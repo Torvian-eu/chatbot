@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,16 +14,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 
 /**
- * Displays a clickable badge for a tool call, showing status and execution time.
+ * Displays a clickable badge for a tool call, showing its status and execution time.
+ *
+ * The badge is intentionally static, including while approval is required, so a pending
+ * approval cannot keep the desktop rendering loop active while the window is minimized.
+ *
+ * @param toolCall Tool-call data used to determine the badge contents.
+ * @param onClick Invoked when the badge is clicked.
+ * @param modifier Modifier applied to the badge surface.
  */
 @Composable
 fun ToolCallBadge(
@@ -63,19 +67,6 @@ fun ToolCallBadge(
             MaterialTheme.colorScheme.tertiary
         )
     }
-
-    // Animate icon opacity for AWAITING_APPROVAL status
-    val infiniteTransition = rememberInfiniteTransition(label = "iconPulse")
-    val iconAlpha by infiniteTransition.animateFloat(
-        initialValue = if (toolCall.status == ToolCallStatus.AWAITING_APPROVAL) 0.3f else 1f,
-        targetValue = if (toolCall.status == ToolCallStatus.AWAITING_APPROVAL) 1f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "iconAlpha"
-    )
-
     Surface(
         modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
@@ -91,11 +82,8 @@ fun ToolCallBadge(
                 imageVector = icon,
                 contentDescription = null,
                 tint = color,
-                modifier = Modifier
-                    .size(16.dp)
-                    .alpha(iconAlpha)
+                modifier = Modifier.size(16.dp)
             )
-
             Text(
                 text = toolCall.toolName,
                 style = MaterialTheme.typography.labelMedium,
@@ -115,8 +103,11 @@ fun ToolCallBadge(
 }
 
 /**
- * Displays a horizontal row of tool call badges.
- * Wraps to multiple lines if needed.
+ * Displays a horizontal row of tool call badges, wrapping them across multiple lines when needed.
+ *
+ * @param toolCalls Tool calls to display.
+ * @param onToolCallClick Invoked with the tool call selected by the user.
+ * @param modifier Modifier applied to the badge group.
  */
 @Composable
 fun ToolCallBadges(
