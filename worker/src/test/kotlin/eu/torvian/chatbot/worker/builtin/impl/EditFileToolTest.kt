@@ -404,9 +404,9 @@ class EditFileToolTest {
             assertTrue(output.contains("matched occurrences: 3"), "report missing matched count")
             assertTrue(output.contains("applied occurrences: 1"), "report missing applied count")
             assertTrue(output.contains("rejected occurrences: 2"), "report missing rejected count")
-            // Rejected occurrences must identify the edit spec index and original-space range.
+            // Rejected occurrences must identify the edit spec index and normalized-space range.
             assertTrue(output.contains("edit spec index 0"), "report missing rejected edit spec index")
-            assertTrue(output.contains("original range ["), "report missing rejected original range")
+            assertTrue(output.contains("normalized range ["), "report missing rejected normalized range")
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -441,7 +441,7 @@ class EditFileToolTest {
             assertTrue(output.contains("applied occurrences: 1"), "report missing applied count")
             assertTrue(output.contains("rejected occurrences: 1"), "report missing rejected count")
             assertTrue(output.contains("edit spec index 1"), "report missing rejected edit spec index")
-            assertTrue(output.contains("original range ["), "report missing rejected original range")
+            assertTrue(output.contains("normalized range ["), "report missing rejected normalized range")
         } finally {
             dir.toFile().deleteRecursively()
         }

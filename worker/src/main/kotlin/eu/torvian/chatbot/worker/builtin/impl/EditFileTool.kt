@@ -16,22 +16,27 @@ import java.nio.file.NoSuchFileException
  *
  * Behavior:
  * - Matching is **exact**: every character in the caller-supplied `oldText` must match the
- *   corresponding character in the file, including whitespace. Newlines, spaces, tabs, and their
- *   specific count must all be identical. The match never leaves original space, so no
- *   normalized-remap step can misplace the range.
+ *   corresponding character in the file, including whitespace. Spaces, tabs, and their
+ *   specific count must all be identical. However, **end-of-line sequences are normalized**:
+ *   the file is read and converted to Unix-style `\n` before matching, and the caller's
+ *   `oldText`/`newText` are similarly normalized, so callers can always use `\n` regardless
+ *   of the file's actual line-ending style (CRLF, LF, or CR). On write, the file's original
+ *   EOL style is restored.
  * - Each caller-supplied edit spec matches **all** of its non-overlapping occurrences in the
- *   original text (not just the first). One edit spec may therefore produce multiple planned
+ *   normalized text (not just the first). One edit spec may therefore produce multiple planned
  *   occurrences.
- * - Edits are planned as a single global batch against the *same* original text. The planning phase
- *   never mutates the source, so caller-supplied order does not influence which ranges are found.
+ * - Edits are planned as a single global batch against the *same* normalized text. The planning
+ *   phase never mutates the source, so caller-supplied order does not influence which ranges
+ *   are found.
  * - Conflicts are resolved deterministically across **all** occurrences: when two planned
- *   occurrences overlap, the **more specific** occurrence wins (longer matched original span first;
- *   ties broken by lower original edit index, then by earlier start index). The lower-priority
- *   overlapping occurrence is rejected with a clear summary rather than silently dropped.
- * - Accepted occurrences are applied in **reverse start-index order** against the original text,
- *   which avoids offset shifting and preserves the planned ranges.
- * - `dryRun` produces a Git-compatible unified diff plus a summary (requested edit specs / matched /
- *   applied / rejected occurrences) without modifying the file.
+ *   occurrences overlap, the **more specific** occurrence wins (longer matched original span
+ *   first; ties broken by lower original edit index, then by earlier start index). The
+ *   lower-priority overlapping occurrence is rejected with a clear summary rather than silently
+ *   dropped.
+ * - Accepted occurrences are applied in **reverse start-index order** against the normalized
+ *   text, which avoids offset shifting and preserves the planned ranges.
+ * - `dryRun` produces a Git-compatible unified diff plus a summary (requested edit specs /
+ *   matched / applied / rejected occurrences) without modifying the file.
  * - If an edit spec matches zero occurrences, the whole operation fails naming that edit spec's
  *   index.
  */
@@ -43,9 +48,14 @@ class EditFileTool : BuiltInTool {
     /**
      * Applies the caller-supplied `oldText` -> `newText` edits to the referenced file.
      *
-     * Edits are matched exactly in original space, planned as a single conflict-resolved batch,
-     * then applied. Validation, workspace containment, and read/write failures are reported as
-     * [BuiltInToolExecutionResult.isError] rather than thrown.
+     * Line endings in the file are normalized to `\n` before matching, and the caller's
+     * `oldText`/`newText` are similarly normalized, so callers may always use `\n` as the
+     * EOL marker regardless of the file's actual encoding (CRLF, LF, or CR). The file's
+     * original EOL style is detected and restored on write, so the file format is preserved.
+     *
+     * Edits are matched exactly in normalized space, planned as a single conflict-resolved
+     * batch, then applied. Validation, workspace containment, and read/write failures are
+     * reported as [BuiltInToolExecutionResult.isError] rather than thrown.
      *
      * @param input Tool input: `path` (string), `edits` (array of `oldText`/`newText`
      *   objects), and an optional `dryRun` flag.
@@ -102,7 +112,7 @@ class EditFileTool : BuiltInTool {
                             null
                         }
 
-                        else -> oldRaw.content
+                        else -> normalizeEol(oldRaw.content)
                     }
                     if (oldText == null) return@mapIndexed null
 
@@ -118,7 +128,7 @@ class EditFileTool : BuiltInTool {
                             null
                         }
 
-                        else -> newRaw.content
+                        else -> normalizeEol(newRaw.content)
                     }
                     if (newText == null) return@mapIndexed null
 
@@ -145,7 +155,7 @@ class EditFileTool : BuiltInTool {
         }
 
         return withContext(context.ioDispatcher) {
-            val original = try {
+            val fileContent = try {
                 Files.readString(target, Charsets.UTF_8)
             } catch (_: NoSuchFileException) {
                 return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "File not found: $path")
@@ -156,17 +166,27 @@ class EditFileTool : BuiltInTool {
                 )
             }
 
-            // Plan + resolve conflicts against the original text (no mutation yet).
-            val plan = planAndResolve(original, edits)
+            // Detect the file's original EOL style and normalize the content to Unix `\n`.
+            // All matching and application happens in \n-normalized space. On write, the
+            // content is denormalized back to the original EOL style so the file format is
+            // preserved.
+            val eol = detectEol(fileContent)
+            val normalizedOriginal = normalizeEol(fileContent)
+
+            // Plan + resolve conflicts against the normalized original text (no mutation yet).
+            val plan = planAndResolve(normalizedOriginal, edits)
             if (plan is PlanResult.Failure) {
                 return@withContext builtInToolErrorResult(BuiltInToolExecutionError.EXECUTION_FAILED, plan.message)
             }
             val success = plan as PlanResult.Success
 
-            // Apply accepted edits in reverse start-index order against the original text.
-            val modified = applyAccepted(original, success.accepted)
+            // Apply accepted edits in reverse start-index order against the normalized text.
+            val normalizedModified = applyAccepted(normalizedOriginal, success.accepted)
 
-            val report = renderReport(original, modified, edits, success)
+            // Denormalize the result back to the file's original EOL style before writing.
+            val modified = denormalizeEol(normalizedModified, eol)
+
+            val report = renderReport(normalizedOriginal, normalizedModified, edits, success)
             if (dryRun) {
                 BuiltInToolExecutionResult(output = report)
             } else {
@@ -186,32 +206,32 @@ class EditFileTool : BuiltInTool {
     /**
      * One requested edit as supplied by the caller (before any matching/planning).
      *
-     * @property oldText Text to locate (matched exactly).
-     * @property newText Replacement text.
+     * @property oldText Text to locate (matched exactly, already EOL-normalized).
+     * @property newText Replacement text (already EOL-normalized).
      */
     private data class EditSpec(val oldText: String, val newText: String)
 
     /**
-     * Range of a match in the original text, covering start (inclusive) to end (exclusive).
+     * Range of a match in the normalized text, covering start (inclusive) to end (exclusive).
      *
-     * @property startIndex Start offset (inclusive) in the original string.
-     * @property endIndexExclusive End offset (exclusive) in the original string.
+     * @property startIndex Start offset (inclusive) in the normalized string.
+     * @property endIndexExclusive End offset (exclusive) in the normalized string.
      */
     private data class MatchRange(val startIndex: Int, val endIndexExclusive: Int)
 
     /**
      * A single planned occurrence of a caller-supplied edit spec after its match has been located
-     * in the original text.
+     * in the normalized text.
      *
      * One [EditSpec] may produce several [PlannedEditOccurrence]s (one per non-overlapping match in
-     * the original text). The [range] is expressed in original-space coordinates and
-     * [matchedSpanLength] is the length of that original span. Both are used for conflict resolution
-     * and for applying the occurrence.
+     * the normalized text). The [range] is expressed in normalized-space coordinates and
+     * [matchedSpanLength] is the length of that normalized span. Both are used for conflict
+     * resolution and for applying the occurrence.
      *
      * @property index Original caller-supplied edit spec index (for deterministic tie-breaking and reporting).
      * @property oldText Text that was matched.
      * @property newText Replacement text.
-     * @property range Original-space range of the matched region.
+     * @property range Normalized-space range of the matched region.
      * @property matchedSpanLength Length of [range] (`endIndexExclusive - startIndex`).
      */
     private data class PlannedEditOccurrence(
@@ -223,11 +243,11 @@ class EditFileTool : BuiltInTool {
     )
 
     /**
-     * An occurrence that matched the original text but was rejected during conflict resolution.
+     * An occurrence that matched the normalized text but was rejected during conflict resolution.
      *
      * @property index Original caller-supplied edit spec index of the rejected occurrence.
      * @property reason Human-readable explanation identifying the kept conflicting occurrence
-     *   (its edit spec index and original-space range).
+     *   (its edit spec index and normalized-space range).
      */
     private data class RejectedEdit(val index: Int, val reason: String)
 
@@ -255,19 +275,19 @@ class EditFileTool : BuiltInTool {
      * Plans every occurrence of every edit spec against the same [text] and resolves overlapping
      * matches deterministically across all occurrences.
      *
-     * Planning never mutates [text]: each edit spec is matched independently against the original
+     * Planning never mutates [text]: each edit spec is matched independently against the normalized
      * string, and **all** of its non-overlapping occurrences are collected, so caller order cannot
      * change which ranges are found. If any edit spec produces zero matches, the whole operation
      * fails naming that edit spec's index.
      *
      * Overlap policy: when two planned occurrences overlap, the **more specific** occurrence wins —
-     * the one with the longer matched original span. Ties (equal span length) are broken first by
+     * the one with the longer matched normalized span. Ties (equal span length) are broken first by
      * the lower original edit index, then by the earlier start index, for full determinism. The
      * lower-priority overlapping occurrence is rejected (kept in the result summary) rather than
      * silently dropped, and the higher-priority occurrence is applied.
      *
-     * @param text Original file content (unmodified).
-     * @param edits Caller-supplied edits in their original order.
+     * @param text Normalized file content (unmodified, all `\n` line endings).
+     * @param edits Caller-supplied edits in their original order (already EOL-normalized).
      * @return A [PlanResult.Failure] if any edit spec cannot be matched, otherwise a
      *   [PlanResult.Success] carrying the accepted and rejected occurrences.
      */
@@ -278,7 +298,7 @@ class EditFileTool : BuiltInTool {
             val ranges = findAllRanges(text, edit.oldText)
             if (ranges.isEmpty()) {
                 return PlanResult.Failure(
-                    "Edit at index $index: 'oldText' not found (exact match)"
+                    "Edit at index $index: 'oldText' not found (exact match after EOL normalization)"
                 )
             }
             for (range in ranges) {
@@ -308,12 +328,12 @@ class EditFileTool : BuiltInTool {
             if (conflict != null) {
                 // Lower-priority overlapping occurrence is rejected; the higher-priority one is kept.
                 // The reason names the kept conflicting occurrence by its edit spec index and
-                // original-space range so the report is unambiguous.
+                // normalized-space range so the report is unambiguous.
                 rejected.add(
                     RejectedEdit(
                         index = candidate.index,
                         reason = "Overlaps occurrence from edit spec ${conflict.index} " +
-                                "at original range [${conflict.range.startIndex}, ${conflict.range.endIndexExclusive}) " +
+                                "at normalized range [${conflict.range.startIndex}, ${conflict.range.endIndexExclusive}) " +
                                 "(kept higher-priority occurrence)"
                     )
                 )
@@ -327,13 +347,13 @@ class EditFileTool : BuiltInTool {
     /**
      * Applies the accepted edits to [text] in reverse start-index order.
      *
-     * Because all [PlannedEditOccurrence] ranges are disjoint (overlaps were rejected) and computed against
-     * the original [text], applying from the highest start index downward keeps every earlier range
-     * valid — no offset shifting occurs between edits.
+     * Because all [PlannedEditOccurrence] ranges are disjoint (overlaps were rejected) and computed
+     * against the normalized [text], applying from the highest start index downward keeps every
+     * earlier range valid — no offset shifting occurs between edits.
      *
-     * @param text Original file content.
+     * @param text Normalized file content (all `\n` line endings).
      * @param accepted Edits accepted by [planAndResolve], in any order.
-     * @return The modified text with all accepted edits applied.
+     * @return The modified text with all accepted edits applied, still in normalized form.
      */
     private fun applyAccepted(text: String, accepted: List<PlannedEditOccurrence>): String {
         val ordered = accepted.sortedByDescending { it.range.startIndex }
@@ -349,7 +369,7 @@ class EditFileTool : BuiltInTool {
      * occurrences, followed by a Git-compatible unified diff of the applied changes.
      *
      * The summary distinguishes **requested edit specs** (caller-supplied edits) from
-     * **occurrences** (individual matches in the original text). One edit spec may produce several
+     * **occurrences** (individual matches in the normalized text). One edit spec may produce several
      * matched/applied/rejected occurrences.
      *
      * The diff is produced by [LineDiff.unifiedDiff], which aligns the two files via a
@@ -357,8 +377,12 @@ class EditFileTool : BuiltInTool {
      * context lines. Unlike a positional line-by-line comparison, this keeps the diff compact and
      * correct even when an edit near the top of the file shifts the alignment of every later line.
      *
-     * @param original Original file content.
-     * @param modified File content after accepted occurrences were applied.
+     * Both [original] and [modified] are in normalized form (all `\n`), so the diff is also
+     * normalized. This is intentional: the caller thinks in Unix-style newlines, and showing raw
+     * CRLF in the diff output would be confusing.
+     *
+     * @param original Normalized original file content (all `\n`).
+     * @param modified Normalized file content after accepted occurrences were applied.
      * @param edits All caller-supplied edit specs (for the requested count).
      * @param plan The resolved plan (accepted + rejected occurrences).
      * @return The rendered report string (summary followed by a unified diff).
@@ -397,7 +421,7 @@ class EditFileTool : BuiltInTool {
     }
 
     /**
-     * Returns `true` when two original-space ranges overlap (share at least one character).
+     * Returns `true` when two normalized-space ranges overlap (share at least one character).
      *
      * Two half-open ranges `[aStart, aEnd)` and `[bStart, bEnd)` overlap iff
      * `aStart < bEnd && bStart < aEnd`.
@@ -415,14 +439,15 @@ class EditFileTool : BuiltInTool {
      *
      * Every character in [needle] must match the corresponding character in [haystack],
      * including whitespace (spaces, tabs, newlines and their exact count). No whitespace
-     * normalization or anchoring is performed — the needle is searched at every position.
+     * normalization or anchoring is performed beyond the initial EOL normalization already
+     * applied to both [haystack] and [needle] — the needle is searched at every position.
      *
      * Occurrences are returned in source order and never overlap: once a match is consumed, the
      * next search resumes after the end of that match, so self-overlapping matches are skipped.
      *
-     * @param haystack Original file content searched for matches.
-     * @param needle Caller-supplied text to locate (matched exactly).
-     * @return The list of [MatchRange]s within the **original** [haystack] for every matched
+     * @param haystack Normalized file content searched for matches (all `\n`).
+     * @param needle Caller-supplied text to locate (matched exactly, already EOL-normalized).
+     * @return The list of [MatchRange]s within the **normalized** [haystack] for every matched
      *   region, in source order. Empty if [needle] is not found.
      */
     private fun findAllRanges(haystack: String, needle: String): List<MatchRange> {
@@ -436,5 +461,72 @@ class EditFileTool : BuiltInTool {
             from = idx + needle.length
         }
         return ranges
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // EOL (end-of-line) normalization helpers
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * Identifies the dominant line-ending style in a text file.
+     *
+     * Detection order (first match wins):
+     * 1. If the text contains `\r\n` → [EolStyle.CRLF]
+     * 2. If the text contains `\r` (not followed by `\n`) → [EolStyle.CR]
+     * 3. Otherwise → [EolStyle.LF]
+     *
+     * Mixed files (e.g. a mix of CRLF and LF) are handled by preferring the dominant style via
+     * the detection heuristic above. If a file contains no line-ending characters at all (e.g. a
+     * single line with no newline), [EolStyle.LF] is returned as the default, since applying
+     * LF-normalized content to such a file is a no-op anyway.
+     *
+     * @param content Raw file content (as read from disk).
+     * @return The detected [EolStyle].
+     */
+    private fun detectEol(content: String): EolStyle {
+        if (content.contains("\r\n")) return EolStyle.CRLF
+        if (content.contains('\r')) return EolStyle.CR
+        return EolStyle.LF
+    }
+
+    /**
+     * Converts any line-ending style (CRLF, CR, LF) to Unix-style LF (`\n`).
+     *
+     * Normalization proceeds in two passes:
+     * 1. Replace all `\r\n` sequences with `\n` (handles CRLF).
+     * 2. Replace any remaining bare `\r` with `\n` (handles classic Mac CR).
+     *
+     * This is order-safe: a bare `\r` that was part of a `\r\n` pair is already consumed by
+     * the first pass and will not be doubled.
+     *
+     * @param content Text with any line-ending style.
+     * @return Text with all line endings converted to `\n`.
+     */
+    private fun normalizeEol(content: String): String =
+        content.replace("\r\n", "\n").replace('\r', '\n')
+
+    /**
+     * Converts normalized Unix-style LF (`\n`) back to the file's original EOL style.
+     *
+     * @param content Text with Unix `\n` line endings.
+     * @param eol The target EOL style to restore.
+     * @return Text with line endings converted to [eol].
+     */
+    private fun denormalizeEol(content: String, eol: EolStyle): String = when (eol) {
+        EolStyle.LF -> content
+        EolStyle.CRLF -> content.replace("\n", "\r\n")
+        EolStyle.CR -> content.replace('\n', '\r')
+    }
+
+    /**
+     * End-of-line style enum for a text file.
+     */
+    private enum class EolStyle {
+        /** Windows-style: `\r\n` */
+        CRLF,
+        /** Unix-style: `\n` */
+        LF,
+        /** Classic Mac-style: `\r` */
+        CR
     }
 }
