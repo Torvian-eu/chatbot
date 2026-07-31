@@ -6,15 +6,9 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerComm
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolMessageTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandRequestPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionAuthorization
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.SignedBuiltInToolExecutionRequest
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.*
 import eu.torvian.chatbot.common.security.SignedRequest
-import eu.torvian.chatbot.worker.builtin.BuiltInToolAuthorizationValidationResult
-import eu.torvian.chatbot.worker.builtin.BuiltInToolAuthorizationValidator
-import eu.torvian.chatbot.worker.builtin.BuiltInToolCallExecutor
+import eu.torvian.chatbot.worker.builtin.*
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
 import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
 import kotlinx.coroutines.test.runTest
@@ -29,7 +23,6 @@ import kotlin.test.assertTrue
 /**
  * Unit tests for [ToolCallInteraction].
  */
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ToolCallInteractionTest {
 
     /**
@@ -70,13 +63,9 @@ class ToolCallInteractionTest {
         )
 
         interaction.start()
-
         assertEquals(1, executor.executed.size, "Executor should be invoked exactly once")
         assertEquals("read_text_file", executor.executed.single().toolName)
-        val executedInput = executor.executed.single().input
-        val debugPath = executedInput["path"]?.let { (it as kotlinx.serialization.json.JsonPrimitive).content }
-        println("DEBUG executedInput=$executedInput  debugPath=$debugPath inputEncoding=${input.toString()}")
-        assertEquals("notes.md", debugPath)
+        assertEquals(Json.encodeToString(JsonObject.serializer(), input), executor.executed.single().input)
 
         val outbound = emitter.messages
         assertEquals(2, outbound.size, "Expected accepted + result")
@@ -192,27 +181,81 @@ class ToolCallInteractionTest {
         assertEquals(WorkerProtocolMessageTypes.COMMAND_REJECTED, outbound[0].type)
     }
 
-    // --- helpers ---
-
     /**
-     * Sanity check that the input parser correctly handles a JSON-encoded JsonObject string.
-     * This protects the test helpers from breaking if the test JSON serializer changes.
+     * Verifies that malformed JSON input in the authorization is forwarded to the executor as a
+     * raw string, and that the executor's error result is propagated back. The actual JSON
+     * parsing and validation is the responsibility of [DefaultBuiltInToolCallExecutor].
      */
     @Test
-    fun `input parser smoke test`() {
-        val input = buildJsonObject { put("path", "notes.md") }
-        val encoded = Json.encodeToString(JsonObject.serializer(), input)
-        val parsed = Json.parseToJsonElement(encoded)
-        val asObj = parsed as? JsonObject
-        assertEquals("notes.md", asObj?.get("path")?.let { (it as kotlinx.serialization.json.JsonPrimitive).content })
+    fun `malformed json input is forwarded to executor and error result is propagated`() = runTest {
+        val emitter = RecordingEmitter()
+        val authorization = buildAuthorization(toolName = "read_text_file").copy(input = "{invalid")
+        val signedRequest = SignedBuiltInToolExecutionRequest(
+            signedRequest = SignedRequest(
+                payload = Json.encodeToString(BuiltInToolExecutionAuthorization.serializer(), authorization),
+                signature = "sig",
+                signerId = "dev",
+                timestamp = 1_700_000_000_000,
+                nonce = "n1",
+            )
+        )
+        val requestPayload = signedRequest.toWorkerCommandRequestPayload()
+            .getOrElse { error("Failed to build request payload: $it") }
+
+        val executor = RecordingExecutor(
+            result = BuiltInToolExecutionResult(
+                output = null,
+                isError = true,
+                errorMessage = "Malformed JSON input: Unexpected character",
+                errorCode = BuiltInToolExecutionError.INVALID_INPUT,
+            )
+        )
+        val interaction = ToolCallInteraction(
+            envelope = WorkerProtocolMessage(
+                id = "in-4",
+                type = WorkerProtocolMessageTypes.COMMAND_REQUEST,
+                interactionId = "int-4",
+                payload = null,
+            ),
+            requestPayload = requestPayload,
+            authorizationValidator = AuthorizingValidator(),
+            toolCallExecutor = executor,
+            emitter = emitter,
+            messageIdProvider = SequenceMessageIdProvider(),
+        )
+        interaction.start()
+
+        assertEquals(1, executor.executed.size, "Executor should be invoked exactly once")
+        assertEquals("read_text_file", executor.executed.single().toolName)
+        assertEquals("{invalid", executor.executed.single().input, "Raw malformed string must be forwarded to executor")
+
+        val outbound = emitter.messages
+        assertEquals(2, outbound.size, "Expected accepted + result")
+        assertEquals(WorkerProtocolMessageTypes.COMMAND_ACCEPTED, outbound[0].type)
+        assertEquals(WorkerProtocolMessageTypes.COMMAND_RESULT, outbound[1].type)
+
+        val resultPayload = decodeProtocolPayload<WorkerCommandResultPayload>(
+            outbound[1].payload!!,
+            "WorkerCommandResultPayload",
+        ).getOrElse { error("Expected result payload to decode: $it") }
+        assertEquals(WorkerCommandResultStatuses.ERROR, resultPayload.status)
+
+        val result = decodeProtocolPayload<BuiltInToolExecutionResult>(
+            resultPayload.data,
+            "BuiltInToolExecutionResult",
+        ).getOrElse { error("Expected built-in result to decode: $it") }
+        assertTrue(result.isError)
+        assertEquals("invalid_input", result.errorCode)
+        val msg = result.errorMessage ?: ""
+        assertTrue(msg.contains("Malformed"), "Expected 'Malformed' in error message, got: $msg")
     }
 
     /**
      * Smoke test that round-trips a BuiltInToolExecutionAuthorization through the serializer
-     * and reproduces the parsing logic used by [ToolCallInteraction.parseInputObject].
+     * and verifies the raw input string is preserved.
      */
     @Test
-    fun `authorization round-trip preserves input json`() {
+    fun `authorization round-trip preserves input string`() {
         val input = buildJsonObject { put("path", "notes.md") }
         val encodedInput = Json.encodeToString(JsonObject.serializer(), input)
         val authorization = BuiltInToolExecutionAuthorization(
@@ -229,10 +272,10 @@ class ToolCallInteractionTest {
         )
         val payload = Json.encodeToString(BuiltInToolExecutionAuthorization.serializer(), authorization)
         val decoded = Json.decodeFromString(BuiltInToolExecutionAuthorization.serializer(), payload)
-        // Replicate the interaction's parseInputObject logic.
-        val parsed = Json.parseToJsonElement(decoded.input!!) as? JsonObject
-        assertEquals("notes.md", parsed?.get("path")?.let { (it as kotlinx.serialization.json.JsonPrimitive).content })
+        assertEquals(encodedInput, decoded.input, "Raw input string should survive round-trip")
     }
+
+    // --- helpers ---
 
     /**
      * Builds an [BuiltInToolExecutionAuthorization] fixture with sensible defaults.
@@ -307,10 +350,11 @@ class ToolCallInteractionTest {
     private class RecordingExecutor(
         private val result: BuiltInToolExecutionResult,
     ) : BuiltInToolCallExecutor {
-        data class Invocation(val toolName: String, val input: JsonObject)
+        data class Invocation(val toolName: String, val input: String?)
+
         val executed: MutableList<Invocation> = mutableListOf()
 
-        override suspend fun execute(toolName: String, input: JsonObject): BuiltInToolExecutionResult {
+        override suspend fun execute(toolName: String, input: String?): BuiltInToolExecutionResult {
             executed += Invocation(toolName, input)
             return result
         }
