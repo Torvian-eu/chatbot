@@ -60,5 +60,22 @@ data class ToolCall(
     val durationMs: Long? = null,
     val errorCode: String? = null,
     val errorDetails: String? = null
-)
+) {
+    /**
+     * Identifies tool calls whose model arguments failed JSON validation and must not be replayed.
+     */
+    companion object {
+        /** Machine-readable marker for discarded, malformed model-emitted arguments. */
+        const val INVALID_ARGUMENTS_ERROR_CODE: String = "INVALID_TOOL_ARGUMENTS_JSON"
+    }
+
+    /**
+     * Indicates whether this record represents an assistant tool call safe to place in provider context.
+     * Parameterless calls remain replayable because null input is valid unless this explicit marker is set.
+     *
+     * @return True when the call was not rejected for malformed arguments.
+     */
+    val isReplayableInLlmContext: Boolean
+        get() = errorCode != INVALID_ARGUMENTS_ERROR_CODE
+}
 

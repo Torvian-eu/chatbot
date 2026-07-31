@@ -98,6 +98,29 @@ class DefaultChatContextBuilderTest {
                 output = null,
                 status = ToolCallStatus.PENDING,
                 executedAt = modifiedAt
+            ),
+            ToolCall(
+                id = 13L,
+                messageId = 2L,
+                toolDefinitionId = 8L,
+                toolName = "search",
+                toolCallId = "call-invalid",
+                input = null,
+                output = "invalid arguments",
+                status = ToolCallStatus.ERROR,
+                errorCode = ToolCall.INVALID_ARGUMENTS_ERROR_CODE,
+                executedAt = modifiedAt
+            ),
+            ToolCall(
+                id = 14L,
+                messageId = 2L,
+                toolDefinitionId = 8L,
+                toolName = "ping",
+                toolCallId = "call-parameterless",
+                input = null,
+                output = "pong",
+                status = ToolCallStatus.SUCCESS,
+                executedAt = modifiedAt
             )
         )
 
@@ -107,18 +130,24 @@ class DefaultChatContextBuilderTest {
             toolCalls = toolCalls
         )
 
-        assertEquals(4, context.size)
+        assertEquals(5, context.size)
         assertEquals(RawChatMessage.User::class, context[0]::class)
         assertEquals(RawChatMessage.Assistant::class, context[1]::class)
         assertEquals(RawChatMessage.Tool::class, context[2]::class)
-        assertEquals(RawChatMessage.User::class, context[3]::class)
+        assertEquals(RawChatMessage.Tool::class, context[3]::class)
+        assertEquals(RawChatMessage.User::class, context[4]::class)
 
         assertEquals(true, context[0].content?.contains("--- Attached Files ---"))
         assertEquals(
-            listOf("call-success", "call-pending"),
+            listOf("call-success", "call-pending", "call-parameterless"),
             (context[1] as RawChatMessage.Assistant).toolCalls?.map { it.id }
         )
         assertEquals("{\"results\":[]}", context[2].content)
-        assertEquals("Follow-up", context[3].content)
+        assertEquals("pong", context[3].content)
+        assertEquals("Follow-up", context[4].content)
+        assertEquals(
+            listOf("call-success", "call-parameterless"),
+            context.filterIsInstance<RawChatMessage.Tool>().map { it.toolCallId }
+        )
     }
 }

@@ -116,7 +116,7 @@ class DefaultConversationTurnOrchestrator(
             currentContext = appendAssistantAndToolResults(
                 currentContext = currentContext,
                 assistantContent = assistantStep.assistantContent,
-                toolCallRequests = assistantStep.toolCallRequests,
+                toolCallRequests = pendingToolCalls,
                 completedToolCalls = completedToolCalls
             )
         }
@@ -386,20 +386,23 @@ class DefaultConversationTurnOrchestrator(
     private fun appendAssistantAndToolResults(
         currentContext: List<RawChatMessage>,
         assistantContent: String?,
-        toolCallRequests: List<LLMCompletionResult.CompletionChoice.ToolCallRequest>,
+        toolCallRequests: List<ToolCall>,
         completedToolCalls: List<ToolCall>
     ): List<RawChatMessage> {
         val assistantContextMessage = RawChatMessage.Assistant(
             content = assistantContent,
-            toolCalls = toolCallRequests.map { toolCallRequest ->
+            toolCalls = toolCallRequests.filter { it.isReplayableInLlmContext }.map { toolCall ->
                 RawChatMessage.Assistant.ToolCall(
-                    id = toolCallRequest.toolCallId,
-                    name = toolCallRequest.name,
-                    arguments = toolCallRequest.arguments
+                    id = toolCall.toolCallId,
+                    name = toolCall.toolName,
+                    arguments = toolCall.input
                 )
             }
         )
-        val toolResultMessages = completedToolCalls.map { toolCall ->
+        // A provider transcript must not contain a result without its replayed assistant call.
+        val toolResultMessages = completedToolCalls
+            .filter { it.isReplayableInLlmContext }
+            .map { toolCall ->
             RawChatMessage.Tool(
                 content = toolResultContentBuilder.build(toolCall),
                 toolCallId = toolCall.toolCallId ?: "",
