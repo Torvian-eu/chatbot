@@ -3,9 +3,9 @@ package eu.torvian.chatbot.worker.mcp
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.security.SignedRequest
+import eu.torvian.chatbot.common.misc.json.parseStrictJsonObject
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
@@ -71,7 +71,7 @@ class McpToolCallExecutorImpl(
         val arguments = auth.input
             ?.let { input ->
                 try {
-                    json.parseToJsonElement(input).jsonObject
+                    parseStrictJsonObject(json, input)
                 } catch (exception: Exception) {
                     return LocalMCPToolCallResult(
                         toolCallId = auth.toolCallId,
