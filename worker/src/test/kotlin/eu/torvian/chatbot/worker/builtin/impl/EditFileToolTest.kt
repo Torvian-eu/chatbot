@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
  * Scenario-driven unit tests for [EditFileTool].
  *
  * These tests lock down the current intended semantics of the tool: all-occurrence replacement,
- * whitespace-normalized matching, deterministic overlap resolution, dry-run vs. write behavior,
+ * exact matching, deterministic overlap resolution, dry-run vs. write behavior,
  * input validation, and workspace containment. They do not redesign the tool.
  */
 class EditFileToolTest {
@@ -114,24 +114,24 @@ class EditFileToolTest {
     }
 
     /**
-     * Interior whitespace divergence (extra spaces) is tolerated for matching; the
-     * matched region is replaced wholesale by newText.
+     * An oldText whose whitespace does not exactly match the source fails
+     * because matching is exact — every character must be identical.
      */
     @Test
-    fun `whitespace-normalized replacement works`() = runTest {
+    fun `whitespace mismatch fails with exact matching`() = runTest {
         val dir = createTempDirectory("edit-file-test")
         try {
             val file = dir.resolve("sample.txt")
-            // Multiple spaces between words in the source.
-            file.writeText("cat   walks", Charsets.UTF_8)
+            // Single spaces between words in the source.
+            file.writeText("cat walks", Charsets.UTF_8)
 
             val result = tool.execute(
-                buildInput("sample.txt", listOf("cat walks" to "dog runs")),
+                buildInput("sample.txt", listOf("cat  walks" to "dog runs")),
                 context(dir),
             )
 
-            assertSuccess(result)
-            assertEquals("dog runs", readFile(file))
+            // "cat  walks" (two spaces) does not match "cat walks" (one space) exactly.
+            assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -236,7 +236,6 @@ class EditFileToolTest {
             dir.toFile().deleteRecursively()
         }
     }
-
     /**
      * A whitespace-only oldText is rejected as INVALID_INPUT before any matching.
      */
@@ -253,6 +252,73 @@ class EditFileToolTest {
             )
 
             assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * A non-string oldText (e.g. a number) is rejected with a precise error message.
+     */
+    @Test
+    fun `non-string oldText is rejected with INVALID_INPUT`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("hello world", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    putJsonArray("edits") {
+                        addJsonObject {
+                            put("oldText", JsonPrimitive(42))
+                            put("newText", JsonPrimitive("x"))
+                        }
+                    }
+                },
+                context(dir),
+            )
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            assertEquals(
+                true,
+                result.errorDetails?.contains("must be a string"),
+                "error details should say 'must be a string': ${result.errorDetails}"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * A non-string newText (e.g. a number) is rejected with a precise error message.
+     */
+    @Test
+    fun `non-string newText is rejected with INVALID_INPUT`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("hello world", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    putJsonArray("edits") {
+                        addJsonObject {
+                            put("oldText", JsonPrimitive("x"))
+                            put("newText", JsonPrimitive(42))
+                        }
+                    }
+                },
+                context(dir),
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            assertEquals(
+                true,
+                result.errorDetails?.contains("must be a string"),
+                "error details should say 'must be a string': ${result.errorDetails}"
+            )
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -404,11 +470,10 @@ class EditFileToolTest {
     }
 
     /**
-     * A tab in the source matches a single space in oldText, and the tab is
-     * replaced by newText (trailing newline preserved).
+     * A tab in the source must be matched exactly with the same tab in oldText.
      */
     @Test
-    fun `tabs spaces and newlines are normalized consistently for matching`() = runTest {
+    fun `exact tab matching replaces correctly`() = runTest {
         val dir = createTempDirectory("edit-file-test")
         try {
             val file = dir.resolve("sample.txt")
@@ -416,12 +481,12 @@ class EditFileToolTest {
             file.writeText("cat\twalks\n", Charsets.UTF_8)
 
             val result = tool.execute(
-                buildInput("sample.txt", listOf("cat walks" to "dog runs")),
+                buildInput("sample.txt", listOf("cat\twalks\n" to "dog\truns\n")),
                 context(dir),
             )
 
             assertSuccess(result)
-            assertEquals("dog runs\n", readFile(file))
+            assertEquals("dog\truns\n", readFile(file))
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -501,58 +566,51 @@ class EditFileToolTest {
         }
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Whitespace-insensitive matching that stays in original space (refactored scanner)
-    // -----------------------------------------------------------------------------------------
-
     /**
-     * Interior whitespace divergence is tolerated for matching, but the matched region
-     * (including its inter-word spacing) is replaced wholesale by newText.
+     * A tab in the source is not equivalent to a space; exact matching rejects
+     * mismatched whitespace.
      */
     @Test
-    fun `differing interior whitespace still matches without touching surrounding spaces`() = runTest {
+    fun `tab does not match space in exact mode`() = runTest {
         val dir = createTempDirectory("edit-file-test")
         try {
             val file = dir.resolve("sample.txt")
-            // Three inter-word spaces in the source; oldText uses a single space.
-            file.writeText("alpha   beta   gamma", Charsets.UTF_8)
+            // Tab between words in the source.
+            file.writeText("cat\twalks", Charsets.UTF_8)
 
+            // oldText uses a space instead of a tab — exact match fails.
             val result = tool.execute(
-                buildInput("sample.txt", listOf("alpha beta gamma" to "A B C")),
+                buildInput("sample.txt", listOf("cat walks" to "dog runs")),
                 context(dir),
             )
 
-            assertSuccess(result)
-            // Interior whitespace divergence is tolerated for *matching*, but the matched
-            // region (including its inter-word spacing) is replaced wholesale by newText, so
-            // the resulting spacing follows newText, not the original.
-            assertEquals("A B C", readFile(file))
+            assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
         } finally {
             dir.toFile().deleteRecursively()
         }
     }
 
     /**
-     * A tab in the source matches a space in oldText; the tab is part of the matched
-     * range and is replaced by newText (the tab does not survive).
+     * Exact interior whitespace matching: the oldText must match the source
+     * character-for-character, so a source with three inter-word spaces requires
+     * exactly those three spaces in oldText.
      */
     @Test
-    fun `tab and space whitespace are treated as equivalent for matching`() = runTest {
+    fun `exact interior whitespace matching works`() = runTest {
         val dir = createTempDirectory("edit-file-test")
         try {
             val file = dir.resolve("sample.txt")
-            // Tab between words in the source; oldText uses a single space.
-            file.writeText("cat\twalks", Charsets.UTF_8)
+            // Three inter-word spaces in the source.
+            file.writeText("alpha   beta   gamma", Charsets.UTF_8)
 
             val result = tool.execute(
-                buildInput("sample.txt", listOf("cat walks" to "dog runs")),
+                buildInput("sample.txt", listOf("alpha   beta   gamma" to "A   B   C")),
                 context(dir),
             )
 
             assertSuccess(result)
-            // The tab is part of the matched original range and is replaced by newText,
-            // so the tab does not survive.
-            assertEquals("dog runs", readFile(file))
+            // All three spaces matched exactly and are replaced.
+            assertEquals("A   B   C", readFile(file))
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -585,7 +643,7 @@ class EditFileToolTest {
             // single indentation, and the file stays CRLF (no stray bare \r, no doubling).
             val expected = "class A {\r\n    fun foo() {\r\n        baz()\r\n    }\r\n}\r\n"
             assertEquals(expected, readFile(file))
-                        assertFalse(readFile(file).contains("        fun"), "first line must not be double-indented")
+            assertFalse(readFile(file).contains("        fun"), "first line must not be double-indented")
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -684,6 +742,42 @@ class EditFileToolTest {
             val output = assertSuccess(result)
             assertTrue(output.contains("(no changes)"), "expected (no changes) marker, got:\n$output")
             assertFalse(output.contains("@@"), "no-op diff must not contain hunk headers")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Trailing whitespace in oldText must not consume the next line's indentation
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * When oldText ends with a newline, the next line's indentation must not
+     * be consumed into the match range and erased. With exact matching, the
+     * match ends exactly at `hi + needle.length`, so trailing whitespace cannot
+     * overshoot into the next line.
+     */
+    @Test
+    fun `trailing newline in oldText does not eat next line indentation`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.kt")
+            val original = "    val x = 1\n    val y = 2\n"
+            file.writeText(original, Charsets.UTF_8)
+
+            // oldText ends with a newline; the next line's indentation (4 spaces)
+            // must survive the replacement.
+            val oldText = "    val x = 1\n"
+            val newText = "    val x = 42\n"
+
+            val result = tool.execute(
+                buildInput("sample.kt", listOf(oldText to newText)),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            val expected = "    val x = 42\n    val y = 2\n"
+            assertEquals(expected, readFile(file))
         } finally {
             dir.toFile().deleteRecursively()
         }
