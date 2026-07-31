@@ -2,16 +2,8 @@ package eu.torvian.chatbot.worker.builtin.impl
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
 import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
-import eu.torvian.chatbot.worker.builtin.BuiltInTool
-import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
-import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
-import eu.torvian.chatbot.worker.builtin.LineDiff
-import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
-import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
-import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
-import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
-import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
-import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
+import eu.torvian.chatbot.worker.builtin.*
+import eu.torvian.chatbot.worker.builtin.validation.*
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -23,11 +15,10 @@ import java.nio.file.NoSuchFileException
  * Performs selective edits inside a text file using `oldText` -> `newText` replacements.
  *
  * Behavior:
-  * - Matching is performed in original space with **whitespace-tolerant** comparison: incidental
- *   whitespace divergence (extra spaces, tabs vs spaces, differing indentation runs) between the
- *   caller-supplied `oldText` and the bytes on disk does not cause misses, and every replacement is
- *   applied using the **original-space** character range that the match covers. The match never
- *   leaves original space, so no normalized-remap step can misplace the range.
+ * - Matching is **exact**: every character in the caller-supplied `oldText` must match the
+ *   corresponding character in the file, including whitespace. Newlines, spaces, tabs, and their
+ *   specific count must all be identical. The match never leaves original space, so no
+ *   normalized-remap step can misplace the range.
  * - Each caller-supplied edit spec matches **all** of its non-overlapping occurrences in the
  *   original text (not just the first). One edit spec may therefore produce multiple planned
  *   occurrences.
@@ -52,9 +43,9 @@ class EditFileTool : BuiltInTool {
     /**
      * Applies the caller-supplied `oldText` -> `newText` edits to the referenced file.
      *
-     * Edits are matched whitespace-insensitively in original space, planned as a single
-     * conflict-resolved batch, then applied. Validation, workspace containment, and read/
-     * write failures are reported as [BuiltInToolExecutionResult.isError] rather than thrown.
+     * Edits are matched exactly in original space, planned as a single conflict-resolved batch,
+     * then applied. Validation, workspace containment, and read/write failures are reported as
+     * [BuiltInToolExecutionResult.isError] rather than thrown.
      *
      * @param input Tool input: `path` (string), `edits` (array of `oldText`/`newText`
      *   objects), and an optional `dryRun` flag.
@@ -75,35 +66,65 @@ class EditFileTool : BuiltInTool {
         val dryRun = parseOptionalBoolean(input, "dryRun", defaultValue = false, validationErrors)
 
         val editsJson = input["edits"]
-        val edits = if (editsJson == null) {
-            validationErrors.add("Missing required argument: edits")
-            emptyList()
-        } else if (editsJson !is JsonArray) {
-            validationErrors.add("Argument 'edits' must be an array")
-            emptyList()
-        } else {
-            editsJson.mapIndexed { index, element ->
-                val obj = element as? JsonObject
-                if (obj == null) {
-                    validationErrors.add("Edit at index $index is not an object")
-                    return@mapIndexed null
-                }
-                val oldText = obj["oldText"]?.let { it as? JsonPrimitive }?.let { if (it.isString) it.content else null }
-                if (oldText == null) {
-                    validationErrors.add("Edit at index $index missing 'oldText'")
-                    return@mapIndexed null
-                }
-                if (oldText.isBlank()) {
-                    validationErrors.add("Edit at index $index has empty or whitespace-only 'oldText'")
-                    return@mapIndexed null
-                }
-                val newText = obj["newText"]?.let { it as? JsonPrimitive }?.let { if (it.isString) it.content else null }
-                if (newText == null) {
-                    validationErrors.add("Edit at index $index missing 'newText'")
-                    return@mapIndexed null
-                }
-                EditSpec(oldText, newText)
-            }.filterNotNull()
+        val edits = when (editsJson) {
+            null -> {
+                validationErrors.add("Missing required argument: edits")
+                emptyList()
+            }
+
+            !is JsonArray -> {
+                validationErrors.add("Argument 'edits' must be an array")
+                emptyList()
+            }
+
+            else -> {
+                editsJson.mapIndexed { index, element ->
+                    val obj = element as? JsonObject
+                    if (obj == null) {
+                        validationErrors.add("Edit at index $index is not an object")
+                        return@mapIndexed null
+                    }
+
+                    val oldRaw = obj["oldText"]
+                    val oldText = when {
+                        oldRaw == null -> {
+                            validationErrors.add("Edit at index $index missing 'oldText'")
+                            null
+                        }
+
+                        oldRaw !is JsonPrimitive || !oldRaw.isString -> {
+                            validationErrors.add("Edit at index $index: 'oldText' must be a string")
+                            null
+                        }
+
+                        oldRaw.content.isBlank() -> {
+                            validationErrors.add("Edit at index $index has empty or whitespace-only 'oldText'")
+                            null
+                        }
+
+                        else -> oldRaw.content
+                    }
+                    if (oldText == null) return@mapIndexed null
+
+                    val newRaw = obj["newText"]
+                    val newText = when {
+                        newRaw == null -> {
+                            validationErrors.add("Edit at index $index missing 'newText'")
+                            null
+                        }
+
+                        newRaw !is JsonPrimitive || !newRaw.isString -> {
+                            validationErrors.add("Edit at index $index: 'newText' must be a string")
+                            null
+                        }
+
+                        else -> newRaw.content
+                    }
+                    if (newText == null) return@mapIndexed null
+
+                    EditSpec(oldText, newText)
+                }.filterNotNull()
+            }
         }
 
         if (edits.isEmpty() && editsJson is JsonArray && editsJson.isEmpty()) {
@@ -165,7 +186,7 @@ class EditFileTool : BuiltInTool {
     /**
      * One requested edit as supplied by the caller (before any matching/planning).
      *
-     * @property oldText Text to locate (matched in normalized space).
+     * @property oldText Text to locate (matched exactly).
      * @property newText Replacement text.
      */
     private data class EditSpec(val oldText: String, val newText: String)
@@ -257,7 +278,7 @@ class EditFileTool : BuiltInTool {
             val ranges = findAllRanges(text, edit.oldText)
             if (ranges.isEmpty()) {
                 return PlanResult.Failure(
-                    "Edit at index $index: 'oldText' not found (whitespace-insensitive match)"
+                    "Edit at index $index: 'oldText' not found (exact match)"
                 )
             }
             for (range in ranges) {
@@ -292,8 +313,8 @@ class EditFileTool : BuiltInTool {
                     RejectedEdit(
                         index = candidate.index,
                         reason = "Overlaps occurrence from edit spec ${conflict.index} " +
-                            "at original range [${conflict.range.startIndex}, ${conflict.range.endIndexExclusive}) " +
-                            "(kept higher-priority occurrence)"
+                                "at original range [${conflict.range.startIndex}, ${conflict.range.endIndexExclusive}) " +
+                                "(kept higher-priority occurrence)"
                     )
                 )
             } else {
@@ -324,7 +345,7 @@ class EditFileTool : BuiltInTool {
     }
 
     /**
-          * Renders a human-readable report: a summary of requested edit specs and matched/applied/rejected
+     * Renders a human-readable report: a summary of requested edit specs and matched/applied/rejected
      * occurrences, followed by a Git-compatible unified diff of the applied changes.
      *
      * The summary distinguishes **requested edit specs** (caller-supplied edits) from
@@ -389,116 +410,31 @@ class EditFileTool : BuiltInTool {
         a.startIndex < b.endIndexExclusive && b.startIndex < a.endIndexExclusive
 
     /**
-     * Finds **all** non-overlapping occurrences of [needle] in [haystack] using a
-     * whitespace-insensitive but **original-space** comparison.
+     * Finds **all** non-overlapping occurrences of [needle] in [haystack] using
+     * **exact** character-by-character matching.
      *
-     * Matching is tolerant to *incidental* whitespace divergence between the caller-supplied
-     * [needle] and the bytes on disk (e.g. `cat   walks` vs `cat walks`, tabs vs spaces):
-     * whenever both cursors sit on whitespace, the comparison advances past each side's whole
-     * whitespace run, so runs of differing length/kind compare equal. All other characters
-     * must match exactly.
-     *
-     * Crucially the search never leaves original space: a match is reported as the *actual*
-     * original `[start, end)` range it covers. Because the range includes the leading
-     * indentation of the first matched line by construction, applying `newText` replaces that
-     * indentation wholesale (no doubling), and there is no normalize-then-remap step that
-     * could misplace the range.
+     * Every character in [needle] must match the corresponding character in [haystack],
+     * including whitespace (spaces, tabs, newlines and their exact count). No whitespace
+     * normalization or anchoring is performed — the needle is searched at every position.
      *
      * Occurrences are returned in source order and never overlap: once a match is consumed, the
-     * next search resumes after the end of that match's original span, so self-overlapping
-     * matches are skipped.
+     * next search resumes after the end of that match, so self-overlapping matches are skipped.
      *
      * @param haystack Original file content searched for matches.
-     * @param needle Caller-supplied text to locate (matched whitespace-insensitively).
+     * @param needle Caller-supplied text to locate (matched exactly).
      * @return The list of [MatchRange]s within the **original** [haystack] for every matched
      *   region, in source order. Empty if [needle] is not found.
      */
-        private fun findAllRanges(haystack: String, needle: String): List<MatchRange> {
-        if (needle.isEmpty()) return listOf(MatchRange(0, 0))
-        // A whitespace-leading needle must anchor at a line start (string start or right after a
-        // newline). This prevents it from absorbing a *preceding* line's trailing whitespace /
-        // newline: e.g. matching `    fun()` against `class A {\n    fun()` must start at the
-        // indentation run after the newline, not at the space following `{`.
-        // A non-whitespace-leading needle is tried at every position (index-of semantics), which
-        // also preserves intra-token repeats such as `aa` inside `aaaa`.
-        val needleStartsWithWs = needle[0].isWhitespace()
-
+    private fun findAllRanges(haystack: String, needle: String): List<MatchRange> {
+        if (needle.isEmpty()) return emptyList()
         val ranges = mutableListOf<MatchRange>()
-        var hi = 0
-        while (hi < haystack.length) {
-            val canStart = !needleStartsWithWs || hi == 0 || haystack[hi - 1] == '\n'
-            if (canStart) {
-                val end = matchEndAt(haystack, hi, needle)
-                if (end != null) {
-                    ranges.add(MatchRange(hi, end))
-                    // Resume after the consumed original span so self-overlapping matches are skipped.
-                    hi = end
-                    continue
-                }
-            }
-            // No match starts here. Skip efficiently: a non-whitespace needle cannot start
-            // inside a whitespace run, so jump to the run's end; otherwise step by one character
-            // (this also keeps visiting line starts inside a whitespace run for ws-leading needles).
-            hi = if (haystack[hi].isWhitespace() && !needleStartsWithWs) {
-                endOfWhitespaceRun(haystack, hi)
-            } else {
-                hi + 1
-            }
+        var from = 0
+        while (true) {
+            val idx = haystack.indexOf(needle, from)
+            if (idx < 0) break
+            ranges.add(MatchRange(idx, idx + needle.length))
+            from = idx + needle.length
         }
         return ranges
-    }
-
-    /**
-     * Attempts a whitespace-insensitive match of [needle] against [haystack] starting at
-     * [hStart].
-     *
-     * @param haystack Original file content being searched.
-     * @param hStart Offset in [haystack] where the attempted match is anchored.
-     * @param needle Caller-supplied text to match.
-     * @return The original-space end index (exclusive) of the matched region if [needle]
-     *   matches starting at [hStart], or `null` if it does not. See [findAllRanges] for the
-     *   whitespace-run equality rule. Trailing whitespace in [needle] is tolerated (a match may
-     *   end inside a whitespace run), while a match that runs past the end of [haystack] fails.
-     */
-    private fun matchEndAt(haystack: String, hStart: Int, needle: String): Int? {
-        var hi = hStart
-        var ni = 0
-        while (ni < needle.length) {
-            if (hi >= haystack.length) return null
-            val hc = haystack[hi]
-            val nc = needle[ni]
-            if (hc.isWhitespace() && nc.isWhitespace()) {
-                // Both sides on whitespace: advance each past its whole run; the runs compare
-                // equal regardless of length or kind (spaces vs tabs vs newlines).
-                hi = endOfWhitespaceRun(haystack, hi)
-                ni = endOfWhitespaceRun(needle, ni)
-            } else if (hc.isWhitespace() || nc.isWhitespace()) {
-                // One side whitespace, the other not -> mismatch.
-                return null
-            } else if (hc != nc) {
-                return null
-            } else {
-                hi++
-                ni++
-            }
-        }
-        // Needle fully consumed. The match ends at the current haystack cursor, which sits at
-        // the first character after the matched region (possibly inside a trailing whitespace
-        // run, which is deliberately included so it is replaced by newText).
-        return hi
-    }
-
-    /**
-     * @param text String being scanned.
-     * @param index Position of the whitespace run to skip past.
-     * @return The index just past the whitespace run starting at [index].
-     *
-     * If [text] has no whitespace at [index] the returned value equals [index], so callers
-     * that only invoke this when `text[index].isWhitespace()` still behave correctly.
-     */
-    private fun endOfWhitespaceRun(text: String, index: Int): Int {
-        var i = index
-        while (i < text.length && text[i].isWhitespace()) i++
-        return i
     }
 }
