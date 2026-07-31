@@ -1,11 +1,11 @@
 package eu.torvian.chatbot.worker.protocol.interaction
 
 import arrow.core.getOrElse
-import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
-import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolRejectionReasons
 import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandAccepted
 import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandRejected
 import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandResult
+import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolRejectionReasons
+import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.BuiltInToolProtocolMappingError
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toSignedBuiltInToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandResultPayload
@@ -19,7 +19,6 @@ import eu.torvian.chatbot.worker.builtin.BuiltInToolCallExecutor
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
 import eu.torvian.chatbot.worker.protocol.ids.UuidMessageIdProvider
 import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -49,10 +48,6 @@ class ToolCallInteraction(
     interactionId = envelope.interactionId,
     emitter = emitter
 ) {
-    companion object {
-        private val inputParser = Json { ignoreUnknownKeys = true }
-    }
-
     /**
      * Executes the command lifecycle: decode the signed request, verify the signature, dispatch
      * the built-in tool, and emit protocol responses.
@@ -83,14 +78,12 @@ class ToolCallInteraction(
             emitResult(result)
             return
         }
-
         val authorization = (validationResult as BuiltInToolAuthorizationValidationResult.Authorized).authorization
-        val innerInput = parseInputObject(authorization.input)
 
         emitAccepted()
         val executionResult = toolCallExecutor.execute(
             toolName = authorization.builtInToolName,
-            input = innerInput,
+            input = authorization.input,
         )
         emitResult(executionResult)
     }
@@ -147,6 +140,7 @@ class ToolCallInteraction(
                     put("expected", mappingError.expected)
                     put("actual", mappingError.actual)
                 }
+
                 is BuiltInToolProtocolMappingError.SerializationFailed -> {
                     put("error", "serialization_failed")
                     put("operation", mappingError.operation)
@@ -155,13 +149,4 @@ class ToolCallInteraction(
                 }
             }
         }
-
-    private fun parseInputObject(input: String?): JsonObject {
-        if (input.isNullOrBlank()) return JsonObject(emptyMap())
-        return try {
-            inputParser.parseToJsonElement(input) as? JsonObject ?: JsonObject(emptyMap())
-        } catch (_: Exception) {
-            JsonObject(emptyMap())
-        }
-    }
 }
