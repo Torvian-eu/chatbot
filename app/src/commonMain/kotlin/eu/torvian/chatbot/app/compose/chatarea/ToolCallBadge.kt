@@ -24,7 +24,14 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 
 /**
- * Displays a clickable badge for a tool call, showing status and execution time.
+ * Displays a clickable badge for a tool call, showing its status and execution time.
+ *
+ * The approval state is the only state with a pulse animation. Static states deliberately avoid
+ * creating an animation clock so completed badges do not schedule recurring redraws.
+ *
+ * @param toolCall Tool-call data used to determine the badge contents.
+ * @param onClick Invoked when the badge is clicked.
+ * @param modifier Modifier applied to the badge surface.
  */
 @Composable
 fun ToolCallBadge(
@@ -63,19 +70,6 @@ fun ToolCallBadge(
             MaterialTheme.colorScheme.tertiary
         )
     }
-
-    // Animate icon opacity for AWAITING_APPROVAL status
-    val infiniteTransition = rememberInfiniteTransition(label = "iconPulse")
-    val iconAlpha by infiniteTransition.animateFloat(
-        initialValue = if (toolCall.status == ToolCallStatus.AWAITING_APPROVAL) 0.3f else 1f,
-        targetValue = if (toolCall.status == ToolCallStatus.AWAITING_APPROVAL) 1f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "iconAlpha"
-    )
-
     Surface(
         modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
@@ -87,14 +81,16 @@ fun ToolCallBadge(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier
-                    .size(16.dp)
-                    .alpha(iconAlpha)
-            )
+            if (toolCall.status == ToolCallStatus.AWAITING_APPROVAL) {
+                PulsingToolCallIcon(icon = icon, color = color)
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
 
             Text(
                 text = toolCall.toolName,
@@ -115,8 +111,46 @@ fun ToolCallBadge(
 }
 
 /**
- * Displays a horizontal row of tool call badges.
- * Wraps to multiple lines if needed.
+ * Displays the approval icon with a pulse to draw attention to required user action.
+ *
+ * This composable is only included for approval-required calls, which keeps the infinite
+ * transition out of all static badge instances.
+ *
+ * @param icon Icon representing the tool-call status.
+ * @param color Tint color for the icon.
+ */
+@Composable
+private fun PulsingToolCallIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: androidx.compose.ui.graphics.Color
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "iconPulse")
+    val iconAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "iconAlpha"
+    )
+
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = color,
+        modifier = Modifier
+            .size(16.dp)
+            .alpha(iconAlpha)
+    )
+}
+
+/**
+ * Displays a horizontal row of tool call badges, wrapping them across multiple lines when needed.
+ *
+ * @param toolCalls Tool calls to display.
+ * @param onToolCallClick Invoked with the tool call selected by the user.
+ * @param modifier Modifier applied to the badge group.
  */
 @Composable
 fun ToolCallBadges(
