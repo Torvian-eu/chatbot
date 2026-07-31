@@ -5,6 +5,7 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.security.SignedRequest
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
@@ -23,7 +24,7 @@ class McpToolCallExecutorImplTest {
      * Verifies that malformed request JSON is mapped to a logical result error and does not hit the runtime service.
      */
     @Test
-    fun `malformed json returns logical error without runtime service call`() = kotlinx.coroutines.test.runTest {
+    fun `malformed json returns logical error without runtime service call`() = runTest {
         val authorization = buildAuthorization(input = "{invalid")
         val runtimeService = RecordingRuntimeService(
             result = Either.Right(McpToolCallOutcome(isError = false, textContent = "ok"))
@@ -40,7 +41,31 @@ class McpToolCallExecutorImplTest {
         val result = executor.execute(signedRequest(authorization))
 
         assertTrue(result.isError)
-        assertEquals(result.errorMessage?.contains("Malformed JSON input"), true)
+        assertEquals(true, result.errorMessage?.contains("Malformed JSON input"))
+        assertEquals(0, runtimeService.callCount)
+    }
+
+    /**
+     * Verifies that a literal control character is rejected by the shared parser and never reaches MCP.
+     */
+    @Test
+    fun `literal tab input returns malformed json error`() = runTest {
+        val authorization = buildAuthorization(input = "{\"query\":\"a\tb\"}")
+        val runtimeService = RecordingRuntimeService(
+            result = Either.Right(McpToolCallOutcome(isError = false, textContent = "ok"))
+        )
+        val executor = McpToolCallExecutorImpl(
+            authorizationValidator = StaticAuthorizationValidator(
+                LocalMCPToolExecutionAuthorizationValidationResult.Authorized(authorization)
+            ),
+            runtimeService = runtimeService,
+            json = json
+        )
+
+        val result = executor.execute(signedRequest(authorization))
+
+        assertTrue(result.isError)
+        assertEquals(true, result.errorMessage?.startsWith("Malformed JSON input: Unescaped control character U+0009"))
         assertEquals(0, runtimeService.callCount)
     }
 
@@ -48,7 +73,7 @@ class McpToolCallExecutorImplTest {
      * Verifies that runtime-level logical errors are propagated as tool-call errors.
      */
     @Test
-    fun `runtime error becomes tool call error result`() = kotlinx.coroutines.test.runTest {
+    fun `runtime error becomes tool call error result`() = runTest {
         val authorization = buildAuthorization()
         val runtimeService = RecordingRuntimeService(
             result = Either.Left(
@@ -79,7 +104,7 @@ class McpToolCallExecutorImplTest {
      * Verifies that successful outcomes with text content are preserved in output.
      */
     @Test
-    fun `successful outcome returns text output`() = kotlinx.coroutines.test.runTest {
+    fun `successful outcome returns text output`() = runTest {
         val authorization = buildAuthorization()
         val runtimeService = RecordingRuntimeService(
             result = Either.Right(
@@ -109,7 +134,7 @@ class McpToolCallExecutorImplTest {
      * Verifies that MCP-level error outcomes are mapped to logical tool-call errors.
      */
     @Test
-    fun `error outcome maps structured content to error message`() = kotlinx.coroutines.test.runTest {
+    fun `error outcome maps structured content to error message`() = runTest {
         val authorization = buildAuthorization()
         val runtimeService = RecordingRuntimeService(
             result = Either.Right(
@@ -140,7 +165,7 @@ class McpToolCallExecutorImplTest {
      * reach the MCP runtime.
      */
     @Test
-    fun `authorization rejection returns structured security error without runtime service call`() = kotlinx.coroutines.test.runTest {
+    fun `authorization rejection returns structured security error without runtime service call`() = runTest {
         val runtimeService = RecordingRuntimeService(
             result = Either.Right(McpToolCallOutcome(isError = false, textContent = "ok"))
         )

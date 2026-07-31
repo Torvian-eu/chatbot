@@ -1,9 +1,9 @@
 package eu.torvian.chatbot.worker.builtin
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
+import eu.torvian.chatbot.common.misc.json.parseStrictJsonObject
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
@@ -38,7 +38,7 @@ class DefaultBuiltInToolCallExecutor(
         val arguments = input
             ?.let { raw ->
                 try {
-                    jsonParser.parseToJsonElement(raw).jsonObject
+                    parseStrictJsonObject(jsonParser, raw)
                 } catch (exception: Exception) {
                     return BuiltInToolExecutionResult(
                         isError = true,
