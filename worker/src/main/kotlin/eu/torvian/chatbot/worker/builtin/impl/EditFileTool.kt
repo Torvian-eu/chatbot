@@ -91,24 +91,24 @@ class EditFileTool : BuiltInTool {
                 editsJson.mapIndexed { index, element ->
                     val obj = element as? JsonObject
                     if (obj == null) {
-                        validationErrors.add("Edit at index $index is not an object")
+                        validationErrors.add("Edit at index ${formatEditIndex(index)} is not an object")
                         return@mapIndexed null
                     }
 
                     val oldRaw = obj["oldText"]
                     val oldText = when {
                         oldRaw == null -> {
-                            validationErrors.add("Edit at index $index missing 'oldText'")
+                            validationErrors.add("Edit at index ${formatEditIndex(index)} missing 'oldText'")
                             null
                         }
 
                         oldRaw !is JsonPrimitive || !oldRaw.isString -> {
-                            validationErrors.add("Edit at index $index: 'oldText' must be a string")
+                            validationErrors.add("Edit at index ${formatEditIndex(index)}: 'oldText' must be a string")
                             null
                         }
 
                         oldRaw.content.isBlank() -> {
-                            validationErrors.add("Edit at index $index has empty or whitespace-only 'oldText'")
+                            validationErrors.add("Edit at index ${formatEditIndex(index)} has empty or whitespace-only 'oldText'")
                             null
                         }
 
@@ -119,12 +119,12 @@ class EditFileTool : BuiltInTool {
                     val newRaw = obj["newText"]
                     val newText = when {
                         newRaw == null -> {
-                            validationErrors.add("Edit at index $index missing 'newText'")
+                            validationErrors.add("Edit at index ${formatEditIndex(index)} missing 'newText'")
                             null
                         }
 
                         newRaw !is JsonPrimitive || !newRaw.isString -> {
-                            validationErrors.add("Edit at index $index: 'newText' must be a string")
+                            validationErrors.add("Edit at index ${formatEditIndex(index)}: 'newText' must be a string")
                             null
                         }
 
@@ -298,7 +298,7 @@ class EditFileTool : BuiltInTool {
             val ranges = findAllRanges(text, edit.oldText)
             if (ranges.isEmpty()) {
                 return PlanResult.Failure(
-                    "Edit at index $index: 'oldText' not found (exact match after EOL normalization)"
+                    "Edit at index ${formatEditIndex(index)}: 'oldText' not found (exact match after EOL normalization)"
                 )
             }
             for (range in ranges) {
@@ -332,7 +332,7 @@ class EditFileTool : BuiltInTool {
                 rejected.add(
                     RejectedEdit(
                         index = candidate.index,
-                        reason = "Overlaps occurrence from edit spec ${conflict.index} " +
+                        reason = "Overlaps occurrence from edit spec index ${formatEditIndex(conflict.index)} " +
                                 "at normalized range [${conflict.range.startIndex}, ${conflict.range.endIndexExclusive}) " +
                                 "(kept higher-priority occurrence)"
                     )
@@ -403,7 +403,7 @@ class EditFileTool : BuiltInTool {
         if (plan.rejected.isNotEmpty()) {
             sb.append("Rejected occurrences (overlapping, lower priority):\n")
             for ((index, reason) in plan.rejected) {
-                sb.append("  - edit spec index ").append(index).append(": ").append(reason).append('\n')
+                sb.append("  - edit spec index ").append(formatEditIndex(index)).append(": ").append(reason).append('\n')
             }
         }
         sb.append("--- diff ---\n")
@@ -462,6 +462,18 @@ class EditFileTool : BuiltInTool {
         }
         return ranges
     }
+
+    /**
+     * Formats an edit-array index for inclusion in a diagnostic message.
+     *
+     * Positive indices receive an explicit qualifier because the value refers to a zero-based
+     * JSON-array position; index zero remains concise for the first edit.
+     *
+     * @param index Zero-based position of the edit in the caller-supplied array.
+     * @return The index text, with `(zero-based)` appended when [index] is greater than zero.
+     */
+    private fun formatEditIndex(index: Int): String =
+        index.toString() + if (index > 0) " (zero-based)" else ""
 
     // -----------------------------------------------------------------------------------------
     // EOL (end-of-line) normalization helpers
