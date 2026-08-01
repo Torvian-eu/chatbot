@@ -20,10 +20,17 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
+import java.nio.charset.StandardCharsets
 
 /**
  * Ktor implementation of the [LLMApiClient].
@@ -44,6 +51,22 @@ class LLMApiClientKtor(
 ) : LLMApiClient {
     companion object {
         private val logger: Logger = LogManager.getLogger(LLMApiClientKtor::class.java)
+
+        /**
+         * Maximum number of raw bytes accepted for a non-streaming LLM response.
+         *
+         * This is deliberately a transport limit rather than an assistant-content limit;
+         * it protects the server while leaving content and persistence policy to higher layers.
+         */
+        private const val MAX_LLM_NON_STREAMING_RESPONSE_BYTES: Long = 10L * 1024L * 1024L
+
+        /**
+         * Maximum number of raw bytes accepted for one streaming LLM response.
+         *
+         * Streaming responses receive a larger allowance because their complete payload is
+         * distributed over time, but the limit still bounds the total provider data consumed.
+         */
+        private const val MAX_LLM_STREAMING_RESPONSE_BYTES: Long = 50L * 1024L * 1024L
     }
 
     override suspend fun completeChat(
@@ -113,12 +136,27 @@ class LLMApiClientKtor(
                 }
                 logger.debug("Received HTTP response: {}", httpResponse.status)
 
-                // 4. Read the response body as text. This is done regardless of status
-                // so the strategy can process the raw body for both success and error responses.
+                // Read through the raw channel so a provider cannot force an unbounded response allocation.
+                // The same bounded body is used for success and error strategies to keep transport behavior uniform.
                 val responseBody = try {
-                    httpResponse.bodyAsText()
+                    val byteReadChannel: ByteReadChannel = httpResponse.body()
+                    readUtf8BodyLimited(
+                        channel = byteReadChannel,
+                        maximumBytes = MAX_LLM_NON_STREAMING_RESPONSE_BYTES
+                    )
+                } catch (e: ResponseBodyLimitExceededException) {
+                    val errorMessage =
+                        "Response from ${provider.name} exceeded the configured transport limit of " +
+                            "$MAX_LLM_NON_STREAMING_RESPONSE_BYTES bytes"
+                    logger.error(errorMessage, e)
+                    return@withContext LLMCompletionError.OtherError(errorMessage).left()
+                } catch (e: CharacterCodingException) {
+                    val errorMessage = "Response from ${provider.name} was not valid UTF-8"
+                    logger.error(errorMessage, e)
+                    return@withContext LLMCompletionError.InvalidResponseError(errorMessage, e).left()
                 } catch (e: Exception) {
-                    // Handle errors specifically during reading the response body
+                    if (e is CancellationException) throw e
+                    // Preserve the existing typed transport error for channel and decoding failures.
                     logger.error("Failed to read response body from {} API", provider.name, e)
                     return@withContext LLMCompletionError.NetworkError(
                         "Failed to read response body from ${provider.name}",
@@ -217,38 +255,40 @@ class LLMApiClientKtor(
                 if (httpResponse.status.isSuccess()) {
                     logger.debug("Received HTTP streaming response: {}", httpResponse.status)
 
-                    // Get the ByteReadChannel for raw content
+                    // Get the ByteReadChannel for raw content.
                     val byteReadChannel: ByteReadChannel = httpResponse.body()
 
-                    // Transform ByteReadChannel into a Flow of lines
-                    val responseStream: Flow<String> = channelFlow {
-                        while (!byteReadChannel.isClosedForRead) {
-                            val line = byteReadChannel.readLine()
-                            if (line != null) {
-                                send(line)
-                            } else {
-                                break // End of stream
-                            }
-                        }
-                    }
+                    val responseStream = readUtf8LinesLimited(
+                        channel = byteReadChannel,
+                        maximumBytes = MAX_LLM_STREAMING_RESPONSE_BYTES,
+                        logger = logger
+                    )
 
                     // Process the stream using the strategy
                     strategy.processStreamingResponse(responseStream).collect { chunkEither ->
                         send(chunkEither) // Forward each processed chunk to the downstream flow
                     }
                 } else {
-                    val errorBody = try {
-                        httpResponse.bodyAsText()
-                    } catch (e: Exception) {
-                        logger.error("Failed to read error response body from ${provider.name} API", e)
-                        "Failed to read error body: ${e.message}"
-                    }
+                    val errorBody = readUtf8BodyLimited(
+                        channel = httpResponse.body(),
+                        maximumBytes = MAX_LLM_STREAMING_RESPONSE_BYTES
+                    )
                     logger.debug("Processing error response (streaming) with strategy ${strategy::class.simpleName}")
                     val apiError = strategy.processErrorResponse(httpResponse.status.value, errorBody)
                     logger.error("LLM API ${provider.name} returned error (Streaming Status: ${httpResponse.status.value}): $apiError")
                     send(apiError.left())
                 }
             }
+        } catch (e: ResponseBodyLimitExceededException) {
+            val errorMessage =
+                "Streaming response from ${provider.name} exceeded the configured transport limit of " +
+                    "$MAX_LLM_STREAMING_RESPONSE_BYTES bytes"
+            logger.error(errorMessage, e)
+            send(LLMCompletionError.OtherError(errorMessage).left())
+        } catch (e: CharacterCodingException) {
+            val errorMessage = "Streaming response from ${provider.name} was not valid UTF-8"
+            logger.error(errorMessage, e)
+            send(LLMCompletionError.InvalidResponseError(errorMessage, e).left())
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             logger.error("LLMApiClientKtor: HTTP streaming request failed for provider ${provider.name}", e)
@@ -345,6 +385,169 @@ class LLMApiClientKtor(
 
 
 // --- Helper functions ---
+
+/**
+ * Size of the temporary transport buffer used while reading provider response bytes.
+ */
+private const val RESPONSE_READ_BUFFER_SIZE: Int = 8 * 1024
+
+/**
+ * Reads UTF-8 response lines while enforcing a cumulative raw-byte upper bound.
+ *
+ * Line delimiters are counted as transport bytes, including the LF in LF and both bytes
+ * in CRLF. The helper deliberately reads bytes itself because an unbounded line reader
+ * could allocate a large unterminated line before the cumulative limit is checked.
+ *
+ * @param channel The single-reader response channel to consume.
+ * @param maximumBytes The inclusive maximum number of raw response bytes to accept.
+ * @return A cold flow of complete lines without their line delimiters.
+ * @throws ResponseBodyLimitExceededException If the response exceeds [maximumBytes].
+ * @throws CharacterCodingException If a line is not valid UTF-8.
+ * @throws IOException If the response channel closes with an I/O failure.
+ */
+private fun readUtf8LinesLimited(
+    channel: ByteReadChannel,
+    maximumBytes: Long,
+    logger: Logger
+): Flow<String> = flow {
+    require(maximumBytes > 0) { "maximumBytes must be positive" }
+
+    val readBuffer = ByteArray(RESPONSE_READ_BUFFER_SIZE)
+    var readBufferOffset = 0
+    var readBufferSize = 0
+    var totalResponseBytes = 0L
+    val lineBytes = ByteArrayOutputStream()
+
+    while (true) {
+        lineBytes.reset()
+        var lineFinished = false
+        var lineHasInput = false
+
+        while (!lineFinished) {
+            if (readBufferOffset >= readBufferSize) {
+                val remainingBytes = maximumBytes - totalResponseBytes
+                val bytesToRead = when {
+                    remainingBytes >= readBuffer.size.toLong() -> readBuffer.size
+                    remainingBytes > 0 -> (remainingBytes + 1L).toInt()
+                    else -> 1
+                }
+                val bytesRead = channel.readAvailable(readBuffer, 0, bytesToRead)
+                if (bytesRead == -1) {
+                    channel.closedCause?.let { throw it }
+                    break
+                }
+                if (bytesRead == 0) continue
+                readBufferOffset = 0
+                readBufferSize = bytesRead
+            }
+
+            while (readBufferOffset < readBufferSize && !lineFinished) {
+                val currentByte = readBuffer[readBufferOffset++]
+                lineHasInput = true
+                totalResponseBytes++
+                if (totalResponseBytes > maximumBytes) {
+                    throw ResponseBodyLimitExceededException(maximumBytes)
+                }
+                if (currentByte == '\n'.code.toByte()) {
+                    lineFinished = true
+                } else {
+                    lineBytes.write(currentByte.toInt())
+                }
+            }
+        }
+
+        if (!lineHasInput) break
+
+        val rawLine = lineBytes.toByteArray()
+        // The CR is part of a CRLF delimiter and must not be passed to provider parsers.
+        val line = if (lineFinished && rawLine.lastOrNull() == '\r'.code.toByte()) {
+            rawLine.copyOf(rawLine.size - 1)
+        } else {
+            rawLine
+        }
+        emit(decodeUtf8(line))
+    }
+
+    logger.debug("Completed reading UTF-8 lines from channel (total bytes read: $totalResponseBytes)")
+}
+
+/**
+ * Reads a response channel into memory only after enforcing a raw-byte upper bound.
+ *
+ * The extra byte read when the limit is reached distinguishes an exactly-at-limit body
+ * from an oversized body without silently truncating provider data. UTF-8 decoding is
+ * intentionally deferred until the bounded read has completed successfully.
+ *
+ * @param channel The single-reader response channel to consume.
+ * @param maximumBytes The inclusive maximum number of raw response bytes to retain.
+ * @return The complete response decoded as strict UTF-8.
+ * @throws ResponseBodyLimitExceededException If the channel contains more than [maximumBytes] bytes.
+ * @throws CharacterCodingException If the bounded bytes are not valid UTF-8.
+ * @throws IOException If the response channel closes with an I/O failure.
+ */
+private suspend fun readUtf8BodyLimited(
+    channel: ByteReadChannel,
+    maximumBytes: Long
+): String {
+    require(maximumBytes > 0) { "maximumBytes must be positive" }
+
+    val output = ByteArrayOutputStream(
+        minOf(maximumBytes, RESPONSE_READ_BUFFER_SIZE.toLong()).toInt()
+    )
+    val readBuffer = ByteArray(RESPONSE_READ_BUFFER_SIZE)
+    var totalBytes = 0L
+
+    while (true) {
+        val remainingBytes = maximumBytes - totalBytes
+        val bytesToRead = when {
+            remainingBytes >= readBuffer.size.toLong() -> readBuffer.size
+            remainingBytes > 0 -> (remainingBytes + 1L).toInt()
+            else -> 1
+        }
+        when (val bytesRead = channel.readAvailable(readBuffer, offset = 0, length = bytesToRead)) {
+            -1 -> {
+                // A normal EOF has no close cause; a cause must be surfaced as the original
+                // I/O or cancellation failure rather than being mistaken for a complete body.
+                channel.closedCause?.let { throw it }
+                return decodeUtf8(output.toByteArray())
+            }
+            0 -> continue
+            else -> {
+                totalBytes += bytesRead
+                if (totalBytes > maximumBytes) {
+                    throw ResponseBodyLimitExceededException(maximumBytes)
+                }
+                output.write(readBuffer, 0, bytesRead)
+            }
+        }
+    }
+}
+
+/**
+ * Decodes a complete provider payload as UTF-8 while rejecting malformed byte sequences.
+ *
+ * Strict decoding prevents invalid transport data from being silently replaced before a
+ * provider strategy attempts to parse it.
+ *
+ * @param bytes The complete UTF-8 byte sequence to decode.
+ * @return The decoded text.
+ * @throws CharacterCodingException If [bytes] is not valid UTF-8.
+ */
+private fun decodeUtf8(bytes: ByteArray): String = StandardCharsets.UTF_8.newDecoder()
+    .onMalformedInput(CodingErrorAction.REPORT)
+    .onUnmappableCharacter(CodingErrorAction.REPORT)
+    .decode(ByteBuffer.wrap(bytes))
+    .toString()
+
+/**
+ * Marks an oversized provider response so the transport can abort reading without exposing
+ * an implementation-specific exception through the public LLM client API.
+ *
+ * @property maximumBytes The configured maximum that the response exceeded.
+ */
+private class ResponseBodyLimitExceededException(
+    val maximumBytes: Long
+) : IOException("Response exceeded the configured limit of $maximumBytes bytes")
 
 /**
  * Converts a [GenericHttpMethod] to a Ktor [HttpMethod].
