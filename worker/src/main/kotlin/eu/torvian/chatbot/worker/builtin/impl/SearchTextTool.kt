@@ -34,10 +34,12 @@ import kotlin.time.Duration.Companion.milliseconds
  * and a structured `details` object with per-match context.
  *
  * The textual output is **grouped by file**: each file contributes a distinctive `=== file: <path> ===`
- * header line, followed by its matching lines rendered as `<lineNumber>: <content>` (context lines are
- * prefixed with their own line number, without extra indentation). A blank line separates consecutive
- * files, and also separates consecutive matches that carry context. This keeps the path out of every
- * line, making results easier to scan and reducing token usage for the consumer.
+ * header line, followed by matching and context lines rendered as `<lineNumber>: <content>` (context
+ * lines are prefixed with their own line number, without extra indentation). Overlapping context
+ * windows are compacted so each source line is emitted at most once; matching lines take precedence
+ * over context renderings. A blank line separates consecutive files and disjoint rendered ranges.
+ * This keeps the path out of every line, makes results easier to scan, and reduces token usage for the
+ * consumer.
  *
  * Matching is **line-based**: a file line contributes at most one result, regardless of how many
  * individual occurrences of the pattern it contains. The result count therefore reflects the number
@@ -263,20 +265,19 @@ class SearchTextTool : BuiltInTool {
 
             val elapsedMs = (System.nanoTime() - startNanos) / 1_000_000
 
-            // Render the grouped readable output: one distinctive header line per file, then each
-            // match rendered as "<lineNumber>: <content>" (context lines prefixed with their own line
-            // number, without extra indentation). A blank line separates consecutive matches that
-            // carry context (before/after), so distinct matches stay easy to tell apart without
-            // repeating the path on every line. A blank line also separates consecutive files.
+            // Render one compact, source-ordered range per file. Per-match details remain unchanged;
+            // only the human-readable projection merges overlapping context windows.
             val outputLines = buildList {
                 matchesByFile.forEach { (relative, renders) ->
                     add("=== file: $relative ===")
-                    renders.forEachIndexed { idx, render ->
-                        // Separate matches that carry context from the previous match for readability.
-                        if (idx > 0 && (render.before.isNotEmpty() || render.after.isNotEmpty())) add("")
-                        render.before.forEach { (n, ctx) -> add("$n: $ctx") }
-                        add("${render.lineNumber}: ${render.line}")
-                        render.after.forEach { (n, ctx) -> add("$n: $ctx") }
+                    val compactedLines = compactRenders(renders)
+                    compactedLines.forEachIndexed { index, renderedLine ->
+                        // A gap means the context windows are disjoint; retain a visual separator there,
+                        // but do not add one merely because two match records overlap.
+                        if (index > 0 && renderedLine.lineNumber != compactedLines[index - 1].lineNumber + 1) {
+                            add("")
+                        }
+                        add("${renderedLine.lineNumber}: ${renderedLine.text}")
                     }
                     add("") // separator between files
                 }
@@ -362,6 +363,32 @@ class SearchTextTool : BuiltInTool {
                 details = details,
             )
         }
+    }
+
+    /**
+     * Compacts per-match renderings into a unique, source-ordered set of lines for readable output.
+     *
+     * Context entries are inserted only when their source line has not already been seen. Matching
+     * entries always replace an existing context entry, ensuring a line that is itself a match keeps
+     * its match-centered rendering rather than a potentially shortened context rendering.
+     *
+     * @param renders Per-match renderings belonging to one file, in match discovery order.
+     * @return Unique rendered lines sorted by their 1-based source line number.
+     */
+    private fun compactRenders(renders: List<MatchRender>): List<RenderedLine> {
+        val linesByNumber = sortedMapOf<Int, RenderedLine>()
+
+        renders.forEach { render ->
+            render.before.forEach { (lineNumber, text) ->
+                linesByNumber.putIfAbsent(lineNumber, RenderedLine(lineNumber, text))
+            }
+            linesByNumber[render.lineNumber] = RenderedLine(render.lineNumber, render.line)
+            render.after.forEach { (lineNumber, text) ->
+                linesByNumber.putIfAbsent(lineNumber, RenderedLine(lineNumber, text))
+            }
+        }
+
+        return linesByNumber.values.toList()
     }
 
     /**
@@ -498,4 +525,15 @@ private data class MatchRender(
     val line: String,
     val before: List<Pair<Int, String>>,
     val after: List<Pair<Int, String>>,
+)
+
+/**
+ * Represents one unique source line in the compact readable rendering of a file.
+ *
+ * @property lineNumber 1-based source line number used as the deduplication key.
+ * @property text Rendered source content, either context-trimmed or match-centered.
+ */
+private data class RenderedLine(
+    val lineNumber: Int,
+    val text: String,
 )

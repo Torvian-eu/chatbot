@@ -524,6 +524,77 @@ class SearchTextToolScenariosTest {
         }
     }
 
+    /**
+     * Verifies that adjacent match windows are merged so an overlapping context line is emitted once.
+     *
+     * The structured result remains per-match, while the readable output represents the unique source
+     * lines covered by both windows.
+     */
+    @Test
+    fun `overlapping context windows are compacted in readable output`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            dir.resolve("sample.txt").writeText(
+                "prefix\nTest first\nTest second\nsuffix",
+                Charsets.UTF_8,
+            )
+
+            val result = tool.execute(
+                buildInput("Test", mode = "plain", contextBefore = 1, contextAfter = 2),
+                context(dir),
+            )
+
+            val success = assertSuccess(result)
+            val outputLines = success.output!!.lines()
+            assertEquals(1, outputLines.count { it.startsWith("1: ") })
+            assertEquals(1, outputLines.count { it.startsWith("2: ") })
+            assertEquals(1, outputLines.count { it.startsWith("3: ") })
+            assertEquals(1, outputLines.count { it.startsWith("4: ") })
+            assertTrue(outputLines.indexOfFirst { it.startsWith("1: ") } < outputLines.indexOfFirst { it.startsWith("2: ") })
+            assertTrue(outputLines.indexOfFirst { it.startsWith("2: ") } < outputLines.indexOfFirst { it.startsWith("3: ") })
+
+            // Compaction is presentation-only: each match still retains its own context window.
+            val matches = success.details!!["matches"]!!.jsonArray
+            assertEquals(2, matches.size)
+            assertEquals(listOf("Test second", "suffix"), matches[0].jsonObject["after"]!!.jsonArray.map {
+                it.jsonPrimitive.content
+            })
+            assertEquals(listOf("suffix"), matches[1].jsonObject["after"]!!.jsonArray.map {
+                it.jsonPrimitive.content
+            })
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that a matching line wins over an earlier context rendering of the same source line.
+     *
+     * The long matching line must retain its match-centered window rather than the shorter context
+     * representation created while rendering the preceding match.
+     */
+    @Test
+    fun `matching line rendering takes precedence over context rendering`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val longMatch = "x".repeat(500) + " TARGET " + "y".repeat(500)
+            dir.resolve("sample.txt").writeText("first TARGET\n$longMatch", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("TARGET", mode = "plain", contextAfter = 1),
+                context(dir),
+            )
+
+            val success = assertSuccess(result)
+            val lineTwo = success.output!!.lines().single { it.startsWith("2: ") }
+            assertTrue(lineTwo.contains("TARGET"), "matching text must remain visible: $lineTwo")
+            assertTrue(lineTwo.contains("..."), "the match-centered window must be retained: $lineTwo")
+            assertEquals(1, success.output!!.lines().count { it.startsWith("2: ") })
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `truncation notice does not contain four consecutive newlines`() = runTest {
         val dir = createTempDirectory("search-text-test")
