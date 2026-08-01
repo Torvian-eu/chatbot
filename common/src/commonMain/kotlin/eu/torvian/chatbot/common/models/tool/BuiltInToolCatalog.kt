@@ -94,7 +94,7 @@ object BuiltInToolCatalog {
         ),
         BuiltInToolSpec(
             builtInToolName = "edit_file",
-            description = "Apply structured edits to a text file with optional dry-run.",
+            description = "Batch-replace exact text in a UTF-8 file. Edits match the original content, not prior edits. Optional dry-run.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -104,13 +104,14 @@ object BuiltInToolCatalog {
                     })
                     put("edits", buildJsonObject {
                         put("type", "array")
+                        put("description", "Replacement batch matched against the original file; array order is not sequential.")
                         put("minItems", 1)
                         put("items", buildJsonObject {
                             put("type", "object")
                             put("properties", buildJsonObject {
                                 put("oldText", buildJsonObject {
                                     put("type", "string")
-                                    put("description", "Text to replace. ALL occurrences in the file will be replaced. Include surrounding context to target a specific instance.")
+                                    put("description", "Exact text to replace. All non-overlapping occurrences are replaced; add context to target one instance.")
                                 })
                                 put("newText", buildJsonObject {
                                     put("type", "string")
