@@ -88,7 +88,7 @@ private fun GeneralMessageControls(
     messageActions: MessageActions,
     moreMenuExpanded: Boolean,
     onMoreMenuExpandedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier.Companion
+    modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier,
@@ -111,6 +111,12 @@ private fun GeneralMessageControls(
         if (message.role == ChatMessage.Role.ASSISTANT) {
             RegenerateButton(message = message, onRegenerateMessage = messageActions.onRegenerateMessage)
         }
+
+        // Branch & Continue is frequent enough to remain one click away from the action row.
+        BranchAndContinueButton(
+            message = message,
+            onBranchAndContinue = messageActions.onBranchAndContinue
+        )
 
         // More Actions Menu (Insert Message, Delete Thread, etc.)
         MoreActionsMenu(
@@ -239,9 +245,38 @@ private fun DeleteButton(message: ChatMessage, onDeleteMessage: (ChatMessage) ->
 }
 
 /**
+ * Displays the direct action for creating a new continuation branch from a message.
+ *
+ * The callback reuses the established Branch & Continue flow, so moving the control
+ * out of the overflow menu changes only discoverability and not request semantics.
+ *
+ * @param message The message from which the new branch should continue.
+ * @param onBranchAndContinue Callback invoked with [message] when the action is selected.
+ */
+@Composable
+private fun BranchAndContinueButton(
+    message: ChatMessage,
+    onBranchAndContinue: (ChatMessage) -> Unit
+) {
+    PlainTooltipBox(text = "Branch & Continue") {
+        IconButton(
+            onClick = { onBranchAndContinue(message) },
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = "Branch & Continue",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
  * Displays the "More" actions menu with additional, less commonly used actions.
  * This menu is designed for extensibility - new actions can be added here without
- * cluttering the main action row.
+ * cluttering the main action row. Frequently used actions are rendered directly in
+ * [GeneralMessageControls] instead.
  *
  * @param message The message for which actions are displayed.
  * @param messageActions All available actions for the message item.
@@ -284,13 +319,6 @@ private fun MoreActionsMenu(
             DeleteThreadMenuItem(
                 message = message,
                 onDeleteThread = messageActions.onDeleteThread,
-                onDismissMenu = { onExpandedChange(false) }
-            )
-
-            // Branch & Continue action
-            BranchAndContinueMenuItem(
-                message = message,
-                onBranchAndContinue = messageActions.onBranchAndContinue,
                 onDismissMenu = { onExpandedChange(false) }
             )
 
@@ -350,32 +378,6 @@ private fun DeleteThreadMenuItem(
     )
 }
 
-/**
- * Menu item for Branch & Continue action.
- * This allows the user to continue the conversation from any message,
- * creating a new branch (sibling) if the message is not a leaf.
- */
-@Composable
-private fun BranchAndContinueMenuItem(
-    message: ChatMessage,
-    onBranchAndContinue: (ChatMessage) -> Unit,
-    onDismissMenu: () -> Unit
-) {
-    DropdownMenuItem(
-        text = { Text("Branch & Continue") },
-        onClick = {
-            onDismissMenu()
-            onBranchAndContinue(message)
-        },
-        leadingIcon = {
-            Icon(
-                Icons.Default.PlayArrow,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    )
-}
 
 
 /**
@@ -389,7 +391,7 @@ private fun BranchAndContinueMenuItem(
 private fun BranchNavigationControls(
     branchNavigationData: BranchNavigationData,
     onSwitchBranchToMessage: (Long) -> Unit,
-    modifier: Modifier = Modifier.Companion
+    modifier: Modifier = Modifier
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         // Previous branch button '<'
