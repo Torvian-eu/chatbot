@@ -48,6 +48,19 @@ class DefaultConversationTurnOrchestrator(
 
         /** Upper bound that prevents an unbounded assistant/tool loop. */
         private const val MAX_TOOL_CALLING_ITERATIONS: Int = 100
+
+        /** Maximum character length of persisted assistant text before the truncation notice. */
+        const val MAX_ASSISTANT_MESSAGE_CHARS: Int = 64_000
+
+        /** Maximum characters allowed for a single tool call argument payload. */
+        const val MAX_TOOL_CALL_ARGUMENT_CHARS: Int = 32_000
+
+        /** Maximum number of tool calls allowed in a single assistant step. */
+        const val MAX_TOOL_CALLS_PER_STEP: Int = 20
+
+        /** Visible marker explaining why assistant output was shortened. */
+        private const val ASSISTANT_TRUNCATION_NOTICE =
+            "\n\n[Output truncated: the response exceeded 64000 characters.]"
     }
 
     /**
@@ -212,9 +225,15 @@ class DefaultConversationTurnOrchestrator(
             return null
         }
 
+        val originalContent = choice.content ?: ""
+        val content = if (originalContent.length > MAX_ASSISTANT_MESSAGE_CHARS) {
+            originalContent.take(MAX_ASSISTANT_MESSAGE_CHARS) + ASSISTANT_TRUNCATION_NOTICE
+        } else {
+            originalContent
+        }
         val assistantMessage = conversationTurnPersistence.saveAssistantMessage(
             sessionId = request.session.id,
-            content = choice.content ?: "",
+            content = content,
             parentMessageId = parentMessageId,
             model = request.llmConfig.model,
             settings = request.llmConfig.settings
@@ -228,15 +247,21 @@ class DefaultConversationTurnOrchestrator(
             persistedAssistantMessage.assistantMessage
         }
 
-        if (choice.finishReason != "tool_calls" || choice.toolCalls.isNullOrEmpty()) {
+        val boundedToolCalls = choice.toolCalls
+            ?.take(MAX_TOOL_CALLS_PER_STEP)
+            ?.map { toolCall ->
+                toolCall.copy(arguments = toolCall.arguments?.take(MAX_TOOL_CALL_ARGUMENT_CHARS))
+            }
+
+        if (choice.finishReason != "tool_calls" || boundedToolCalls.isNullOrEmpty()) {
             emit(ConversationTurnEvent.TurnCompleted)
             return null
         }
 
         return AssistantStepOutcome(
             assistantMessage = assistantMessage,
-            assistantContent = choice.content,
-            toolCallRequests = choice.toolCalls
+            assistantContent = content,
+            toolCallRequests = boundedToolCalls
         )
     }
 
@@ -446,6 +471,7 @@ class DefaultConversationTurnOrchestrator(
         onCancellation: suspend (partialContent: String) -> Unit
     ) {
         val accumulatedContent = StringBuilder()
+        var contentTruncated = false
         var finishReason: String? = null
         val toolCallsByIndex = mutableMapOf<Int, MutableToolCallAccumulator>()
 
@@ -460,15 +486,29 @@ class DefaultConversationTurnOrchestrator(
                         ifRight = { chunk ->
                             when (chunk) {
                                 is LLMStreamChunk.ContentChunk -> {
-                                    accumulatedContent.append(chunk.deltaContent)
-                                    onContentDelta(chunk.deltaContent)
-                                    if (chunk.finishReason != null) {
-                                        finishReason = chunk.finishReason
+                                    val remainingChars = MAX_ASSISTANT_MESSAGE_CHARS - accumulatedContent.length
+                                    if (remainingChars > 0) {
+                                        val allowedDelta = chunk.deltaContent.take(remainingChars)
+                                        if (allowedDelta.length < chunk.deltaContent.length) {
+                                            contentTruncated = true
+                                        }
+                                        accumulatedContent.append(allowedDelta)
+                                        if (allowedDelta.isNotEmpty()) {
+                                            onContentDelta(allowedDelta)
+                                        }
+                                        if (chunk.finishReason != null) {
+                                            finishReason = chunk.finishReason
+                                        }
+                                    } else {
+                                        contentTruncated = true
                                     }
                                 }
 
                                 is LLMStreamChunk.ToolCallChunk -> {
                                     val index = chunk.index ?: 0
+                                    if (index >= MAX_TOOL_CALLS_PER_STEP) {
+                                        return@fold
+                                    }
                                     val accumulator = toolCallsByIndex.getOrPut(index) {
                                         MutableToolCallAccumulator(
                                             id = chunk.id,
@@ -484,10 +524,17 @@ class DefaultConversationTurnOrchestrator(
                                         accumulator.name = chunk.name
                                     }
                                     if (chunk.argumentsDelta != null) {
-                                        accumulator.arguments.append(chunk.argumentsDelta)
+                                        val remaining = MAX_TOOL_CALL_ARGUMENT_CHARS - accumulator.arguments.length
+                                        if (remaining > 0) {
+                                            val allowedDelta = chunk.argumentsDelta.take(remaining)
+                                            accumulator.arguments.append(allowedDelta)
+                                            if (allowedDelta.isNotEmpty()) {
+                                                onToolCallChunk(chunk.copy(argumentsDelta = allowedDelta))
+                                            }
+                                        }
+                                    } else {
+                                        onToolCallChunk(chunk)
                                     }
-
-                                    onToolCallChunk(chunk)
                                 }
 
                                 is LLMStreamChunk.UsageChunk -> {
@@ -513,7 +560,9 @@ class DefaultConversationTurnOrchestrator(
                                         finishReason = "tool_calls"
                                     }
 
-                                    onStreamComplete(accumulatedContent.toString(), toolCallRequests, finishReason)
+                                    val finalContent = accumulatedContent.toString() +
+                                        if (contentTruncated) ASSISTANT_TRUNCATION_NOTICE else ""
+                                    onStreamComplete(finalContent, toolCallRequests, finishReason)
                                 }
 
                                 is LLMStreamChunk.Error -> {
@@ -528,7 +577,10 @@ class DefaultConversationTurnOrchestrator(
             logger.info("LLM streaming cancelled, accumulated content length: ${accumulatedContent.length}")
             try {
                 withContext(NonCancellable) {
-                    onCancellation(accumulatedContent.toString())
+                    onCancellation(
+                        accumulatedContent.toString() +
+                            if (contentTruncated) ASSISTANT_TRUNCATION_NOTICE else ""
+                    )
                 }
             } catch (handlerError: Exception) {
                 logger.error("Failed to run onCancellation handler: ${handlerError.message}", handlerError)
