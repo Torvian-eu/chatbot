@@ -37,6 +37,9 @@ class OpenRouterModelDiscoveryStrategyTest {
         assertEquals("/models", config.path)
         assertEquals(GenericHttpMethod.GET, config.method)
         assertEquals("Bearer secret", config.customHeaders["Authorization"])
+        assertEquals("https://chatbot.torvian.eu", config.customHeaders["HTTP-Referer"])
+        assertEquals("Torvian Chatbot", config.customHeaders["X-OpenRouter-Title"])
+        assertEquals("cloud-agent,general-chat", config.customHeaders["X-OpenRouter-Categories"])
     }
 
     @Test

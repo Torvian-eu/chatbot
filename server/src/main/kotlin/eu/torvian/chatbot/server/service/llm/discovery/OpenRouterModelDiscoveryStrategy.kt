@@ -11,6 +11,7 @@ import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.ModelDiscoveryError
 import eu.torvian.chatbot.server.service.llm.ModelDiscoveryResult
 import eu.torvian.chatbot.server.service.llm.ModelDiscoveryStrategy
+import eu.torvian.chatbot.server.service.llm.OpenRouterClientInfo
 import io.ktor.http.HttpHeaders
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -41,7 +42,10 @@ class OpenRouterModelDiscoveryStrategy(private val json: Json) : ModelDiscoveryS
             method = GenericHttpMethod.GET,
             body = "",
             contentType = GenericContentType.APPLICATION_JSON,
-            customHeaders = mapOf(HttpHeaders.Authorization to "Bearer $apiKey")
+            customHeaders = buildMap {
+                put(HttpHeaders.Authorization, "Bearer $apiKey")
+                putAll(OpenRouterClientInfo.headers)
+            }
         ).right()
     }
 
