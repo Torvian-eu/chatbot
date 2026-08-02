@@ -110,6 +110,11 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             customHeaders[HttpHeaders.Authorization] = "Bearer $apiKey"
         }
 
+        // Attribution belongs only on OpenRouter requests; this strategy is also reused by OpenAI.
+        if (provider.type == LLMProviderType.OPENROUTER) {
+            customHeaders.putAll(OpenRouterClientInfo.headers)
+        }
+
         // Pre-serialize the JsonObject to avoid Ktor serialization issues
         val requestBodyString = json.encodeToString(JsonObject.serializer(), requestBodyJson)
 

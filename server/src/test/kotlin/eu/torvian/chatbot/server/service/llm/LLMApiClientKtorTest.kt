@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
@@ -127,6 +128,49 @@ class LLMApiClientKtorTest {
         }
         verify(exactly = 1) { mockStrategy.processSuccessResponse(successResponseBody) }
         verify(exactly = 0) { mockStrategy.processErrorResponse(any(), any()) } // Error processing should not be called
+    }
+
+    /**
+     * Confirms that the generic Ktor transport forwards attribution produced by the
+     * provider strategy rather than altering or filtering provider-specific headers.
+     */
+    @Test
+    fun `completeChat should forward OpenRouter attribution headers`() = runTest {
+        val openRouterProvider = testProvider.copy(
+            type = LLMProviderType.OPENROUTER,
+            name = "OpenRouter",
+            apiKeyId = "openrouter-key",
+            baseUrl = "https://openrouter.ai/api/v1"
+        )
+        val strategy = OpenAIChatStrategy(Json { ignoreUnknownKeys = true })
+        val responseBody = """
+            {"id":"completion-123","object":"chat.completion","created":1678885370,
+             "model":"openai/gpt-4o","choices":[{"index":0,"message":{"role":"assistant","content":"Hello!"},"finish_reason":"stop"}],
+             "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+        """.trimIndent()
+
+        httpClient = createMockHttpClient { request ->
+            assertEquals("Bearer $testApiKey", request.headers[HttpHeaders.Authorization])
+            assertEquals("https://chatbot.torvian.eu", request.headers["HTTP-Referer"])
+            assertEquals("Torvian Chatbot", request.headers["X-OpenRouter-Title"])
+            assertEquals("cloud-agent,general-chat", request.headers["X-OpenRouter-Categories"])
+            respond(
+                content = ByteReadChannel(responseBody),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        client = LLMApiClientKtor(httpClient, mapOf(LLMProviderType.OPENROUTER to strategy))
+
+        val result = client.completeChat(
+            testMessages,
+            testModel,
+            openRouterProvider,
+            testSettings,
+            testApiKey
+        )
+
+        assertTrue(result.isRight(), "Result should be successful")
     }
 
     @Test

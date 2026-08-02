@@ -60,6 +60,9 @@ class OpenAIChatStrategyTest {
         assertEquals(GenericContentType.APPLICATION_JSON, config.contentType)
         assertEquals("Bearer $apiKey", config.customHeaders[HttpHeaders.Authorization])
         assertFalse(config.customHeaders.containsKey("X-Api-Key"), "Should not use X-Api-Key header for OpenAI")
+        assertFalse(config.customHeaders.containsKey("HTTP-Referer"), "OpenAI must not receive OpenRouter attribution")
+        assertFalse(config.customHeaders.containsKey("X-OpenRouter-Title"), "OpenAI must not receive OpenRouter attribution")
+        assertFalse(config.customHeaders.containsKey("X-OpenRouter-Categories"), "OpenAI must not receive OpenRouter attribution")
 
         // Verify the body is now a String (pre-serialized JSON)
         assertTrue(config.body is String, "Body should be a pre-serialized JSON String")
@@ -80,6 +83,42 @@ class OpenAIChatStrategyTest {
         val messagesArrayJson = requestBodyJson["messages"]?.jsonArray
         assertNotNull(messagesArrayJson, "Should have messages array")
         assertEquals(4, messagesArrayJson.size) // 1 system + 3 chat messages
+    }
+
+    /**
+     * Verifies that OpenRouter receives the canonical attribution headers while the
+     * OpenAI-compatible request body remains unchanged.
+     */
+    @Test
+    @DisplayName("prepareRequest should add OpenRouter attribution headers without changing the payload")
+    fun prepareRequest_openRouterAddsAttributionHeaders() {
+        val provider = TestDefaults.llmProvider1.copy(
+            name = "OpenRouter",
+            type = LLMProviderType.OPENROUTER,
+            apiKeyId = "openrouter-key",
+            baseUrl = "https://openrouter.ai/api/v1"
+        )
+        val apiKey = "sk-openrouter-test"
+
+        val result = strategy.prepareRequest(
+            messages = listOf(RawChatMessage.User("Hello")),
+            modelConfig = TestDefaults.llmModel1.copy(name = "openai/gpt-4o"),
+            provider = provider,
+            settings = TestDefaults.modelSettings1,
+            apiKey = apiKey
+        )
+
+        assertTrue(result.isRight(), "Expected success result")
+        val config = result.getOrNull()
+        assertNotNull(config, "Expected non-null ApiRequestConfig")
+        assertEquals("Bearer $apiKey", config.customHeaders[HttpHeaders.Authorization])
+        assertEquals("https://chatbot.torvian.eu", config.customHeaders["HTTP-Referer"])
+        assertEquals("Torvian Chatbot", config.customHeaders["X-OpenRouter-Title"])
+        assertEquals("cloud-agent,general-chat", config.customHeaders["X-OpenRouter-Categories"])
+
+        val body = Json.decodeFromString<JsonObject>(config.body as String)
+        assertEquals("openai/gpt-4o", body["model"]?.jsonPrimitive?.content)
+        assertEquals(2, body["messages"]?.jsonArray?.size)
     }
 
     @Test
