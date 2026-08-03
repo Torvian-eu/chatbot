@@ -198,7 +198,6 @@ class DownloadFileToolTest {
                 "url" to JsonPrimitive("https://example.com/e.bin"),
                 "path" to JsonPrimitive("e.bin"),
                 "timeoutSeconds" to JsonPrimitive(20),
-                "maxBytes" to JsonPrimitive(4096),
                 "followRedirects" to JsonPrimitive(false),
             ),
             context(ws),
@@ -206,7 +205,8 @@ class DownloadFileToolTest {
 
         val req = fake.requests.first()
         assertEquals(20, req.timeoutSeconds)
-        assertEquals(4096, req.maxBytes)
+        // The download cap is a hard limit not controllable by the LLM.
+        assertEquals(10 * 1024 * 1024, req.maxBytes)
         assertEquals(false, req.followRedirects)
     }
 
@@ -274,7 +274,7 @@ class DownloadFileToolTest {
     }
 
     @Test
-    fun `non-positive maxBytes is invalid input`() = runTest {
+    fun `maxBytes is not a valid argument and is rejected as unknown`() = runTest {
         val ws = createTempDirectory("dl-test")
         val result = toolWith(FakeWebFetchService()).execute(
             input(

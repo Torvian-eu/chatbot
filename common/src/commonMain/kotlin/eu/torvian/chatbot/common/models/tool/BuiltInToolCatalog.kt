@@ -389,15 +389,10 @@ object BuiltInToolCatalog {
                         put("minimum", 1)
                         put("description", "Optional request timeout in seconds.")
                     })
-                    put("maxDownloadBytes", buildJsonObject {
-                        put("type", "integer")
-                        put("minimum", 1)
-                        put("default", 100000)
-                        put("description", "Maximum number of response bytes to download from the network.")
-                    })
                     put("maxBytes", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)
+                        put("maximum", 200000)
                         put("default", 20000)
                         put("description", "Maximum number of text bytes returned in the tool output.")
                     })
@@ -446,11 +441,6 @@ object BuiltInToolCatalog {
                         put("type", "integer")
                         put("minimum", 1)
                         put("description", "Optional request timeout in seconds.")
-                    })
-                    put("maxBytes", buildJsonObject {
-                        put("type", "integer")
-                        put("minimum", 1)
-                        put("description", "Maximum number of bytes allowed for the download.")
                     })
                     put("followRedirects", buildJsonObject {
                         put("type", "boolean")
