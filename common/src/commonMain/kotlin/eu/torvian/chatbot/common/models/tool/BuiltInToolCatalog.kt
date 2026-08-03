@@ -389,12 +389,6 @@ object BuiltInToolCatalog {
                         put("minimum", 1)
                         put("description", "Optional request timeout in seconds.")
                     })
-                    put("maxDownloadBytes", buildJsonObject {
-                        put("type", "integer")
-                        put("minimum", 1)
-                        put("default", 100000)
-                        put("description", "Maximum number of response bytes to download from the network.")
-                    })
                     put("maxBytes", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)

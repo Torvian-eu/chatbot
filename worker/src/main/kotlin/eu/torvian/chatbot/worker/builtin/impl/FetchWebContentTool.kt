@@ -56,7 +56,7 @@ class FetchWebContentTool(
         val validationErrors = mutableListOf<String>()
 
         // Define the set of known/valid parameter names for this tool
-        val validKeys = setOf("url", "timeoutSeconds", "maxDownloadBytes", "maxBytes", "maxLines", "followRedirects", "returnMode", "range")
+        val validKeys = setOf("url", "timeoutSeconds", "maxBytes", "maxLines", "followRedirects", "returnMode", "range")
         addUnknownParameterErrors(input, validKeys, validationErrors)
 
         val url = parseRequiredString(input, "url", validationErrors)
@@ -67,11 +67,6 @@ class FetchWebContentTool(
         val timeoutSeconds = parseOptionalIntOrNull(input, "timeoutSeconds", validationErrors)
         if (timeoutSeconds != null && timeoutSeconds <= 0) {
             validationErrors.add("Argument 'timeoutSeconds' must be > 0")
-        }
-
-        val maxDownloadBytes = parseOptionalInt(input, "maxDownloadBytes", defaultValue = 100000, validationErrors)
-        if (maxDownloadBytes <= 0) {
-            validationErrors.add("Argument 'maxDownloadBytes' must be > 0")
         }
 
         val maxBytes = parseOptionalInt(input, "maxBytes", defaultValue = 20000, validationErrors)
@@ -101,7 +96,7 @@ class FetchWebContentTool(
         val request = WebFetchRequest(
             url = url!!,
             timeoutSeconds = timeoutSeconds,
-            maxBytes = maxDownloadBytes,
+            maxBytes = MAX_DOWNLOAD_BYTES,
             followRedirects = followRedirects,
         )
 
@@ -237,6 +232,9 @@ class FetchWebContentTool(
     }.getOrNull()
 
     private companion object {
+        /** Hard cap on the response body bytes the tool will buffer before rejecting the fetch. */
+        const val MAX_DOWNLOAD_BYTES: Int = 10 * 1024 * 1024 // 10 MB
+
         /** Application media types that are reliably textual and safe to emit as text. */
         val TEXTUAL_APPLICATION_TYPES: Set<String> = setOf(
             "application/json",
