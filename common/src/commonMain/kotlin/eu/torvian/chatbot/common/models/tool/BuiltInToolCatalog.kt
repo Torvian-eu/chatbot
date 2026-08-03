@@ -392,6 +392,7 @@ object BuiltInToolCatalog {
                     put("maxBytes", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)
+                        put("maximum", 200000)
                         put("default", 20000)
                         put("description", "Maximum number of text bytes returned in the tool output.")
                     })

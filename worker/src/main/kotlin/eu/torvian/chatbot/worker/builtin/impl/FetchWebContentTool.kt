@@ -72,6 +72,8 @@ class FetchWebContentTool(
         val maxBytes = parseOptionalInt(input, "maxBytes", defaultValue = 20000, validationErrors)
         if (maxBytes <= 0) {
             validationErrors.add("Argument 'maxBytes' must be > 0")
+        } else if (maxBytes > MAX_PRESENTATION_BYTES) {
+            validationErrors.add("Argument 'maxBytes' must be <= $MAX_PRESENTATION_BYTES")
         }
 
         val maxLines = parseOptionalInt(input, "maxLines", defaultValue = 500, validationErrors)
@@ -234,6 +236,9 @@ class FetchWebContentTool(
     private companion object {
         /** Hard cap on the response body bytes the tool will buffer before rejecting the fetch. */
         const val MAX_DOWNLOAD_BYTES: Int = 10 * 1024 * 1024 // 10 MB
+
+        /** Maximum LLM-settable value for the `maxBytes` presentation argument. */
+        const val MAX_PRESENTATION_BYTES: Int = 200_000
 
         /** Application media types that are reliably textual and safe to emit as text. */
         val TEXTUAL_APPLICATION_TYPES: Set<String> = setOf(

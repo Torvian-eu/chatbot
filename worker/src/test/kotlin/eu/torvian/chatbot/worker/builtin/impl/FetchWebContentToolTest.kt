@@ -115,7 +115,7 @@ class FetchWebContentToolTest {
         val req = fake.requests.first()
         assertEquals(15, req.timeoutSeconds)
         // The download cap is a hard limit not controllable by the LLM.
-        assertEquals(1024 * 1024, req.maxBytes)
+        assertEquals(10 * 1024 * 1024, req.maxBytes)
         assertEquals(false, req.followRedirects)
     }
 
@@ -408,7 +408,7 @@ class FetchWebContentToolTest {
         assertTrue(success.output!!.startsWith("=== https://example.com/ (lines:1-2 of 5) ==="), "Expected range header; got: ${success.output}")
         assertTrue(success.output!!.contains("[Output truncated:"), "Expected truncation notice; got: ${success.output}")
         assertEquals(true, success.details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
-        assertEquals(1024 * 1024, fake.requests.first().maxBytes)
+        assertEquals(10 * 1024 * 1024, fake.requests.first().maxBytes)
     }
 
     @Test
@@ -418,6 +418,20 @@ class FetchWebContentToolTest {
             input(
                 "url" to JsonPrimitive("https://example.com/"),
                 "maxBytes" to JsonPrimitive(0),
+            ),
+            context(),
+        )
+        assertTrue(result.isError)
+        assertEquals(BuiltInToolExecutionError.INVALID_INPUT, result.errorCode)
+    }
+
+    @Test
+    fun `maxBytes above the presentation cap is invalid input`() = runTest {
+        val fake = FakeWebFetchService(mutableListOf())
+        val result = toolWith(fake).execute(
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "maxBytes" to JsonPrimitive(200001),
             ),
             context(),
         )
