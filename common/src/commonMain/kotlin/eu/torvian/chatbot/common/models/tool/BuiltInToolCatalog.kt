@@ -442,11 +442,6 @@ object BuiltInToolCatalog {
                         put("minimum", 1)
                         put("description", "Optional request timeout in seconds.")
                     })
-                    put("maxBytes", buildJsonObject {
-                        put("type", "integer")
-                        put("minimum", 1)
-                        put("description", "Maximum number of bytes allowed for the download.")
-                    })
                     put("followRedirects", buildJsonObject {
                         put("type", "boolean")
                         put("description", "Whether HTTP redirects should be followed.")

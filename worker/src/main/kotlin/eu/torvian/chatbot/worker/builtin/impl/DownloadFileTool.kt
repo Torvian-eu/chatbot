@@ -50,7 +50,7 @@ class DownloadFileTool(
         val validationErrors = mutableListOf<String>()
 
         // Define the set of known/valid parameter names for this tool
-        val validKeys = setOf("url", "path", "overwrite", "timeoutSeconds", "maxBytes", "followRedirects")
+        val validKeys = setOf("url", "path", "overwrite", "timeoutSeconds", "followRedirects")
         addUnknownParameterErrors(input, validKeys, validationErrors)
 
         val url = parseRequiredString(input, "url", validationErrors)
@@ -68,11 +68,6 @@ class DownloadFileTool(
         val timeoutSeconds = parseOptionalIntOrNull(input, "timeoutSeconds", validationErrors)
         if (timeoutSeconds != null && timeoutSeconds <= 0) {
             validationErrors.add("Argument 'timeoutSeconds' must be > 0")
-        }
-
-        val maxBytes = parseOptionalIntOrNull(input, "maxBytes", validationErrors)
-        if (maxBytes != null && maxBytes <= 0) {
-            validationErrors.add("Argument 'maxBytes' must be > 0")
         }
 
         val followRedirects = parseOptionalBoolean(input, "followRedirects", defaultValue = true, validationErrors)
@@ -95,7 +90,7 @@ class DownloadFileTool(
         val request = WebFetchRequest(
             url = url!!,
             timeoutSeconds = timeoutSeconds,
-            maxBytes = maxBytes,
+            maxBytes = MAX_DOWNLOAD_BYTES,
             followRedirects = followRedirects,
         )
 
@@ -144,5 +139,10 @@ class DownloadFileTool(
                 builtInToolErrorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to write file: ${e.message}")
             }
         }
+    }
+
+    private companion object {
+        /** Hard cap on the response body bytes the tool will buffer before rejecting the download. */
+        const val MAX_DOWNLOAD_BYTES: Int = 10 * 1024 * 1024 // 10 MB
     }
 }
