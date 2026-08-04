@@ -62,11 +62,6 @@ class SearchTextTool : BuiltInTool {
          */
         const val MAX_FILE_BYTES: Long = 1_048_576L // 1 MB
 
-        /**
-         * Maximum number of characters allowed per line in search output.
-         */
-        const val MAX_LINE_CHARS = 200
-
     }
 
     override val name: String = "search_text"
@@ -366,32 +361,6 @@ class SearchTextTool : BuiltInTool {
     }
 
     /**
-     * Compacts per-match renderings into a unique, source-ordered set of lines for readable output.
-     *
-     * Context entries are inserted only when their source line has not already been seen. Matching
-     * entries always replace an existing context entry, ensuring a line that is itself a match keeps
-     * its match-centered rendering rather than a potentially shortened context rendering.
-     *
-     * @param renders Per-match renderings belonging to one file, in match discovery order.
-     * @return Unique rendered lines sorted by their 1-based source line number.
-     */
-    private fun compactRenders(renders: List<MatchRender>): List<RenderedLine> {
-        val linesByNumber = sortedMapOf<Int, RenderedLine>()
-
-        renders.forEach { render ->
-            render.before.forEach { (lineNumber, text) ->
-                linesByNumber.putIfAbsent(lineNumber, RenderedLine(lineNumber, text))
-            }
-            linesByNumber[render.lineNumber] = RenderedLine(render.lineNumber, render.line)
-            render.after.forEach { (lineNumber, text) ->
-                linesByNumber.putIfAbsent(lineNumber, RenderedLine(lineNumber, text))
-            }
-        }
-
-        return linesByNumber.values.toList()
-    }
-
-    /**
      * Checks if the query appears to be a regular expression pattern.
      *
      * This is an intentionally coarse heuristic used only for deciding whether to show
@@ -421,30 +390,6 @@ class SearchTextTool : BuiltInTool {
     }
 
     /**
-     * Builds the [Regex] used to test each line.
-     *
-     * In plain mode the [query] is treated literally (escaped) and, when [wholeWord] is set, wrapped
-     * in word boundaries. In regex mode the [query] is used verbatim. Case-insensitivity is applied
-     * unless [caseSensitive] is true.
-     *
-     * @param query Raw query from the tool input.
-     * @param mode Either `"plain"` or `"regex"`.
-     * @param caseSensitive When false, matching ignores case.
-     * @param wholeWord When true (plain mode only), matches are anchored to word boundaries.
-     * @return Compiled [Regex] for line matching.
-     * @throws IllegalArgumentException If the regex pattern is invalid.
-     */
-    private fun compileRegex(query: String, mode: String, caseSensitive: Boolean, wholeWord: Boolean): Regex {
-        val pattern = if (mode == "regex") {
-            query
-        } else {
-            if (wholeWord) "\\b${Regex.escape(query)}\\b" else Regex.escape(query)
-        }
-        val options = if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
-        return Regex(pattern, options)
-    }
-
-    /**
      * Reads [file] as UTF-8 text, splitting it into lines.
      *
      * Uses a strict decoder that reports (rather than silently replaces) malformed input, so files
@@ -467,73 +412,4 @@ class SearchTextTool : BuiltInTool {
         return text.split(Regex("\r\n|\r|\n"))
     }
 
-    /**
-     * Windows a matching line around [matchRange] if it exceeds [maxChars], ensuring the match is visible.
-     *
-     * @param line The raw line string to be windowed.
-     * @param matchRange The character index range where the match was found.
-     * @param maxChars Maximum character limit for the windowed line.
-     * @return The windowed line snippet with ellipsis markers where truncated.
-     */
-    private fun windowLineAroundMatch(
-        line: String,
-        matchRange: IntRange,
-        maxChars: Int = MAX_LINE_CHARS,
-    ): String {
-        if (line.length <= maxChars) return line
-
-        val matchLength = (matchRange.last - matchRange.first + 1).coerceAtLeast(1)
-        val margin = ((maxChars - matchLength) / 2).coerceAtLeast(20)
-
-        var winStart = maxOf(0, matchRange.first - margin)
-        val winEnd = minOf(line.length, winStart + maxChars)
-        if (winEnd == line.length) {
-            winStart = maxOf(0, winEnd - maxChars)
-        }
-
-        val snippet = line.substring(winStart, winEnd)
-        val prefix = if (winStart > 0) "..." else ""
-        val suffix = if (winEnd < line.length) "..." else ""
-        return "$prefix$snippet$suffix"
-    }
-
-    /**
-     * Trims a context line if it exceeds [MAX_LINE_CHARS], appending an ellipsis suffix.
-     *
-     * @param ctx The context line string.
-     * @return The trimmed context line if too long, or the original line otherwise.
-     */
-    private fun trimContext(ctx: String): String =
-        if (ctx.length > MAX_LINE_CHARS) ctx.take(MAX_LINE_CHARS) + "..." else ctx
-
 }
-
-/**
- * Renderable representation of a single matching line, grouped later by file.
- *
- * The path is intentionally omitted here: it is emitted once as a per-file header during
- * rendering (see the grouped-output block in [SearchTextTool.execute]) rather than repeated on every line,
- * which keeps the textual output compact and token-friendly for the consuming model.
- *
- * @property lineNumber 1-based line number of the match within its file.
- * @property line Content of the matching line.
- * @property before Context lines preceding the match, each paired with its 1-based line number.
- * @property after Context lines following the match, each paired with its 1-based line number.
- */
-private data class MatchRender(
-    val lineNumber: Int,
-    val line: String,
-    val before: List<Pair<Int, String>>,
-    val after: List<Pair<Int, String>>,
-)
-
-/**
- * Represents one unique source line in the compact readable rendering of a file.
- *
- * @property lineNumber 1-based source line number used as the deduplication key.
- * @property text Rendered source content, either context-trimmed or match-centered.
- */
-private data class RenderedLine(
-    val lineNumber: Int,
-    val text: String,
-)

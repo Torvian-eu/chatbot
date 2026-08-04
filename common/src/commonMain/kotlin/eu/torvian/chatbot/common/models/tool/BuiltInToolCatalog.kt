@@ -368,6 +368,55 @@ object BuiltInToolCatalog {
                         put("format", "uri")
                         put("description", "Public internet URL to fetch.")
                     })
+                    put("searchQuery", buildJsonObject {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "Use to find specific content. Works with `contextBefore`/`contextAfter` to get surrounding lines. Mutually exclusive with `range`."
+                        )
+                    })
+                    put("searchMode", buildJsonObject {
+                        put("type", "string")
+                        put("enum", buildJsonArray { add("plain"); add("regex") })
+                        put("description", "Interpret 'searchQuery' as plain text or a regular expression. Use 'plain' for exact literal matching.")
+                        put("default", "regex")
+                    })
+                    put("caseSensitive", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "Whether matching is case-sensitive.")
+                        put("default", false)
+                    })
+                    put("wholeWord", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "When true, matches whole words only. Only valid and applicable when searchMode='plain'.")
+                        put("default", false)
+                    })
+                    put("contextBefore", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 0)
+                        put(
+                            "description",
+                            "Context lines to include before each match; also extends each match " +
+                            "window backward by 'contextBefore * 80' characters for long lines."
+                        )
+                        put("default", 1)
+                    })
+                    put("contextAfter", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 0)
+                        put(
+                            "description",
+                            "Context lines to include after each match; also extends each match " +
+                            "window forward by 'contextAfter * 80' characters for long lines."
+                        )
+                        put("default", 2)
+                    })
+                    put("maxResults", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 10)
+                        put("description", "Maximum number of matches to return.")
+                    })
                     put("range", buildJsonObject {
                         put("type", "array")
                         put("minItems", 2)
@@ -381,25 +430,27 @@ object BuiltInToolCatalog {
                         put(
                             "description",
                             "Line range as [start, end), matching Python slice semantics. " +
-                            "Negative values count from the end. Use null for open-ended."
+                                    "Negative values count from the end. Use null for open-ended. " +
+                                    "Mutually exclusive with `searchQuery`."
                         )
                     })
                     put("timeoutSeconds", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)
+                        put("default", 5)
                         put("description", "Optional request timeout in seconds.")
                     })
                     put("maxBytes", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)
                         put("maximum", 200000)
-                        put("default", 20000)
+                        put("default", 1200)
                         put("description", "Maximum number of text bytes returned in the tool output.")
                     })
                     put("maxLines", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)
-                        put("default", 500)
+                        put("default", 25)
                         put("description", "Maximum number of text lines returned in the tool output.")
                     })
                     put("followRedirects", buildJsonObject {
