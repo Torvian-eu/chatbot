@@ -3,7 +3,6 @@ package eu.torvian.chatbot.server.service.core.chat.context
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
-import eu.torvian.chatbot.common.models.tool.arguments.ToolCallArgumentNormalizer
 import eu.torvian.chatbot.server.service.core.chat.content.FileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.ToolResultContentBuilder
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
@@ -52,14 +51,12 @@ class DefaultChatContextBuilder(
                         .filter { it.status in ToolCallStatus.terminalStatuses }
                     val assistantToolCalls = replayableToolCalls
                         .map { toolCall ->
-                        RawChatMessage.Assistant.ToolCall(
-                            id = toolCall.toolCallId,
-                            name = toolCall.toolName,
-                            // Legacy rows may predate ingestion normalization; never replay them raw.
-                            arguments = (ToolCallArgumentNormalizer.normalize(toolCall.input)
-                                as? ToolCallArgumentNormalizer.Result.Valid)?.value
-                        )
-                    }.takeIf { it.isNotEmpty() }
+                            RawChatMessage.Assistant.ToolCall(
+                                id = toolCall.toolCallId,
+                                name = toolCall.toolName,
+                                arguments = toolCall.input
+                            )
+                        }.takeIf { it.isNotEmpty() }
 
                     rawContext.add(
                         RawChatMessage.Assistant(
@@ -69,14 +66,14 @@ class DefaultChatContextBuilder(
                     )
 
                     replayableToolCalls.forEach { toolCall ->
-                            rawContext.add(
-                                RawChatMessage.Tool(
-                                    content = toolResultContentBuilder.build(toolCall),
-                                    toolCallId = toolCall.toolCallId ?: "",
-                                    name = toolCall.toolName
-                                )
+                        rawContext.add(
+                            RawChatMessage.Tool(
+                                content = toolResultContentBuilder.build(toolCall),
+                                toolCallId = toolCall.toolCallId ?: "",
+                                name = toolCall.toolName
                             )
-                        }
+                        )
+                    }
                 }
             }
         }
