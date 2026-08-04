@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.service.core.chat.content.ToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.context.ChatContextBuilder
@@ -129,7 +130,6 @@ class DefaultConversationTurnOrchestrator(
             currentContext = appendAssistantAndToolResults(
                 currentContext = currentContext,
                 assistantContent = assistantStep.assistantContent,
-                toolCallRequests = pendingToolCalls,
                 completedToolCalls = completedToolCalls
             )
         }
@@ -404,19 +404,22 @@ class DefaultConversationTurnOrchestrator(
      *
      * @param currentContext Context accumulated so far for the turn.
      * @param assistantContent Assistant content associated with the tool-call request.
-     * @param toolCallRequests Tool calls requested by the assistant.
-     * @param completedToolCalls Completed tool calls whose results should be appended.
+     * @param completedToolCalls Completed tool calls whose calls and results should be appended.
      * @return Updated raw context used for the next assistant iteration.
      */
     private fun appendAssistantAndToolResults(
         currentContext: List<RawChatMessage>,
         assistantContent: String?,
-        toolCallRequests: List<ToolCall>,
         completedToolCalls: List<ToolCall>
     ): List<RawChatMessage> {
+        // Derive both provider messages from the same ordered terminal collection so a result
+        // can never be emitted without its matching assistant tool call.
+        val pairedToolCalls = completedToolCalls
+            .filter { it.isReplayableInLlmContext }
+            .filter { it.status in ToolCallStatus.terminalStatuses }
         val assistantContextMessage = RawChatMessage.Assistant(
             content = assistantContent,
-            toolCalls = toolCallRequests.filter { it.isReplayableInLlmContext }.map { toolCall ->
+            toolCalls = pairedToolCalls.map { toolCall ->
                 RawChatMessage.Assistant.ToolCall(
                     id = toolCall.toolCallId,
                     name = toolCall.toolName,
@@ -425,9 +428,7 @@ class DefaultConversationTurnOrchestrator(
             }
         )
         // A provider transcript must not contain a result without its replayed assistant call.
-        val toolResultMessages = completedToolCalls
-            .filter { it.isReplayableInLlmContext }
-            .map { toolCall ->
+        val toolResultMessages = pairedToolCalls.map { toolCall ->
             RawChatMessage.Tool(
                 content = toolResultContentBuilder.build(toolCall),
                 toolCallId = toolCall.toolCallId ?: "",

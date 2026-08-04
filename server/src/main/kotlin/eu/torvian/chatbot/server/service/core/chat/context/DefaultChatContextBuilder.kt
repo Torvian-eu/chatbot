@@ -44,9 +44,13 @@ class DefaultChatContextBuilder(
                 }
 
                 is ChatMessage.AssistantMessage -> {
-                    val messageToolCalls = sortedToolCalls.filter { it.messageId == message.id }
-                    val assistantToolCalls = messageToolCalls
+                    // Derive both sides of the provider transcript from one terminal set. This
+                    // prevents stale or interrupted rows from creating an unpaired assistant call.
+                    val replayableToolCalls = sortedToolCalls
+                        .filter { it.messageId == message.id }
                         .filter { it.isReplayableInLlmContext }
+                        .filter { it.status in ToolCallStatus.terminalStatuses }
+                    val assistantToolCalls = replayableToolCalls
                         .map { toolCall ->
                         RawChatMessage.Assistant.ToolCall(
                             id = toolCall.toolCallId,
@@ -64,16 +68,7 @@ class DefaultChatContextBuilder(
                         )
                     )
 
-                    messageToolCalls
-                        .filter { it.isReplayableInLlmContext }
-                        .filter {
-                            it.status in setOf(
-                                ToolCallStatus.SUCCESS,
-                                ToolCallStatus.ERROR,
-                                ToolCallStatus.USER_DENIED
-                            )
-                        }
-                        .forEach { toolCall ->
+                    replayableToolCalls.forEach { toolCall ->
                             rawContext.add(
                                 RawChatMessage.Tool(
                                     content = toolResultContentBuilder.build(toolCall),

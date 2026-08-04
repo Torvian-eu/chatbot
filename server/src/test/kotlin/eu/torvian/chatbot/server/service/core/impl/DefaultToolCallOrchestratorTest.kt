@@ -216,7 +216,13 @@ class DefaultToolCallOrchestratorTest {
     }
 
     /**
-     * Stubs [ToolCallDao.updateToolCall] and records every persisted update so tests can assert status transitions.
+     * Stubs tool-call persistence and records ordinary lifecycle updates so tests can assert status transitions.
+     *
+     * Cancellation cleanup uses the compare-and-update DAO operation. Its successful result is
+     * stubbed here without adding cleanup writes to the lifecycle assertions, because ordinary
+     * test completions should remain the focus of those assertions.
+     *
+     * @return Mutable list receiving each unconditional tool-call update.
      */
     private fun trackToolCallUpdates(): MutableList<ToolCall> {
         val updates = mutableListOf<ToolCall>()
@@ -224,6 +230,7 @@ class DefaultToolCallOrchestratorTest {
             updates.add(firstArg())
             Unit.right()
         }
+        coEvery { toolCallDao.updateToolCallIfStatusIn(any(), any()) } returns 0
         return updates
     }
 
