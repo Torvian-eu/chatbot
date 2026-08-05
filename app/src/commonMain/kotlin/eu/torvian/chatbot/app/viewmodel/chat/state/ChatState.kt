@@ -151,9 +151,9 @@ interface ChatState {
     val editingBasePathOverride: StateFlow<String?>
 
     /**
-     * Whether a message is currently being sent.
+     * Lifecycle state used by the composer action button.
      */
-    val isSendingMessage: StateFlow<Boolean>
+    val turnExecutionState: StateFlow<TurnExecutionState>
 
     /**
      * The current dialog state for the chat area (e.g., delete confirmation).
@@ -258,9 +258,11 @@ interface ChatState {
     fun setEditingBasePathOverride(path: String?)
 
     /**
-     * Sets the sending message flag.
+     * Updates the lifecycle state of the active turn.
+     *
+     * @param executionState New state to expose to observers.
      */
-    fun setIsSending(isSending: Boolean)
+    fun setTurnExecutionState(executionState: TurnExecutionState)
 
     /**
      * Sets the dialog state.

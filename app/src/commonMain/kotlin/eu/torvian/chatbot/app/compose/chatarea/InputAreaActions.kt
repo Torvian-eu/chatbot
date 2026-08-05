@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.core.FileReference
  * @param onUpdateInput Updates the input text.
  * @param onSendMessage Sends the current input as a message.
  * @param onCancelSendMessage Cancels the current send/stream operation.
+ * @param onPauseSendMessage Requests a soft pause of the active turn.
  * @param onCancelReply Clears the current reply target.
  * @param onToggleExpansion Toggles compact/expanded input mode.
  * @param onAddFileReferences Opens the file picker to add attached files.
@@ -19,6 +20,7 @@ data class InputAreaActions(
     val onUpdateInput: (String) -> Unit,
     val onSendMessage: () -> Unit,
     val onCancelSendMessage: () -> Unit,
+    val onPauseSendMessage: () -> Unit,
     val onCancelReply: () -> Unit,
     val onToggleExpansion: (() -> Unit)? = null,
     val onAddFileReferences: () -> Unit,

@@ -112,6 +112,17 @@ class DefaultChatContextBuilderTest {
                 executedAt = modifiedAt
             ),
             ToolCall(
+                id = 15L,
+                messageId = 2L,
+                toolDefinitionId = 8L,
+                toolName = "search",
+                toolCallId = "call-cancelled",
+                input = "{\"query\":\"stopped\"}",
+                output = null,
+                status = ToolCallStatus.CANCELLED,
+                executedAt = modifiedAt
+            ),
+            ToolCall(
                 id = 14L,
                 messageId = 2L,
                 toolDefinitionId = 8L,
@@ -130,23 +141,25 @@ class DefaultChatContextBuilderTest {
             toolCalls = toolCalls
         )
 
-        assertEquals(5, context.size)
+        assertEquals(6, context.size)
         assertEquals(RawChatMessage.User::class, context[0]::class)
         assertEquals(RawChatMessage.Assistant::class, context[1]::class)
         assertEquals(RawChatMessage.Tool::class, context[2]::class)
         assertEquals(RawChatMessage.Tool::class, context[3]::class)
-        assertEquals(RawChatMessage.User::class, context[4]::class)
+        assertEquals(RawChatMessage.Tool::class, context[4]::class)
+        assertEquals(RawChatMessage.User::class, context[5]::class)
 
         assertEquals(true, context[0].content?.contains("--- Attached Files ---"))
         assertEquals(
-            listOf("call-success", "call-pending", "call-parameterless"),
+            listOf("call-success", "call-parameterless", "call-cancelled"),
             (context[1] as RawChatMessage.Assistant).toolCalls?.map { it.id }
         )
         assertEquals("{\"results\":[]}", context[2].content)
         assertEquals("pong", context[3].content)
-        assertEquals("Follow-up", context[4].content)
+        assertEquals("{\"cancelled\":\"Tool call was cancelled before a result was produced.\"}", context[4].content)
+        assertEquals("Follow-up", context[5].content)
         assertEquals(
-            listOf("call-success", "call-parameterless"),
+            listOf("call-success", "call-parameterless", "call-cancelled"),
             context.filterIsInstance<RawChatMessage.Tool>().map { it.toolCallId }
         )
     }

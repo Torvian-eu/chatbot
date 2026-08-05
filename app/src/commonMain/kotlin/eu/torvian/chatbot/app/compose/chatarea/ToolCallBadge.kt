@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.HourglassEmpty
@@ -65,6 +66,11 @@ fun ToolCallBadge(
         ToolCallStatus.USER_DENIED -> Pair(
             Icons.Default.Error,
             MaterialTheme.colorScheme.tertiary
+        )
+
+        ToolCallStatus.CANCELLED -> Pair(
+            Icons.Default.Block,
+            MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
     Surface(

@@ -23,6 +23,7 @@ import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageErr
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
+import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
@@ -115,22 +116,36 @@ class SessionMessagesWebSocketHandler(
                 }
 
                 coroutineScope {
-                    val processingScope = this
+                    // Keep the inbound collector alive after Cancel so terminal cancellation events can be sent.
+                    val controlSignal = TurnControlSignal()
+                    val outerSessionScope = this
                     val clientEventFlow = createClientEventFlow(
                         onChannelClosed = {
                             logger.info("WebSocket channel closed by client for session $sessionId")
-                            processingScope.cancel(CancellationException("Client closed WebSocket"))
+                            // A transport failure is different from a turn cancel: it tears down everything.
+                            outerSessionScope.cancel(CancellationException("Client closed WebSocket"))
+                        },
+                        onCancellationRequested = {
+                            // Only the active turn is cancellable through the application protocol.
+                            controlSignal.cancel()
+                        },
+                        onPauseRequested = {
+                            // Pause is soft: the active LLM/tool step must be allowed to finish.
+                            controlSignal.pause()
                         }
                     )
                     val approvalResponseFlow = clientEventFlow.toApprovalSubmissionFlow()
 
+                    // Collect on the outer session scope so cooperative cancellation cannot stop event mapping
+                    // or WebSocket forwarding.
                     if (processRequest.isStreaming) {
                         processStreamingRequest(
                             userId = userId,
                             session = session,
                             llmConfig = llmConfig,
                             request = processRequest,
-                            approvalResponseFlow = approvalResponseFlow
+                            approvalResponseFlow = approvalResponseFlow,
+                            controlSignal = controlSignal
                         )
                     } else {
                         processNonStreamingRequest(
@@ -138,9 +153,11 @@ class SessionMessagesWebSocketHandler(
                             session = session,
                             llmConfig = llmConfig,
                             request = processRequest,
-                            approvalResponseFlow = approvalResponseFlow
+                            approvalResponseFlow = approvalResponseFlow,
+                            controlSignal = controlSignal
                         )
                     }
+                    close(CloseReason(CloseReason.Codes.NORMAL, "Turn completed"))
                 }
 
             } catch (e: ClosedReceiveChannelException) {
@@ -170,10 +187,14 @@ class SessionMessagesWebSocketHandler(
      *
      * @receiver Live Ktor WebSocket session that owns the inbound channel.
      * @param onChannelClosed Callback invoked when the WebSocket channel closes.
+     * @param onCancellationRequested Callback invoked for an application-level cancellation event.
+     * @param onPauseRequested Callback invoked for an application-level pause event.
      * @return Shared flow of decoded client events sourced from text frames.
      */
     private fun DefaultWebSocketServerSession.createClientEventFlow(
-        onChannelClosed: () -> Unit
+        onChannelClosed: () -> Unit,
+        onCancellationRequested: () -> Unit,
+        onPauseRequested: () -> Unit
     ): Flow<ChatClientEvent> {
         return incoming.receiveAsFlow()
             .onCompletion {
@@ -181,6 +202,17 @@ class SessionMessagesWebSocketHandler(
             }
             .filterIsInstance<Frame.Text>()
             .map { frame -> json.decodeFromString<ChatClientEvent>(frame.readText()) }
+            .onEach { event ->
+                when (event) {
+                    ChatClientEvent.Cancel -> {
+                        // Cancel is a control event, not an approval; leave the shared stream alive for the drain.
+                        onCancellationRequested()
+                    }
+                    ChatClientEvent.Pause -> onPauseRequested()
+                    else -> Unit
+                }
+            }
+            .filterNot { event -> event is ChatClientEvent.Cancel || event is ChatClientEvent.Pause }
             .shareIn(this, SharingStarted.Eagerly)
     }
 
@@ -218,13 +250,15 @@ class SessionMessagesWebSocketHandler(
      * @param llmConfig Validated LLM configuration resolved during initial request validation.
      * @param request Initial non-streaming request frame payload.
      * @param approvalResponseFlow Normalized approval submissions from subsequent client events.
+     * @param controlSignal Cooperative cancellation requested for this turn.
      */
     private suspend fun DefaultWebSocketServerSession.processNonStreamingRequest(
         userId: Long,
         session: ChatSession,
         llmConfig: LLMConfig,
         request: ProcessNewMessageRequest,
-        approvalResponseFlow: Flow<ToolCallApprovalSubmission>
+        approvalResponseFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ) {
         chatService.processNewMessage(
             userId = userId,
@@ -233,7 +267,8 @@ class SessionMessagesWebSocketHandler(
             content = request.content,
             parentMessageId = request.parentMessageId,
             fileReferences = request.fileReferences,
-            toolApprovalFlow = approvalResponseFlow
+            toolApprovalFlow = approvalResponseFlow,
+            controlSignal = controlSignal
         ).collect { eitherEvent ->
             eitherEvent.fold(
                 ifLeft = { processError ->
@@ -255,13 +290,15 @@ class SessionMessagesWebSocketHandler(
      * @param llmConfig Validated LLM configuration resolved during initial request validation.
      * @param request Initial streaming request frame payload.
      * @param approvalResponseFlow Normalized approval submissions from subsequent client events.
+     * @param controlSignal Cooperative cancellation requested for this turn.
      */
     private suspend fun DefaultWebSocketServerSession.processStreamingRequest(
         userId: Long,
         session: ChatSession,
         llmConfig: LLMConfig,
         request: ProcessNewMessageRequest,
-        approvalResponseFlow: Flow<ToolCallApprovalSubmission>
+        approvalResponseFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ) {
         chatService.processNewMessageStreaming(
             userId = userId,
@@ -270,7 +307,8 @@ class SessionMessagesWebSocketHandler(
             content = request.content,
             parentMessageId = request.parentMessageId,
             fileReferences = request.fileReferences,
-            toolApprovalFlow = approvalResponseFlow
+            toolApprovalFlow = approvalResponseFlow,
+            controlSignal = controlSignal
         ).collect { eitherEvent ->
             eitherEvent.fold(
                 ifLeft = { processError ->

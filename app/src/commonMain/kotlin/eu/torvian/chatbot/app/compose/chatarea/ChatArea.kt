@@ -21,6 +21,7 @@ import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
+import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
@@ -77,7 +78,7 @@ fun ChatArea(
                 actions = actions,
                 inputContent = state.inputContent,
                 replyTargetMessage = state.replyTargetMessage,
-                isSendingMessage = state.isSendingMessage,
+                turnExecutionState = state.turnExecutionState,
                 editingMessage = state.editingMessage,
                 editingContent = state.editingContent,
                 editingFileReferences = state.editingFileReferences,
@@ -136,7 +137,7 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param actions The actions contract for the chat area, providing message-related callbacks.
  * @param inputContent The current text content in the message input field.
  * @param replyTargetMessage The message the user is currently explicitly replying to via the Reply action.
- * @param isSendingMessage Indicates whether a message is currently in the process of being sent.
+ * @param turnExecutionState Lifecycle state used by the composer action button.
  * @param editingMessage The message currently being edited (E3.S1, E3.S2).
  * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
  * @param dialogState The current dialog state from the ViewModel.
@@ -155,7 +156,7 @@ private fun SuccessStateDisplay(
     actions: ChatAreaActions,
     inputContent: String,
     replyTargetMessage: ChatMessage?,
-    isSendingMessage: Boolean,
+    turnExecutionState: TurnExecutionState,
     editingMessage: ChatMessage?,
     editingContent: String?,
     editingFileReferences: List<FileReference>,
@@ -232,6 +233,7 @@ private fun SuccessStateDisplay(
                 onUpdateInput = actions::onUpdateInput,
                 onSendMessage = actions::onSendMessage,
                 onCancelSendMessage = actions::onCancelSendMessage,
+                onPauseSendMessage = actions::onPauseSendMessage,
                 onCancelReply = actions::onCancelReply,
                 onToggleExpansion = onToggleExpansion,
                 onAddFileReferences = actions::onAddFileReferences,
@@ -316,7 +318,7 @@ private fun SuccessStateDisplay(
                 scrollToInputTrigger = scrollToInputTrigger,
                 inputContent = inputContent,
                 replyTargetMessage = replyTargetMessage,
-                isSendingMessage = isSendingMessage,
+                turnExecutionState = turnExecutionState,
                 pendingFileReferences = pendingFileReferences,
                 searchQuery = searchQuery,
                 searchResults = searchResults,
@@ -335,7 +337,7 @@ private fun SuccessStateDisplay(
                 InputArea(
                     actions = inputAreaActions,
                     replyTargetMessage = replyTargetMessage,
-                    isSendingMessage = isSendingMessage,
+                    turnExecutionState = turnExecutionState,
                     isExpanded = false,
                     fileReferences = pendingFileReferences,
                     focusRequester = inputFocusRequester,

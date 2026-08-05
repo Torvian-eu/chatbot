@@ -11,6 +11,7 @@ import eu.torvian.chatbot.app.viewmodel.SearchNavigationIntent
 import eu.torvian.chatbot.app.viewmodel.SearchNavigationState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
+import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -26,6 +27,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Manages the UI state for the main chat area of the currently active session.
@@ -76,6 +79,9 @@ class ChatViewModel(
 
     companion object {
         private val logger = kmpLogger<ChatViewModel>()
+
+        /** Maximum time allowed for the server to publish cancellation events before a hard cancel. */
+        private const val CANCELLATION_DRAIN_TIMEOUT_MILLIS = 3_000L
     }
 
     /**
@@ -83,6 +89,9 @@ class ChatViewModel(
      * Null when no message is being sent.
      */
     private var sendMessageJob: Job? = null
+
+    /** Job that bounds the time spent waiting for the server to acknowledge cancellation. */
+    private var cancellationDrainJob: Job? = null
 
     // --- Public State Properties (delegated to Reactive ChatState) ---
 
@@ -175,9 +184,9 @@ class ChatViewModel(
     val editingBasePathOverride: StateFlow<String?> = state.editingBasePathOverride
 
     /**
-     * Indicates whether a message is currently in the process of being sent.
+     * Lifecycle state used by the chat input action button.
      */
-    val isSendingMessage: StateFlow<Boolean> = state.isSendingMessage
+    val turnExecutionState: StateFlow<TurnExecutionState> = state.turnExecutionState
 
     /**
      * The current dialog state for the chat area (e.g., delete confirmation).
@@ -329,20 +338,71 @@ class ChatViewModel(
             sendMessageUC.execute(continueFromMessage = continueFromMessage)
         }
         sendMessageJob = job
-        state.setIsSending(true)
+        state.setTurnExecutionState(TurnExecutionState.RUNNING)
         job.invokeOnCompletion {
             sendMessageJob = null
-            state.setIsSending(false)
+            // STOPPING owns the final transition until the cancellation drain completes.
+            if (state.turnExecutionState.value != TurnExecutionState.STOPPING) {
+                state.setTurnExecutionState(TurnExecutionState.IDLE)
+            }
         }
     }
 
     /**
-     * Cancels the currently active message sending operation.
+     * Routes the composer action to a soft pause or hard stop according to the active turn state.
+     *
+     * RUNNING deliberately sends only Pause, while PAUSING sends Cancel and starts the bounded
+     * drain. STOPPING is intentionally inert because another click cannot improve cancellation.
      */
-    fun cancelSendMessage() {
-        sendMessageJob?.cancel()
-        sendMessageJob = null
+    fun handlePauseOrStop() {
+        when (state.turnExecutionState.value) {
+            TurnExecutionState.RUNNING -> {
+                state.setTurnExecutionState(TurnExecutionState.PAUSING)
+                normalScope.launch {
+                    sendMessageUC.requestPause()
+                }
+            }
+
+            TurnExecutionState.PAUSING -> {
+                state.setTurnExecutionState(TurnExecutionState.STOPPING)
+                val activeSendJob = sendMessageJob ?: run {
+                    state.setTurnExecutionState(TurnExecutionState.IDLE)
+                    return
+                }
+                if (cancellationDrainJob?.isActive == true) return
+
+                // Keep collecting the socket so terminal CANCELLED events reach the UI before closure.
+                cancellationDrainJob = normalScope.launch {
+                    sendMessageUC.requestCancellation()
+                    withTimeoutOrNull(CANCELLATION_DRAIN_TIMEOUT_MILLIS.milliseconds) {
+                        activeSendJob.join()
+                    }
+                    if (activeSendJob.isActive) {
+                        // A broken or stuck peer must not leave the send state active forever.
+                        activeSendJob.cancel()
+                    }
+                }.also { drainJob ->
+                    drainJob.invokeOnCompletion {
+                        cancellationDrainJob = null
+                        state.setTurnExecutionState(TurnExecutionState.IDLE)
+                    }
+                }
+            }
+
+            TurnExecutionState.STOPPING,
+            TurnExecutionState.IDLE -> Unit
+        }
     }
+
+    /**
+     * Compatibility action that now follows the state-machine semantics.
+     */
+    fun pauseSendMessage() = handlePauseOrStop()
+
+    /**
+     * Compatibility action used by callers that previously exposed a dedicated stop callback.
+     */
+    fun cancelSendMessage() = handlePauseOrStop()
 
     /**
      * Regenerates an assistant message by continuing from its parent message.

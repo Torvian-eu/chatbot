@@ -17,8 +17,10 @@ import eu.torvian.chatbot.server.data.dao.error.UpdateToolCallError
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
 import eu.torvian.chatbot.server.data.tables.ToolCallTable
 import eu.torvian.chatbot.server.data.tables.mappers.toToolCall
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.innerJoin
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -128,6 +130,31 @@ class ToolCallDaoExposed(
                     it[errorDetails] = toolCall.errorDetails
                 }
                 ensure(updatedRowCount != 0) { UpdateToolCallError.NotFound(toolCall.id) }
+            }
+        }
+
+    override suspend fun updateToolCallIfStatusIn(
+        toolCall: ToolCall,
+        expectedStatuses: Set<ToolCallStatus>
+    ): Int =
+        transactionScope.transaction {
+            ToolCallTable.update({
+                (ToolCallTable.id eq toolCall.id) and
+                        (ToolCallTable.status inList expectedStatuses)
+            }) {
+                it[messageId] = toolCall.messageId
+                it[toolDefinitionId] = toolCall.toolDefinitionId
+                it[toolName] = toolCall.toolName
+                it[toolCallId] = toolCall.toolCallId
+                it[inputJson] = toolCall.input
+                it[outputJson] = toolCall.output
+                it[status] = toolCall.status
+                it[errorMessage] = toolCall.errorMessage
+                it[denialReason] = toolCall.denialReason
+                it[executedAt] = toolCall.executedAt.toEpochMilliseconds()
+                it[durationMs] = toolCall.durationMs
+                it[errorCode] = toolCall.errorCode
+                it[errorDetails] = toolCall.errorDetails
             }
         }
 

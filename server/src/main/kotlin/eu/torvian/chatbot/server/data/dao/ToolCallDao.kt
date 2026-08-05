@@ -91,6 +91,21 @@ interface ToolCallDao {
     ): Either<UpdateToolCallError, Unit>
 
     /**
+     * Updates a tool call only while its current status is one of [expectedStatuses].
+     *
+     * This compare-and-update operation gives cancellation cleanup a deterministic race rule:
+     * whichever terminal update reaches the database first wins.
+     *
+     * @param toolCall Complete replacement value to persist.
+     * @param expectedStatuses Non-terminal statuses from which the update is allowed.
+     * @return Number of rows updated (zero when another terminal update won the race).
+     */
+    suspend fun updateToolCallIfStatusIn(
+        toolCall: ToolCall,
+        expectedStatuses: Set<ToolCallStatus>
+    ): Int
+
+    /**
      * Deletes all tool calls for a message.
      * Note: Usually handled automatically via CASCADE delete when message is deleted.
      *

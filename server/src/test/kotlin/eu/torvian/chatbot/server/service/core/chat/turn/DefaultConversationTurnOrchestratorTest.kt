@@ -11,8 +11,8 @@ import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
-import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.service.core.LLMConfig
+import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.context.DefaultChatContextBuilder
@@ -181,7 +181,8 @@ class DefaultConversationTurnOrchestratorTest {
                 content = "Hello",
                 parentMessageId = null,
                 fileReferences = emptyList(),
-                toolApprovalFlow = emptyFlow()
+                toolApprovalFlow = emptyFlow(),
+                turnControlSignal = TurnControlSignal()
             )
         ).toList()
 
@@ -325,7 +326,7 @@ class DefaultConversationTurnOrchestratorTest {
             )
         } returns listOf(pendingToolCall)
         every {
-            toolCallOrchestrator.executeAndUpdateToolCalls(1L, listOf(pendingToolCall), listOf(toolDefinition), any())
+            toolCallOrchestrator.executeAndUpdateToolCalls(1L, listOf(pendingToolCall), listOf(toolDefinition), any(), any())
         } returns flowOf(
             ToolCallExecutionEvent.ToolCallApprovalRequested(pendingToolCall),
             ToolCallExecutionEvent.ToolCallExecuting(executingToolCall),
@@ -340,7 +341,8 @@ class DefaultConversationTurnOrchestratorTest {
                 content = "Find docs",
                 parentMessageId = null,
                 fileReferences = emptyList(),
-                toolApprovalFlow = emptyFlow()
+                toolApprovalFlow = emptyFlow(),
+                turnControlSignal = TurnControlSignal()
             )
         ).toList()
 
@@ -354,6 +356,46 @@ class DefaultConversationTurnOrchestratorTest {
         assertEquals(2, capturedContexts.size)
         assertEquals(listOf("user", "assistant", "tool"), capturedContexts[1].map { it.role })
         assertEquals("{\"results\":[]}", capturedContexts[1].last().content)
+    }
+
+    /**
+     * Verifies a pause observed at an iteration boundary completes the turn without issuing another LLM call.
+     */
+    @Test
+    fun `processNonStreamingTurn stops before the next iteration when paused`() = runTest {
+        val userMessage = ChatMessage.UserMessage(
+            id = 51L,
+            sessionId = testSession.id,
+            content = "Pause here",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = emptyList()
+        )
+        val turnControlSignal = TurnControlSignal().also { it.pause() }
+
+        coEvery {
+            conversationTurnPersistence.saveUserMessage(testSession.id, "Pause here", null, any())
+        } returns PersistedUserMessage(userMessage, null)
+        coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
+
+        val events = orchestrator.processNonStreamingTurn(
+            ConversationTurnRequest(
+                userId = 1L,
+                session = testSession,
+                llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key"),
+                content = "Pause here",
+                parentMessageId = null,
+                fileReferences = emptyList(),
+                toolApprovalFlow = emptyFlow(),
+                turnControlSignal = turnControlSignal
+            )
+        ).toList()
+
+        assertEquals(2, events.size)
+        assertIs<ConversationTurnEvent.UserMessageSaved>(events[0])
+        assertEquals(ConversationTurnEvent.TurnCompleted, events[1])
+        coVerify(exactly = 0) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) }
     }
 
     /**
@@ -416,7 +458,8 @@ class DefaultConversationTurnOrchestratorTest {
                 content = "Hello",
                 parentMessageId = null,
                 fileReferences = emptyList(),
-                toolApprovalFlow = emptyFlow()
+                toolApprovalFlow = emptyFlow(),
+                turnControlSignal = TurnControlSignal()
             )
         ).toList()
 

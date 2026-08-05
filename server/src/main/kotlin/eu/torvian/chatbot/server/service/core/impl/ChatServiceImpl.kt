@@ -13,6 +13,8 @@ import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnRequest
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
+import eu.torvian.chatbot.server.runtime.TurnControlSignal
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import org.apache.logging.log4j.LogManager
@@ -59,7 +61,8 @@ class ChatServiceImpl(
         content: String?,
         parentMessageId: Long?,
         fileReferences: List<FileReference>,
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ): Flow<Either<ProcessNewMessageError, MessageEvent>> = channelFlow {
         try {
             conversationTurnOrchestrator.processNonStreamingTurn(
@@ -70,11 +73,15 @@ class ChatServiceImpl(
                     content = content,
                     parentMessageId = parentMessageId,
                     fileReferences = fileReferences,
-                    toolApprovalFlow = toolApprovalFlow
+                    toolApprovalFlow = toolApprovalFlow,
+                    turnControlSignal = controlSignal
                 )
             ).collect { event ->
                 send(event.toMessageEventEither())
             }
+        } catch (e: CancellationException) {
+            // Cancellation is the normal control path for a stopped turn; do not convert it to an API error.
+            throw e
         } catch (e: Exception) {
             val errorMessage = "Unexpected error in processNewMessage for session ${session.id}: ${e.message}"
             logger.error(errorMessage, e)
@@ -92,7 +99,8 @@ class ChatServiceImpl(
         content: String?,
         parentMessageId: Long?,
         fileReferences: List<FileReference>,
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ): Flow<Either<ProcessNewMessageError, MessageStreamEvent>> = channelFlow {
         try {
             conversationTurnOrchestrator.processStreamingTurn(
@@ -103,11 +111,15 @@ class ChatServiceImpl(
                     content = content,
                     parentMessageId = parentMessageId,
                     fileReferences = fileReferences,
-                    toolApprovalFlow = toolApprovalFlow
+                    toolApprovalFlow = toolApprovalFlow,
+                    turnControlSignal = controlSignal
                 )
             ).collect { event ->
                 send(event.toMessageStreamEventEither())
             }
+        } catch (e: CancellationException) {
+            // Cancellation is the normal control path for a stopped turn; do not convert it to an API error.
+            throw e
         } catch (e: Exception) {
             val errorMessage = "Unexpected error in processNewMessageStreaming for session ${session.id}: ${e.message}"
             logger.error(errorMessage, e)

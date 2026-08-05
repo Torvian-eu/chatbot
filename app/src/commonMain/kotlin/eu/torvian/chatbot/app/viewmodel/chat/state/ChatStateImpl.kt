@@ -57,7 +57,7 @@ class ChatStateImpl(
     private val _editingContent = MutableStateFlow("")
     private val _editingFileReferences = MutableStateFlow<List<FileReference>>(emptyList())
     private val _editingBasePathOverride = MutableStateFlow<String?>(null)
-    private val _isSendingMessage = MutableStateFlow(false)
+    private val _turnExecutionState = MutableStateFlow(TurnExecutionState.IDLE)
     private val _dialogState = MutableStateFlow<ChatAreaDialogState>(ChatAreaDialogState.None)
     private val _pendingFileReferences = MutableStateFlow<List<FileReference>>(emptyList())
     private val _basePathOverride = MutableStateFlow<String?>(null)
@@ -84,7 +84,7 @@ class ChatStateImpl(
     override val editingContent: StateFlow<String> = _editingContent.asStateFlow()
     override val editingFileReferences: StateFlow<List<FileReference>> = _editingFileReferences.asStateFlow()
     override val editingBasePathOverride: StateFlow<String?> = _editingBasePathOverride.asStateFlow()
-    override val isSendingMessage: StateFlow<Boolean> = _isSendingMessage.asStateFlow()
+    override val turnExecutionState: StateFlow<TurnExecutionState> = _turnExecutionState.asStateFlow()
     override val dialogState: StateFlow<ChatAreaDialogState> = _dialogState.asStateFlow()
     override val pendingFileReferences: StateFlow<List<FileReference>> = _pendingFileReferences.asStateFlow()
     override val basePathOverride: StateFlow<String?> = _basePathOverride.asStateFlow()
@@ -370,8 +370,8 @@ class ChatStateImpl(
         _editingBasePathOverride.value = path
     }
 
-    override fun setIsSending(isSending: Boolean) {
-        _isSendingMessage.value = isSending
+    override fun setTurnExecutionState(executionState: TurnExecutionState) {
+        _turnExecutionState.value = executionState
     }
 
     override fun setDialogState(dialogState: ChatAreaDialogState) {
@@ -399,7 +399,7 @@ class ChatStateImpl(
         _editingContent.value = ""
         _editingFileReferences.value = emptyList()
         _editingBasePathOverride.value = null
-        _isSendingMessage.value = false
+        _turnExecutionState.value = TurnExecutionState.IDLE
         _dialogState.value = ChatAreaDialogState.None
         _pendingFileReferences.value = emptyList()
         _basePathOverride.value = null

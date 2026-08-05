@@ -85,6 +85,7 @@ fun ToolCallDetailsDialog(
                         ToolCallStatus.AWAITING_APPROVAL -> "Awaiting user approval..."
                         ToolCallStatus.EXECUTING -> "Tool is executing..."
                         ToolCallStatus.USER_DENIED -> "Tool call was denied by user"
+                        ToolCallStatus.CANCELLED -> "Tool call was cancelled before a result was produced"
                         else -> "No output data"
                     }
                 )
@@ -194,6 +195,7 @@ private fun ToolCallStatusSection(toolCall: ToolCall) {
         ToolCallStatus.SUCCESS -> "Success" to MaterialTheme.colorScheme.primary
         ToolCallStatus.ERROR -> "Error" to MaterialTheme.colorScheme.error
         ToolCallStatus.USER_DENIED -> "Denied by User" to MaterialTheme.colorScheme.tertiary
+        ToolCallStatus.CANCELLED -> "Cancelled" to MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Row(

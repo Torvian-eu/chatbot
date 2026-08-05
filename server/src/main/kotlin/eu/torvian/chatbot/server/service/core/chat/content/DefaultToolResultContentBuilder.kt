@@ -53,6 +53,12 @@ class DefaultToolResultContentBuilder : ToolResultContentBuilder {
                 }.toString()
             }
 
+            ToolCallStatus.CANCELLED -> {
+                buildJsonObject {
+                    put("cancelled", "Tool call was cancelled before a result was produced.")
+                }.toString()
+            }
+
             else -> {
                 val output = toolCall.output
                 if (output.isNullOrBlank()) {

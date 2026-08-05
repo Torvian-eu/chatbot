@@ -17,6 +17,7 @@ import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallExecutionEvent
+import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
 import io.mockk.clearMocks
@@ -216,7 +217,13 @@ class DefaultToolCallOrchestratorTest {
     }
 
     /**
-     * Stubs [ToolCallDao.updateToolCall] and records every persisted update so tests can assert status transitions.
+     * Stubs tool-call persistence and records ordinary lifecycle updates so tests can assert status transitions.
+     *
+     * Cancellation cleanup uses the compare-and-update DAO operation. Its successful result is
+     * stubbed here without adding cleanup writes to the lifecycle assertions, because ordinary
+     * test completions should remain the focus of those assertions.
+     *
+     * @return Mutable list receiving each unconditional tool-call update.
      */
     private fun trackToolCallUpdates(): MutableList<ToolCall> {
         val updates = mutableListOf<ToolCall>()
@@ -224,6 +231,7 @@ class DefaultToolCallOrchestratorTest {
             updates.add(firstArg())
             Unit.right()
         }
+        coEvery { toolCallDao.updateToolCallIfStatusIn(any(), any()) } returns 0
         return updates
     }
 
@@ -248,7 +256,8 @@ class DefaultToolCallOrchestratorTest {
             userId = 1L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
-            toolApprovalFlow = flowOf(approval)
+            toolApprovalFlow = flowOf(approval),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(3, events.size)
@@ -281,7 +290,8 @@ class DefaultToolCallOrchestratorTest {
             userId = 1L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
-            toolApprovalFlow = flowOf(approval)
+            toolApprovalFlow = flowOf(approval),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(2, events.size)
@@ -333,6 +343,7 @@ class DefaultToolCallOrchestratorTest {
                 pendingToolCalls = listOf(pending),
                 toolDefinitions = listOf(toolDef),
                 toolApprovalFlow = flowOf(approval),
+                controlSignal = TurnControlSignal()
             ).toList()
 
             assertEquals(3, events.size)
@@ -390,6 +401,7 @@ class DefaultToolCallOrchestratorTest {
                 pendingToolCalls = listOf(pending),
                 toolDefinitions = listOf(toolDef),
                 toolApprovalFlow = flowOf(approval),
+                controlSignal = TurnControlSignal()
             ).toList()
 
             assertEquals(3, events.size)
@@ -444,6 +456,7 @@ class DefaultToolCallOrchestratorTest {
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(3, events.size)
@@ -494,6 +507,7 @@ class DefaultToolCallOrchestratorTest {
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(3, events.size)
@@ -530,6 +544,7 @@ class DefaultToolCallOrchestratorTest {
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(2, events.size)
@@ -577,6 +592,7 @@ class DefaultToolCallOrchestratorTest {
                     approved = true,
                 )
             ),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(1, events.size)

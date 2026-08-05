@@ -3,14 +3,20 @@ package eu.torvian.chatbot.server.service.core.toolcall
 import arrow.core.getOrElse
 import eu.torvian.chatbot.common.models.tool.*
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
+import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.ProducerScope
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.withContext
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import kotlin.time.Clock
@@ -40,64 +46,120 @@ class DefaultToolCallOrchestrator(
         userId: Long,
         pendingToolCalls: List<ToolCall>,
         toolDefinitions: List<ToolDefinition>?,
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ): Flow<ToolCallExecutionEvent> = channelFlow {
-        pendingToolCalls.forEach { pendingToolCall ->
-            // Skip if already processed
-            if (pendingToolCall.status != ToolCallStatus.PENDING) {
-                send(ToolCallExecutionEvent.ToolCallCompleted(pendingToolCall))
-                return@forEach
-            }
-
-            // Resolve tool definition
-            val toolDef = toolDefinitions?.find { it.id == pendingToolCall.toolDefinitionId }
-                ?: throw IllegalStateException("Tool definition ${pendingToolCall.toolDefinitionId} not found for pending tool call")
-
-            // Step 1: Resolve approval
-            val approvalOutcome = when (toolDef) {
-                is LocalMCPToolDefinition -> resolveLocalMcpApproval(pendingToolCall, toolApprovalFlow)
-                is BuiltInWorkerToolDefinition -> resolveBuiltInWorkerApproval(pendingToolCall, toolApprovalFlow)
-            }
-            // Handle denial
-            when (approvalOutcome) {
-                is ApprovalOutcome.Denied -> {
-                    persistAndEmitDeniedToolCall(pendingToolCall, approvalOutcome.reason)
-                    return@forEach
+        try {
+            for (pendingToolCall in pendingToolCalls) {
+                if (controlSignal.isCancelled) break
+                // Skip if already processed. Existing terminal rows are still returned so the
+                // caller can pair them with the assistant request in the next LLM context.
+                if (pendingToolCall.status != ToolCallStatus.PENDING) {
+                    send(ToolCallExecutionEvent.ToolCallCompleted(pendingToolCall))
+                    continue
                 }
 
-                is ApprovalOutcome.Approved -> {
-                    // Continue to execution
+                // Resolve tool definition
+                val toolDef = toolDefinitions?.find { it.id == pendingToolCall.toolDefinitionId }
+                    ?: throw IllegalStateException("Tool definition ${pendingToolCall.toolDefinitionId} not found for pending tool call")
+
+                // Step 1: Resolve approval
+                val approvalOutcome = when (toolDef) {
+                    is LocalMCPToolDefinition -> resolveLocalMcpApproval(
+                        pendingToolCall,
+                        toolApprovalFlow,
+                        controlSignal
+                    )
+
+                    is BuiltInWorkerToolDefinition -> resolveBuiltInWorkerApproval(
+                        pendingToolCall,
+                        toolApprovalFlow,
+                        controlSignal
+                    )
                 }
-            }
+                // Handle denial
+                when (approvalOutcome) {
+                    is ApprovalOutcome.Denied -> {
+                        persistAndEmitDeniedToolCall(pendingToolCall, approvalOutcome.reason)
+                        continue
+                    }
 
-            // Step 2: Mark as executing and emit event
-            persistAndEmitExecutingToolCall(pendingToolCall)
+                    is ApprovalOutcome.Approved -> {
+                        // Continue to execution
+                    }
 
-            // Step 3: Execute based on tool type
-            val completedToolCall = when (toolDef) {
-                is LocalMCPToolDefinition -> {
-                    val localApproval = approvalOutcome.submission as? ToolCallApprovalSubmission.LocalMcpSigned
-                        ?: throw IllegalStateException(
-                            "Local MCP tool call ${pendingToolCall.id} did not receive LocalMcpSigned approval"
-                        )
-                    executeLocalMcpTool(pendingToolCall, toolDef, localApproval)
+                    ApprovalOutcome.Cancelled -> {
+                        break
+                    }
                 }
 
-                is BuiltInWorkerToolDefinition -> {
-                    val builtInApproval = approvalOutcome.submission as? ToolCallApprovalSubmission.BuiltInSigned
-                        ?: throw IllegalStateException(
-                            "Built-in worker tool call ${pendingToolCall.id} did not receive BuiltInSigned approval"
-                        )
-                    executeBuiltInWorkerTool(pendingToolCall, toolDef, builtInApproval)
+                // Step 2: Mark as executing and emit event
+                persistAndEmitExecutingToolCall(pendingToolCall)
+
+                // Step 3: Execute based on tool type
+                val completedToolCall = when (toolDef) {
+                    is LocalMCPToolDefinition -> {
+                        val localApproval = approvalOutcome.submission as? ToolCallApprovalSubmission.LocalMcpSigned
+                            ?: throw IllegalStateException(
+                                "Local MCP tool call ${pendingToolCall.id} did not receive LocalMcpSigned approval"
+                            )
+                        executeLocalMcpTool(pendingToolCall, toolDef, localApproval)
+                    }
+
+                    is BuiltInWorkerToolDefinition -> {
+                        val builtInApproval =
+                            approvalOutcome.submission as? ToolCallApprovalSubmission.BuiltInSigned
+                                ?: throw IllegalStateException(
+                                    "Built-in worker tool call ${pendingToolCall.id} did not receive BuiltInSigned approval"
+                                )
+                        executeBuiltInWorkerTool(pendingToolCall, toolDef, builtInApproval)
+                    }
+
                 }
 
+                // Step 4: Persist and emit completion
+                toolCallDao.updateToolCall(completedToolCall).getOrElse { error ->
+                    throw IllegalStateException("Failed to update tool call: $error")
+                }
+                send(ToolCallExecutionEvent.ToolCallCompleted(completedToolCall))
             }
-
-            // Step 4: Persist and emit completion
-            toolCallDao.updateToolCall(completedToolCall).getOrElse { error ->
-                throw IllegalStateException("Failed to update tool call: $error")
+        } finally {
+            // The initial batch is the source of truth for cleanup: every row that was not
+            // terminal when execution began must be finalized, including calls not yet reached by
+            // the sequential loop. Conditional updates preserve a completion that won the race.
+            withContext(NonCancellable) {
+                pendingToolCalls
+                    .forEach { unfinishedToolCall ->
+                        try {
+                            val cancelledToolCall = unfinishedToolCall.copy(
+                                status = ToolCallStatus.CANCELLED,
+                                output = null,
+                                errorMessage = "Tool call was cancelled before a result was produced.",
+                                denialReason = null,
+                                durationMs = unfinishedToolCall.durationMs
+                            )
+                            toolCallDao.updateToolCallIfStatusIn(
+                                toolCall = cancelledToolCall,
+                                expectedStatuses = setOf(
+                                    ToolCallStatus.PENDING,
+                                    ToolCallStatus.AWAITING_APPROVAL,
+                                    ToolCallStatus.EXECUTING
+                                )
+                            ).takeIf { updatedRows -> updatedRows > 0 }?.let {
+                                // Notify connected clients after persistence so the badge can show the
+                                // terminal state before the cancelled WebSocket flow finishes.
+                                send(ToolCallExecutionEvent.ToolCallCompleted(cancelledToolCall))
+                            }
+                        } catch (exception: Exception) {
+                            // Cleanup is best effort: one failed row or closed socket must not
+                            // prevent the remaining calls from being finalized.
+                            logger.error(
+                                "Failed to finalize cancelled tool call ${unfinishedToolCall.id}",
+                                exception
+                            )
+                        }
+                    }
             }
-            send(ToolCallExecutionEvent.ToolCallCompleted(completedToolCall))
         }
     }
 
@@ -106,7 +168,8 @@ class DefaultToolCallOrchestrator(
      */
     private suspend fun ProducerScope<ToolCallExecutionEvent>.resolveLocalMcpApproval(
         pendingToolCall: ToolCall,
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ): ApprovalOutcome {
         val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
         toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
@@ -114,10 +177,15 @@ class DefaultToolCallOrchestrator(
         }
         send(ToolCallExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
 
-        val submission = toolApprovalFlow.first { submission ->
-            submission.toolCallId == pendingToolCall.id &&
-                    submission is ToolCallApprovalSubmission.LocalMcpSigned
-        }
+        val submission = awaitApprovalOrCancellation(
+            toolApprovalFlow = toolApprovalFlow,
+            controlSignal = controlSignal,
+            matches = { submission ->
+                submission.toolCallId == pendingToolCall.id &&
+                        submission is ToolCallApprovalSubmission.LocalMcpSigned
+            }
+        )
+        if (submission == null || controlSignal.isCancelled) return ApprovalOutcome.Cancelled
         return if (submission.approved) {
             ApprovalOutcome.Approved(submission)
         } else {
@@ -130,7 +198,8 @@ class DefaultToolCallOrchestrator(
      */
     private suspend fun ProducerScope<ToolCallExecutionEvent>.resolveBuiltInWorkerApproval(
         pendingToolCall: ToolCall,
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ): ApprovalOutcome {
         val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
         toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
@@ -138,14 +207,48 @@ class DefaultToolCallOrchestrator(
         }
         send(ToolCallExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
 
-        val submission = toolApprovalFlow.first { submission ->
-            submission.toolCallId == pendingToolCall.id &&
-                    submission is ToolCallApprovalSubmission.BuiltInSigned
-        }
+        val submission = awaitApprovalOrCancellation(
+            toolApprovalFlow = toolApprovalFlow,
+            controlSignal = controlSignal,
+            matches = { submission ->
+                submission.toolCallId == pendingToolCall.id &&
+                        submission is ToolCallApprovalSubmission.BuiltInSigned
+            }
+        )
+        if (submission == null || controlSignal.isCancelled) return ApprovalOutcome.Cancelled
         return if (submission.approved) {
             ApprovalOutcome.Approved(submission)
         } else {
             ApprovalOutcome.Denied(submission.denialReason)
+        }
+    }
+
+    /**
+     * Waits for the matching approval or for cooperative cancellation of the active turn.
+     *
+     * @param toolApprovalFlow Client approval submissions.
+     * @param controlSignal Signal that completes when the client stops the turn.
+     * @param matches Predicate identifying the approval for the current tool call.
+     * @return Matching approval, or `null` when cancellation wins the race.
+     */
+    private suspend fun awaitApprovalOrCancellation(
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal,
+        matches: (ToolCallApprovalSubmission) -> Boolean
+    ): ToolCallApprovalSubmission? = coroutineScope {
+        val approval = async {
+            toolApprovalFlow.first { matches(it) }
+        }
+        val cancellation = async {
+            controlSignal.awaitCancelled()
+            null
+        }
+        select {
+            approval.onAwait { result -> result }
+            cancellation.onAwait { null }
+        }.also {
+            approval.cancel()
+            cancellation.cancel()
         }
     }
 
@@ -257,5 +360,6 @@ class DefaultToolCallOrchestrator(
     private sealed interface ApprovalOutcome {
         data class Approved(val submission: ToolCallApprovalSubmission) : ApprovalOutcome
         data class Denied(val reason: String?) : ApprovalOutcome
+        data object Cancelled : ApprovalOutcome
     }
 }
