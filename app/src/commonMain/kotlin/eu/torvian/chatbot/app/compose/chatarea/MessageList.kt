@@ -31,6 +31,7 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
@@ -54,7 +55,7 @@ import kotlinx.coroutines.yield
  * @param scrollToInputTrigger Incrementing trigger used to request scrolling to inline input.
  * @param inputContent Current input content.
  * @param replyTargetMessage Current reply target, if replying.
- * @param isSendingMessage Whether a send/stream operation is active.
+ * @param turnExecutionState Lifecycle state used by the composer action button.
  * @param pendingFileReferences File references attached to the composer.
  * @param searchQuery Current in-session search query.
  * @param searchResults Ordered occurrence-level matches for the current query, used to build the
@@ -76,18 +77,18 @@ fun MessageList(
     editingContent: String?,
     editingFileReferences: List<FileReference>,
     editingBasePathOverride: String?,
+    modifier: Modifier = Modifier,
     modelsById: Map<Long, LLMModel> = emptyMap(),
     toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),
     isInputExpanded: Boolean = false,
     scrollToInputTrigger: Int = 0,
     inputContent: String = "",
     replyTargetMessage: ChatMessage? = null,
-    isSendingMessage: Boolean = false,
+    turnExecutionState: TurnExecutionState = TurnExecutionState.IDLE,
     pendingFileReferences: List<FileReference> = emptyList(),
     searchQuery: String = "",
     searchResults: List<MessageSearchMatch> = emptyList(),
     currentSearchIndex: Int = -1,
-    modifier: Modifier = Modifier,
     inputFocusRequester: FocusRequester = remember { FocusRequester() },
     inputTextFieldState: TextFieldState = rememberTextFieldState()
 ) {
@@ -291,7 +292,7 @@ fun MessageList(
                             InputArea(
                                 actions = inputAreaActions,
                                 replyTargetMessage = replyTargetMessage,
-                                isSendingMessage = isSendingMessage,
+                                turnExecutionState = turnExecutionState,
                                 isExpanded = true,
                                 fileReferences = pendingFileReferences,
                                 focusRequester = inputFocusRequester,
@@ -311,7 +312,7 @@ fun MessageList(
                         InputArea(
                             actions = inputAreaActions,
                             replyTargetMessage = replyTargetMessage,
-                            isSendingMessage = isSendingMessage,
+                            turnExecutionState = turnExecutionState,
                             isExpanded = true,
                             fileReferences = pendingFileReferences,
                             focusRequester = inputFocusRequester,

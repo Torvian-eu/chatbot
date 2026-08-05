@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.toolcall
 
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -19,12 +20,14 @@ interface ToolCallOrchestrator {
      * @param pendingToolCalls Pending tool calls to process.
      * @param toolDefinitions Enabled tool definitions available to the current LLM turn.
      * @param toolApprovalFlow Normalized client approval submissions emitted by the chat WebSocket.
+     * @param controlSignal Signal that requests cooperative cancellation of approval and execution work.
      * @return Flow of tool execution lifecycle events.
      */
     fun executeAndUpdateToolCalls(
         userId: Long,
         pendingToolCalls: List<ToolCall>,
         toolDefinitions: List<ToolDefinition>?,
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ): Flow<ToolCallExecutionEvent>
 }

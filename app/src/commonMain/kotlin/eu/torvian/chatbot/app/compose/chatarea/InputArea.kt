@@ -1,6 +1,12 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -15,10 +21,12 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -31,6 +39,7 @@ import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.generated.resources.*
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
+import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -45,9 +54,9 @@ import org.jetbrains.compose.resources.stringResource
 
  * @param actions Grouped callbacks for input area interactions.
  * @param replyTargetMessage The message being replied to, if any.
- * @param isSendingMessage Indicates if a message is currently being sent.
+ * @param turnExecutionState Lifecycle state used to select the action button.
+ * @param modifier Modifier applied to the input container.
  * @param fileReferences List of file references attached to the current message.
- * @param modifier Modifier to be applied to the component.
  * @param focusRequester Focus requester to programmatically control focus on the text field.
  * @param textFieldState The text field state, shared with parent for cursor persistence.
  */
@@ -56,14 +65,25 @@ import org.jetbrains.compose.resources.stringResource
 fun InputArea(
     actions: InputAreaActions,
     replyTargetMessage: ChatMessage?,
-    isSendingMessage: Boolean,
+    turnExecutionState: TurnExecutionState,
+    modifier: Modifier = Modifier,
     isExpanded: Boolean = false,
     fileReferences: List<FileReference> = emptyList(),
-    modifier: Modifier = Modifier,
     focusRequester: FocusRequester = remember { FocusRequester() },
     textFieldState: TextFieldState = rememberTextFieldState()
 ) {
-    val isSendButtonEnabled = textFieldState.text.isNotBlank() && !isSendingMessage
+    val isSendButtonEnabled =
+        turnExecutionState == TurnExecutionState.IDLE && textFieldState.text.isNotBlank()
+    val infiniteTransition = rememberInfiniteTransition(label = "stopping_pulse")
+    val pulsingAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 600, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
 
     Column(modifier = modifier) {
         // Reply Target Banner
@@ -244,33 +264,71 @@ fun InputArea(
                     // Spacer to push send button to the right
                     Spacer(Modifier.weight(1f))
 
-                    // Send Button or Stop Button (right side)
-                    if (isSendingMessage) { // Stop button to cancel sending (E1.S3)
-                        PlainTooltipBox(text = stringResource(Res.string.sending_message_tooltip)) {
-                            FilledIconButton(
-                                onClick = actions.onCancelSendMessage,
-                                modifier = Modifier.size(48.dp),
-                                enabled = true
-                            ) {
-                                Icon(
-                                    Icons.Default.Stop,
-                                    contentDescription = stringResource(Res.string.cancel_send_message_button_description),
-                                    tint = MaterialTheme.colorScheme.onPrimary
-                                )
+                    // Render exactly one action for the current turn lifecycle state.
+                    when (turnExecutionState) {
+                        TurnExecutionState.IDLE -> {
+                            PlainTooltipBox(text = stringResource(Res.string.send_message_button_description) + " (Ctrl+Enter)") {
+                                FilledIconButton(
+                                    onClick = actions.onSendMessage,
+                                    modifier = Modifier.size(48.dp),
+                                    enabled = isSendButtonEnabled
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Send,
+                                        contentDescription = stringResource(Res.string.send_message_button_description),
+                                        tint = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
                             }
                         }
-                    } else { // Show Send Button (E1.S2)
-                        PlainTooltipBox(text = stringResource(Res.string.send_message_button_description) + " (Ctrl+Enter)") {
-                            FilledIconButton(
-                                onClick = actions.onSendMessage,
-                                modifier = Modifier.size(48.dp),
-                                enabled = isSendButtonEnabled
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = stringResource(Res.string.send_message_button_description),
-                                    tint = MaterialTheme.colorScheme.onPrimary
-                                )
+
+                        TurnExecutionState.RUNNING -> {
+                            PlainTooltipBox(text = "Pause (Finish current step)") {
+                                FilledIconButton(
+                                    onClick = actions.onPauseSendMessage,
+                                    modifier = Modifier.size(48.dp),
+                                    enabled = true
+                                ) {
+                                    Icon(
+                                        Icons.Default.Pause,
+                                        contentDescription = "Pause (Finish current step)",
+                                        tint = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                            }
+                        }
+
+                        TurnExecutionState.PAUSING -> {
+                            PlainTooltipBox(text = "Stop immediately (Force cancel)") {
+                                FilledIconButton(
+                                    onClick = actions.onCancelSendMessage,
+                                    modifier = Modifier.size(48.dp),
+                                    enabled = true
+                                ) {
+                                    Icon(
+                                        Icons.Default.Stop,
+                                        contentDescription = "Stop immediately (Force cancel)",
+                                        modifier = Modifier.graphicsLayer { alpha = pulsingAlpha },
+                                        tint = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                            }
+                        }
+
+                        TurnExecutionState.STOPPING -> {
+                            PlainTooltipBox(text = "Stopping...") {
+                                FilledIconButton(
+                                    onClick = {},
+                                    modifier = Modifier.size(48.dp),
+                                    enabled = false
+                                ) {
+                                    Icon(
+                                        Icons.Default.Stop,
+                                        contentDescription = "Stopping...",
+                                        modifier = Modifier.graphicsLayer { alpha = pulsingAlpha },
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }

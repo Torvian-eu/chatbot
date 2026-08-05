@@ -74,6 +74,7 @@ fun ChatAreaPreview() {
             override fun onUpdateInput(newText: String) {}
             override fun onSendMessage() {}
             override fun onCancelSendMessage() {}
+            override fun onPauseSendMessage() {}
             override fun onStartReplyTo(message: ChatMessage) {}
             override fun onCancelReply() {}
             override fun onStartEditing(message: ChatMessage) {}

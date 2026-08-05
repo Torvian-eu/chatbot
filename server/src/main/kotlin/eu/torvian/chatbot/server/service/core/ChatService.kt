@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
+import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -56,6 +57,7 @@ interface ChatService {
      * @param parentMessageId Optional ID of the message being replied to. Must be non-null when [content] is null.
      * @param fileReferences Optional list of file references attached to the message.
      * @param toolApprovalFlow A flow of tool-call approval submissions from the client.
+     * @param controlSignal Signal that requests cooperative cancellation of the turn.
      * @return A Flow of Either<ProcessNewMessageError, MessageEvent>.
      *         The flow emits MessageEvent objects as processing progresses,
      *         or ProcessNewMessageError if an error occurs.
@@ -67,7 +69,8 @@ interface ChatService {
         content: String?,
         parentMessageId: Long? = null,
         fileReferences: List<FileReference> = emptyList(),
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ): Flow<Either<ProcessNewMessageError, MessageEvent>>
 
     /**
@@ -113,6 +116,7 @@ interface ChatService {
      *                        when [content] is null.
      * @param fileReferences Optional list of file references attached to the message.
      * @param toolApprovalFlow A flow of tool-call approval submissions from the client.
+     * @param controlSignal Signal that requests cooperative cancellation of the turn.
      * @return A Flow of Either<ProcessNewMessageError, MessageStreamEvent>.
      *
      * @see MessageStreamEvent for detailed event type documentation
@@ -125,6 +129,7 @@ interface ChatService {
         content: String?,
         parentMessageId: Long? = null,
         fileReferences: List<FileReference> = emptyList(),
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ): Flow<Either<ProcessNewMessageError, MessageStreamEvent>>
 }

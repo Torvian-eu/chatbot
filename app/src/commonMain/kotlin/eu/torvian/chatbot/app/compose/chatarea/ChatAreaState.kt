@@ -4,6 +4,7 @@ import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
+import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
@@ -29,7 +30,7 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @property editingContent The content of the message currently being edited (E3.S1, E3.S2).
  * @property editingFileReferences The list of file references being edited (E3.S2).
  * @property editingBasePathOverride The base path override being edited (E3.S2).
- * @property isSendingMessage Indicates whether a message is currently in the process of being sent (E1.S3).
+ * @property turnExecutionState Lifecycle state used by the composer action button.
  * @property dialogState The current dialog state for the chat area (e.g., delete confirmation).
  * @property enabledToolsCount The number of tools currently enabled for the session.
  * @property toolCallsMap Tool calls for the current session, organized by message ID.
@@ -54,7 +55,7 @@ data class ChatAreaState(
     val editingContent: String = "",
     val editingFileReferences: List<FileReference> = emptyList(),
     val editingBasePathOverride: String? = null,
-    val isSendingMessage: Boolean = false,
+    val turnExecutionState: TurnExecutionState = TurnExecutionState.IDLE,
     val dialogState: ChatAreaDialogState = ChatAreaDialogState.None,
     val enabledToolsCount: Int = 0,
     val toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),

@@ -21,6 +21,23 @@ sealed interface ChatClientEvent {
     @Serializable
     data class ProcessNewMessage(val request: ProcessNewMessageRequest) : ChatClientEvent
 
+    /**
+     * Requests cancellation of the active message turn without closing the WebSocket.
+     *
+     * The server keeps the connection alive long enough to persist and publish terminal
+     * cancellation events before completing the socket normally.
+     */
+    @Serializable
+    @SerialName("cancel")
+    data object Cancel : ChatClientEvent
+
+    /**
+     * Requests the active turn to finish its current assistant/tool step without starting another
+     * assistant iteration.
+     */
+    @Serializable
+    @SerialName("pause")
+    data object Pause : ChatClientEvent
 
     /**
      * An event sent by the client to provide an approval decision for a non-Local-MCP tool call.

@@ -6,6 +6,7 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.core.chat.preparation.ConversationTurnPreparationService
 import eu.torvian.chatbot.server.service.core.chat.preparation.PreparedConversationTurn
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnEvent
@@ -172,7 +173,7 @@ class ChatServiceImplTest {
         )
 
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), TurnControlSignal())
             .collect { event -> events.add(event) }
 
         assertEquals(3, events.size)
@@ -192,7 +193,7 @@ class ChatServiceImplTest {
         )
 
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), TurnControlSignal())
             .collect { event -> events.add(event) }
 
         assertIs<ProcessNewMessageError.ExternalServiceError>(events[0].leftOrNull())
@@ -221,7 +222,8 @@ class ChatServiceImplTest {
             "Hello",
             null,
             emptyList(),
-            emptyFlow()
+            emptyFlow(),
+            TurnControlSignal()
         )
             .collect { event -> events.add(event) }
 
@@ -239,7 +241,7 @@ class ChatServiceImplTest {
         every { conversationTurnOrchestrator.processNonStreamingTurn(any()) } throws IllegalStateException("boom")
 
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), TurnControlSignal())
             .collect { event -> events.add(event) }
 
         assertIs<ProcessNewMessageError.UnexpectedError>(events[0].leftOrNull())
@@ -258,7 +260,8 @@ class ChatServiceImplTest {
             "Hello",
             null,
             emptyList(),
-            emptyFlow()
+            emptyFlow(),
+            TurnControlSignal()
         )
             .collect { event -> events.add(event) }
 

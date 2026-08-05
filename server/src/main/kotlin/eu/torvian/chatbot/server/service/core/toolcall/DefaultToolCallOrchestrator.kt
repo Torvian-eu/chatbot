@@ -3,15 +3,19 @@ package eu.torvian.chatbot.server.service.core.toolcall
 import arrow.core.getOrElse
 import eu.torvian.chatbot.common.models.tool.*
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
+import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.ProducerScope
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -42,15 +46,17 @@ class DefaultToolCallOrchestrator(
         userId: Long,
         pendingToolCalls: List<ToolCall>,
         toolDefinitions: List<ToolDefinition>?,
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ): Flow<ToolCallExecutionEvent> = channelFlow {
         try {
-            pendingToolCalls.forEach { pendingToolCall ->
+            for (pendingToolCall in pendingToolCalls) {
+                if (controlSignal.isCancelled) break
                 // Skip if already processed. Existing terminal rows are still returned so the
                 // caller can pair them with the assistant request in the next LLM context.
                 if (pendingToolCall.status != ToolCallStatus.PENDING) {
                     send(ToolCallExecutionEvent.ToolCallCompleted(pendingToolCall))
-                    return@forEach
+                    continue
                 }
 
                 // Resolve tool definition
@@ -59,18 +65,31 @@ class DefaultToolCallOrchestrator(
 
                 // Step 1: Resolve approval
                 val approvalOutcome = when (toolDef) {
-                    is LocalMCPToolDefinition -> resolveLocalMcpApproval(pendingToolCall, toolApprovalFlow)
-                    is BuiltInWorkerToolDefinition -> resolveBuiltInWorkerApproval(pendingToolCall, toolApprovalFlow)
+                    is LocalMCPToolDefinition -> resolveLocalMcpApproval(
+                        pendingToolCall,
+                        toolApprovalFlow,
+                        controlSignal
+                    )
+
+                    is BuiltInWorkerToolDefinition -> resolveBuiltInWorkerApproval(
+                        pendingToolCall,
+                        toolApprovalFlow,
+                        controlSignal
+                    )
                 }
                 // Handle denial
                 when (approvalOutcome) {
                     is ApprovalOutcome.Denied -> {
                         persistAndEmitDeniedToolCall(pendingToolCall, approvalOutcome.reason)
-                        return@forEach
+                        continue
                     }
 
                     is ApprovalOutcome.Approved -> {
                         // Continue to execution
+                    }
+
+                    ApprovalOutcome.Cancelled -> {
+                        break
                     }
                 }
 
@@ -88,10 +107,11 @@ class DefaultToolCallOrchestrator(
                     }
 
                     is BuiltInWorkerToolDefinition -> {
-                        val builtInApproval = approvalOutcome.submission as? ToolCallApprovalSubmission.BuiltInSigned
-                            ?: throw IllegalStateException(
-                                "Built-in worker tool call ${pendingToolCall.id} did not receive BuiltInSigned approval"
-                            )
+                        val builtInApproval =
+                            approvalOutcome.submission as? ToolCallApprovalSubmission.BuiltInSigned
+                                ?: throw IllegalStateException(
+                                    "Built-in worker tool call ${pendingToolCall.id} did not receive BuiltInSigned approval"
+                                )
                         executeBuiltInWorkerTool(pendingToolCall, toolDef, builtInApproval)
                     }
 
@@ -148,7 +168,8 @@ class DefaultToolCallOrchestrator(
      */
     private suspend fun ProducerScope<ToolCallExecutionEvent>.resolveLocalMcpApproval(
         pendingToolCall: ToolCall,
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ): ApprovalOutcome {
         val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
         toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
@@ -156,10 +177,15 @@ class DefaultToolCallOrchestrator(
         }
         send(ToolCallExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
 
-        val submission = toolApprovalFlow.first { submission ->
-            submission.toolCallId == pendingToolCall.id &&
-                    submission is ToolCallApprovalSubmission.LocalMcpSigned
-        }
+        val submission = awaitApprovalOrCancellation(
+            toolApprovalFlow = toolApprovalFlow,
+            controlSignal = controlSignal,
+            matches = { submission ->
+                submission.toolCallId == pendingToolCall.id &&
+                        submission is ToolCallApprovalSubmission.LocalMcpSigned
+            }
+        )
+        if (submission == null || controlSignal.isCancelled) return ApprovalOutcome.Cancelled
         return if (submission.approved) {
             ApprovalOutcome.Approved(submission)
         } else {
@@ -172,7 +198,8 @@ class DefaultToolCallOrchestrator(
      */
     private suspend fun ProducerScope<ToolCallExecutionEvent>.resolveBuiltInWorkerApproval(
         pendingToolCall: ToolCall,
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
     ): ApprovalOutcome {
         val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
         toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
@@ -180,14 +207,48 @@ class DefaultToolCallOrchestrator(
         }
         send(ToolCallExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
 
-        val submission = toolApprovalFlow.first { submission ->
-            submission.toolCallId == pendingToolCall.id &&
-                    submission is ToolCallApprovalSubmission.BuiltInSigned
-        }
+        val submission = awaitApprovalOrCancellation(
+            toolApprovalFlow = toolApprovalFlow,
+            controlSignal = controlSignal,
+            matches = { submission ->
+                submission.toolCallId == pendingToolCall.id &&
+                        submission is ToolCallApprovalSubmission.BuiltInSigned
+            }
+        )
+        if (submission == null || controlSignal.isCancelled) return ApprovalOutcome.Cancelled
         return if (submission.approved) {
             ApprovalOutcome.Approved(submission)
         } else {
             ApprovalOutcome.Denied(submission.denialReason)
+        }
+    }
+
+    /**
+     * Waits for the matching approval or for cooperative cancellation of the active turn.
+     *
+     * @param toolApprovalFlow Client approval submissions.
+     * @param controlSignal Signal that completes when the client stops the turn.
+     * @param matches Predicate identifying the approval for the current tool call.
+     * @return Matching approval, or `null` when cancellation wins the race.
+     */
+    private suspend fun awaitApprovalOrCancellation(
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal,
+        matches: (ToolCallApprovalSubmission) -> Boolean
+    ): ToolCallApprovalSubmission? = coroutineScope {
+        val approval = async {
+            toolApprovalFlow.first { matches(it) }
+        }
+        val cancellation = async {
+            controlSignal.awaitCancelled()
+            null
+        }
+        select {
+            approval.onAwait { result -> result }
+            cancellation.onAwait { null }
+        }.also {
+            approval.cancel()
+            cancellation.cancel()
         }
     }
 
@@ -299,5 +360,6 @@ class DefaultToolCallOrchestrator(
     private sealed interface ApprovalOutcome {
         data class Approved(val submission: ToolCallApprovalSubmission) : ApprovalOutcome
         data class Denied(val reason: String?) : ApprovalOutcome
+        data object Cancelled : ApprovalOutcome
     }
 }

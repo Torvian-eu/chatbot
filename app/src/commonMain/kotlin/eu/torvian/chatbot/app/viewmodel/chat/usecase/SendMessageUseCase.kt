@@ -50,10 +50,11 @@ class SendMessageUseCase(
     /**
      * Flow for emitting follow-up client events during an active chat WebSocket session.
      *
-     * This carries either plain approval responses for regular tools or signed Local MCP approvals that
-     * the server can forward to the worker.
+     * This carries tool approval responses for regular tools, signed Local MCP / Built-in Worker
+     * approvals, as well as turn control events such as [ChatClientEvent.Pause] and
+     * [ChatClientEvent.Cancel].
      */
-    private val toolApprovalFlow = MutableSharedFlow<ChatClientEvent>()
+    private val clientEventFlow = MutableSharedFlow<ChatClientEvent>()
 
     /**
      * Approves a tool call and allows it to execute.
@@ -76,6 +77,25 @@ class SendMessageUseCase(
     suspend fun denyToolCall(toolCall: ToolCall, reason: String?) {
         logger.debug("Denying tool call: ${toolCall.id}, reason: $reason")
         emitApprovalEvent(toolCall = toolCall, approved = false, denialReason = reason)
+    }
+
+    /**
+     * Requests cancellation of the currently active turn while preserving the WebSocket collector.
+     *
+     * The event is sent through the same shared outbound stream as tool approvals, so the server can
+     * cancel processing and still deliver the cancellation finalizer's terminal events.
+     */
+    suspend fun requestCancellation() {
+        logger.debug("Requesting cancellation of the active chat turn")
+        clientEventFlow.emit(ChatClientEvent.Cancel)
+    }
+
+    /**
+     * Requests a soft pause for the active turn, allowing its current assistant/tool step to finish.
+     */
+    suspend fun requestPause() {
+        logger.debug("Requesting pause for active chat turn")
+        clientEventFlow.emit(ChatClientEvent.Pause)
     }
 
     /**
@@ -104,7 +124,7 @@ class SendMessageUseCase(
 
         val localMcpTool = findLocalMcpToolDefinition(toolCall)
         if (localMcpTool == null) {
-            toolApprovalFlow.emit(
+            clientEventFlow.emit(
                 ChatClientEvent.ToolCallApproval(
                     ToolCallApprovalResponse(
                         toolCallId = toolCall.id,
@@ -182,7 +202,7 @@ class SendMessageUseCase(
         )
 
         // Emit only the signed request; the typed authorization is serialized in signedRequest.payload
-        toolApprovalFlow.emit(
+        clientEventFlow.emit(
             ChatClientEvent.LocalMcpToolCallApproval(
                 signedRequest = signedRequest
             )
@@ -247,7 +267,7 @@ class SendMessageUseCase(
         )
 
         // Emit only the signed request; the typed authorization is serialized in signedRequest.payload
-        toolApprovalFlow.emit(
+        clientEventFlow.emit(
             ChatClientEvent.BuiltInToolCallApproval(
                 signedRequest = signedRequest
             )
@@ -423,7 +443,7 @@ class SendMessageUseCase(
         val messageEvents: Flow<ChatClientEvent> = flowOf(ChatClientEvent.ProcessNewMessage(request))
         val clientEvents: Flow<ChatClientEvent> = merge(
             messageEvents,
-            toolApprovalFlow
+            clientEventFlow
         )
 
         // Call the repository with the combined event flow and collect server responses.
@@ -480,7 +500,7 @@ class SendMessageUseCase(
         val messageEvents: Flow<ChatClientEvent> = flowOf(ChatClientEvent.ProcessNewMessage(request))
         val clientEvents: Flow<ChatClientEvent> = merge(
             messageEvents,
-            toolApprovalFlow
+            clientEventFlow
         )
 
         // Call the repository with the combined event flow and collect server responses.

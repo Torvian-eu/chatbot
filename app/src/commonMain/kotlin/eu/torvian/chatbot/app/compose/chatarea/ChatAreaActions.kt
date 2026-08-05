@@ -28,6 +28,11 @@ interface ChatAreaActions {
     fun onCancelSendMessage()
 
     /**
+     * Callback for when the user requests a soft pause of the active turn.
+     */
+    fun onPauseSendMessage()
+
+    /**
      * Callback for when the user starts replying to a specific message.
      * @param message The message the user is replying to.
      */

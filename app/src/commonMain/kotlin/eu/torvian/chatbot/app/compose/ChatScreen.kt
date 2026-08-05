@@ -86,7 +86,7 @@ fun ChatScreen(
     val chatEditingBasePathOverride by chatViewModel.editingBasePathOverride.collectAsState()
     val chatDisplayedMessages by chatViewModel.displayedMessages.collectAsState()
     val chatCollapsedMessageIds by chatViewModel.collapsedMessageIds.collectAsState()
-    val chatIsSendingMessage by chatViewModel.isSendingMessage.collectAsState()
+    val chatTurnExecutionState by chatViewModel.turnExecutionState.collectAsState()
     val chatDialogState by chatViewModel.dialogState.collectAsState()
     val enabledToolsForCurrentSession by chatViewModel.enabledToolsForCurrentSession.collectAsState()
     val toolCallsForCurrentSession by chatViewModel.toolCallsForCurrentSession.collectAsState()
@@ -213,7 +213,7 @@ fun ChatScreen(
         chatSessionUiState, availableModels, availableSettings, currentModel, currentSettings, modelsById,
         chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
         chatEditingFileReferences, chatEditingBasePathOverride, chatDisplayedMessages, chatCollapsedMessageIds,
-        chatIsSendingMessage, chatDialogState, enabledToolsCount, toolCallsMap, pendingFileReferences,
+        chatTurnExecutionState, chatDialogState, enabledToolsCount, toolCallsMap, pendingFileReferences,
         isSearchActive, searchQuery, searchResults, currentSearchIndex,
     ) {
         ChatAreaState(
@@ -231,7 +231,7 @@ fun ChatScreen(
             editingBasePathOverride = chatEditingBasePathOverride,
             displayedMessages = chatDisplayedMessages,
             collapsedMessageIds = chatCollapsedMessageIds,
-            isSendingMessage = chatIsSendingMessage,
+            turnExecutionState = chatTurnExecutionState,
             dialogState = chatDialogState,
             enabledToolsCount = enabledToolsCount,
             toolCallsMap = toolCallsMap,
@@ -247,6 +247,7 @@ fun ChatScreen(
             override fun onUpdateInput(newText: String) = chatViewModel.updateInput(newText)
             override fun onSendMessage() = chatViewModel.sendMessage()
             override fun onCancelSendMessage() = chatViewModel.cancelSendMessage()
+            override fun onPauseSendMessage() = chatViewModel.pauseSendMessage()
             override fun onStartReplyTo(message: ChatMessage) = chatViewModel.startReplyTo(message)
             override fun onCancelReply() = chatViewModel.cancelReply()
             override fun onStartEditing(message: ChatMessage) = chatViewModel.startEditing(message)

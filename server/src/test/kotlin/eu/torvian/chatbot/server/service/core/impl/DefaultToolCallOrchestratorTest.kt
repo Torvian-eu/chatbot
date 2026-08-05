@@ -17,6 +17,7 @@ import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallExecutionEvent
+import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
 import io.mockk.clearMocks
@@ -255,7 +256,8 @@ class DefaultToolCallOrchestratorTest {
             userId = 1L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
-            toolApprovalFlow = flowOf(approval)
+            toolApprovalFlow = flowOf(approval),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(3, events.size)
@@ -288,7 +290,8 @@ class DefaultToolCallOrchestratorTest {
             userId = 1L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
-            toolApprovalFlow = flowOf(approval)
+            toolApprovalFlow = flowOf(approval),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(2, events.size)
@@ -340,6 +343,7 @@ class DefaultToolCallOrchestratorTest {
                 pendingToolCalls = listOf(pending),
                 toolDefinitions = listOf(toolDef),
                 toolApprovalFlow = flowOf(approval),
+                controlSignal = TurnControlSignal()
             ).toList()
 
             assertEquals(3, events.size)
@@ -397,6 +401,7 @@ class DefaultToolCallOrchestratorTest {
                 pendingToolCalls = listOf(pending),
                 toolDefinitions = listOf(toolDef),
                 toolApprovalFlow = flowOf(approval),
+                controlSignal = TurnControlSignal()
             ).toList()
 
             assertEquals(3, events.size)
@@ -451,6 +456,7 @@ class DefaultToolCallOrchestratorTest {
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(3, events.size)
@@ -501,6 +507,7 @@ class DefaultToolCallOrchestratorTest {
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(3, events.size)
@@ -537,6 +544,7 @@ class DefaultToolCallOrchestratorTest {
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(2, events.size)
@@ -584,6 +592,7 @@ class DefaultToolCallOrchestratorTest {
                     approved = true,
                 )
             ),
+            controlSignal = TurnControlSignal()
         ).toList()
 
         assertEquals(1, events.size)
