@@ -9,7 +9,6 @@ import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
 import eu.torvian.chatbot.worker.builtin.validation.*
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
-import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.PathMatcher
@@ -24,7 +23,8 @@ import java.nio.file.PathMatcher
  * directory; use `**` (e.g. `**.kt`) for recursive matching that also includes the starting directory
  * itself. A pattern can also be anchored to a subdirectory — for instance a pattern that starts with
  * `src/` and ends in `**` matches the entire src subtree. Supports exclude patterns (string or array)
- * that skip matched paths. Returns a newline-separated list of matched paths (relative to the starting
+ * that skip matched paths. Matching is case-insensitive by default (controllable via the optional
+ * `caseSensitive` flag). Returns a newline-separated list of matched paths (relative to the starting
  * directory).
  */
 class SearchFilesTool : BuiltInTool {
@@ -38,7 +38,7 @@ class SearchFilesTool : BuiltInTool {
         val validationErrors = mutableListOf<String>()
 
         // Define the set of known/valid parameter names for this tool
-        val validKeys = setOf("path", "pattern", "excludePatterns", "maxResults")
+        val validKeys = setOf("path", "pattern", "excludePatterns", "maxResults", "caseSensitive")
         addUnknownParameterErrors(input, validKeys, validationErrors)
         val pattern = parseRequiredString(input, "pattern", validationErrors)
         val path = parseRequiredString(input, "path", validationErrors)
@@ -47,6 +47,9 @@ class SearchFilesTool : BuiltInTool {
         if (maxResults < 1) {
             validationErrors.add("Argument 'maxResults' must be >= 1")
         }
+
+        // Optional boolean field: validate if present, otherwise default to case-insensitive matching.
+        val caseSensitive = parseOptionalBoolean(input, "caseSensitive", defaultValue = false, validationErrors)
 
         if (validationErrors.isNotEmpty()) {
             return invalidInputResult(validationErrors)
@@ -69,8 +72,8 @@ class SearchFilesTool : BuiltInTool {
                 )
             }
 
-            val matcher: PathMatcher = FileSystems.getDefault().getPathMatcher("glob:$pattern")
-            val excludeMatchers: List<PathMatcher> = exclude.map { FileSystems.getDefault().getPathMatcher("glob:$it") }
+            val matcher: PathMatcher = ConfigurableGlobMatcher(pattern!!, caseSensitive)
+            val excludeMatchers: List<PathMatcher> = exclude.map { ConfigurableGlobMatcher(it, caseSensitive) }
             val matches = mutableListOf<String>()
             var truncated = false
 
@@ -96,14 +99,14 @@ class SearchFilesTool : BuiltInTool {
 
             val hints = mutableListOf<String>()
 
-            if (pattern != null && isUnintentionalLeadingSlashStarStar(pattern)) {
+            if (isUnintentionalLeadingSlashStarStar(pattern)) {
                 hints += "Hint: '$pattern' excludes files directly in the starting directory because '**/ '" +
                         " requires a directory separator. To include files in the starting directory as well" +
                         ", use '${fixLeadingSlashStarStar(pattern)}'."
             }
 
-            if (matches.isEmpty() && Files.isDirectory(root) && pattern != null
-                && looksLikeNonRecursiveTopLevelPattern(pattern) && hasSubdirectories(root)
+            if (matches.isEmpty() && Files.isDirectory(root) && looksLikeNonRecursiveTopLevelPattern(pattern)
+                && hasSubdirectories(root)
             ) {
                 val suggested = toRecursiveHintPattern(pattern)
                 hints += "Hint: '$pattern' only matches entries in the starting directory." +
@@ -123,7 +126,7 @@ class SearchFilesTool : BuiltInTool {
 
             BuiltInToolExecutionResult(
                 output = if (matches.isEmpty()) {
-                    if (hints.isNotEmpty()) "No matches found" + hintSuffix else ""
+                    if (hints.isNotEmpty()) "No matches found$hintSuffix" else ""
                 } else {
                     matches.joinToString(separator = "\n") + summary + hintSuffix
                 },
@@ -131,5 +134,4 @@ class SearchFilesTool : BuiltInTool {
             )
         }
     }
-
 }
