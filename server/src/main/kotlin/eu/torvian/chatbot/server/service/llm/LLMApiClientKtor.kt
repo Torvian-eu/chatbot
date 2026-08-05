@@ -412,6 +412,9 @@ private fun readUtf8LinesLimited(
 ): Flow<String> = flow {
     require(maximumBytes > 0) { "maximumBytes must be positive" }
 
+    // Temporary diagnostics, removed once the root cause is fixed. Accumulates the decoded lines so
+    // a suspiciously short stream (provider closed the connection early) can be logged verbatim.
+    val diagnosticText = StringBuilder()
     val readBuffer = ByteArray(RESPONSE_READ_BUFFER_SIZE)
     var readBufferOffset = 0
     var readBufferSize = 0
@@ -465,9 +468,20 @@ private fun readUtf8LinesLimited(
         } else {
             rawLine
         }
-        emit(decodeUtf8(line))
+        val text = decodeUtf8(line)
+        // Only accumulate while the stream is still (potentially) short, so the builder stays bounded
+        // for healthy responses. Once past the threshold a line is never part of a suspicious dump.
+        if (totalResponseBytes <= 2000) {
+            diagnosticText.append(text).append('\n')
+        }
+        emit(text)
     }
 
+    // Temporary diagnostic: a healthy stream is several KB; below 2000B likely means the provider
+    // closed the connection early. Dump the accumulated lines verbatim so they're readable in logs.
+    if (totalResponseBytes < 2000) {
+        logger.warn("Suspiciously short stream: $totalResponseBytes bytes. Content:\n$diagnosticText")
+    }
     logger.debug("Completed reading UTF-8 lines from channel (total bytes read: $totalResponseBytes)")
 }
 
