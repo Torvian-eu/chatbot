@@ -9,6 +9,7 @@ import kotlinx.serialization.json.*
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readText
+import kotlin.io.path.writeBytes
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -108,6 +109,107 @@ class EditFileToolTest {
 
             assertSuccess(result)
             assertEquals("baz bar baz bar baz", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * A file exactly at the inclusive 10 MiB boundary is rejected before its contents are read.
+     */
+    @Test
+    fun `file at 10 MiB fails the editable size guard`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("large.txt")
+            file.writeBytes(ByteArray(10 * 1024 * 1024) { 'x'.code.toByte() })
+
+            val result = tool.execute(
+                buildInput("large.txt", listOf("x" to "y")),
+                context(dir),
+            )
+
+            assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
+            assertEquals(true, result.errorMessage?.contains("10 MB maximum editable limit"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * A single edit with at least 10,000 matches is rejected before planning can allocate an
+     * unbounded occurrence list.
+     */
+    @Test
+    fun `too many matching occurrences fail during planning`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("repeated.txt")
+            file.writeText("a".repeat(10_000), Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("repeated.txt", listOf("a" to "b")),
+                context(dir),
+            )
+
+            assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
+            assertEquals(true, result.errorMessage?.contains("matched too many occurrences (>= 10,000)"))
+            assertEquals("a".repeat(10_000), readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * A batch whose accepted replacements would grow the file by more than 100 KB is rejected
+     * before the modified content can be written.
+     */
+    @Test
+    fun `batch net growth over 100 KB fails before applying`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            val original = "marker"
+            file.writeText(original, Charsets.UTF_8)
+            val replacement = "r".repeat(100_007)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("marker" to replacement)),
+                context(dir),
+            )
+
+            assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
+            assertEquals(true, result.errorMessage?.contains("maximum allowed net growth of 100 KB"))
+            assertEquals(original, readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * A large diff is applied successfully while its returned UTF-8 report remains capped and
+     * explicitly tells the caller that a non-dry-run edit reached disk.
+     */
+    @Test
+    fun `large report is truncated after the file is modified`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            val replacement = "replacement line with additional content"
+            val original = (0 until 300).joinToString("\n") { "x$it" }
+            file.writeText(original, Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("x" to replacement)),
+                context(dir),
+            )
+
+            val output = assertSuccess(result)
+            assertTrue(output.toByteArray(Charsets.UTF_8).size <= 5_000)
+            assertTrue(output.contains("[Output truncated at 5,000 bytes."))
+            assertTrue(output.contains("The file edit WAS applied to disk."))
+            val expected = (0 until 300).joinToString("\n") { "$replacement$it" }
+            assertEquals(expected, readFile(file))
         } finally {
             dir.toFile().deleteRecursively()
         }

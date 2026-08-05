@@ -41,6 +41,21 @@ import java.nio.file.NoSuchFileException
  *   index.
  */
 class EditFileTool : BuiltInTool {
+    /** Constants enforcing the edit tool's resource-safety policy. */
+    private companion object {
+        /** Maximum on-disk file size accepted before loading a file into memory. */
+        const val MAX_EDITABLE_FILE_BYTES = 10L * 1024L * 1024L
+
+        /** Maximum positive net character growth allowed for one planned batch. */
+        const val MAX_NET_GROWTH = 100_000L
+
+        /** Maximum UTF-8 byte size of a successful tool report. */
+        const val MAX_REPORT_BYTES = 5_000
+
+        /** Maximum number of occurrences scanned for one edit specification. */
+        const val MAX_MATCHES_PER_EDIT = 10_000
+    }
+
     override val name: String = "edit_file"
     override val description: String = BuiltInToolCatalog.specFor(name)!!.description
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
@@ -155,6 +170,25 @@ class EditFileTool : BuiltInTool {
         }
 
         return withContext(context.ioDispatcher) {
+            // Check the on-disk size before allocating a String for the file. This is deliberately
+            // a byte limit and is inclusive: a file exactly 10 MiB is rejected.
+            val fileSize = try {
+                Files.size(target)
+            } catch (_: NoSuchFileException) {
+                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "File not found: $path")
+            } catch (e: Exception) {
+                return@withContext builtInToolErrorResult(
+                    BuiltInToolExecutionError.EXECUTION_FAILED,
+                    "Failed to inspect file size: ${e.message}"
+                )
+            }
+            if (fileSize >= MAX_EDITABLE_FILE_BYTES) {
+                return@withContext builtInToolErrorResult(
+                    BuiltInToolExecutionError.EXECUTION_FAILED,
+                    "File exceeds the 10 MB maximum editable limit (size: $fileSize bytes)."
+                )
+            }
+
             val fileContent = try {
                 Files.readString(target, Charsets.UTF_8)
             } catch (_: NoSuchFileException) {
@@ -186,7 +220,7 @@ class EditFileTool : BuiltInTool {
             // Denormalize the result back to the file's original EOL style before writing.
             val modified = denormalizeEol(normalizedModified, eol)
 
-            val report = renderReport(normalizedOriginal, normalizedModified, edits, success)
+            val report = renderReport(normalizedOriginal, normalizedModified, edits, success, dryRun)
             if (dryRun) {
                 BuiltInToolExecutionResult(output = report)
             } else {
@@ -256,9 +290,10 @@ class EditFileTool : BuiltInTool {
      */
     private sealed interface PlanResult {
         /**
-         * Planning could not proceed because an edit spec matched zero occurrences.
+         * Planning could not proceed because an edit spec matched zero occurrences or the
+         * conflict-resolved batch would exceed the net-growth safety limit.
          *
-         * @property message Explains which edit spec index failed and why.
+         * @property message Human-readable explanation of the planning failure.
          */
         data class Failure(val message: String) : PlanResult
 
@@ -278,7 +313,8 @@ class EditFileTool : BuiltInTool {
      * Planning never mutates [text]: each edit spec is matched independently against the normalized
      * string, and **all** of its non-overlapping occurrences are collected, so caller order cannot
      * change which ranges are found. If any edit spec produces zero matches, the whole operation
-     * fails naming that edit spec's index.
+     * fails naming that edit spec's index. A scan reaching [MAX_MATCHES_PER_EDIT] occurrences
+     * also fails before conflict sorting.
      *
      * Overlap policy: when two planned occurrences overlap, the **more specific** occurrence wins —
      * the one with the longer matched normalized span. Ties (equal span length) are broken first by
@@ -292,16 +328,33 @@ class EditFileTool : BuiltInTool {
      *   [PlanResult.Success] carrying the accepted and rejected occurrences.
      */
     private fun planAndResolve(text: String, edits: List<EditSpec>): PlanResult {
-        // Flatten all occurrences from every edit spec into a single global list.
+        // Flatten occurrences into one global list, but bound each scan and growth-check each
+        // occurrence before adding more objects. This prevents pathological inputs from filling
+        // the heap before a safety limit can reject them.
         val planned = mutableListOf<PlannedEditOccurrence>()
+        var runningNetGrowth = 0L
         for ((index, edit) in edits.withIndex()) {
-            val ranges = findAllRanges(text, edit.oldText)
+            val ranges = findAllRanges(text, edit.oldText, maxMatches = MAX_MATCHES_PER_EDIT)
             if (ranges.isEmpty()) {
                 return PlanResult.Failure(
                     "Edit at index ${formatEditIndex(index)}: 'oldText' not found (exact match after EOL normalization)"
                 )
             }
+            if (ranges.size >= MAX_MATCHES_PER_EDIT) {
+                return PlanResult.Failure(
+                    "Edit at index ${formatEditIndex(index)} matched too many occurrences (>= 10,000). " +
+                        "Add more context to narrow oldText."
+                )
+            }
+            val occurrenceNetGrowth = edit.newText.length.toLong() - edit.oldText.length.toLong()
             for (range in ranges) {
+                runningNetGrowth += occurrenceNetGrowth
+                if (runningNetGrowth > MAX_NET_GROWTH) {
+                    return PlanResult.Failure(
+                        "Planned edit batch exceeds maximum allowed net growth of 100 KB. " +
+                            "Narrow the edit scope or split changes into smaller batches."
+                    )
+                }
                 planned.add(
                     PlannedEditOccurrence(
                         index = index,
@@ -340,6 +393,18 @@ class EditFileTool : BuiltInTool {
             } else {
                 accepted.add(candidate)
             }
+        }
+
+        // The running check above protects planning before sorting. Keep this post-resolution
+        // check as a defensive invariant because conflicts can only reduce the applied growth.
+        val totalNetGrowth = accepted.sumOf { occurrence ->
+            occurrence.newText.length.toLong() - occurrence.oldText.length.toLong()
+        }
+        if (totalNetGrowth > MAX_NET_GROWTH) {
+            return PlanResult.Failure(
+                "Planned edit batch exceeds maximum allowed net growth of 100 KB. " +
+                    "Narrow the edit scope or split changes into smaller batches."
+            )
         }
         return PlanResult.Success(accepted, rejected)
     }
@@ -385,40 +450,62 @@ class EditFileTool : BuiltInTool {
      * @param modified Normalized file content after accepted occurrences were applied.
      * @param edits All caller-supplied edit specs (for the requested count).
      * @param plan The resolved plan (accepted + rejected occurrences).
-     * @return The rendered report string (summary followed by a unified diff).
+     * @param dryRun Whether the report describes a change that was not written to disk.
+     * @return The rendered report string (summary followed by a unified diff), capped at 5,000
+     *   UTF-8 bytes when necessary.
      */
     private fun renderReport(
         original: String,
         modified: String,
         edits: List<EditSpec>,
-        plan: PlanResult.Success
+        plan: PlanResult.Success,
+        dryRun: Boolean,
     ): String {
         val matched = plan.accepted.size + plan.rejected.size
-        val sb = StringBuilder()
-        sb.append("Edit summary:\n")
-        sb.append("- requested edit specs: ").append(edits.size).append('\n')
-        sb.append("- matched occurrences: ").append(matched).append('\n')
-        sb.append("- applied occurrences: ").append(plan.accepted.size).append('\n')
-        sb.append("- rejected occurrences: ").append(plan.rejected.size).append('\n')
-        if (plan.rejected.isNotEmpty()) {
-            sb.append("Rejected occurrences (overlapping, lower priority):\n")
-            for ((index, reason) in plan.rejected) {
-                sb.append("  - edit spec index ").append(formatEditIndex(index)).append(": ").append(reason).append('\n')
+        val summary = buildString {
+            append("Edit summary:\n")
+            append("- requested edit specs: ").append(edits.size).append('\n')
+            append("- matched occurrences: ").append(matched).append('\n')
+            append("- applied occurrences: ").append(plan.accepted.size).append('\n')
+            append("- rejected occurrences: ").append(plan.rejected.size).append('\n')
+        }
+        val rejected = buildString {
+            if (plan.rejected.isNotEmpty()) {
+                append("Rejected occurrences (overlapping, lower priority):\n")
+                for ((index, reason) in plan.rejected) {
+                    append("  - edit spec index ").append(formatEditIndex(index)).append(": ")
+                        .append(reason).append('\n')
+                }
             }
         }
-        sb.append("--- diff ---\n")
-        // Split on '\n' so each list entry is a line *without* its terminator; a trailing empty
-        // string preserves a missing final newline and is reported faithfully rather than invented.
-        val originalLines = original.split('\n')
-        val modifiedLines = modified.split('\n')
-        val diff = LineDiff.unifiedDiff(originalLines, modifiedLines, contextLines = 3)
-        if (diff.isEmpty()) {
-            sb.append("(no changes)\n")
+        // The diff remains fully generated before truncation so writing the file is independent
+        // of how much report text can be returned to the caller.
+        val diff = LineDiff.unifiedDiff(original.split('\n'), modified.split('\n'), contextLines = 3)
+        val diffBody = diff.ifEmpty { "(no changes)\n" }
+        val diffHeader = "--- diff ---\n"
+        val completeReport = summary + rejected + diffHeader + diffBody
+        if (utf8ByteCount(completeReport) <= MAX_REPORT_BYTES) return completeReport
+
+        val notice = if (dryRun) {
+            "\n\n[Output truncated at 5,000 bytes. NOTE: The file edit was NOT applied to disk because this was a dry run. " +
+                "Review whether this extensive change was intentional, or use read_text_file to inspect the modified regions.]"
         } else {
-            sb.append(diff)
+            "\n\n[Output truncated at 5,000 bytes. NOTE: The file edit WAS applied to disk. " +
+                "Review whether this extensive change was intentional, or use read_text_file to inspect the modified regions.]"
         }
-        return sb.toString()
+        val body = rejected + diffHeader + diffBody
+        val bodyBudget = MAX_REPORT_BYTES - utf8ByteCount(summary) - utf8ByteCount(notice)
+        val (truncatedBody, _) = truncateBytes(body, bodyBudget)
+        return summary + truncatedBody + notice
     }
+
+    /**
+     * Counts the bytes in [text]'s UTF-8 representation for the report size contract.
+     *
+     * @param text Text to measure.
+     * @return Number of UTF-8 bytes used by [text].
+     */
+    private fun utf8ByteCount(text: String): Int = text.toByteArray(Charsets.UTF_8).size
 
     /**
      * Returns `true` when two normalized-space ranges overlap (share at least one character).
@@ -447,14 +534,19 @@ class EditFileTool : BuiltInTool {
      *
      * @param haystack Normalized file content searched for matches (all `\n`).
      * @param needle Caller-supplied text to locate (matched exactly, already EOL-normalized).
+     * @param maxMatches Maximum number of ranges to collect before stopping the scan.
      * @return The list of [MatchRange]s within the **normalized** [haystack] for every matched
      *   region, in source order. Empty if [needle] is not found.
      */
-    private fun findAllRanges(haystack: String, needle: String): List<MatchRange> {
-        if (needle.isEmpty()) return emptyList()
-        val ranges = mutableListOf<MatchRange>()
+    private fun findAllRanges(
+        haystack: String,
+        needle: String,
+        maxMatches: Int = MAX_MATCHES_PER_EDIT,
+    ): List<MatchRange> {
+        if (needle.isEmpty() || maxMatches <= 0) return emptyList()
+        val ranges = ArrayList<MatchRange>(minOf(maxMatches, 128))
         var from = 0
-        while (true) {
+        while (ranges.size < maxMatches) {
             val idx = haystack.indexOf(needle, from)
             if (idx < 0) break
             ranges.add(MatchRange(idx, idx + needle.length))
