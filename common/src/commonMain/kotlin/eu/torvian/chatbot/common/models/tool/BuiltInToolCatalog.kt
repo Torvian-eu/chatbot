@@ -226,6 +226,11 @@ object BuiltInToolCatalog {
                         })
                         put("description", "Optional glob pattern(s) to exclude. Supports both string and array formats.")
                     })
+                    put("caseSensitive", buildJsonObject {
+                        put("type", "boolean")
+                        put("default", false)
+                        put("description", "Whether pattern matching is case-sensitive.")
+                    })
                     put("maxResults", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)

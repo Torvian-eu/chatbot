@@ -40,6 +40,8 @@ class SearchFilesToolTest {
      * @param pattern Glob pattern matched against the workspace-relative path. Use `**` for recursive matching.
      * @param path Workspace-relative starting directory (defaults to "." when null).
      * @param excludePatterns Optional glob pattern(s) to exclude (string or list).
+     * @param maxResults Optional maximum number of results.
+     * @param caseSensitive Optional boolean controlling case-sensitive matching.
      * @return The input [kotlinx.serialization.json.JsonObject] for the tool.
      */
     private fun buildInput(
@@ -47,6 +49,7 @@ class SearchFilesToolTest {
         path: String = ".",
         excludePatterns: Any? = null,
         maxResults: Any? = null,
+        caseSensitive: Any? = null,
     ): JsonObject = buildJsonObject {
         put("pattern", pattern)
         put("path", path)
@@ -60,6 +63,12 @@ class SearchFilesToolTest {
             is Int -> put("maxResults", maxResults)
             is String -> put("maxResults", maxResults)
             is JsonElement -> put("maxResults", maxResults)
+        }
+        when (caseSensitive) {
+            is Boolean -> put("caseSensitive", caseSensitive)
+            is String -> put("caseSensitive", caseSensitive)
+            is Int -> put("caseSensitive", caseSensitive)
+            is JsonElement -> put("caseSensitive", caseSensitive)
         }
     }
 
@@ -612,6 +621,181 @@ class SearchFilesToolTest {
                 val output = assertSuccess(result)
                 assertFalse(output.contains("excludes files directly in the starting directory"), "pattern $p should not trigger hint; output=$output")
             }
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Case-sensitivity scenarios
+    // -----------------------------------------------------------------------------------------
+
+    @Test
+    fun `case-insensitive default matches differing case files`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("Main.KT").writeText("x", Charsets.UTF_8)
+            dir.resolve("README.MD").writeText("x", Charsets.UTF_8)
+
+            // Default (caseSensitive=false) matches both regardless of pattern case.
+            val result = tool.execute(buildInput("*.kt"), context(dir))
+            val matchesKt = assertSuccess(result).lines().map { it.replace('\\', '/') }.toSet()
+            assertEquals(setOf("Main.KT"), matchesKt)
+
+            val resultMd = tool.execute(buildInput("*.md"), context(dir))
+            val matchesMd = assertSuccess(resultMd).lines().map { it.replace('\\', '/') }.toSet()
+            assertEquals(setOf("README.MD"), matchesMd)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `case-insensitive pattern with mixed case matches`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("HelloWorld.kt").writeText("x", Charsets.UTF_8)
+
+            // Pattern with mixed case still matches the differing-case file by default.
+            val result = tool.execute(buildInput("helloworld.*"), context(dir))
+            val matches = assertSuccess(result).lines().map { it.replace('\\', '/') }.toSet()
+            assertEquals(setOf("HelloWorld.kt"), matches)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `case-insensitive nested pattern matches differing case files`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("src").toFile().mkdirs()
+            dir.resolve("src/UTILS").toFile().mkdirs()
+            dir.resolve("src/UTILS/Helper.KT").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("src/utils/**helper.*"), context(dir))
+            val matches = assertSuccess(result).lines().map { it.replace('\\', '/') }.toSet()
+            assertEquals(setOf("src/UTILS/Helper.KT"), matches)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `case-sensitive matching does not fold case`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("main.kt").writeText("x", Charsets.UTF_8)
+            dir.resolve("Main.KT").writeText("x", Charsets.UTF_8)
+
+            // caseSensitive=true: pattern "*.kt" matches only the exact-case "main.kt".
+            val result = tool.execute(buildInput("*.kt", caseSensitive = true), context(dir))
+            val matches = assertSuccess(result).lines().map { it.replace('\\', '/') }.toSet()
+            assertEquals(setOf("main.kt"), matches)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `case-insensitive exclude pattern filters differing case files`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("keep.kt").writeText("x", Charsets.UTF_8)
+            dir.resolve("SKIP.kt").writeText("x", Charsets.UTF_8)
+
+            // Default (caseSensitive=false): exclude "skip.kt" also excludes "SKIP.kt".
+            val result = tool.execute(buildInput("**.kt", excludePatterns = listOf("skip.kt")), context(dir))
+            val matches = assertSuccess(result).lines().map { it.replace('\\', '/') }.toSet()
+            assertEquals(setOf("keep.kt"), matches)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `case-sensitive exclude pattern does not fold case`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("keep.kt").writeText("x", Charsets.UTF_8)
+            dir.resolve("SKIP.kt").writeText("x", Charsets.UTF_8)
+            dir.resolve("skip.kt").writeText("x", Charsets.UTF_8)
+
+            // caseSensitive=true: exclude "skip.kt" only excludes the exact-case "skip.kt", not "SKIP.kt".
+            val result = tool.execute(buildInput("**.kt", excludePatterns = listOf("skip.kt"), caseSensitive = true), context(dir))
+            val matches = assertSuccess(result).lines().map { it.replace('\\', '/') }.toSet()
+            assertEquals(setOf("keep.kt", "SKIP.kt"), matches)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `original case preserved in output when matching case-insensitively`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("HelloWorld.KT").writeText("x", Charsets.UTF_8)
+
+            // Case-insensitive matching returns the original-case path.
+            val result = tool.execute(buildInput("*.kt"), context(dir))
+            val output = assertSuccess(result)
+            assertTrue(output.contains("HelloWorld.KT"), "expected original-case path in output; got: $output")
+            assertFalse(output.contains("helloworld.kt"), "did not expect lowercased path in output; got: $output")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `invalid caseSensitive value is rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+
+            val resultString = tool.execute(buildInput("**.kt", caseSensitive = "maybe"), context(dir))
+            assertError(resultString, BuiltInToolExecutionError.INVALID_INPUT)
+            assertTrue(
+                resultString.errorDetails!!.contains("Argument 'caseSensitive' must be a boolean"),
+                "expected caseSensitive type error; got: ${resultString.errorDetails}"
+            )
+
+            val resultNumber = tool.execute(buildInput("**.kt", caseSensitive = 1), context(dir))
+            assertError(resultNumber, BuiltInToolExecutionError.INVALID_INPUT)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `unknown parameter caseSensitive was previously rejected but now accepted`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+
+            // "caseSensitive" must be a known/valid key, not flagged as an unknown parameter.
+            val result = tool.execute(buildJsonObject {
+                put("pattern", "**.kt")
+                put("path", ".")
+                put("caseSensitive", true)
+            }, context(dir))
+            val output = assertSuccess(result)
+            assertFalse(output.contains("Unknown parameter"), "caseSensitive should be a valid key; output=$output")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `case-insensitive union pattern matches differing case`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("photo.JPG").writeText("x", Charsets.UTF_8)
+            dir.resolve("video.mov").writeText("x", Charsets.UTF_8)
+
+            // Union pattern {jpg,png} with case-insensitive default matches "photo.JPG".
+            val result = tool.execute(buildInput("*.{jpg,png}"), context(dir))
+            val matches = assertSuccess(result).lines().map { it.replace('\\', '/') }.toSet()
+            assertEquals(setOf("photo.JPG"), matches)
         } finally {
             dir.toFile().deleteRecursively()
         }
