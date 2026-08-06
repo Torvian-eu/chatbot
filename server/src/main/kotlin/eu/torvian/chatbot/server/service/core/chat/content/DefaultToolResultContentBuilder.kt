@@ -19,6 +19,16 @@ class DefaultToolResultContentBuilder : ToolResultContentBuilder {
      */
     override fun build(toolCall: ToolCall): String {
         return when (toolCall.status) {
+            ToolCallStatus.SUCCESS -> {
+                // A successfully executed call carries its real result back into provider context.
+                val output = toolCall.output
+                if (output.isNullOrBlank()) {
+                    buildJsonObject { }.toString()
+                } else {
+                    output
+                }
+            }
+
             ToolCallStatus.ERROR -> {
                 buildJsonObject {
                     put("error", toolCall.errorMessage ?: "Unknown error")
@@ -59,13 +69,13 @@ class DefaultToolResultContentBuilder : ToolResultContentBuilder {
                 }.toString()
             }
 
+            // Provisional or interrupted calls (PENDING, AWAITING_APPROVAL, EXECUTING) never produced
+            // a usable result. Treat them like a cancelled call so the replayed assistant tool call is
+            // always paired with a meaningful, non-empty tool response instead of a bare empty object.
             else -> {
-                val output = toolCall.output
-                if (output.isNullOrBlank()) {
-                    buildJsonObject { }.toString()
-                } else {
-                    output
-                }
+                buildJsonObject {
+                    put("cancelled", "Tool call was cancelled before a result was produced.")
+                }.toString()
             }
         }
     }

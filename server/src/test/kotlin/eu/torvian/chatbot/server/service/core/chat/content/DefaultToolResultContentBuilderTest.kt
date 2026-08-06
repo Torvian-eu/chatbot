@@ -242,4 +242,28 @@ class DefaultToolResultContentBuilderTest {
             result
         )
     }
+
+    /**
+     * Verifies a provisional call that never produced a result is serialized like a cancelled call.
+     */
+    @Test
+    fun `build treats provisional calls as cancelled without a result`() {
+        val builder = DefaultToolResultContentBuilder()
+
+        val result = builder.build(
+            ToolCall(
+                id = 8L,
+                messageId = 10L,
+                toolDefinitionId = 2L,
+                toolName = "weather",
+                toolCallId = "call-8",
+                input = "{\"city\":\"Paris\"}",
+                output = null,
+                status = ToolCallStatus.PENDING,
+                executedAt = Instant.fromEpochMilliseconds(1234L)
+            )
+        )
+
+        assertEquals("{\"cancelled\":\"Tool call was cancelled before a result was produced.\"}", result)
+    }
 }

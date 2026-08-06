@@ -108,7 +108,6 @@ class DefaultChatContextBuilderTest {
                 input = null,
                 output = "invalid arguments",
                 status = ToolCallStatus.ERROR,
-                errorCode = ToolCall.INVALID_ARGUMENTS_ERROR_CODE,
                 executedAt = modifiedAt
             ),
             ToolCall(
@@ -141,25 +140,29 @@ class DefaultChatContextBuilderTest {
             toolCalls = toolCalls
         )
 
-        assertEquals(6, context.size)
+        assertEquals(8, context.size)
         assertEquals(RawChatMessage.User::class, context[0]::class)
         assertEquals(RawChatMessage.Assistant::class, context[1]::class)
         assertEquals(RawChatMessage.Tool::class, context[2]::class)
         assertEquals(RawChatMessage.Tool::class, context[3]::class)
         assertEquals(RawChatMessage.Tool::class, context[4]::class)
-        assertEquals(RawChatMessage.User::class, context[5]::class)
+        assertEquals(RawChatMessage.Tool::class, context[5]::class)
+        assertEquals(RawChatMessage.Tool::class, context[6]::class)
+        assertEquals(RawChatMessage.User::class, context[7]::class)
 
         assertEquals(true, context[0].content?.contains("--- Attached Files ---"))
         assertEquals(
-            listOf("call-success", "call-parameterless", "call-cancelled"),
+            listOf("call-success", "call-pending", "call-invalid", "call-parameterless", "call-cancelled"),
             (context[1] as RawChatMessage.Assistant).toolCalls?.map { it.id }
         )
         assertEquals("{\"results\":[]}", context[2].content)
-        assertEquals("pong", context[3].content)
-        assertEquals("{\"cancelled\":\"Tool call was cancelled before a result was produced.\"}", context[4].content)
-        assertEquals("Follow-up", context[5].content)
+        assertEquals("{\"cancelled\":\"Tool call was cancelled before a result was produced.\"}", context[3].content)
+        assertEquals("{\"error\":\"Unknown error\",\"output\":\"invalid arguments\"}", context[4].content)
+        assertEquals("pong", context[5].content)
+        assertEquals("{\"cancelled\":\"Tool call was cancelled before a result was produced.\"}", context[6].content)
+        assertEquals("Follow-up", context[7].content)
         assertEquals(
-            listOf("call-success", "call-parameterless", "call-cancelled"),
+            listOf("call-success", "call-pending", "call-invalid", "call-parameterless", "call-cancelled"),
             context.filterIsInstance<RawChatMessage.Tool>().map { it.toolCallId }
         )
     }
