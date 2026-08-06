@@ -356,19 +356,45 @@ class FetchWebContentToolTest {
     }
 
     @Test
-    fun `html returnMode returns raw html text`() = runTest {
+    fun `html returnMode with cleanHtml false returns raw html text`() = runTest {
         val html = "<html><body>hi</body></html>"
         val fake = FakeWebFetchService(
             mutableListOf(okResult("https://example.com/", html, contentType = "text/html"))
         )
         val result = toolWith(fake).execute(
-            input("url" to JsonPrimitive("https://example.com/"), "returnMode" to JsonPrimitive("html")),
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "returnMode" to JsonPrimitive("html"),
+                "cleanHtml" to JsonPrimitive(false),
+            ),
             context(),
         )
         val success = assertSuccess(result)
         assertEquals("=== https://example.com/ (lines:1 of 1) ===\n$html", success.output)
         assertEquals("html", success.details!!["returnMode"]?.jsonPrimitive?.content)
+        assertEquals(false, success.details!!["cleanHtml"]?.jsonPrimitive?.boolean)
     }
+
+    @Test
+    fun `html content is cleaned by default down to core text`() = runTest {
+        val html = "<html><head><style>.x{}</style></head><body><script>bad()</script><p>Hi <b>there</b></p><p onclick=\"evil()\">Second</p></body></html>"
+        val fake = FakeWebFetchService(
+            mutableListOf(okResult("https://example.com/", html, contentType = "text/html"))
+        )
+        val result = toolWith(fake).execute(
+            input("url" to JsonPrimitive("https://example.com/")),
+            context(),
+        )
+        val success = assertSuccess(result)
+        // Script/style/head and non-core attributes (onclick) are dropped; core content & tags remain.
+        assertTrue(success.output!!.contains("Hi <b>there</b>"), "Expected cleaned content; got: ${success.output}")
+        assertTrue(!success.output!!.contains("<script>"), "Script must be dropped; got: ${success.output}")
+        assertTrue(!success.output!!.contains("onclick"), "onclick attribute must be dropped; got: ${success.output}")
+        assertEquals(true, success.details?.jsonObject?.get("cleanHtml")?.jsonPrimitive?.boolean)
+        // The shared service must have received the cleanHtml=true flag.
+        assertEquals(true, fake.requests.first().cleanHtml)
+    }
+
 
     @Test
     fun `absent content type is rejected as non-textual`() = runTest {

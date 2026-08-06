@@ -8,6 +8,7 @@ import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
 import eu.torvian.chatbot.worker.builtin.net.WebFetchRequest
 import eu.torvian.chatbot.worker.builtin.net.WebFetchService
+import eu.torvian.chatbot.worker.builtin.net.HtmlCleaner
 import eu.torvian.chatbot.worker.builtin.net.mapWebFetchErrorToToolResult
 import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
 import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
@@ -18,6 +19,7 @@ import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.file.Files
+import java.nio.charset.StandardCharsets
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
@@ -30,14 +32,19 @@ import kotlin.io.path.isDirectory
  * [WorkspacePathValidator] and the standard filesystem API. It never performs its own DNS, socket,
  * redirect, or escape-checking logic, so the security policy lives in exactly one place per concern.
  *
- * Unlike `fetch_web_content`, this tool is binary-safe: it writes the raw response bytes verbatim and
- * performs no content-type gating, so any payload (images, archives, etc.) can be stored unchanged.
+ * Unlike `fetch_web_content`, this tool is binary-safe: it writes the response bytes verbatim and to
+ * the workspace, so any payload (images, archives, etc.) can be stored unchanged. When the `cleanHtml`
+ * option (default on) is set and the response is an HTML document, the stored copy is instead reduced
+ * to core tags, core attributes, and visible text.
  *
  * @property fetchService Shared, transport-agnostic web-fetch service (validates URLs, issues GETs,
  *   enforces timeouts and size caps, and follows redirects only when requested).
+ * @property htmlCleaner Reusable HTML cleaner, applied when the `cleanHtml` tool option is on and the
+ *   response is HTML.
  */
 class DownloadFileTool(
     private val fetchService: WebFetchService,
+    private val htmlCleaner: HtmlCleaner = HtmlCleaner(),
 ) : BuiltInTool {
 
     override val name: String = "download_file"
@@ -50,7 +57,7 @@ class DownloadFileTool(
         val validationErrors = mutableListOf<String>()
 
         // Define the set of known/valid parameter names for this tool
-        val validKeys = setOf("url", "path", "overwrite", "timeoutSeconds", "followRedirects")
+        val validKeys = setOf("url", "path", "overwrite", "timeoutSeconds", "followRedirects", "cleanHtml")
         addUnknownParameterErrors(input, validKeys, validationErrors)
 
         val url = parseRequiredString(input, "url", validationErrors)
@@ -72,6 +79,10 @@ class DownloadFileTool(
 
         val followRedirects = parseOptionalBoolean(input, "followRedirects", defaultValue = true, validationErrors)
 
+        // Tool-level default for the LLM-facing parameter is ON; the shared model default of false is
+        // never relied on here because the parsed (explicit) value is always forwarded to the request.
+        val cleanHtml = parseOptionalBoolean(input, "cleanHtml", defaultValue = true, validationErrors)
+
         if (validationErrors.isNotEmpty()) {
             return invalidInputResult(validationErrors)
         }
@@ -92,11 +103,22 @@ class DownloadFileTool(
             timeoutSeconds = timeoutSeconds,
             maxBytes = MAX_DOWNLOAD_BYTES,
             followRedirects = followRedirects,
+            cleanHtml = cleanHtml,
         )
 
         val result = when (val fetched = fetchService.fetch(request)) {
             is arrow.core.Either.Left -> return mapWebFetchErrorToToolResult(fetched.value)
             is arrow.core.Either.Right -> fetched.value
+        }
+
+        // Resolve the bytes to persist. The tool is binary-safe by default: the raw response bytes are
+        // used verbatim. Only when cleanHtml is on AND the response is confirmed HTML do we decode,
+        // clean to core tags/attributes + visible text, and re-encode to UTF-8.
+        val bytesToWrite = if (cleanHtml && isHtmlContentType(result.contentType)) {
+            val text = result.bodyBytes.toString(StandardCharsets.UTF_8)
+            htmlCleaner.clean(text, clean = true).toByteArray(StandardCharsets.UTF_8)
+        } else {
+            result.bodyBytes
         }
 
         return withContext(context.ioDispatcher) {
@@ -119,8 +141,9 @@ class DownloadFileTool(
 
                 // Create parent directories automatically so nested paths work without manual setup.
                 Files.createDirectories(target.parent ?: context.workspace)
-                // Write the raw bytes exactly as received; binary-safe, no decoding or content gating.
-                Files.write(target, result.bodyBytes)
+                // Write the resolved bytes: raw verbatim for binary-safe downloads, or cleaned HTML when
+                // the cleanHtml option was applied to a confirmed HTML response.
+                Files.write(target, bytesToWrite)
 
                 val details = buildJsonObject {
                     put("finalUrl", result.finalUrl)
@@ -128,11 +151,13 @@ class DownloadFileTool(
                     put("contentType", result.contentType)
                     put("contentLength", result.contentLength)
                     put("bytesRead", result.bodyBytes.size)
+                    put("bytesWritten", bytesToWrite.size)
+                    put("cleanHtml", cleanHtml)
                     put("path", path)
                     put("overwritten", alreadyExisted)
                 }
                 BuiltInToolExecutionResult(
-                    output = "Downloaded ${result.bodyBytes.size} byte(s) from ${result.finalUrl} to $path",
+                    output = "Downloaded ${bytesToWrite.size} byte(s) from ${result.finalUrl} to $path",
                     details = details,
                 )
             } catch (e: Exception) {
@@ -141,8 +166,27 @@ class DownloadFileTool(
         }
     }
 
+    /**
+     * Decides whether [contentType] denotes an HTML document that the `cleanHtml` option should clean.
+     *
+     * Matches the standard HTML content types (`text/html` and `application/xhtml+xml`), case-insensitive.
+     * Anything else (including null) is not considered HTML, so cleaning is skipped and the raw bytes
+     * are stored verbatim (preserving binary safety for non-HTML payloads).
+     *
+     * @param contentType Raw `Content-Type` header value, or null when absent.
+     * @return True when [contentType] is a recognized HTML content type.
+     */
+    private fun isHtmlContentType(contentType: String?): Boolean =
+        contentType?.substringBefore(';')?.trim()?.lowercase() in HTML_CONTENT_TYPES
+
     private companion object {
         /** Hard cap on the response body bytes the tool will buffer before rejecting the download. */
         const val MAX_DOWNLOAD_BYTES: Int = 10 * 1024 * 1024 // 10 MB
+
+        /** Media types recognised as HTML documents eligible for the `cleanHtml` option. */
+        val HTML_CONTENT_TYPES: Set<String> = setOf(
+            "text/html",
+            "application/xhtml+xml",
+        )
     }
 }

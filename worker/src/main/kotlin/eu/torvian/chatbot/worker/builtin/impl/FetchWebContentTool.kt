@@ -9,6 +9,7 @@ import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.net.WebFetchRequest
 import eu.torvian.chatbot.worker.builtin.net.WebFetchResult
 import eu.torvian.chatbot.worker.builtin.net.WebFetchService
+import eu.torvian.chatbot.worker.builtin.net.HtmlCleaner
 import eu.torvian.chatbot.worker.builtin.net.mapWebFetchErrorToToolResult
 import eu.torvian.chatbot.worker.builtin.validation.*
 import kotlinx.serialization.json.JsonObject
@@ -28,13 +29,16 @@ import java.nio.charset.CodingErrorAction
  *
  * Binary/non-text responses are rejected rather than emitted as garbage, and decoding failures are
  * surfaced as explicit errors. `returnMode` (`auto`/`text`/`html`) is accepted for forward
- * compatibility but, in this v1, all modes return the decoded body text verbatim (no HTML cleaning).
+ * compatibility; the `cleanHtml` switch (default on) drives the actual HTML cleaning, so when enabled
+ * the response text is reduced to core tags, core attributes, and visible text.
  *
  * @property fetchService Shared, transport-agnostic web-fetch service (validates URLs, issues GETs,
  *   enforces timeouts and size caps, and follows redirects only when requested).
+ * @property htmlCleaner Reusable HTML cleaner, applied when the `cleanHtml` tool option is on.
  */
 class FetchWebContentTool(
     private val fetchService: WebFetchService,
+    private val htmlCleaner: HtmlCleaner = HtmlCleaner(),
 ) : BuiltInTool {
 
     override val name: String = "fetch_web_content"
@@ -50,7 +54,7 @@ class FetchWebContentTool(
         val validKeys = setOf(
             "url", "timeoutSeconds", "maxBytes", "maxLines", "followRedirects", "returnMode",
             "range", "searchQuery", "searchMode", "contextBefore", "contextAfter", "maxResults",
-            "caseSensitive", "wholeWord"
+            "caseSensitive", "wholeWord", "cleanHtml"
         )
         addUnknownParameterErrors(input, validKeys, validationErrors)
 
@@ -77,6 +81,10 @@ class FetchWebContentTool(
         }
 
         val followRedirects = parseOptionalBoolean(input, "followRedirects", defaultValue = true, validationErrors)
+
+        // Tool-level default for the LLM-facing parameter is ON; the shared model default of false is
+        // never relied on here because the parsed (explicit) value is always forwarded to the request.
+        val cleanHtml = parseOptionalBoolean(input, "cleanHtml", defaultValue = true, validationErrors)
 
         val returnMode = parseOptionalString(input, "returnMode", validationErrors) ?: "auto"
         if (returnMode !in setOf("auto", "text", "html")) {
@@ -146,6 +154,7 @@ class FetchWebContentTool(
             timeoutSeconds = timeoutSeconds,
             maxBytes = MAX_DOWNLOAD_BYTES,
             followRedirects = followRedirects,
+            cleanHtml = cleanHtml,
         )
 
         val fetchedResult = when (val fetched = fetchService.fetch(request)) {
@@ -170,8 +179,14 @@ class FetchWebContentTool(
                 "Response body could not be decoded as text using charset '${charset.name()}'."
             )
 
+        // --- Optional HTML cleaning --------------------------------------------------------------
+        // Reduce the decoded body to core tags/attributes + visible text when cleanHtml is on and the
+        // response is HTML; non-HTML bodies pass through unchanged. Non-HTML Content-Types are always
+        // left untouched (no-op), consistent with the tool's textual gating.
+        val cleanedText = htmlCleaner.clean(text, clean = cleanHtml && isHtmlContentType(mediaType))
+
         // --- Shape the result (output + structured details) --------------------------------------
-        val allLines = text.lines()
+        val allLines = cleanedText.lines()
 
         if (searchQuery != null) {
             return renderSearchResult(
@@ -221,6 +236,7 @@ class FetchWebContentTool(
             put("contentLength", fetchedResult.contentLength)
             put("bytesRead", fetchedResult.bodyBytes.size)
             put("returnMode", returnMode)
+            put("cleanHtml", cleanHtml)
             put("totalLines", allLines.size)
             put("truncated", truncated)
         }
@@ -577,6 +593,19 @@ class FetchWebContentTool(
     }
 
     /**
+     * Decides whether [mediaType] denotes an HTML document that the `cleanHtml` option should clean.
+     *
+     * Matches the standard HTML content types (`text/html` and `application/xhtml+xml`), case-insensitive
+     * as [mediaType] is normalized to lower case. Anything else (including null) is not considered HTML,
+     * so cleaning is a no-op for it regardless of the `cleanHtml` switch.
+     *
+     * @param mediaType Lower-cased media type, or null when the header was absent.
+     * @return True when the type is one of the recognized HTML content types.
+     */
+    private fun isHtmlContentType(mediaType: String?): Boolean =
+        mediaType in HTML_CONTENT_TYPES
+
+    /**
      * Resolves a charset name to a [Charset], falling back to UTF-8 when the name is blank, missing,
      * or unsupported by the JVM.
      *
@@ -631,6 +660,12 @@ class FetchWebContentTool(
             "application/ld+json",
             "application/x-www-form-urlencoded",
             "image/svg+xml",
+        )
+
+        /** Media types recognised as HTML documents eligible for the `cleanHtml` option. */
+        val HTML_CONTENT_TYPES: Set<String> = setOf(
+            "text/html",
+            "application/xhtml+xml",
         )
     }
 }

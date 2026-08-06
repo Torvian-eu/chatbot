@@ -13,12 +13,16 @@ package eu.torvian.chatbot.worker.builtin.net
  *   the service applies its own default cap.
  * @property followRedirects Whether HTTP redirects should be followed. When true, each redirect target
  *   is revalidated against the public-URL policy before the next hop.
+ * @property cleanHtml Whether the fetched content should be cleaned down to core HTML tags, core
+ *   attributes, and visible text. Defaults to false so the transport layer stays conservative: callers
+ *   (e.g. built-in tools that default this to true) opt in explicitly.
  */
 data class WebFetchRequest(
     val url: String,
     val timeoutSeconds: Int? = null,
     val maxBytes: Int? = null,
     val followRedirects: Boolean = true,
+    val cleanHtml: Boolean = false,
 )
 
 /**

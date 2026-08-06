@@ -364,7 +364,7 @@ object BuiltInToolCatalog {
         ),
         BuiltInToolSpec(
             builtInToolName = "fetch_web_content",
-            description = "Fetch textual content from a public internet URL. Localhost, loopback, link-local, and private-network addresses are not allowed.",
+            description = "Fetch textual content from a public internet URL. By default cleans HTML down to core tags, attributes, and visible text. Localhost, loopback, link-local, and private-network addresses are not allowed.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -463,6 +463,15 @@ object BuiltInToolCatalog {
                         put("description", "Whether HTTP redirects should be followed.")
                         put("default", true)
                     })
+                    put("cleanHtml", buildJsonObject {
+                        put("type", "boolean")
+                        put(
+                            "description",
+                            "When true (default), clean the fetched HTML page down to core tags, core " +
+                            "attributes, and visible text. Disable to receive the original, unmodified page."
+                        )
+                        put("default", true)
+                    })
                     put("returnMode", buildJsonObject {
                         put("type", "string")
                         put("enum", buildJsonArray { add("auto"); add("text"); add("html") })
@@ -475,7 +484,7 @@ object BuiltInToolCatalog {
         ),
         BuiltInToolSpec(
             builtInToolName = "download_file",
-            description = "Download content from a public internet URL directly to a file inside the workspace. Supports binary data. Localhost, loopback, link-local, and private-network addresses are not allowed.",
+            description = "Download content from a public internet URL directly to a file inside the workspace. Supports binary data. By default cleans HTML down to core tags, attributes, and visible text. Localhost, loopback, link-local, and private-network addresses are not allowed.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -501,6 +510,15 @@ object BuiltInToolCatalog {
                     put("followRedirects", buildJsonObject {
                         put("type", "boolean")
                         put("description", "Whether HTTP redirects should be followed.")
+                        put("default", true)
+                    })
+                    put("cleanHtml", buildJsonObject {
+                        put("type", "boolean")
+                        put(
+                            "description",
+                            "When true (default), clean the fetched HTML page down to core tags, core " +
+                            "attributes, and visible text. Disable to write the original, unmodified page."
+                        )
                         put("default", true)
                     })
                 })
