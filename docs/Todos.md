@@ -30,6 +30,7 @@
 - Add back button to navigation bar, for desktop and web platforms only.
 - Add a running clock when submitting a message to the assistant, so that the user can time how long the assistant takes to respond. This can be implemented as a simple timer that starts when the user submits the message and stops when the assistant finishes responding. The elapsed time can be displayed next to the assistant's response.
 - Input area: Remove auto expand behavior, grow space until half of the viewport height, add scrollbar. 
+- [x] Move "Branch & Continue" option out of more menu, and into main action menu for messages, since its used quite often.
 
 ## Security
 - [x] User account will be locked after a certain number of failed login attempts.

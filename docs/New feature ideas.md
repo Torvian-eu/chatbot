@@ -230,7 +230,7 @@ Allow users to create multiple skill spaces, which are separate collections of S
 ### Workspaces
 Combine memory spaces and skill spaces into workspaces. A workspace is a collection of memory spaces and skill spaces that are relevant for a specific topic or project. When starting a new chat session, the user can choose which workspace to load into the LLM context, which will load all the memory spaces and skill spaces associated with that workspace.
 
-### Built-in worker tools
+### (done) Built-in worker tools
 Add built-in tools for the worker to use.
 - All tools can be prefixed with a unique identifier to indicate that they are built-in tools for a specific worker instance. This prefix is configurable, so that the user can change it to something more meaningful for their specific use case. For instance: "project1.read_text_file", "project1.write_file", "project1.edit_file", etc.
 - Each worker as a special `workspace` directory, which is used to store files that the worker can access. All file paths are relative to this workspace directory. The worker can read/write files in this directory, but cannot access files outside of it. This is a security measure to prevent the worker from accessing sensitive files on the host machine.
@@ -296,6 +296,33 @@ Add built-in tools for the worker to use.
     - `exitCode` (number): Exit code of the command
   - The current working directory is the worker's `workspace` directory. The command must be available in the system PATH or specified with an absolute path.
   - The worker should run within a docker container or sandboxed environment to prevent malicious commands from affecting the host system.
+
+
+### (done) Retry LLM request on 429 or 503
+- Implement retry logic for LLM requests that receive a 429 Too Many Requests or 503 Service Unavailable error, with exponential backoff.
+
+### (done) Show hints to LLM when built-in tool fails (or returns empty result)
+
+### (done) Add search capability for `fetch_web_content` tool
+Allow LLM to search for text in a web page directly, similarly to `search_text` tool.
+- add parameters:
+  - `searchQuery` : string (optional); cannot be mixed with `range` parameter
+  - `searchMode` : `regex` or `plain` (default: `regex`)
+  - `contextBefore` : number (optional, default: 0); only used when `searchQuery` is specified
+  - `contextAfter` : number (optional, default: 0); only used when `searchQuery` is specified
+  - `maxResults` : number (optional, default: 10); only used when `searchQuery` is specified
+  - `caseSensitive` : boolean (optional, default: false); only used when `searchQuery` is specified
+  - `wholeWord` : boolean (optional, default: false); only used when `searchQuery` is specified and `searchMode` is `plain`
+- updated parameters:
+  - `range` : cannot be mixed with `searchQuery` parameter
+
+Notes:
+- if `range` and `searchQuery` are both specified, the tool should return an error message indicating that only one of them can be used at a time.
+- If any of the `searchQuery` related parameters (`searchMode`, `contextBefore`, `contextAfter`, `maxResults`, `caseSensitive`, `wholeWord`) are specified, the tool should return an error message indicating that they can only be used when `searchQuery` is specified.
+- Spefifying both `maxLines` and `searchQuery` is allowed. The number of lines is counted as the total number of lines returned (including context), regardless of how many matches are found. If `maxLines` is reached, the tool should return a message indicating that the maximum number of lines has been reached.
+
+### (done) Add strip HTML capability for `fetch_web_content` and `download_file` tools
+Add an option to these tools to strip a HTML page to a bare minimum, so that only the core HTML tags, core attributes, and text content remain. A boolean parameter should be added as an on/off switch (default: on). 
 
 ---
 
@@ -389,9 +416,6 @@ Open questions:
 - alternative: use [Graphify](https://github.com/safishamsi/graphify) SKILL.
 
 ### Role-playing mode
-
-### Retry LLM request on 503
-- Implement retry logic for LLM requests that receive a 503 Service Unavailable error, with exponential backoff.
 
 ---
 
