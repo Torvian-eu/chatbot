@@ -2,7 +2,6 @@ package eu.torvian.chatbot.server.service.core.chat.context
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
-import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.server.service.core.chat.content.FileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.ToolResultContentBuilder
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
@@ -43,13 +42,14 @@ class DefaultChatContextBuilder(
                 }
 
                 is ChatMessage.AssistantMessage -> {
-                    // Derive both sides of the provider transcript from one terminal set. This
-                    // prevents stale or interrupted rows from creating an unpaired assistant call.
-                    val replayableToolCalls = sortedToolCalls
+                    // Derive both sides of the provider transcript from the same ordered row set so a
+                    // result can never be emitted without its matching assistant call. Every recorded
+                    // tool call is replayed so a tool-calling assistant message never becomes a bare
+                    // assistant message, which would confuse providers that reject consecutive
+                    // assistant turns without an intervening tool response.
+                    val pairedToolCalls = sortedToolCalls
                         .filter { it.messageId == message.id }
-                        .filter { it.isReplayableInLlmContext }
-                        .filter { it.status in ToolCallStatus.terminalStatuses }
-                    val assistantToolCalls = replayableToolCalls
+                    val assistantToolCalls = pairedToolCalls
                         .map { toolCall ->
                             RawChatMessage.Assistant.ToolCall(
                                 id = toolCall.toolCallId,
@@ -65,7 +65,7 @@ class DefaultChatContextBuilder(
                         )
                     )
 
-                    replayableToolCalls.forEach { toolCall ->
+                    pairedToolCalls.forEach { toolCall ->
                         rawContext.add(
                             RawChatMessage.Tool(
                                 content = toolResultContentBuilder.build(toolCall),

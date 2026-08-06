@@ -6,7 +6,6 @@ import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.tool.ToolCall
-import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.core.chat.content.ToolResultContentBuilder
@@ -420,14 +419,12 @@ class DefaultConversationTurnOrchestrator(
         assistantContent: String?,
         completedToolCalls: List<ToolCall>
     ): List<RawChatMessage> {
-        // Derive both provider messages from the same ordered terminal collection so a result
-        // can never be emitted without its matching assistant tool call.
-        val pairedToolCalls = completedToolCalls
-            .filter { it.isReplayableInLlmContext }
-            .filter { it.status in ToolCallStatus.terminalStatuses }
+        // Derive both provider messages from the same ordered collection so a result can never
+        // be emitted without its matching assistant tool call. Every recorded call is replayed,
+        // so a tool-calling assistant step always carries its full set of calls in context.
         val assistantContextMessage = RawChatMessage.Assistant(
             content = assistantContent,
-            toolCalls = pairedToolCalls.map { toolCall ->
+            toolCalls = completedToolCalls.map { toolCall ->
                 RawChatMessage.Assistant.ToolCall(
                     id = toolCall.toolCallId,
                     name = toolCall.toolName,
@@ -436,7 +433,7 @@ class DefaultConversationTurnOrchestrator(
             }
         )
         // A provider transcript must not contain a result without its replayed assistant call.
-        val toolResultMessages = pairedToolCalls.map { toolCall ->
+        val toolResultMessages = completedToolCalls.map { toolCall ->
             RawChatMessage.Tool(
                 content = toolResultContentBuilder.build(toolCall),
                 toolCallId = toolCall.toolCallId ?: "",

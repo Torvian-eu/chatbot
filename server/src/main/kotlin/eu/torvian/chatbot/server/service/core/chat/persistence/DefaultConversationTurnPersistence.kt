@@ -10,7 +10,6 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
-import eu.torvian.chatbot.common.models.tool.arguments.ToolCallArgumentNormalizer
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
@@ -129,31 +128,24 @@ class DefaultConversationTurnPersistence(
     ): List<ToolCall> {
         return toolCallRequests.map { toolCallRequest ->
             val toolDefinition = enabledTools?.find { it.name == toolCallRequest.name }
-            val normalizedArguments = ToolCallArgumentNormalizer.normalize(toolCallRequest.arguments)
-            val safeInput = (normalizedArguments as? ToolCallArgumentNormalizer.Result.Valid)?.value
-            val argumentError = normalizedArguments as? ToolCallArgumentNormalizer.Result.Invalid
-            // Invalid model JSON is recorded as an execution error, never as replayable provider input.
             toolCallDao.insertToolCall(
                 messageId = messageId,
                 toolDefinitionId = toolDefinition?.id,
                 toolName = toolCallRequest.name,
                 toolCallId = toolCallRequest.toolCallId,
-                input = safeInput,
+                // Arguments are stored verbatim so the recorded assistant call can be replayed
+                // faithfully in provider context, even if the model emitted malformed JSON.
+                input = toolCallRequest.arguments,
                 output = null,
-                status = if (toolDefinition == null || argumentError != null) ToolCallStatus.ERROR else ToolCallStatus.PENDING,
+                status = if (toolDefinition == null) ToolCallStatus.ERROR else ToolCallStatus.PENDING,
                 errorMessage = when {
                     toolDefinition == null -> "Tool '${toolCallRequest.name}' not found in enabled tools"
-                    argumentError != null -> "Invalid tool-call arguments: ${argumentError.message}"
                     else -> null
                 },
                 denialReason = null,
                 executedAt = Clock.System.now(),
                 durationMs = null,
-                errorCode = when {
-                    toolDefinition == null -> null
-                    argumentError != null -> ToolCall.INVALID_ARGUMENTS_ERROR_CODE
-                    else -> null
-                },
+                errorCode = null,
                 errorDetails = null
             ).getOrElse { error ->
                 throw IllegalStateException("Failed to insert tool call: $error")
