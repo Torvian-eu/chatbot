@@ -257,6 +257,30 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                 val streamChunk: OpenAiApiModels.ChatCompletionStreamChunk =
                     json.decodeFromString(dataContent)
 
+                // A provider (e.g. OpenRouter) can embed an error inside an otherwise-successful (200)
+                // SSE stream, typically with an empty "choices" list. Such a stream must not be treated
+                // as a healthy completion: surface the embedded error as a typed Error chunk so the retry
+                // decorator can decide whether to retry. Abandon the rest of this chunk because the
+                // embedded error is terminal.
+                streamChunk.error?.let { embeddedError ->
+                    logger.debug(
+                        "OpenAI-compatible provider returned embedded stream error: " +
+                            "code={}, message={}",
+                        embeddedError.code,
+                        embeddedError.message
+                    )
+                    emit(
+                        LLMStreamChunk.Error(
+                            LLMCompletionError.ApiError(
+                                statusCode = if (embeddedError.code > 0) embeddedError.code else 500,
+                                message = embeddedError.message,
+                                errorBody = dataContent
+                            )
+                        ).right()
+                    )
+                    return@collect
+                }
+
                 // Process usage information if present
                 streamChunk.usage?.let { usage ->
                     emit(

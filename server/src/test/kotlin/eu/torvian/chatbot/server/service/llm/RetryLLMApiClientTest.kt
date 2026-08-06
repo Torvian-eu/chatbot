@@ -373,6 +373,81 @@ class RetryLLMApiClientTest {
     }
 
     @Test
+    fun `streaming retries on embedded Error chunk before content and succeeds on second attempt`() = runTest {
+        val successChunks = listOf(
+            LLMStreamChunk.ContentChunk("Hello", null).right(),
+            LLMStreamChunk.Done.right()
+        )
+
+        var callCount = 0
+        coEvery {
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+        } answers {
+            callCount++
+            if (callCount == 1) {
+                // First attempt returns an embedded stream Error (501/502-style OpenRouter case)
+                // before any content is emitted.
+                flow {
+                    emit(
+                        LLMStreamChunk.Error(
+                            LLMCompletionError.ApiError(502, "Upstream error", "data: {...}")
+                        ).right()
+                    )
+                }
+            } else {
+                // Second attempt succeeds.
+                flow {
+                    successChunks.forEach { emit(it) }
+                }
+            }
+        }
+
+        val client = RetryLLMApiClient(
+            mockInner,
+            maxRetries = 3,
+            baseDelayMs = 1,
+            retryableStatusCodes = setOf(429, 502, 503)
+        )
+        val result = client.completeChatStreaming(
+            testMessages, testModelConfig, testProvider, testSettings, "test-key"
+        ).toList()
+
+        // The embedded error was retried, so only the success chunks surface.
+        assertEquals(successChunks, result)
+
+        @Suppress("UnusedFlow")
+        coVerify(exactly = 2) {
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
+    fun `streaming emits non-retryable embedded Error chunk without retry`() = runTest {
+        val nonRetryableErrorChunk = LLMStreamChunk.Error(
+            LLMCompletionError.ApiError(401, "Unauthorized", "data: {...}")
+        ).right()
+
+        coEvery {
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+        } returns flow {
+            emit(nonRetryableErrorChunk)
+        }
+
+        val client = RetryLLMApiClient(mockInner, maxRetries = 3, baseDelayMs = 1)
+        val result = client.completeChatStreaming(
+            testMessages, testModelConfig, testProvider, testSettings, "test-key"
+        ).toList()
+
+        // Non-retryable embedded error propagates immediately without a retry.
+        assertEquals(listOf(nonRetryableErrorChunk), result)
+
+        @Suppress("UnusedFlow")
+        coVerify(exactly = 1) {
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
     fun `streaming does not retry on non-retryable error`() = runTest {
         val nonRetryableError = LLMCompletionError.ApiError(401, "Unauthorized", null).left()
 
