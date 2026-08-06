@@ -136,6 +136,9 @@ object OpenAiApiModels {
      * @property model The model that generated the response.
      * @property choices A list of choices, each containing a delta of the response.
      * @property usage Token usage statistics.
+     * @property error An embedded error signal carried inside an otherwise-successful (2xx) stream.
+     *                 This is not part of the official OpenAI SSE spec and is, to our knowledge, only
+     *                 emitted by OpenRouter. It is non-null only when the provider injects an error chunk.
      */
     @Serializable
     data class ChatCompletionStreamChunk(
@@ -145,7 +148,8 @@ object OpenAiApiModels {
         val created: Long,
         val model: String,
         val choices: List<StreamChoice>,
-        val usage: StreamUsage? = null
+        val usage: StreamUsage? = null,
+        val error: StreamError? = null
     ) {
         /**
          * Represents a single choice within a stream chunk.
@@ -218,6 +222,25 @@ object OpenAiApiModels {
             val completion_tokens: Int,
             val prompt_tokens: Int,
             val total_tokens: Int
+        )
+
+        /**
+         * Represents an error embedded inside a streaming chunk by the provider (e.g. OpenRouter).
+         *
+         * OpenRouter can respond with HTTP 200 OK while sending the actual failure signal inside a
+         * chunk that carries an empty `choices` list and a top-level `error` object. This is an
+         * OpenRouter extension and is not part of the official OpenAI SSE spec; OpenAI, by contrast,
+         * reports streaming failures via a non-2xx HTTP status or a `data: {"error": ...}` line.
+         *
+         * @property code The HTTP-style status code of the failure (e.g. 502).
+         * @property message A human-readable description of the failure.
+         * @property metadata Optional structured provider metadata (e.g. "provider_unavailable").
+         */
+        @Serializable
+        data class StreamError(
+            val code: Int = 0,
+            val message: String? = null,
+            val metadata: JsonObject? = null
         )
     }
 

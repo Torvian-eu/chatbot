@@ -209,6 +209,58 @@ class OpenAIChatStrategyStreamingTest : OpenAIChatStrategyTestBase() {
     }
 
     @Test
+    @DisplayName("processStreamingResponse should surface an embedded OpenRouter error as an Error chunk")
+    fun processStreamingResponse_embeddedOpenRouterError_surfacesErrorChunk() = runTest {
+        // Given - OpenRouter responds with 200 OK but embeds a 502 in an otherwise-empty SSE chunk.
+        val streamLines = listOf(
+            ": OPENROUTER PROCESSING",
+            "data: {\"id\":\"gen-1785962534-Hw3xRqHKoG3IBRsvW6Ix\",\"object\":\"chat.completion.chunk\",\"created\":1785962534,\"model\":\"nvidia/nemotron-3-ultra-550b-a55b:free\",\"provider\":\"Nvidia\",\"choices\":[],\"error\":{\"code\":502,\"message\":\"Upstream error from Nvidia: ResourceExhausted: Worker local total request limit reached (33/32)\",\"metadata\":{\"error_type\":\"provider_unavailable\"}}}",
+            "data: [DONE]"
+        )
+        val responseStream = flowOf(*streamLines.toTypedArray())
+
+        // When
+        val result = strategy.processStreamingResponse(responseStream).toList()
+
+        // Then - exactly one Error chunk carrying the embedded 502, then the terminal Done chunk.
+        assertEquals(2, result.size, "Should emit 1 embedded-error chunk + 1 done chunk")
+
+        val errorChunk = result[0].getOrNull()
+        assertIs<LLMStreamChunk.Error>(errorChunk)
+        val apiError = errorChunk.llmError
+        assertIs<LLMCompletionError.ApiError>(apiError)
+        assertEquals(502, apiError.statusCode)
+        assertTrue(apiError.message.orEmpty().contains("ResourceExhausted"))
+        assertTrue(
+            apiError.errorBody.orEmpty().contains("\"error\":"),
+            "The raw error body should be preserved for upstream debugging"
+        )
+
+        val doneChunk = result[1].getOrNull()
+        assertIs<LLMStreamChunk.Done>(doneChunk)
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should only emit Done for chunks without an embedded error")
+    fun processStreamingResponse_noEmbeddedError_emitsDone() = runTest {
+        // Given - a normal OpenAI-compatible stream without an embedded error field.
+        val streamLines = listOf(
+            "data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hi\"},\"finish_reason\":null}]}",
+            "data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}",
+            "data: [DONE]"
+        )
+        val responseStream = flowOf(*streamLines.toTypedArray())
+
+        // When
+        val result = strategy.processStreamingResponse(responseStream).toList()
+
+        // Then - content flows normally and the stream ends with Done, with no Error chunk injected.
+        assertEquals(3, result.size)
+        assertTrue(result.none { (it.getOrNull() as? LLMStreamChunk.Error) != null })
+        assertTrue(result[2].getOrNull() is LLMStreamChunk.Done)
+    }
+
+    @Test
     @DisplayName("processStreamingResponse should handle multiple choices in a single chunk")
     fun processStreamingResponse_multipleChoices() = runTest {
         // Given

@@ -124,6 +124,20 @@ class RetryLLMApiClient(
                             if (chunk is LLMStreamChunk.ContentChunk || chunk is LLMStreamChunk.ToolCallChunk) {
                                 contentEmitted = true
                             }
+
+                            // A provider can report a failure inside an otherwise-successful stream as an
+                            // Error chunk (e.g. OpenRouter embeds an ApiError in a "data:" line that is not
+                            // part of the choices). Treat a retryable ApiError that arrives before any content
+                            // as retryable, restarting the stream from scratch, mirroring the Either.Left path.
+                            if (chunk is LLMStreamChunk.Error) {
+                                val llmError = chunk.llmError
+                                val shouldRetry = isRetryable(llmError) && !contentEmitted && attempt < maxRetries
+                                if (shouldRetry) {
+                                    retryableErrorEncountered = llmError as LLMCompletionError.ApiError
+                                    return@collect
+                                }
+                            }
+
                             emit(chunkEither)
                         }
 
