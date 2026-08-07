@@ -2,9 +2,9 @@ package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.getOrElse
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
@@ -463,7 +463,7 @@ class DefaultConversationTurnOrchestrator(
         context: List<RawChatMessage>,
         model: LLMModel,
         provider: LLMProvider,
-        settings: ChatModelSettings,
+        settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
         controlSignal: TurnControlSignal,

@@ -16,6 +16,13 @@ enum class LLMModelType {
     CHAT,
 
     /**
+     * Models used through OpenAI's Responses API (`POST /v1/responses`). These models support native
+     * reasoning tokens whose summaries and encrypted content can be replayed across multi-turn conversations
+     * for higher-accuracy reasoning results.
+     */
+    RESPONSES,
+
+    /**
      * Older models intended for single-turn text completion, where the model continues a given prompt.
      * Largely superseded by [CHAT] models for most generative tasks.
      */

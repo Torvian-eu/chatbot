@@ -5,8 +5,8 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -76,7 +76,7 @@ class DefaultConversationTurnPersistence(
         content: String,
         parentMessageId: Long,
         model: LLMModel,
-        settings: ChatModelSettings
+        settings: ModelSettings
     ): PersistedAssistantMessage = transactionScope.transaction {
         val assistantMessage = messageDao.insertMessage(
             sessionId = sessionId,

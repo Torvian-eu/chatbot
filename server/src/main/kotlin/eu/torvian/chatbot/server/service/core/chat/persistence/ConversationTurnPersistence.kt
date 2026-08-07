@@ -2,8 +2,8 @@ package eu.torvian.chatbot.server.service.core.chat.persistence
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
@@ -43,7 +43,7 @@ interface ConversationTurnPersistence {
         content: String,
         parentMessageId: Long,
         model: LLMModel,
-        settings: ChatModelSettings
+        settings: ModelSettings
     ): PersistedAssistantMessage
 
     /**

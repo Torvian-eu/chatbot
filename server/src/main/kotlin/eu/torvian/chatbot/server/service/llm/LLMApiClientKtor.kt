@@ -4,10 +4,11 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -47,10 +48,35 @@ import java.nio.charset.StandardCharsets
 class LLMApiClientKtor(
     private val httpClient: HttpClient,
     private val strategies: Map<LLMProviderType, ChatCompletionStrategy>,
-    private val modelDiscoveryStrategies: Map<LLMProviderType, ModelDiscoveryStrategy> = emptyMap()
+    private val modelDiscoveryStrategies: Map<LLMProviderType, ModelDiscoveryStrategy> = emptyMap(),
+    private val responsesStrategy: ChatCompletionStrategy? = null
 ) : LLMApiClient {
     companion object {
         private val logger: Logger = LogManager.getLogger(LLMApiClientKtor::class.java)
+
+        /**
+         * Resolves the [ChatCompletionStrategy] for a chat request.
+         *
+         * RESPONSES-typed models (OpenAI Responses API) are routed to [responsesStrategy] when one is
+         * registered; all other models use the strategy registered for the provider type. This allows a
+         * single OpenAI provider to serve both Chat Completions and Responses models.
+         *
+         * @param modelConfig The target model.
+         * @param provider The owning provider.
+         * @return The resolved strategy, or `null` if none is registered for the request.
+         */
+        private fun resolveStrategy(
+            modelConfig: LLMModel,
+            provider: LLMProvider,
+            strategies: Map<LLMProviderType, ChatCompletionStrategy>,
+            responsesStrategy: ChatCompletionStrategy?
+        ): ChatCompletionStrategy? {
+            return if (modelConfig.type == LLMModelType.RESPONSES) {
+                responsesStrategy
+            } else {
+                strategies[provider.type]
+            }
+        }
 
         /**
          * Maximum number of raw bytes accepted for a non-streaming LLM response.
@@ -73,7 +99,7 @@ class LLMApiClientKtor(
         messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ChatModelSettings,
+        settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?
     ): Either<LLMCompletionError, LLMCompletionResult> {
@@ -81,9 +107,9 @@ class LLMApiClientKtor(
         logger.info("LLMApiClientKtor: Received request for model ${modelConfig.name} (Provider: ${provider.name}, Type: ${provider.type})")
         logger.debug("Context messages received: ${messages.size}")
 
-        // 1. Find the appropriate strategy for the provider type.
+        // 1. Find the appropriate strategy for this model and provider type.
         // If no strategy is found, return a configuration error immediately.
-        val strategy = strategies[provider.type]
+        val strategy = resolveStrategy(modelConfig, provider, strategies, responsesStrategy)
             ?: run {
                 val errorMsg = "No ChatCompletionStrategy found for provider type: ${provider.type}"
                 logger.error(errorMsg)
@@ -203,13 +229,13 @@ class LLMApiClientKtor(
         messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ChatModelSettings,
+        settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> = channelFlow {
         logger.info("LLMApiClientKtor: Received streaming request for model ${modelConfig.name} (Provider: ${provider.name}, Type: ${provider.type})")
 
-        val strategy = strategies[provider.type]
+        val strategy = resolveStrategy(modelConfig, provider, strategies, responsesStrategy)
             ?: run {
                 val errorMsg = "No ChatCompletionStrategy found for provider type: ${provider.type}"
                 logger.error(errorMsg)
