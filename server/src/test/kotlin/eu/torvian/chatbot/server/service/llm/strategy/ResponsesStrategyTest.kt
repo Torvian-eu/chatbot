@@ -213,11 +213,15 @@ class ResponsesStrategyTest {
     }
 
     @Test
-    @DisplayName("processStreamingResponse should emit content, tool-call and done chunks")
-    fun processStreamingResponse_emitsChunks() = runBlocking {
+    @DisplayName("processStreamingResponse should aggregate tool calls by output_index and carry name/call_id")
+    fun processStreamingResponse_emitsToolCallChunksByOutputIndex() = runBlocking {
         val events = flowOf(
             """data: {"type":"response.output_text.delta","delta":"Hi"}""",
-            """data: {"type":"response.function_call_arguments.delta","call_id":"call_1","name":"getWeather","delta":"{\"city\":"}""",
+            """data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"findFiles"}}""",
+            """data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":0,"delta":"{\"pattern\":"}""",
+            """data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":0,"delta":"\"*.py\"}"}""",
+            """data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_2","call_id":"call_2","name":"findFiles"}}""",
+            """data: {"type":"response.function_call_arguments.delta","item_id":"fc_2","output_index":1,"delta":"{\"path\":\"chatbot\"}"}""",
             """data: {"type":"response.output_text.delta","delta":" there!"}""",
             """data: {"type":"response.completed","response":{"id":"resp_9","usage":{"input_tokens":5,"output_tokens":7,"total_tokens":12}}}""",
             """data: [DONE]"""
@@ -234,7 +238,43 @@ class ResponsesStrategyTest {
         assertTrue(chunks.isNotEmpty(), "Expected at least one emitted chunk")
         assertTrue(chunks.any { it is LLMStreamChunk.ContentChunk && it.deltaContent == "Hi" })
         assertTrue(chunks.any { it is LLMStreamChunk.ContentChunk && it.deltaContent == " there!" })
-        assertTrue(chunks.any { it is LLMStreamChunk.ToolCallChunk && it.id == "call_1" })
+        assertTrue(chunks.any { it is LLMStreamChunk.UsageChunk && it.totalTokens == 12 })
+
+        // Both tool calls must be grouped by distinct output_index, each carrying its name and call_id,
+        // and no arguments may bleed across tool calls.
+        val toolCallChunks = chunks.filterIsInstance<LLMStreamChunk.ToolCallChunk>()
+        assertEquals(3, toolCallChunks.size)
+        assertTrue(toolCallChunks.all { it.name == "findFiles" })
+
+        val indexed = toolCallChunks.groupBy { it.index }
+        assertEquals(setOf(0, 1), indexed.keys)
+        assertTrue(indexed[0]!!.all { it.id == "call_1" })
+        assertTrue(indexed[1]!!.all { it.id == "call_2" })
+        assertEquals("""{"pattern":"*.py"}""", indexed[0]!!.joinToString("") { it.argumentsDelta.orEmpty() })
+        assertEquals("""{"path":"chatbot"}""", indexed[1]!!.joinToString("") { it.argumentsDelta.orEmpty() })
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should emit content, and done chunks")
+    fun processStreamingResponse_emitsContentChunks() = runBlocking {
+        val events = flowOf(
+            """data: {"type":"response.output_text.delta","delta":"Hi"}""",
+            """data: {"type":"response.output_text.delta","delta":" there!"}""",
+            """data: {"type":"response.completed","response":{"id":"resp_9","usage":{"input_tokens":5,"output_tokens":7,"total_tokens":12}}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = mutableListOf<LLMStreamChunk>()
+        strategy.processStreamingResponse(events).collect { either ->
+            either.fold(
+                ifLeft = { throw AssertionError("Expected no error, got $it") },
+                ifRight = { chunks.add(it) }
+            )
+        }
+
+        assertTrue(chunks.isNotEmpty(), "Expected at least one emitted chunk")
+        assertTrue(chunks.any { it is LLMStreamChunk.ContentChunk && it.deltaContent == "Hi" })
+        assertTrue(chunks.any { it is LLMStreamChunk.ContentChunk && it.deltaContent == " there!" })
         assertTrue(chunks.any { it is LLMStreamChunk.UsageChunk && it.totalTokens == 12 })
     }
 

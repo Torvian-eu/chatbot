@@ -124,8 +124,10 @@ object ResponsesApiModels {
      *
      * @property type The event type (e.g. "response.output_text.delta", "response.completed", "error").
      * @property delta Timed event delta content (used for text and argument deltas).
-     * @property callId The `call_id` of the function call for function-call argument deltas.
-     * @property name Tool name for function-call deltas.
+     * @property itemId The `item_id` of the output item a delta/section event refers to.
+     * @property outputIndex The `output_index` of the output item a delta/section event refers to.
+     * @property item The output item carried by announcement events such as `response.output_item.added`;
+     *            for function calls this is the `function_call` item carrying its name and call_id.
      * @property response Embedded response snapshot carried by lifecycle events such as `response.completed`.
      * @property message Error message for `error` events.
      */
@@ -133,8 +135,9 @@ object ResponsesApiModels {
     data class StreamEvent(
         val type: String? = null,
         @SerialName("delta") val delta: String? = null,
-        @SerialName("call_id") val callId: String? = null,
-        val name: String? = null,
+        @SerialName("item_id") val itemId: String? = null,
+        @SerialName("output_index") val outputIndex: Int? = null,
+        val item: ResponseOutputItem? = null,
         val response: ResponsesResponse? = null,
         val message: String? = null
     )

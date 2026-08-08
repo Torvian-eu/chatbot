@@ -251,8 +251,14 @@ class ResponsesStrategy(
     ): Flow<Either<LLMCompletionError.InvalidResponseError, LLMStreamChunk>> = flow {
         logger.debug("Processing Responses streaming response")
 
-        // Accumulate streaming argument deltas by call_id so a complete tool call can be reported.
-        val argumentsByCallId = LinkedHashMap<String, StringBuilder>()
+        // Track the identity of each in-progress tool call, keyed by output_index. The function-call
+        // identity (name and call_id) is only carried by the `response.output_item.added` event that
+        // introduces the call; the subsequent `response.function_call_arguments.delta` events are routed
+        // to the same tool call via their `output_index` and carry no name/id themselves.
+        //
+        // The upstream consumer groups ToolCallChunks by `index` (= output_index) and uses the first
+        // chunk's name/id, so we attach the captured name and call_id to each emitted delta chunk.
+        val toolCallMetaByOutputIndex = LinkedHashMap<Int, ToolCallMeta>()
 
         responseStream.collect { rawChunk ->
             try {
@@ -275,16 +281,26 @@ class ResponsesStrategy(
                         }
                     }
 
+                    "response.output_item.added" -> {
+                        // A function call is announced here with its name and call_id. Capture them keyed
+                        // by the event's output_index so subsequent argument deltas can be attributed to it.
+                        val item = event.item
+                        if (item?.type == "function_call") {
+                            val outputIndex = event.outputIndex ?: return@collect
+                            toolCallMetaByOutputIndex[outputIndex] =
+                                ToolCallMeta(name = item.name ?: "", callId = item.callId)
+                        }
+                    }
+
                     "response.function_call_arguments.delta" -> {
-                        val callId = event.callId
+                        val outputIndex = event.outputIndex ?: return@collect
                         val argumentsDelta = event.delta ?: ""
-                        val builder = argumentsByCallId.getOrPut(callId ?: "") { StringBuilder() }
-                        builder.append(argumentsDelta)
+                        val meta = toolCallMetaByOutputIndex[outputIndex]
                         emit(
                             LLMStreamChunk.ToolCallChunk(
-                                index = null,
-                                id = callId,
-                                name = event.name,
+                                index = outputIndex,
+                                id = meta?.callId,
+                                name = meta?.name,
                                 argumentsDelta = argumentsDelta
                             ).right()
                         )
@@ -401,5 +417,17 @@ class ResponsesStrategy(
         put("parameters", tool.inputSchema)
         put("strict", JsonPrimitive(false))
     }
+
+    /**
+     * Captured identity of an in-progress function call, obtained from its `response.output_item.added`
+     * event and used to decorate the argument-delta [LLMStreamChunk.ToolCallChunk] instances that follow.
+     *
+     * @property name The function name invoked by the model.
+     * @property callId The `call_id` used to later submit the function-call output back to the API.
+     */
+    private data class ToolCallMeta(
+        val name: String,
+        val callId: String?,
+    )
 }
 
