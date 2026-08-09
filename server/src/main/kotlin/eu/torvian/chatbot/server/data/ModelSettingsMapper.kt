@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.llm.EmbeddingModelSettings
 import eu.torvian.chatbot.common.models.llm.ImageGenerationModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.common.models.llm.SpeechToTextModelSettings
 import eu.torvian.chatbot.common.models.llm.TextToSpeechModelSettings
 import eu.torvian.chatbot.server.data.tables.ModelSettingsTable
@@ -40,6 +41,18 @@ fun ModelSettings.toEntity(): ModelSettingsEntity {
                 topP?.let { put("topP", it) }
                 stopSequences?.let { putJsonArray("stopSequences") { it.forEach(::add) } }
                 put("stream", stream)
+            }
+
+            is ResponsesModelSettings -> {
+                instructions?.let { put("instructions", it) }
+                temperature?.let { put("temperature", it) }
+                maxOutputTokens?.let { put("maxOutputTokens", it) }
+                topP?.let { put("topP", it) }
+                stopSequences?.let { putJsonArray("stopSequences") { it.forEach(::add) } }
+                put("stream", stream)
+                reasoningEffort?.let { put("reasoningEffort", it) }
+                put("store", store)
+                put("replayReasoning", replayReasoning)
             }
 
             is CompletionModelSettings -> {
@@ -87,6 +100,7 @@ fun ModelSettings.toEntity(): ModelSettingsEntity {
         name = name,
         type = when (this) {
             is ChatModelSettings -> LLMModelType.CHAT
+            is ResponsesModelSettings -> LLMModelType.RESPONSES
             is CompletionModelSettings -> LLMModelType.COMPLETION
             is EmbeddingModelSettings -> LLMModelType.EMBEDDING
             is ImageGenerationModelSettings -> LLMModelType.IMAGE_GENERATION
@@ -118,6 +132,22 @@ fun ModelSettingsEntity.toDomain(): ModelSettings {
             topP = parsedVariableParams["topP"]?.jsonPrimitive?.floatOrNull,
             stopSequences = parsedVariableParams["stopSequences"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull },
             stream = parsedVariableParams["stream"]?.jsonPrimitive?.booleanOrNull ?: true,
+            customParams = parsedCustomParams
+        )
+
+        LLMModelType.RESPONSES -> ResponsesModelSettings(
+            id = id,
+            modelId = modelId,
+            name = name,
+            instructions = parsedVariableParams["instructions"]?.jsonPrimitive?.contentOrNull,
+            temperature = parsedVariableParams["temperature"]?.jsonPrimitive?.floatOrNull,
+            maxOutputTokens = parsedVariableParams["maxOutputTokens"]?.jsonPrimitive?.intOrNull,
+            topP = parsedVariableParams["topP"]?.jsonPrimitive?.floatOrNull,
+            stopSequences = parsedVariableParams["stopSequences"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull },
+            stream = parsedVariableParams["stream"]?.jsonPrimitive?.booleanOrNull ?: true,
+            reasoningEffort = parsedVariableParams["reasoningEffort"]?.jsonPrimitive?.contentOrNull,
+            store = parsedVariableParams["store"]?.jsonPrimitive?.booleanOrNull ?: false,
+            replayReasoning = parsedVariableParams["replayReasoning"]?.jsonPrimitive?.booleanOrNull ?: true,
             customParams = parsedCustomParams
         )
 

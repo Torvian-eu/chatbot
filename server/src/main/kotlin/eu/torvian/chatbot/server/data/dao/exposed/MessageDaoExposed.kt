@@ -20,7 +20,9 @@ import eu.torvian.chatbot.server.data.tables.ChatSessionTable
 import eu.torvian.chatbot.server.data.tables.SessionCurrentLeafTable
 import eu.torvian.chatbot.server.data.tables.mappers.toAssistantMessage
 import eu.torvian.chatbot.server.data.tables.mappers.toUserMessage
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import org.jetbrains.exposed.v1.core.*
@@ -227,6 +229,7 @@ class MessageDaoExposed(
         modelId: Long?,
         settingsId: Long?,
         fileReferences: List<FileReference>,
+        reasoningItems: List<JsonObject>?,
         createdAt: Instant?,
         updatedAt: Instant?
     ): Either<InsertMessageError, ChatMessage> =
@@ -294,6 +297,7 @@ class MessageDaoExposed(
                         it[AssistantMessageTable.messageId] = newMessageId
                         it[AssistantMessageTable.modelId] = modelId
                         it[AssistantMessageTable.settingsId] = settingsId
+                        it[AssistantMessageTable.reasoningItemsJson] = serializeReasoning(reasoningItems)
                     }
                 }
 
@@ -370,7 +374,8 @@ class MessageDaoExposed(
                         childrenMessageIds = newChildrenIds,
                         fileReferences = fileReferences,
                         modelId = modelId,
-                        settingsId = settingsId
+                        settingsId = settingsId,
+                        reasoningItems = reasoningItems
                     )
                 } else {
                     ChatMessage.UserMessage(
@@ -405,6 +410,23 @@ class MessageDaoExposed(
 
                 // Retrieve the updated message
                 getMessageById(id).getOrElse { throw IllegalStateException("Failed to retrieve updated message") }
+            }
+        }
+
+    override suspend fun updateAssistantMessageReasoning(
+        messageId: Long,
+        reasoningItems: List<JsonObject>?
+    ): Either<MessageError.MessageNotFound, ChatMessage.AssistantMessage> =
+        transactionScope.transaction {
+            either {
+                // Only assistant messages carry a reasoning column; update the dedicated row directly.
+                val updatedCount = AssistantMessageTable.update({ AssistantMessageTable.messageId eq messageId }) {
+                    it[AssistantMessageTable.reasoningItemsJson] = serializeReasoning(reasoningItems)
+                }
+                ensure(updatedCount != 0) { MessageError.MessageNotFound(messageId) }
+
+                getMessageById(messageId).getOrElse { throw IllegalStateException("Failed to retrieve updated message") }
+                    as ChatMessage.AssistantMessage
             }
         }
 
@@ -775,4 +797,17 @@ class MessageDaoExposed(
         return insertStatement.resultedValues?.first()
             ?: throw IllegalStateException("Failed to retrieve newly inserted message (role=$role)")
     }
+
+    /**
+     * Serializes raw reasoning items into their JSON-array form for the database column, or `null` when absent.
+     *
+     * The payload is opaque (may include OpenAI-encrypted content) and must not be logged or rendered.
+     *
+     * @param reasoningItems Raw reasoning items, or `null`/empty when there are none to persist.
+     * @return The JSON-array string, or `null` when there are no items.
+     */
+    private fun serializeReasoning(reasoningItems: List<JsonObject>?): String? =
+        reasoningItems?.takeIf { it.isNotEmpty() }
+            ?.let { Json.encodeToString(ListSerializer(JsonObject.serializer()), it) }
+
 }
