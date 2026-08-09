@@ -273,6 +273,7 @@ fun MessageList(
                             toolCallsForMessage = toolCallsMap[message.id] ?: emptyList(),
                             isCollapsed = message.id in collapsedMessageIds,
                             isCollapsible = message.content.length > collapseThreshold,
+                            turnExecutionState = turnExecutionState,
                             searchContext = itemSearchContext,
                             modifier = Modifier
                                 .then(

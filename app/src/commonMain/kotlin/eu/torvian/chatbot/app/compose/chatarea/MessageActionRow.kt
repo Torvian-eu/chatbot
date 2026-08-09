@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
+import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.common.models.core.ChatMessage
 
 /**
@@ -23,6 +24,8 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
  * @param allRootMessageIds A sorted list of all root message IDs in the session.
  * @param messageActions All available actions for the message item.
  * @param hovered Whether the parent [MessageItem] is currently hovered.
+ * @param turnExecutionState Lifecycle state of the active assistant turn. Actions that start a
+ * new LLM turn (Regenerate, Branch & Continue) are disabled while a turn is active.
  * @param modifier Modifier to be applied to the component.
  */
 @Composable
@@ -32,7 +35,8 @@ fun MessageActionRow(
     allRootMessageIds: List<Long>,
     messageActions: MessageActions,
     hovered: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    turnExecutionState: TurnExecutionState = TurnExecutionState.IDLE
 ) {
     // Track if the "More" menu is expanded to keep controls visible
     var moreMenuExpanded by remember { mutableStateOf(false) }
@@ -57,7 +61,8 @@ fun MessageActionRow(
                 message = message,
                 messageActions = messageActions,
                 moreMenuExpanded = moreMenuExpanded,
-                onMoreMenuExpandedChange = { moreMenuExpanded = it }
+                onMoreMenuExpandedChange = { moreMenuExpanded = it },
+                turnExecutionState = turnExecutionState
             )
         } else {
             Spacer(Modifier.width(0.dp)) // Placeholder to maintain layout structure
@@ -80,6 +85,8 @@ fun MessageActionRow(
  * @param messageActions All available actions for the message item.
  * @param moreMenuExpanded Whether the "More" menu is currently expanded.
  * @param onMoreMenuExpandedChange Callback to update the expanded state of the "More" menu.
+ * @param turnExecutionState Lifecycle state of the active assistant turn; used to disable
+ * actions that would start a conflicting LLM turn.
  * @param modifier Modifier to be applied to the component.
  */
 @Composable
@@ -88,6 +95,7 @@ private fun GeneralMessageControls(
     messageActions: MessageActions,
     moreMenuExpanded: Boolean,
     onMoreMenuExpandedChange: (Boolean) -> Unit,
+    turnExecutionState: TurnExecutionState,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -102,20 +110,29 @@ private fun GeneralMessageControls(
         ReplyButton(message = message, onReplyMessage = messageActions.onReplyMessage)
 
         // Delete Button
-        DeleteButton(message = message, onDeleteMessage = messageActions.onDeleteMessage)
+        DeleteButton(
+            message = message,
+            onDeleteMessage = messageActions.onDeleteMessage,
+            enabled = turnExecutionState == TurnExecutionState.IDLE
+        )
 
         // Copy Button
         CopyButton(message = message, onCopyMessage = messageActions.onCopyMessage)
 
         // Regenerate Button (Assistant Message only)
         if (message.role == ChatMessage.Role.ASSISTANT) {
-            RegenerateButton(message = message, onRegenerateMessage = messageActions.onRegenerateMessage)
+            RegenerateButton(
+                message = message,
+                onRegenerateMessage = messageActions.onRegenerateMessage,
+                enabled = turnExecutionState == TurnExecutionState.IDLE
+            )
         }
 
         // Branch & Continue is frequent enough to remain one click away from the action row.
         BranchAndContinueButton(
             message = message,
-            onBranchAndContinue = messageActions.onBranchAndContinue
+            onBranchAndContinue = messageActions.onBranchAndContinue,
+            enabled = turnExecutionState == TurnExecutionState.IDLE
         )
 
         // More Actions Menu (Insert Message, Delete Thread, etc.)
@@ -123,7 +140,8 @@ private fun GeneralMessageControls(
             message = message,
             messageActions = messageActions,
             expanded = moreMenuExpanded,
-            onExpandedChange = onMoreMenuExpandedChange
+            onExpandedChange = onMoreMenuExpandedChange,
+            enabled = turnExecutionState == TurnExecutionState.IDLE
         )
     }
 }
@@ -179,20 +197,31 @@ private fun CopyButton(message: ChatMessage, onCopyMessage: ((ChatMessage) -> Un
  *
  * @param message The assistant message to be regenerated.
  * @param onRegenerateMessage Callback for the regenerate action.
+ * @param enabled Whether the button is clickable. Disabled while an assistant turn is active
+ * to prevent starting a conflicting generation.
  */
 @Composable
-private fun RegenerateButton(message: ChatMessage, onRegenerateMessage: (ChatMessage) -> Unit) {
+private fun RegenerateButton(
+    message: ChatMessage,
+    onRegenerateMessage: (ChatMessage) -> Unit,
+    enabled: Boolean
+) {
     // Only show if message has a parent (not root)
     if (message.parentMessageId != null) {
         PlainTooltipBox(text = "Regenerate response") {
             IconButton(
                 onClick = { onRegenerateMessage(message) },
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(24.dp),
+                enabled = enabled
             ) {
                 Icon(
                     Icons.Default.Refresh,
                     contentDescription = "Regenerate response",
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = if (enabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                    }
                 )
             }
         }
@@ -226,19 +255,30 @@ private fun ReplyButton(message: ChatMessage, onReplyMessage: (ChatMessage) -> U
  *
  * @param message The message to be deleted.
  * @param onDeleteMessage Callback for the delete action.
+ * @param enabled Whether the button is clickable. Disabled while an assistant turn is active
+ * to prevent destructive edits to a conversation that is still being generated.
  */
 @Composable
-private fun DeleteButton(message: ChatMessage, onDeleteMessage: (ChatMessage) -> Unit) {
+private fun DeleteButton(
+    message: ChatMessage,
+    onDeleteMessage: (ChatMessage) -> Unit,
+    enabled: Boolean
+) {
     PlainTooltipBox(text = "Delete message") {
         IconButton(
             onClick = { onDeleteMessage(message) },
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(24.dp),
+            enabled = enabled
         ) {
             // Using a standard trash icon for deletion
             Icon(
                 Icons.Default.Delete,
                 contentDescription = "Delete message",
-                tint = MaterialTheme.colorScheme.error
+                tint = if (enabled) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.error.copy(alpha = 0.38f)
+                }
             )
         }
     }
@@ -252,21 +292,29 @@ private fun DeleteButton(message: ChatMessage, onDeleteMessage: (ChatMessage) ->
  *
  * @param message The message from which the new branch should continue.
  * @param onBranchAndContinue Callback invoked with [message] when the action is selected.
+ * @param enabled Whether the button is clickable. Disabled while an assistant turn is active
+ * to prevent starting a conflicting generation.
  */
 @Composable
 private fun BranchAndContinueButton(
     message: ChatMessage,
-    onBranchAndContinue: (ChatMessage) -> Unit
+    onBranchAndContinue: (ChatMessage) -> Unit,
+    enabled: Boolean
 ) {
     PlainTooltipBox(text = "Branch & Continue") {
         IconButton(
             onClick = { onBranchAndContinue(message) },
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(24.dp),
+            enabled = enabled
         ) {
             Icon(
                 imageVector = Icons.Default.PlayArrow,
                 contentDescription = "Branch & Continue",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = if (enabled) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                }
             )
         }
     }
@@ -282,13 +330,16 @@ private fun BranchAndContinueButton(
  * @param messageActions All available actions for the message item.
  * @param expanded Whether the menu is currently expanded.
  * @param onExpandedChange Callback to update the expanded state.
+ * @param enabled Whether the menu's actions are clickable. Disabled while an assistant turn is
+ * active to prevent destructive edits to a conversation that is still being generated.
  */
 @Composable
 private fun MoreActionsMenu(
     message: ChatMessage,
     messageActions: MessageActions,
     expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit
+    onExpandedChange: (Boolean) -> Unit,
+    enabled: Boolean
 ) {
     Box {
         PlainTooltipBox(text = "More actions") {
@@ -312,14 +363,16 @@ private fun MoreActionsMenu(
             InsertMessageMenuItem(
                 message = message,
                 onRequestInsertMessage = messageActions.onRequestInsertMessage,
-                onDismissMenu = { onExpandedChange(false) }
+                onDismissMenu = { onExpandedChange(false) },
+                enabled = enabled
             )
 
             // Delete Thread action
             DeleteThreadMenuItem(
                 message = message,
                 onDeleteThread = messageActions.onDeleteThread,
-                onDismissMenu = { onExpandedChange(false) }
+                onDismissMenu = { onExpandedChange(false) },
+                enabled = enabled
             )
 
             // Future: Add more menu items here as needed
@@ -330,12 +383,18 @@ private fun MoreActionsMenu(
 
 /**
  * Menu item for Insert Message action.
+ *
+ * @param message The message relative to which a new message would be inserted.
+ * @param onRequestInsertMessage Callback for the insert action.
+ * @param onDismissMenu Callback to close the overflow menu after selection.
+ * @param enabled Whether the action is clickable. Disabled while an assistant turn is active.
  */
 @Composable
 private fun InsertMessageMenuItem(
     message: ChatMessage,
     onRequestInsertMessage: (ChatMessage) -> Unit,
-    onDismissMenu: () -> Unit
+    onDismissMenu: () -> Unit,
+    enabled: Boolean
 ) {
     DropdownMenuItem(
         text = { Text("Insert Message") },
@@ -343,11 +402,16 @@ private fun InsertMessageMenuItem(
             onDismissMenu()
             onRequestInsertMessage(message)
         },
+        enabled = enabled,
         leadingIcon = {
             Icon(
                 Icons.Default.Add,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = if (enabled) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                }
             )
         }
     )
@@ -355,12 +419,18 @@ private fun InsertMessageMenuItem(
 
 /**
  * Menu item for Delete Thread action.
+ *
+ * @param message The message whose thread would be deleted.
+ * @param onDeleteThread Callback for the delete-thread action.
+ * @param onDismissMenu Callback to close the overflow menu after selection.
+ * @param enabled Whether the action is clickable. Disabled while an assistant turn is active.
  */
 @Composable
 private fun DeleteThreadMenuItem(
     message: ChatMessage,
     onDeleteThread: (ChatMessage) -> Unit,
-    onDismissMenu: () -> Unit
+    onDismissMenu: () -> Unit,
+    enabled: Boolean
 ) {
     DropdownMenuItem(
         text = { Text("Delete Thread") },
@@ -368,11 +438,16 @@ private fun DeleteThreadMenuItem(
             onDismissMenu()
             onDeleteThread(message)
         },
+        enabled = enabled,
         leadingIcon = {
             Icon(
                 Icons.Default.DeleteSweep,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.error
+                tint = if (enabled) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.error.copy(alpha = 0.38f)
+                }
             )
         }
     )
