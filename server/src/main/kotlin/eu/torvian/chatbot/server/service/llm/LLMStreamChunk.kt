@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.service.llm
 
+import kotlinx.serialization.json.JsonObject
+
 /**
  * Sealed class representing a single chunk of data in a streaming LLM response.
  * This is an internal representation, parsed by strategies from raw API responses.
@@ -30,13 +32,55 @@ sealed class LLMStreamChunk {
     ) : LLMStreamChunk()
 
     /**
+     * Represents a reasoning-text delta emitted during streaming for a reasoning-capable model.
+     *
+     * This chunk carries the **plaintext** chain-of-thought text produced by the model, in incremental
+     * deltas, and is intended for live UI rendering (e.g. a collapsible "Thinking…" panel). Consumers that
+     * group chunks by ([outputIndex], [contentIndex]) and concatenate their [delta] values reconstruct the
+     * full text of a reasoning content part.
+     *
+     * Unlike [ReasoningDone] (which carries the opaque reasoning output item for persistence and replay),
+     * this chunk carries only renderable text and must never be persisted or fed back into a future
+     * request's `input`.
+     *
+     * @property outputIndex The output index of the reasoning output item this delta belongs to, or `null`
+     *            when the provider does not include it.
+     * @property contentIndex The index of the reasoning content part within the item this delta belongs to.
+     * @property delta The incremental reasoning text added. Multiple deltas should be concatenated.
+     */
+    data class ReasoningTextChunk(
+        val outputIndex: Int?,
+        val contentIndex: Int,
+        val delta: String
+    ) : LLMStreamChunk()
+
+    /**
+     * Represents a completed, opaque reasoning output item for a reasoning-capable model during streaming.
+     *
+     * Reasoning items carry the chain-of-thought produced by the model; the raw items (including any
+     * `encrypted_content`) are opaque and must be persisted verbatim so they can be replayed into a future
+     * request's `input`. The item is emitted as the provider completes each reasoning output item and is
+     * never rendered to the user.
+     *
+     * @property reasoningItem Raw reasoning output item (e.g. `{"type":"reasoning",...}`) completed.
+     */
+    data class ReasoningDone(val reasoningItem: JsonObject) : LLMStreamChunk()
+
+    /**
      * Represents a usage statistics chunk (might be sent at the end).
      *
      * @property promptTokens Number of tokens in the prompt/context
      * @property completionTokens Number of tokens in the generated completion
      * @property totalTokens Total tokens used (prompt + completion)
+     * @property reasoningTokens Number of reasoning (chain-of-thought) tokens consumed, when the provider reports
+     *            them (e.g. OpenAI's Responses API), or `null` otherwise.
      */
-    data class UsageChunk(val promptTokens: Int, val completionTokens: Int, val totalTokens: Int) : LLMStreamChunk()
+    data class UsageChunk(
+        val promptTokens: Int,
+        val completionTokens: Int,
+        val totalTokens: Int,
+        val reasoningTokens: Int? = null
+    ) : LLMStreamChunk()
 
     /**
      * Represents the final "done" signal from the LLM.

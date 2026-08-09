@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.service.llm.*
 import io.ktor.http.*
@@ -34,7 +35,7 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
         messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ChatModelSettings,
+        settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?
     ): Either<LLMCompletionError.ConfigurationError, ApiRequestConfig> {
@@ -48,10 +49,19 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             ).left()
         }
 
+        // This strategy handles the Chat Completions dialect, so it only understands ChatModelSettings.
+        // The caller routes CHAT models here, guaranteeing ChatModelSettings, but we still guard defensively.
+        if (settings !is ChatModelSettings) {
+            return LLMCompletionError.ConfigurationError(
+                "OpenAIChatStrategy requires ChatModelSettings but received ${settings::class.simpleName}."
+            ).left()
+        }
+        val chatSettings: ChatModelSettings = settings
+
         // 2. Build the messages list with system message if present
         val apiMessages = buildList {
             // Add system message if present in settings
-            val systemMessage = settings.systemMessage
+            val systemMessage = chatSettings.systemMessage
             if (!systemMessage.isNullOrBlank()) {
                 add(buildJsonObject {
                     put("role", JsonPrimitive("system"))
@@ -66,27 +76,27 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
         // 3. Build the request body as a flexible JsonObject
         val requestBodyJson = buildJsonObject {
             // Start with custom parameters from settings
-            settings.customParams?.let { params ->
+            chatSettings.customParams?.let { params ->
                 params.forEach { (key, value) -> put(key, value) }
             }
 
             // Add/overwrite with standard and required parameters
             put("model", JsonPrimitive(modelConfig.name))
             put("messages", JsonArray(apiMessages))
-            put("stream", JsonPrimitive(settings.stream))
+            put("stream", JsonPrimitive(chatSettings.stream))
 
             // Add stream_options when streaming is enabled to request usage statistics
-            if (settings.stream) {
+            if (chatSettings.stream) {
                 put("stream_options", buildJsonObject {
                     put("include_usage", JsonPrimitive(true))
                 })
             }
 
             // Add/overwrite with specific parameters from ChatModelSettings
-            settings.temperature?.let { put("temperature", JsonPrimitive(it)) }
-            settings.maxTokens?.let { put("max_tokens", JsonPrimitive(it)) }
-            settings.topP?.let { put("top_p", JsonPrimitive(it)) }
-            settings.stopSequences?.takeIf { it.isNotEmpty() }?.let {
+            chatSettings.temperature?.let { put("temperature", JsonPrimitive(it)) }
+            chatSettings.maxTokens?.let { put("max_tokens", JsonPrimitive(it)) }
+            chatSettings.topP?.let { put("top_p", JsonPrimitive(it)) }
+            chatSettings.stopSequences?.takeIf { it.isNotEmpty() }?.let {
                 put("stop", json.encodeToJsonElement(it))
             }
 

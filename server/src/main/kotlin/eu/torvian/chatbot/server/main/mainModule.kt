@@ -9,6 +9,7 @@ import eu.torvian.chatbot.server.service.llm.discovery.OpenAIModelDiscoveryStrat
 import eu.torvian.chatbot.server.service.llm.discovery.OpenRouterModelDiscoveryStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OllamaChatStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
+import eu.torvian.chatbot.server.service.llm.strategy.ResponsesStrategy
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
@@ -45,6 +46,7 @@ fun mainModule(application: Application) = module {
 
     single<OpenAIChatStrategy> { OpenAIChatStrategy(get()) }
     single<OllamaChatStrategy> { OllamaChatStrategy(get()) }
+    single<ResponsesStrategy> { ResponsesStrategy(get()) }
     single<OpenAIModelDiscoveryStrategy> { OpenAIModelDiscoveryStrategy(get()) }
     single<OllamaModelDiscoveryStrategy> { OllamaModelDiscoveryStrategy(get()) }
     single<OpenRouterModelDiscoveryStrategy> { OpenRouterModelDiscoveryStrategy(get()) }

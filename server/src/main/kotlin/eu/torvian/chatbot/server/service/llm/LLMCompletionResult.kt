@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.service.llm
 
+import kotlinx.serialization.json.JsonObject
+
 /**
  * Represents the structured result of an LLM chat completion, independent of the specific provider API format.
  * This is the common type returned by the LLMApiClient interface.
@@ -8,6 +10,10 @@ package eu.torvian.chatbot.server.service.llm
  * @property usage Statistics about token usage for this completion request.
  * @property id An identifier for the completion request (may be provider-specific or generated).
  *              Null if the provider doesn't return a meaningful ID or it's not needed at the service level.
+ * @property reasoningItems For Responses-capable models, the raw reasoning output items (e.g. `{"type":"reasoning",...}`)
+ *            emitted alongside the assistant content, captured verbatim so higher layers can persist and replay them
+ *            across turns. `null` or empty when the model did not emit reasoning. This is an opaque payload and must
+ *            not be logged or rendered.
  * @property metadata Optional metadata from the provider. Could be used for debugging or logging.
  *                    This map should contain data that doesn't fit into the structured fields but is useful
  *                    to pass up from the specific API response.
@@ -16,6 +22,7 @@ data class LLMCompletionResult(
     val choices: List<CompletionChoice>,
     val usage: UsageStats,
     val id: String? = null,
+    val reasoningItems: List<JsonObject>? = null,
     val metadata: Map<String, Any?> = emptyMap()
 ) {
     /**
@@ -59,10 +66,13 @@ data class LLMCompletionResult(
      * @property promptTokens Number of tokens in the prompt/context
      * @property completionTokens Number of tokens in the generated completion
      * @property totalTokens Total tokens used (prompt + completion)
+     * @property reasoningTokens Number of reasoning (chain-of-thought) tokens consumed by the assistant, when the
+     *            provider reports them (e.g. OpenAI's Responses API), or `null` otherwise.
      */
     data class UsageStats(
         val promptTokens: Int,
         val completionTokens: Int,
-        val totalTokens: Int
+        val totalTokens: Int,
+        val reasoningTokens: Int? = null
     )
 }

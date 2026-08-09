@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.llm
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Raw message types for LLM API communication.
@@ -56,11 +57,15 @@ sealed class RawChatMessage {
      *
      * @property content The assistant's response text (null if only tool calls)
      * @property toolCalls List of tool calls made by the assistant (null if none)
+     * @property reasoningItems For Responses-capable models, the raw reasoning output items that preceded this
+     *            assistant message, captured so the strategy can interleave them into a future request's `input`.
+     *            These are opaque payloads and must not be logged or rendered. `null` when absent.
      */
     @Serializable
     data class Assistant(
         override val content: String?,
-        val toolCalls: List<ToolCall>? = null
+        val toolCalls: List<ToolCall>? = null,
+        val reasoningItems: List<JsonObject>? = null
     ) : RawChatMessage() {
         override val role: String = "assistant"
 
