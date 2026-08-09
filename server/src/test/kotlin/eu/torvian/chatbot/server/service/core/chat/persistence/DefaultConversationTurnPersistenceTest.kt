@@ -9,12 +9,14 @@ import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
-import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
-import io.mockk.*
+import io.mockk.clearMocks
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -109,7 +111,7 @@ class DefaultConversationTurnPersistenceTest {
         )
 
         coEvery { messageDao.insertMessage(1L, 5L, any(), ChatMessage.Role.USER, "Hello", null, null, any()) } returns
-            savedUserMessage.right()
+                savedUserMessage.right()
         coEvery { sessionDao.updateSessionLeafMessageId(1L, savedUserMessage.id) } returns Unit.right()
         coEvery { messageDao.getMessageById(5L) } returns refreshedParent.right()
 
@@ -248,13 +250,42 @@ class DefaultConversationTurnPersistenceTest {
         )
 
         coEvery {
-            toolCallDao.insertToolCall(12L, toolDefinition.id, "search", "call-1", "{\"query\":\"docs\"}", null, ToolCallStatus.PENDING, null, null, any(), null, null, null)
+            toolCallDao.insertToolCall(
+                12L,
+                toolDefinition.id,
+                "search",
+                "call-1",
+                "{\"query\":\"docs\"}",
+                null,
+                ToolCallStatus.PENDING,
+                null,
+                null,
+                any(),
+                null,
+                null,
+                null
+            )
         } returns knownToolCall.right()
         coEvery {
-            toolCallDao.insertToolCall(12L, null, "missing", "call-2", "{}", null, ToolCallStatus.ERROR, "Tool 'missing' not found in enabled tools", null, any(), null, null, null)
+            toolCallDao.insertToolCall(
+                12L,
+                null,
+                "missing",
+                "call-2",
+                "{}",
+                null,
+                ToolCallStatus.ERROR,
+                "Tool 'missing' not found in enabled tools",
+                null,
+                any(),
+                null,
+                null,
+                null
+            )
         } returns missingToolCall.right()
 
-        val result = persistence.persistPendingToolCalls(12L, listOf(knownRequest, missingRequest), listOf(toolDefinition))
+        val result =
+            persistence.persistPendingToolCalls(12L, listOf(knownRequest, missingRequest), listOf(toolDefinition))
 
         assertEquals(listOf(knownToolCall, missingToolCall), result)
     }
@@ -310,7 +341,17 @@ class DefaultConversationTurnPersistenceTest {
         )
 
         coEvery {
-            messageDao.insertMessage(1L, 5L, any(), ChatMessage.Role.ASSISTANT, "Answer", testModel.id, testSettings.id, any(), reasoningItems)
+            messageDao.insertMessage(
+                1L,
+                5L,
+                any(),
+                ChatMessage.Role.ASSISTANT,
+                "Answer",
+                testModel.id,
+                testSettings.id,
+                any(),
+                reasoningItems
+            )
         } returns savedAssistantMessage.right()
         coEvery { sessionDao.updateSessionLeafMessageId(1L, savedAssistantMessage.id) } returns Unit.right()
         coEvery { messageDao.getMessageById(5L) } returns ChatMessage.UserMessage(

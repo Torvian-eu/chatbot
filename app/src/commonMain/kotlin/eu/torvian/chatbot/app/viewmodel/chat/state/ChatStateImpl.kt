@@ -12,9 +12,9 @@ import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -111,13 +111,13 @@ class ChatStateImpl(
             initialValue = DataState.Idle
         )
 
-    // Available models from repository, filtered for chat models and active models only
+    // Available models from repository, filtered for chat-capable (CHAT or RESPONSES) and active models only
     override val availableModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> =
         modelRepository.models.map { dataState ->
             when (dataState) {
                 is DataState.Success -> {
                     val filteredModels = dataState.data.filter { model ->
-                        model.type == LLMModelType.CHAT && model.active
+                        (model.type == LLMModelType.CHAT || model.type == LLMModelType.RESPONSES) && model.active
                     }
                     DataState.Success(filteredModels)
                 }
@@ -134,12 +134,14 @@ class ChatStateImpl(
 
     private val allModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> = modelRepository.models
 
-    // All settings from repository, filtered for chat model settings only
-    private val allSettings: StateFlow<DataState<RepositoryError, List<ChatModelSettings>>> =
+    // All settings from repository, filtered for chat-capable settings (CHAT or RESPONSES model types) only
+    private val allSettings: StateFlow<DataState<RepositoryError, List<ModelSettings>>> =
         modelSettingsRepository.allSettings.map { dataState ->
             when (dataState) {
                 is DataState.Success -> {
-                    val filteredSettings = dataState.data.filterIsInstance<ChatModelSettings>()
+                    val filteredSettings = dataState.data.filter { settings ->
+                        settings.modelType == LLMModelType.CHAT || settings.modelType == LLMModelType.RESPONSES
+                    }
                     DataState.Success(filteredSettings)
                 }
 
@@ -158,7 +160,7 @@ class ChatStateImpl(
         allModels.map { it.dataOrNull?.associateBy { model -> model.id } ?: emptyMap() }
             .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    override val settingsById: StateFlow<Map<Long, ChatModelSettings>> =
+    override val settingsById: StateFlow<Map<Long, ModelSettings>> =
         allSettings.map { it.dataOrNull?.associateBy { settings -> settings.id } ?: emptyMap() }
             .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
@@ -174,7 +176,7 @@ class ChatStateImpl(
             currentModelId?.let { modelsMap[it] }
         }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
 
-    override val currentSettings: StateFlow<ChatModelSettings?> = currentSession
+    override val currentSettings: StateFlow<ModelSettings?> = currentSession
         .map { session -> session?.currentSettingsId }
         .distinctUntilChanged()
         .combine(settingsById) { currentSettingsId, settingsMap ->
@@ -182,7 +184,7 @@ class ChatStateImpl(
         }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
 
     // --- Derived Filtered List for UI ---
-    override val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ChatModelSettings>>> =
+    override val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ModelSettings>>> =
         combine(currentModel, allSettings) { model, settingsState ->
             val currentModelId = model?.id
             when (settingsState) {

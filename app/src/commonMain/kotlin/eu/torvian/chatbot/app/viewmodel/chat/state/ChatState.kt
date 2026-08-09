@@ -9,8 +9,8 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.StateFlow
 
@@ -44,7 +44,7 @@ interface ChatState {
     /**
      * The list of settings profiles available for the currently selected model.
      */
-    val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ChatModelSettings>>>
+    val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ModelSettings>>>
 
     /**
      * The list of all available tool definitions.
@@ -80,10 +80,10 @@ interface ChatState {
     val modelsById: StateFlow<Map<Long, LLMModel>>
 
     /**
-     * A map of settings IDs to ChatModelSettings objects, derived from the global settings list.
+     * A map of settings IDs to [ModelSettings] objects, derived from the global settings list.
      * Optimized for quick lookups.
      */
-    val settingsById: StateFlow<Map<Long, ChatModelSettings>>
+    val settingsById: StateFlow<Map<Long, ModelSettings>>
 
     // --- Derived "Current Item" States (for UI convenience) ---
     /**
@@ -99,10 +99,10 @@ interface ChatState {
     val currentModel: StateFlow<LLMModel?>
 
     /**
-     * The fully resolved ChatModelSettings object for the current session, or null.
+     * The fully resolved [ModelSettings] object for the current session, or null.
      * Derived by combining currentSession and settingsById.
      */
-    val currentSettings: StateFlow<ChatModelSettings?>
+    val currentSettings: StateFlow<ModelSettings?>
 
     /**
      * The list of messages to display in the UI, representing the currently selected thread branch.

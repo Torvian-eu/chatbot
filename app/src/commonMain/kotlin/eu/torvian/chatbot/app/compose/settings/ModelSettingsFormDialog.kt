@@ -51,6 +51,7 @@ fun ModelSettingsFormDialog(
                     when (formState) {
                         is ModelSettingsFormState.Chat -> ChatFormContent(formState, onFormUpdate)
                         is ModelSettingsFormState.Embedding -> EmbeddingFormContent(formState, onFormUpdate)
+                        is ModelSettingsFormState.Responses -> ResponsesFormContent(formState, onFormUpdate)
                     }
 
                     // Custom Params (Advanced)
@@ -87,6 +88,7 @@ private fun ModelSettingsFormState.withUpdatedName(name: String): ModelSettingsF
     return when(this) {
         is ModelSettingsFormState.Chat -> copy(name = name)
         is ModelSettingsFormState.Embedding -> copy(name = name)
+        is ModelSettingsFormState.Responses -> copy(name = name)
     }
 }
 
@@ -94,6 +96,7 @@ private fun ModelSettingsFormState.withUpdatedCustomParams(json: String): ModelS
      return when(this) {
         is ModelSettingsFormState.Chat -> copy(customParamsJson = json)
         is ModelSettingsFormState.Embedding -> copy(customParamsJson = json)
+        is ModelSettingsFormState.Responses -> copy(customParamsJson = json)
     }
 }
 
@@ -160,5 +163,66 @@ private fun EmbeddingFormContent(
         value = formState.encodingFormat,
         onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Embedding).copy(encodingFormat = value) } },
         label = "Encoding Format"
+    )
+}
+
+/**
+ * Form content specific to Responses model settings.
+ */
+@Composable
+private fun ResponsesFormContent(
+    formState: ModelSettingsFormState.Responses,
+    onFormUpdate: ((ModelSettingsFormState) -> ModelSettingsFormState) -> Unit
+) {
+    ConfigTextField(
+        value = formState.instructions,
+        onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Responses).copy(instructions = value) } },
+        label = "Instructions (System Prompt)",
+        singleLine = false,
+        modifier = Modifier.height(120.dp)
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ConfigTextField(
+            value = formState.temperature,
+            onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Responses).copy(temperature = value) } },
+            label = "Temperature",
+            modifier = Modifier.weight(1f)
+        )
+        ConfigTextField(
+            value = formState.maxOutputTokens,
+            onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Responses).copy(maxOutputTokens = value) } },
+            label = "Max Output Tokens",
+            modifier = Modifier.weight(1f)
+        )
+    }
+    ConfigTextField(
+        value = formState.topP,
+        onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Responses).copy(topP = value) } },
+        label = "Top P"
+    )
+    ConfigTextField(
+        value = formState.stopSequences,
+        onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Responses).copy(stopSequences = value) } },
+        label = "Stop Sequences (comma-separated)"
+    )
+    ConfigTextField(
+        value = formState.reasoningEffort,
+        onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Responses).copy(reasoningEffort = value) } },
+        label = "Reasoning Effort (low / medium / high)"
+    )
+    ConfigCheckbox(
+        checked = formState.stream,
+        onCheckedChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Responses).copy(stream = value) } },
+        label = "Enable Streaming"
+    )
+    ConfigCheckbox(
+        checked = formState.store,
+        onCheckedChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Responses).copy(store = value) } },
+        label = "Store responses server-side"
+    )
+    ConfigCheckbox(
+        checked = formState.replayReasoning,
+        onCheckedChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Responses).copy(replayReasoning = value) } },
+        label = "Replay reasoning tokens across turns"
     )
 }

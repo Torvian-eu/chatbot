@@ -3,17 +3,12 @@ package eu.torvian.chatbot.server.service.core.chat.turn
 import arrow.core.right
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
-import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
-import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.llm.LLMProviderType
-import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
+import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
-import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
+import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.context.DefaultChatContextBuilder
@@ -31,10 +26,8 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -333,7 +326,13 @@ class DefaultConversationTurnOrchestratorTest {
             )
         } returns listOf(pendingToolCall)
         every {
-            toolCallOrchestrator.executeAndUpdateToolCalls(1L, listOf(pendingToolCall), listOf(toolDefinition), any(), any())
+            toolCallOrchestrator.executeAndUpdateToolCalls(
+                1L,
+                listOf(pendingToolCall),
+                listOf(toolDefinition),
+                any(),
+                any()
+            )
         } returns flowOf(
             ToolCallExecutionEvent.ToolCallApprovalRequested(pendingToolCall),
             ToolCallExecutionEvent.ToolCallExecuting(executingToolCall),
@@ -539,7 +538,14 @@ class DefaultConversationTurnOrchestratorTest {
             reasoningItems = reasoningItems
         )
 
-        coEvery { conversationTurnPersistence.saveUserMessage(testSession.id, "Reason", null, any()) } returns PersistedUserMessage(userMessage, null)
+        coEvery {
+            conversationTurnPersistence.saveUserMessage(
+                testSession.id,
+                "Reason",
+                null,
+                any()
+            )
+        } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns completion.right()
         coEvery {
@@ -620,7 +626,14 @@ class DefaultConversationTurnOrchestratorTest {
         )
         val assistantFinished = assistantStarted.copy(content = "Answer")
 
-        coEvery { conversationTurnPersistence.saveUserMessage(testSession.id, "Stream reason", null, any()) } returns PersistedUserMessage(userMessage, null)
+        coEvery {
+            conversationTurnPersistence.saveUserMessage(
+                testSession.id,
+                "Stream reason",
+                null,
+                any()
+            )
+        } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -637,7 +650,12 @@ class DefaultConversationTurnOrchestratorTest {
         coEvery {
             conversationTurnPersistence.updateAssistantMessageReasoning(assistantStarted.id, reasoningItems)
         } returns assistantFinished
-        coEvery { conversationTurnPersistence.updateAssistantMessageContent(assistantStarted.id, "Answer") } returns assistantFinished
+        coEvery {
+            conversationTurnPersistence.updateAssistantMessageContent(
+                assistantStarted.id,
+                "Answer"
+            )
+        } returns assistantFinished
 
         orchestrator.processStreamingTurn(
             ConversationTurnRequest(
