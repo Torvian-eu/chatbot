@@ -14,6 +14,7 @@ import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.EmbeddingModelSettings
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 
 /**
  * Reusable body for the Model Settings details view.
@@ -40,8 +41,8 @@ fun ModelSettingsDetailsBody(
     onMakePublic: (ModelSettingsDetails) -> Unit,
     onMakePrivate: (ModelSettingsDetails) -> Unit,
     onManageAccess: (ModelSettingsDetails) -> Unit,
-    showHeader: Boolean = true,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showHeader: Boolean = true
 ) {
     if (settingsDetails == null) {
         Box(contentAlignment = Alignment.Center, modifier = modifier.fillMaxSize()) {
@@ -174,6 +175,7 @@ fun ModelSettingsDetailsBody(
                 when (settings) {
                     is ChatModelSettings -> ChatSettingsDetails(settings)
                     is EmbeddingModelSettings -> EmbeddingSettingsDetails(settings)
+                    is ResponsesModelSettings -> ResponsesSettingsDetails(settings)
                     // Add cases for other settings types as they are implemented.
                     else -> Text("Details for this settings type are not yet implemented.")
                 }
@@ -202,4 +204,25 @@ private fun ChatSettingsDetails(settings: ChatModelSettings) {
 private fun EmbeddingSettingsDetails(settings: EmbeddingModelSettings) {
     DetailRow("Dimensions", settings.dimensions?.toString() ?: "Default")
     DetailRow("Encoding Format", settings.encodingFormat ?: "Default")
+}
+
+/**
+ * Responses-specific settings details.
+ *
+ * Displays the Responses API parameter surface, including native reasoning knobs
+ * such as reasoning effort, server-side storage, and reasoning replay.
+ *
+ * @param settings The Responses model settings whose details are rendered.
+ */
+@Composable
+private fun ResponsesSettingsDetails(settings: ResponsesModelSettings) {
+    DetailRow("Instructions", settings.instructions ?: "Not set")
+    DetailRow("Temperature", settings.temperature?.toString() ?: "Default")
+    DetailRow("Max Output Tokens", settings.maxOutputTokens?.toString() ?: "Default")
+    DetailRow("Top P", settings.topP?.toString() ?: "Default")
+    DetailRow("Stream", settings.stream.toString())
+    DetailRow("Stop Sequences", settings.stopSequences?.joinToString(", ") ?: "None")
+    DetailRow("Reasoning Effort", settings.reasoningEffort ?: "Default")
+    DetailRow("Store", settings.store.toString())
+    DetailRow("Replay Reasoning", settings.replayReasoning.toString())
 }
