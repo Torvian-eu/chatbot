@@ -28,6 +28,7 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
+import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
@@ -48,6 +49,8 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @param toolCallsForMessage List of tool calls associated with this message.
  * @param isCollapsed Whether this message is currently collapsed.
  * @param isCollapsible Whether this message can be collapsed (content length > threshold).
+ * @param turnExecutionState Lifecycle state of the active assistant turn; disables actions that
+ * start a new LLM turn (Regenerate, Branch & Continue) while a turn is active.
  * @param searchContext optional in-session search context for highlights and selected-result
  * geometry reporting. When `null`, the message renders without search-specific measurements.
  * @param modifier Modifier applied to the outer message container.
@@ -62,12 +65,13 @@ fun MessageItem(
     editingContent: String?,
     editingFileReferences: List<FileReference>,
     editingBasePathOverride: String?,
+    modifier: Modifier = Modifier,
     modelsById: Map<Long, LLMModel> = emptyMap(),
     toolCallsForMessage: List<ToolCall> = emptyList(),
     isCollapsed: Boolean = false,
     isCollapsible: Boolean = false,
-    searchContext: MessageSearchContext? = null,
-    modifier: Modifier = Modifier,
+    turnExecutionState: TurnExecutionState = TurnExecutionState.IDLE,
+    searchContext: MessageSearchContext? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -208,6 +212,7 @@ fun MessageItem(
             allRootMessageIds = allRootMessageIds,
             messageActions = actions,
             hovered = hovered,
+            turnExecutionState = turnExecutionState,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(24.dp) // Reserve the height for the action row
