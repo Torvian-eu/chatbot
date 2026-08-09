@@ -2,12 +2,6 @@ package eu.torvian.chatbot.server.data.tables
 
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
-import eu.torvian.chatbot.server.data.tables.LLMModelTable.active
-import eu.torvian.chatbot.server.data.tables.LLMModelTable.capabilities
-import eu.torvian.chatbot.server.data.tables.LLMModelTable.displayName
-import eu.torvian.chatbot.server.data.tables.LLMModelTable.name
-import eu.torvian.chatbot.server.data.tables.LLMModelTable.providerId
-import eu.torvian.chatbot.server.data.tables.LLMModelTable.type
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
@@ -15,7 +9,8 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  * Exposed table definition for LLM model configurations.
  * Corresponds to the [LLMModel] DTO.
  *
- * @property name Unique identifier for the LLM model (e.g., "gpt-3.5-turbo", "gpt-4")
+ * @property name The model's name (e.g., "gpt-3.5-turbo", "gpt-4"). Not necessarily unique — the same name
+ *            may be reused across model types (e.g. a CHAT and a RESPONSES variant of the same model).
  * @property providerId Reference to the LLM provider that hosts this model (CASCADE on delete)
  * @property active Whether the model can still be actively used
  * @property displayName Optional display name for UI purposes
@@ -23,7 +18,7 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  * @property capabilities JSON object containing model capabilities (nullable)
  */
 object LLMModelTable : LongIdTable("llm_models") {
-    val name = varchar("name", 255).uniqueIndex()
+    val name = varchar("name", 255)
     val providerId = reference("provider_id", LLMProviderTable, onDelete = ReferenceOption.CASCADE)
     val active = bool("active").default(true)
     val displayName = varchar("display_name", 255).nullable()

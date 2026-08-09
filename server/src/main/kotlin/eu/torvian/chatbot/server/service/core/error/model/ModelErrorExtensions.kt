@@ -19,11 +19,6 @@ fun AddModelError.toApiError(): ApiError = when (this) {
         "Provider not found for model",
         "providerId" to this.providerId.toString()
     )
-    is AddModelError.ModelNameAlreadyExists -> apiError(
-        CommonApiErrorCodes.ALREADY_EXISTS,
-        "Model name already exists",
-        "name" to this.name
-    )
     is AddModelError.OwnershipError -> apiError(
         CommonApiErrorCodes.INTERNAL,
         "Failed to set model ownership",
@@ -54,11 +49,6 @@ fun UpdateModelError.toApiError(): ApiError = when (this) {
         CommonApiErrorCodes.NOT_FOUND,
         "Provider not found",
         "providerId" to this.providerId.toString()
-    )
-    is UpdateModelError.ModelNameAlreadyExists -> apiError(
-        CommonApiErrorCodes.ALREADY_EXISTS,
-        "Model name already exists",
-        "name" to this.name
     )
 }
 

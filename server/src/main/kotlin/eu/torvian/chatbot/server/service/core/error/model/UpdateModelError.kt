@@ -21,10 +21,4 @@ sealed interface UpdateModelError {
      * Maps from UpdateModelError.ProviderNotFound in the DAO layer.
      */
     data class ProviderNotFound(val providerId: Long) : UpdateModelError
-
-    /**
-     * Indicates that a model with the specified name already exists (and it's not the same model being updated).
-     * Maps from UpdateModelError.ModelNameAlreadyExists in the DAO layer.
-     */
-    data class ModelNameAlreadyExists(val name: String) : UpdateModelError
 }

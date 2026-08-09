@@ -63,7 +63,7 @@ interface LLMModelService {
     /**
      * Adds a new LLM model configuration.
      * @param ownerId The ID of the user creating the model (owner).
-     * @param name The unique identifier for the model (e.g., "gpt-3.5-turbo").
+     * @param name The model name (e.g., "gpt-3.5-turbo"). Not necessarily unique.
      * @param providerId The ID of the provider that hosts this model.
      * @param type The operational type of this model (e.g., CHAT, EMBEDDING, etc.).
      * @param active Whether the model is currently active and available for use.

@@ -17,12 +17,6 @@ sealed interface AddModelError {
     data class ProviderNotFound(val providerId: Long) : AddModelError
 
     /**
-     * Indicates that a model with the specified name already exists.
-     * Maps from InsertModelError.ModelNameAlreadyExists in the DAO layer.
-     */
-    data class ModelNameAlreadyExists(val name: String) : AddModelError
-
-    /**
      * Indicates an ownership-related error when creating the model ownership link.
      * This can represent foreign key violations or ownership conflicts.
      */

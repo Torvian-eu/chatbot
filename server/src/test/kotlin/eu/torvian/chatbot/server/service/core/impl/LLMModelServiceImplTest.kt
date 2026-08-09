@@ -292,30 +292,6 @@ class LLMModelServiceImplTest {
         coVerify(exactly = 0) { modelOwnershipDao.setOwner(any(), any()) }
     }
 
-    @Test
-    fun `addModel should return ModelNameAlreadyExists error when name is duplicate`() = runTest {
-        // Arrange
-        val ownerId = 1L
-        val name = "existing-model"
-        val providerId = 1L
-        val type = LLMModelType.CHAT
-        val daoError = InsertModelError.ModelNameAlreadyExists(name)
-        coEvery { modelDao.insertModel(name, providerId, type, true, null, null) } returns daoError.left()
-
-        // Act
-        val result = llmModelService.addModel(ownerId, name, providerId, type, true, null, null)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for duplicate name")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertIs<AddModelError.ModelNameAlreadyExists>(error, "Should be ModelNameAlreadyExists error")
-        assertEquals(name, error.name)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { modelDao.insertModel(name, providerId, type, true, null, null) }
-        coVerify(exactly = 0) { modelOwnershipDao.setOwner(any(), any()) }
-    }
-
     // --- updateModel Tests ---
 
     @Test
