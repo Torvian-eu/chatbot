@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.service.llm.strategy
 
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.server.service.llm.GenericContentType
 import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
@@ -65,6 +66,10 @@ class ResponsesStrategyTest {
         assertEquals(GenericHttpMethod.POST, config.method)
         assertEquals(GenericContentType.APPLICATION_JSON, config.contentType)
         assertEquals("Bearer $apiKey", config.customHeaders[HttpHeaders.Authorization])
+        // OpenAI must not receive OpenRouter attribution headers.
+        assertFalse(config.customHeaders.containsKey("HTTP-Referer"))
+        assertFalse(config.customHeaders.containsKey("X-OpenRouter-Title"))
+        assertFalse(config.customHeaders.containsKey("X-OpenRouter-Categories"))
 
         val body = Json.decodeFromString<JsonObject>(config.body as String)
         assertEquals("gpt-5.4", body["model"]?.jsonPrimitive?.content)
@@ -110,6 +115,38 @@ class ResponsesStrategyTest {
         assertEquals("function_call", input!![0].jsonObject["type"]?.jsonPrimitive?.content)
         assertEquals("call_a", input[0].jsonObject["call_id"]?.jsonPrimitive?.content)
         assertEquals("getWeather", input[0].jsonObject["name"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    @DisplayName("prepareRequest should add OpenRouter attribution headers for OpenRouter providers")
+    fun prepareRequest_openRouterAddsAttributionHeaders() {
+        val provider = TestDefaults.llmProvider1.copy(
+            name = "OpenRouter",
+            type = LLMProviderType.OPENROUTER,
+            apiKeyId = "openrouter-key",
+            baseUrl = "https://openrouter.ai/api/v1"
+        )
+        val apiKey = "sk-openrouter-test"
+
+        val result = strategy.prepareRequest(
+            messages = listOf(RawChatMessage.User("Hello")),
+            modelConfig = responsesModel.copy(name = "openai/gpt-5.4"),
+            provider = provider,
+            settings = responsesSettings,
+            apiKey = apiKey
+        )
+
+        assertTrue(result.isRight(), "Expected success result")
+        val config = result.getOrNull()
+        assertNotNull(config, "Expected non-null ApiRequestConfig")
+        assertEquals("Bearer $apiKey", config.customHeaders[HttpHeaders.Authorization])
+        assertEquals("https://chatbot.torvian.eu", config.customHeaders["HTTP-Referer"])
+        assertEquals("Torvian Chatbot", config.customHeaders["X-OpenRouter-Title"])
+        assertEquals("cloud-agent,general-chat", config.customHeaders["X-OpenRouter-Categories"])
+
+        val body = Json.decodeFromString<JsonObject>(config.body as String)
+        assertEquals("openai/gpt-5.4", body["model"]?.jsonPrimitive?.content)
+        assertEquals(1, body["input"]?.jsonArray?.size)
     }
 
     @Test

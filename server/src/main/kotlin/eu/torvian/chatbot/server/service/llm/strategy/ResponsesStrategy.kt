@@ -16,6 +16,7 @@ import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
 import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
+import eu.torvian.chatbot.server.service.llm.OpenRouterClientInfo
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import io.ktor.http.*
 import kotlinx.coroutines.flow.Flow
@@ -118,6 +119,11 @@ class ResponsesStrategy(
         val customHeaders = buildMap {
             if (apiKey != null) {
                 put(HttpHeaders.Authorization, "Bearer $apiKey")
+            }
+
+            // Attribution belongs only on OpenRouter requests; this strategy is also reused by OpenAI.
+            if (provider.type == LLMProviderType.OPENROUTER) {
+                putAll(OpenRouterClientInfo.headers)
             }
         }
 
