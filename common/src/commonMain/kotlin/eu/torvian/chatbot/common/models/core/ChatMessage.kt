@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.common.models.core
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import kotlin.time.Instant
 
 /**
@@ -72,6 +73,11 @@ sealed class ChatMessage {
      * @property fileReferences List of file references attached to this message.
      * @property modelId ID of the LLM model used to generate this message.
      * @property settingsId ID of the settings profile used to generate this message.
+     * @property reasoningItems For Responses-capable models, the raw reasoning output items
+     *            (e.g. `{"type":"reasoning",...}`) emitted alongside this assistant message, used to replay
+     *            reasoning context across turns in a stateless fashion. `null` when the model did not emit
+     *            reasoning. Each item is an opaque object (may include OpenAI-encrypted content) and must not
+     *            be logged or rendered.
      */
     @Serializable
     data class AssistantMessage(
@@ -84,7 +90,8 @@ sealed class ChatMessage {
         override val childrenMessageIds: List<Long> = emptyList(),
         override val fileReferences: List<FileReference> = emptyList(),
         val modelId: Long?,
-        val settingsId: Long?
+        val settingsId: Long?,
+        val reasoningItems: List<JsonObject>? = null
     ) : ChatMessage() {
         override val role: Role = Role.ASSISTANT
     }
