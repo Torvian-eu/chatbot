@@ -216,9 +216,10 @@ class SettingsRoutesTest {
     }
 
     @Test
-    fun `POST settings with mismatched model type should return 400`() = settingsTestApplication {
+    fun `POST settings with a different settings type than the model should succeed`() = settingsTestApplication {
         // Arrange
-        // The TestDefaults.llmModel1 is of type CHAT; create CompletionModelSettings to cause mismatch
+        // A model has no operational type of its own: it can host settings profiles of any type.
+        // TestDefaults.llmModel1 was previously typed CHAT; attaching a COMPLETION profile must now succeed.
         val mismatchedSettings = eu.torvian.chatbot.common.models.llm.CompletionModelSettings(
             id = 0L,
             modelId = TestDefaults.llmModel1.id,
@@ -240,13 +241,10 @@ class SettingsRoutesTest {
         }
 
         // Assert
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-        val error = response.body<ApiError>()
-        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-        assertEquals(400, error.statusCode)
-        assertEquals("Invalid settings input", error.message)
-        assert(error.details?.containsKey("reason") == true)
-        assert(error.details?.get("reason")!!.contains("does not match"))
+        assertEquals(HttpStatusCode.Created, response.status)
+        val created = response.body<ModelSettings>()
+        assertEquals(mismatchedSettings.name, created.name)
+        assertEquals(mismatchedSettings.modelId, created.modelId)
     }
 
     // --- PUT /api/v1/settings/{settingsId} Tests ---

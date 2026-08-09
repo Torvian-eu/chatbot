@@ -259,7 +259,6 @@ class ModelConfigViewModel(
             val request = AddModelRequest(
                 name = form.name.trim(),
                 providerId = form.providerId,
-                type = form.type,
                 active = form.active,
                 displayName = form.displayName.trim().takeIf { it.isNotBlank() },
                 capabilities = form.capabilities.takeIf { it.isNotEmpty() }
@@ -268,7 +267,6 @@ class ModelConfigViewModel(
             modelRepository.addModel(
                 name = request.name,
                 providerId = request.providerId,
-                type = request.type,
                 active = request.active,
                 displayName = request.displayName,
                 capabilities = request.capabilities
@@ -305,7 +303,6 @@ class ModelConfigViewModel(
             val updatedModel = originalModel.copy(
                 name = form.name.trim(),
                 providerId = form.providerId,
-                type = form.type,
                 active = form.active,
                 displayName = form.displayName.trim().takeIf { it.isNotBlank() },
                 capabilities = form.capabilities.takeIf { it.isNotEmpty() }

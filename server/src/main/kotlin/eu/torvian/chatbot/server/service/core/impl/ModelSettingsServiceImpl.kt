@@ -2,7 +2,6 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.Either
 import arrow.core.raise.either
-import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
@@ -88,18 +87,15 @@ class ModelSettingsServiceImpl(
     override suspend fun addSettings(ownerId: Long, settings: ModelSettings): Either<AddSettingsError, ModelSettings> =
         transactionScope.transaction {
             either {
-                // Get the associated LLMModel to verify type consistency
-                val llmModel = withError({ getModelError: GetModelError ->
+                // Verify the associated LLMModel exists (a model has no type of its own, so no
+                // model-type/ settings-type consistency check is needed here: the settings profile
+                // itself determines the operational type for invocations using it).
+                withError({ getModelError: GetModelError ->
                     when (getModelError) {
                         is GetModelError.ModelNotFound -> AddSettingsError.ModelNotFound(getModelError.id)
                     }
                 }) {
                     llmModelService.getModelById(settings.modelId).bind()
-                }
-                ensure(settings.modelType == llmModel.type) {
-                    AddSettingsError.InvalidInput(
-                        "Model settings type (${settings.modelType}) does not match the associated LLM Model's type (${llmModel.type})."
-                    )
                 }
 
                 // Insert the settings
@@ -126,20 +122,15 @@ class ModelSettingsServiceImpl(
     override suspend fun updateSettings(settings: ModelSettings): Either<UpdateSettingsError, Unit> =
         transactionScope.transaction {
             either {
-                // Get the associated LLMModel to verify type consistency
-                val llmModel = withError({ getModelError: GetModelError ->
+                // Verify the associated LLMModel exists. No model-type/ settings-type consistency
+                // check is performed: the model carries no type, so the settings profile alone
+                // defines the operational type of any invocation that uses it.
+                withError({ getModelError: GetModelError ->
                     when (getModelError) {
                         is GetModelError.ModelNotFound -> UpdateSettingsError.ModelNotFound(getModelError.id)
                     }
                 }) {
                     llmModelService.getModelById(settings.modelId).bind()
-                }
-
-                // Verify that the ModelSettings type matches the LLMModel's type
-                ensure(settings.modelType == llmModel.type) {
-                    UpdateSettingsError.InvalidInput(
-                        "Model settings type (${settings.modelType}) does not match the associated LLM Model's type (${llmModel.type})."
-                    )
                 }
 
                 // Update the settings

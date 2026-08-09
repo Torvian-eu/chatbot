@@ -352,8 +352,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
             name = "gpt-4o",
             providerId = 1L,
             active = true,
-            displayName = "GPT-4o",
-            type = LLMModelType.CHAT
+            displayName = "GPT-4o"
         )
         val provider = LLMProvider(
             id = 1L,
@@ -405,8 +404,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
             name = "gpt-4o",
             providerId = 1L,
             active = true,
-            displayName = "GPT-4o",
-            type = LLMModelType.CHAT
+            displayName = "GPT-4o"
         )
         val provider = LLMProvider(
             id = 1L,

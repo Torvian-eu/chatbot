@@ -54,7 +54,6 @@ class SettingsOwnershipDaoExposedTest {
         providerId = 1L,
         active = true,
         displayName = "GPT-4",
-        type = LLMModelType.CHAT,
         capabilities = null
     )
 

@@ -7,7 +7,6 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelCapabilities
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.MessageDao
@@ -68,8 +67,7 @@ class DefaultConversationTurnPreparationServiceTest {
         name = "gpt-3.5-turbo",
         providerId = 1L,
         active = true,
-        displayName = "GPT-3.5 Turbo",
-        type = LLMModelType.CHAT
+        displayName = "GPT-3.5 Turbo"
     )
 
     private val toolCallingModel = testModel.copy(

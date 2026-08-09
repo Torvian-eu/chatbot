@@ -7,7 +7,6 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
@@ -364,7 +363,7 @@ class SessionServiceImplTest {
     // --- updateSessionCurrentModelId Tests ---
 
     @Test
-    fun `updateSessionCurrentModelId should update session model ID successfully when model is CHAT type`() = runTest {
+    fun `updateSessionCurrentModelId should update session model ID successfully when model is active`() = runTest {
         // Arrange
         val sessionId = 1L
         val modelId = 2L
@@ -372,7 +371,6 @@ class SessionServiceImplTest {
             id = modelId,
             name = "gpt-3.5-turbo",
             providerId = 1L,
-            type = LLMModelType.CHAT,
             active = true
         )
 
@@ -384,7 +382,7 @@ class SessionServiceImplTest {
         val result = sessionService.updateSessionCurrentModelId(sessionId, modelId)
 
         // Assert
-        assertTrue(result.isRight(), "Should return Right for successful update with CHAT model")
+        assertTrue(result.isRight(), "Should return Right for successful update with active model")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.getModelById(modelId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, modelId) }
@@ -412,30 +410,28 @@ class SessionServiceImplTest {
     }
 
     @Test
-    fun `updateSessionCurrentModelId should return InvalidModelType error when model is not CHAT type`() = runTest {
+    fun `updateSessionCurrentModelId should return DeprecatedModel error when model is inactive`() = runTest {
         // Arrange
         val sessionId = 1L
         val modelId = 2L
-        val embeddingModel = LLMModel(
+        val inactiveModel = LLMModel(
             id = modelId,
             name = "text-embedding-ada-002",
             providerId = 1L,
-            type = LLMModelType.EMBEDDING,
-            active = true
+            active = false
         )
 
-        coEvery { modelDao.getModelById(modelId) } returns embeddingModel.right()
+        coEvery { modelDao.getModelById(modelId) } returns inactiveModel.right()
 
         // Act
         val result = sessionService.updateSessionCurrentModelId(sessionId, modelId)
 
         // Assert
-        assertTrue(result.isLeft(), "Should return Left for non-CHAT model type")
+        assertTrue(result.isLeft(), "Should return Left for inactive model")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertIs<UpdateSessionCurrentModelIdError.InvalidModelType>(error, "Should be InvalidModelType error")
+        assertIs<UpdateSessionCurrentModelIdError.DeprecatedModel>(error, "Should be DeprecatedModel error")
         assertEquals(modelId, error.modelId)
-        assertEquals("EMBEDDING", error.actualType)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.getModelById(modelId) }
         coVerify(exactly = 0) { sessionDao.updateSessionCurrentModelId(any(), any()) }
@@ -477,7 +473,6 @@ class SessionServiceImplTest {
             id = modelId,
             name = "gpt-3.5-turbo",
             providerId = 1L,
-            type = LLMModelType.CHAT,
             active = true
         )
         coEvery { modelDao.getModelById(modelId) } returns chatModel.right()

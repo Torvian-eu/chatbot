@@ -15,7 +15,6 @@ fun ResultRow.toLLMModel() = LLMModel(
     providerId = this[LLMModelTable.providerId].value,
     active = this[LLMModelTable.active],
     displayName = this[LLMModelTable.displayName],
-    type = this[LLMModelTable.type],
     capabilities = this[LLMModelTable.capabilities]?.let { capabilitiesJson ->
         Json.decodeFromString<JsonObject>(capabilitiesJson)
     }

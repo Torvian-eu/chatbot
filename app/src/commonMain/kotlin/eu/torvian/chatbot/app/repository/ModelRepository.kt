@@ -5,7 +5,6 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonObject
@@ -96,7 +95,6 @@ interface ModelRepository {
      *
      * @param name The unique identifier for the model
      * @param providerId The ID of the provider hosting this model
-     * @param type The operational type of this model
      * @param active Whether the model is currently active
      * @param displayName Optional display name for UI purposes
      * @param capabilities Optional JSON object containing model capabilities
@@ -105,7 +103,6 @@ interface ModelRepository {
     suspend fun addModel(
         name: String,
         providerId: Long,
-        type: LLMModelType,
         active: Boolean = true,
         displayName: String? = null,
         capabilities: JsonObject? = null

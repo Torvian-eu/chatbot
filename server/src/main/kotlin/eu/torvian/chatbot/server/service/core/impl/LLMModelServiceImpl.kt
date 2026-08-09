@@ -11,7 +11,6 @@ import eu.torvian.chatbot.common.models.api.access.ResourceAccessDetails
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
 import eu.torvian.chatbot.common.models.api.access.toOwnerInfo
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
 import eu.torvian.chatbot.server.data.dao.ModelAccessDao
 import eu.torvian.chatbot.server.data.dao.ModelDao
@@ -88,7 +87,6 @@ class LLMModelServiceImpl(
         ownerId: Long,
         name: String,
         providerId: Long,
-        type: LLMModelType,
         active: Boolean,
         displayName: String?,
         capabilities: JsonObject?
@@ -104,7 +102,7 @@ class LLMModelServiceImpl(
                         is InsertModelError.ProviderNotFound -> AddModelError.ProviderNotFound(daoError.providerId)
                     }
                 }) {
-                    modelDao.insertModel(name, providerId, type, active, displayName, capabilities).bind()
+                    modelDao.insertModel(name, providerId, active, displayName, capabilities).bind()
                 }
 
                 // Set ownership for the newly created model

@@ -3,7 +3,6 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
@@ -56,8 +55,7 @@ class LLMModelServiceImplTest {
         name = "gpt-3.5-turbo",
         providerId = 1L,
         active = true,
-        displayName = "GPT-3.5 Turbo",
-        type = LLMModelType.CHAT
+        displayName = "GPT-3.5 Turbo"
     )
 
     private val testModel2 = LLMModel(
@@ -65,8 +63,7 @@ class LLMModelServiceImplTest {
         name = "gpt-4",
         providerId = 1L,
         active = true,
-        displayName = "GPT-4",
-        type = LLMModelType.CHAT
+        displayName = "GPT-4"
     )
 
     private val testProvider = LLMProvider(
@@ -229,20 +226,19 @@ class LLMModelServiceImplTest {
         val ownerId = 1L
         val name = "gpt-3.5-turbo"
         val providerId = 1L
-        val type = LLMModelType.CHAT
         val active = true
         val displayName = "GPT-3.5 Turbo"
-        coEvery { modelDao.insertModel(name, providerId, type, active, displayName, null) } returns testModel1.right()
+        coEvery { modelDao.insertModel(name, providerId, active, displayName, null) } returns testModel1.right()
         coEvery { modelOwnershipDao.setOwner(testModel1.id, ownerId) } returns Unit.right()
 
         // Act
-        val result = llmModelService.addModel(ownerId, name, providerId, type, active, displayName, null)
+        val result = llmModelService.addModel(ownerId, name, providerId, active, displayName, null)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful creation")
         assertEquals(testModel1, result.getOrNull(), "Should return the created model")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { modelDao.insertModel(name, providerId, type, active, displayName, null) }
+        coVerify(exactly = 1) { modelDao.insertModel(name, providerId, active, displayName, null) }
         coVerify(exactly = 1) { modelOwnershipDao.setOwner(testModel1.id, ownerId) }
     }
 
@@ -252,10 +248,9 @@ class LLMModelServiceImplTest {
         val ownerId = 1L
         val blankName = "   "
         val providerId = 1L
-        val type = LLMModelType.CHAT
 
         // Act
-        val result = llmModelService.addModel(ownerId, blankName, providerId, type, true, null, null)
+        val result = llmModelService.addModel(ownerId, blankName, providerId, true, null, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for blank name")
@@ -264,7 +259,7 @@ class LLMModelServiceImplTest {
         assertIs<AddModelError.InvalidInput>(error, "Should be InvalidInput error")
         assertEquals("Model name cannot be blank.", error.reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 0) { modelDao.insertModel(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { modelDao.insertModel(any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { modelOwnershipDao.setOwner(any(), any()) }
     }
 
@@ -274,12 +269,11 @@ class LLMModelServiceImplTest {
         val ownerId = 1L
         val name = "test-model"
         val providerId = 999L
-        val type = LLMModelType.CHAT
         val daoError = InsertModelError.ProviderNotFound(providerId)
-        coEvery { modelDao.insertModel(name, providerId, type, true, null, null) } returns daoError.left()
+        coEvery { modelDao.insertModel(name, providerId, true, null, null) } returns daoError.left()
 
         // Act
-        val result = llmModelService.addModel(ownerId, name, providerId, type, true, null, null)
+        val result = llmModelService.addModel(ownerId, name, providerId, true, null, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent provider")
@@ -288,7 +282,7 @@ class LLMModelServiceImplTest {
         assertIs<AddModelError.ProviderNotFound>(error, "Should be ProviderNotFound error")
         assertEquals(providerId, error.providerId)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { modelDao.insertModel(name, providerId, type, true, null, null) }
+        coVerify(exactly = 1) { modelDao.insertModel(name, providerId, true, null, null) }
         coVerify(exactly = 0) { modelOwnershipDao.setOwner(any(), any()) }
     }
 

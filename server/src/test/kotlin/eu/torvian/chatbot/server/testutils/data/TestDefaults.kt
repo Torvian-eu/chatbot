@@ -120,8 +120,7 @@ object TestDefaults {
         name = "gpt-4",
         providerId = llmProvider1.id,
         active = true,
-        displayName = "GPT-4",
-        type = LLMModelType.CHAT
+        displayName = "GPT-4"
     )
 
     val llmModel2 = LLMModel(
@@ -129,8 +128,7 @@ object TestDefaults {
         name = "claude-3-sonnet-20240229",
         providerId = llmProvider2.id,
         active = true,
-        displayName = "Claude 3 Sonnet",
-        type = LLMModelType.CHAT
+        displayName = "Claude 3 Sonnet"
     )
 
     val modelSettings1 = ChatModelSettings(

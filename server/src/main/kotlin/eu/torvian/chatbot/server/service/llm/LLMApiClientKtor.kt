@@ -5,10 +5,10 @@ import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -85,7 +85,7 @@ class LLMApiClientKtor(
 
         // 1. Find the appropriate strategy for this model and provider type.
         // If no strategy is found, return a configuration error immediately.
-        val strategy = resolveStrategy(modelConfig, provider)
+        val strategy = resolveStrategy(settings, provider)
             ?: run {
                 val errorMsg = "No ChatCompletionStrategy found for provider type: ${provider.type}"
                 logger.error(errorMsg)
@@ -211,7 +211,7 @@ class LLMApiClientKtor(
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> = channelFlow {
         logger.info("LLMApiClientKtor: Received streaming request for model ${modelConfig.name} (Provider: ${provider.name}, Type: ${provider.type})")
 
-        val strategy = resolveStrategy(modelConfig, provider)
+        val strategy = resolveStrategy(settings, provider)
             ?: run {
                 val errorMsg = "No ChatCompletionStrategy found for provider type: ${provider.type}"
                 logger.error(errorMsg)
@@ -387,22 +387,23 @@ class LLMApiClientKtor(
     /**
      * Resolves the [ChatCompletionStrategy] for a chat request.
      *
-     * RESPONSES-typed models (OpenAI Responses API) are routed to [responsesStrategy] when one is
-     * registered; all other models use the strategy registered for the provider type. This allows a
-     * single OpenAI provider to serve both Chat Completions and Responses models.
+     * The strategy is chosen from the concrete [ModelSettings] subtype, because the settings profile
+     * decides the API dialect for the invocation: RESPONSES settings (OpenAI Responses API) are routed
+     * to [responsesStrategy] when one is registered; all other settings use the strategy registered for
+     * the provider type. This allows a single model to serve both Chat Completions and Responses
+     * requests through different settings profiles attached to it.
      *
-     * @param modelConfig The target model.
+     * @param settings The settings profile attached to the request, which determines the API dialect.
      * @param provider The owning provider.
      * @return The resolved strategy, or `null` if none is registered for the request.
      */
     private fun resolveStrategy(
-        modelConfig: LLMModel,
+        settings: ModelSettings,
         provider: LLMProvider,
     ): ChatCompletionStrategy? {
-        return if (modelConfig.type == LLMModelType.RESPONSES) {
-            responsesStrategy
-        } else {
-            strategies[provider.type]
+        return when (settings) {
+            is ResponsesModelSettings -> responsesStrategy
+            else -> strategies[provider.type]
         }
     }
 }

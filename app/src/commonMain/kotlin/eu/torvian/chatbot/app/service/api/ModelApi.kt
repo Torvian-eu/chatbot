@@ -3,7 +3,6 @@ package eu.torvian.chatbot.app.service.api
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 import kotlinx.serialization.json.JsonObject
 
@@ -34,7 +33,6 @@ interface ModelApi {
      *
      * @param name The unique identifier for the model (e.g., "gpt-3.5-turbo", "gpt-4").
      * @param providerId The ID of the provider that hosts this model.
-     * @param type The operational type of this model (e.g., CHAT, EMBEDDING, etc.).
      * @param active Whether the model is currently active and available for use.
      * @param displayName Optional display name for UI purposes.
      * @param capabilities Optional JSON object containing model capabilities.
@@ -44,7 +42,6 @@ interface ModelApi {
     suspend fun addModel(
         name: String,
         providerId: Long,
-        type: LLMModelType,
         active: Boolean = true,
         displayName: String? = null,
         capabilities: JsonObject? = null

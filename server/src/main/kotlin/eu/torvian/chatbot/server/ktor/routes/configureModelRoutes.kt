@@ -69,7 +69,6 @@ fun Route.configureModelRoutes(
                         userId,
                         request.name,
                         request.providerId,
-                        request.type,
                         request.active,
                         request.displayName,
                         request.capabilities

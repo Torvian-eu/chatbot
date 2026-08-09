@@ -5,7 +5,6 @@ import arrow.core.right
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.user.UserStatus
@@ -79,7 +78,6 @@ class ModelOwnershipDaoExposedTest {
         providerId = 1L,
         active = true,
         displayName = "GPT-4",
-        type = LLMModelType.CHAT,
         capabilities = null
     )
 
@@ -89,7 +87,6 @@ class ModelOwnershipDaoExposedTest {
         providerId = 1L,
         active = true,
         displayName = "Claude 3",
-        type = LLMModelType.CHAT,
         capabilities = null
     )
 
@@ -99,7 +96,6 @@ class ModelOwnershipDaoExposedTest {
         providerId = 1L,
         active = true,
         displayName = "GPT-3.5 Turbo",
-        type = LLMModelType.CHAT,
         capabilities = null
     )
 

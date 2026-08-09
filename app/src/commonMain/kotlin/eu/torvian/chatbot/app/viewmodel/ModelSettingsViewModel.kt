@@ -4,8 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.domain.contracts.*
-import eu.torvian.chatbot.app.generated.resources.Res
-import eu.torvian.chatbot.app.generated.resources.error_unsupported_model_type
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ModelSettingsRepository
@@ -15,6 +13,7 @@ import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -184,21 +183,32 @@ class ModelSettingsViewModel(
     }
 
     /**
-     * Initiates the process of adding a new settings profile by showing the form.
+     * Initiates the process of adding a new settings profile by first asking the user which
+     * settings type (API dialect) the new profile should describe. A model carries no operational
+     * type of its own, so the type is chosen here rather than read from the model.
      */
     fun startAddingNewSettings() {
         val selectedModel = selectedModel.value ?: return
-        if (selectedModel.type !in getSupportedSettingsTypes()) {
-            viewModelScope.launch {
-                notificationService.genericWarning(
-                    shortMessageRes = Res.string.error_unsupported_model_type,
-                    detailedMessage = "Cannot add new settings: Model type ${selectedModel.type} is not supported."
-                )
-            }
+        _dialogState.value = ModelSettingsDialogState.ChooseNewSettingsType(
+            modelId = selectedModel.id
+        )
+    }
+
+    /**
+     * Continues the add-settings flow after the user picked a settings type, opening the form
+     * dialog pre-populated for that type and the target model.
+     *
+     * @param modelType The settings type the user chose for the new profile.
+     */
+    fun chooseNewSettingsType(modelType: LLMModelType) {
+        val modelId = selectedModel.value?.id ?: return
+        if (modelType !in getSupportedSettingsTypes()) {
+            logger.warn("Cannot create settings: unsupported settings type $modelType.")
+            cancelDialog()
             return
         }
         _dialogState.value = ModelSettingsDialogState.AddNewSettings(
-            formState = createEmptyNewSettingsForm(selectedModel.type, selectedModel.id),
+            formState = createEmptyNewSettingsForm(modelType, modelId),
         )
     }
 

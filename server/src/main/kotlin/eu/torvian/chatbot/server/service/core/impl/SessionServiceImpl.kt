@@ -11,7 +11,6 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.server.data.dao.*
@@ -114,16 +113,14 @@ class SessionServiceImpl(
     ): Either<UpdateSessionCurrentModelIdError, Unit> =
         transactionScope.transaction {
             either {
-                // If modelId is provided, validate that the model exists, is active, and is of CHAT type
+                // If modelId is provided, validate that the model exists and is active.
+                // A model has no operational type of its own; chat-capability is determined by the
+                // settings profile attached to the session, so no type check is performed here.
                 if (modelId != null) {
                     val model = withError({ _: ModelError.ModelNotFound ->
                         UpdateSessionCurrentModelIdError.InvalidRelatedEntity("Model with ID $modelId not found")
                     }) {
                         modelDao.getModelById(modelId).bind()
-                    }
-                    // Verify that the model is of CHAT or RESPONSES type
-                    ensure(model.type == LLMModelType.CHAT || model.type == LLMModelType.RESPONSES) {
-                        UpdateSessionCurrentModelIdError.InvalidModelType(modelId, model.type.name)
                     }
                     // Guard against setting a deprecated (inactive) model
                     ensure(model.active) {
@@ -208,16 +205,13 @@ class SessionServiceImpl(
     ): Either<UpdateSessionCurrentModelAndSettingsIdError, Unit> =
         transactionScope.transaction {
             either {
-                // If modelId is provided, validate it exists, is active, and is of CHAT type
+                // If modelId is provided, validate it exists and is active. The model carries no
+                // operational type of its own; chat-capability is validated via the settings profile.
                 if (modelId != null) {
                     val model = withError({ _: ModelError.ModelNotFound ->
                         UpdateSessionCurrentModelAndSettingsIdError.ModelNotFound(modelId)
                     }) {
                         modelDao.getModelById(modelId).bind()
-                    }
-                    // Verify that the model is of CHAT or RESPONSES type
-                    ensure(model.type == LLMModelType.CHAT || model.type == LLMModelType.RESPONSES) {
-                        UpdateSessionCurrentModelAndSettingsIdError.InvalidModelType(modelId, model.type.name)
                     }
                     // Guard against setting a deprecated (inactive) model
                     ensure(model.active) {

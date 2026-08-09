@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.server.service.llm.strategy
 
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.server.service.llm.GenericContentType
 import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
@@ -31,8 +30,7 @@ class ResponsesStrategyTest {
     private val strategy = ResponsesStrategy(json)
 
     private val responsesModel = TestDefaults.llmModel1.copy(
-        name = "gpt-5.4",
-        type = LLMModelType.RESPONSES
+        name = "gpt-5.4"
     )
 
     private val responsesSettings = ResponsesModelSettings(

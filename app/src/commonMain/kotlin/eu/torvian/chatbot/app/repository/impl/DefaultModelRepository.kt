@@ -13,7 +13,6 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.JsonObject
 
@@ -121,7 +120,6 @@ class DefaultModelRepository(
     override suspend fun addModel(
         name: String,
         providerId: Long,
-        type: LLMModelType,
         active: Boolean,
         displayName: String?,
         capabilities: JsonObject?
@@ -133,7 +131,6 @@ class DefaultModelRepository(
                 modelApi.addModel(
                     name = name,
                     providerId = providerId,
-                    type = type,
                     active = active,
                     displayName = displayName,
                     capabilities = capabilities

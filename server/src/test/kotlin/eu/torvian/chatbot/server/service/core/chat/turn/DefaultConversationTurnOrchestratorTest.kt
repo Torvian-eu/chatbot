@@ -51,8 +51,7 @@ class DefaultConversationTurnOrchestratorTest {
         name = "gpt-4o-mini",
         providerId = 1L,
         active = true,
-        displayName = "GPT-4o mini",
-        type = LLMModelType.CHAT
+        displayName = "GPT-4o mini"
     )
 
     private val testProvider = LLMProvider(
@@ -504,7 +503,7 @@ class DefaultConversationTurnOrchestratorTest {
             parentMessageId = null,
             childrenMessageIds = emptyList()
         )
-        val reasoningModel = testModel.copy(type = LLMModelType.RESPONSES)
+        val reasoningModel = testModel.copy()
         val reasoningSettings = ResponsesModelSettings(
             id = 2L,
             modelId = reasoningModel.id,
@@ -605,7 +604,7 @@ class DefaultConversationTurnOrchestratorTest {
             parentMessageId = null,
             childrenMessageIds = emptyList()
         )
-        val reasoningModel = testModel.copy(type = LLMModelType.RESPONSES)
+        val reasoningModel = testModel.copy()
         val reasoningSettings = ResponsesModelSettings(
             id = 3L,
             modelId = reasoningModel.id,

@@ -11,7 +11,6 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlin.time.Instant
 
@@ -56,8 +55,7 @@ fun ChatAreaPreview() {
         name = "gpt-4",
         providerId = 1L,
         active = true,
-        displayName = "GPT-4",
-        type = LLMModelType.CHAT
+        displayName = "GPT-4"
     )
 
     ChatArea(

@@ -10,7 +10,6 @@ import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.data.entities.PermissionEntity
 import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
@@ -161,7 +160,6 @@ class ModelRoutesTest {
         val createRequest = AddModelRequest(
             name = newModelName,
             providerId = testProvider1.id,
-            type = LLMModelType.CHAT,
             active = newModelActive,
             displayName = newModelDisplayName
         )
@@ -196,7 +194,6 @@ class ModelRoutesTest {
         val createRequest = AddModelRequest(
             name = "   ",
             providerId = testProvider1.id,
-            type = LLMModelType.CHAT,
             active = true,
             displayName = null
         )
@@ -227,7 +224,6 @@ class ModelRoutesTest {
         val createRequest = AddModelRequest(
             name = "Model For NonExistent Provider",
             providerId = nonExistentProviderId,
-            type = LLMModelType.CHAT,
             active = true,
             displayName = null
         )
