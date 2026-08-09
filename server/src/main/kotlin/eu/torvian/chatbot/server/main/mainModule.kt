@@ -62,7 +62,7 @@ fun mainModule(application: Application) = module {
             LLMProviderType.OPENROUTER to get<OpenRouterModelDiscoveryStrategy>(),
             LLMProviderType.OLLAMA to get<OllamaModelDiscoveryStrategy>(),
         )
-        val baseClient = LLMApiClientKtor(get(), strategies, modelDiscoveryStrategies)
+        val baseClient = LLMApiClientKtor(get(), strategies, modelDiscoveryStrategies, get<ResponsesStrategy>())
         // 429, 502 and 503 are all transient upstream signals. 502 in particular is surfaced by
         // OpenRouter as an error embedded inside an otherwise-successful stream (see OpenAIChatStrategy),
         // which the retry decorator restarts from scratch because no content has been emitted yet.

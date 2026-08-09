@@ -3,6 +3,8 @@ package eu.torvian.chatbot.server.service.core
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 
 /**
@@ -14,7 +16,9 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  *
  * @property provider The LLM provider (OpenAI, Ollama, etc.)
  * @property model The specific model configuration
- * @property settings Model settings (temperature, max tokens, etc.)
+ * @property settings Model settings (temperature, max tokens, etc.). The concrete subtype depends on
+ *                the [LLMModel.type] of the model (e.g., [ChatModelSettings] for CHAT models,
+ *                [ResponsesModelSettings] for RESPONSES models).
  * @property apiKey Optional API key for authentication
  * @property tools Optional list of tool definitions available for this request.
  *                 Null if the model doesn't support tool calling (no tool calling capability).
@@ -24,7 +28,7 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
 data class LLMConfig(
     val provider: LLMProvider,
     val model: LLMModel,
-    val settings: ChatModelSettings,
+    val settings: ModelSettings,
     val apiKey: String?,
     val tools: List<ToolDefinition>? = null
 )

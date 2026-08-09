@@ -12,6 +12,8 @@ import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModelType
+import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.*
 import eu.torvian.chatbot.server.service.core.SessionService
@@ -119,8 +121,8 @@ class SessionServiceImpl(
                     }) {
                         modelDao.getModelById(modelId).bind()
                     }
-                    // Verify that the model is of CHAT type
-                    ensure(model.type == LLMModelType.CHAT) {
+                    // Verify that the model is of CHAT or RESPONSES type
+                    ensure(model.type == LLMModelType.CHAT || model.type == LLMModelType.RESPONSES) {
                         UpdateSessionCurrentModelIdError.InvalidModelType(modelId, model.type.name)
                     }
                     // Guard against setting a deprecated (inactive) model
@@ -167,8 +169,8 @@ class SessionServiceImpl(
                         settingsDao.getSettingsById(settingsId).bind()
                     }
 
-                    // Verify that the settings are of ChatModelSettings type
-                    ensure(settings is ChatModelSettings) {
+                    // Verify that the settings are of a chat-capable type (CHAT or RESPONSES)
+                    ensure(isChatLikeSettings(settings)) {
                         UpdateSessionCurrentSettingsIdError.InvalidSettingsType(
                             settingsId = settingsId,
                             actualType = settings::class.simpleName ?: "Unknown"
@@ -213,8 +215,8 @@ class SessionServiceImpl(
                     }) {
                         modelDao.getModelById(modelId).bind()
                     }
-                    // Verify that the model is of CHAT type
-                    ensure(model.type == LLMModelType.CHAT) {
+                    // Verify that the model is of CHAT or RESPONSES type
+                    ensure(model.type == LLMModelType.CHAT || model.type == LLMModelType.RESPONSES) {
                         UpdateSessionCurrentModelAndSettingsIdError.InvalidModelType(modelId, model.type.name)
                     }
                     // Guard against setting a deprecated (inactive) model
@@ -231,8 +233,8 @@ class SessionServiceImpl(
                         settingsDao.getSettingsById(settingsId).bind()
                     }
 
-                    // Verify that the settings are of ChatModelSettings type
-                    ensure(settings is ChatModelSettings) {
+                    // Verify that the settings are of a chat-capable type (CHAT or RESPONSES)
+                    ensure(isChatLikeSettings(settings)) {
                         UpdateSessionCurrentModelAndSettingsIdError.InvalidSettingsType(
                             settingsId = settingsId,
                             actualType = settings::class.simpleName ?: "Unknown"
@@ -362,6 +364,7 @@ class SessionServiceImpl(
                     // Extract modelId and settingsId if this is an AssistantMessage
                     val modelId = (message as? ChatMessage.AssistantMessage)?.modelId
                     val settingsId = (message as? ChatMessage.AssistantMessage)?.settingsId
+                    val reasoningItems = (message as? ChatMessage.AssistantMessage)?.reasoningItems
 
                     // Clone this message
                     val newMessage = withError({ daoError: InsertMessageError ->
@@ -376,6 +379,7 @@ class SessionServiceImpl(
                             modelId = modelId,
                             settingsId = settingsId,
                             fileReferences = message.fileReferences,
+                            reasoningItems = reasoningItems,
                             createdAt = message.createdAt,
                             updatedAt = message.updatedAt
                         ).bind()
@@ -457,4 +461,18 @@ class SessionServiceImpl(
                 }
             }
         }
+
+    /**
+     * Whether the given [ModelSettings] can be attached to a chat session. Both [ChatModelSettings] and
+     * [ResponsesModelSettings] describe conversational generation, so either is accepted for CHAT or
+     * RESPONSES models.
+     *
+     * @receiver The settings profile to inspect.
+     * @return `true` if the settings describe a chat-capable model type.
+     */
+    private fun isChatLikeSettings(settings: ModelSettings): Boolean = when (settings) {
+        is ChatModelSettings -> true
+        is ResponsesModelSettings -> true
+        else -> false
+    }
 }

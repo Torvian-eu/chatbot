@@ -40,13 +40,13 @@ sealed interface UpdateSessionCurrentModelAndSettingsIdError {
     data class InvalidRelatedEntity(val message: String) : UpdateSessionCurrentModelAndSettingsIdError
 
     /**
-     * Indicates that the provided settings are not of the ChatModelSettings type.
-     * This occurs when trying to assign settings that are not suitable for chat sessions.
+     * Indicates that the provided settings are not of a chat-capable type (ChatModelSettings or
+     * ResponsesModelSettings). This occurs when trying to assign settings that are not suitable for chat sessions.
      */
     data class InvalidSettingsType(val settingsId: Long, val actualType: String) : UpdateSessionCurrentModelAndSettingsIdError
 
     /**
-     * Indicates that the model exists but doesn't have the required CHAT type.
+     * Indicates that the model exists but doesn't have the required CHAT or RESPONSES type.
      */
     data class InvalidModelType(val modelId: Long, val actualType: String) : UpdateSessionCurrentModelAndSettingsIdError
 
@@ -91,14 +91,14 @@ fun UpdateSessionCurrentModelAndSettingsIdError.toApiError(): ApiError = when (t
 
     is UpdateSessionCurrentModelAndSettingsIdError.InvalidSettingsType -> apiError(
         CommonApiErrorCodes.INVALID_ARGUMENT,
-        "Settings type must be CHAT",
+        "Settings type must be CHAT or RESPONSES",
         "settingsId" to settingsId.toString(),
         "actualType" to actualType
     )
 
     is UpdateSessionCurrentModelAndSettingsIdError.InvalidModelType -> apiError(
         CommonApiErrorCodes.INVALID_ARGUMENT,
-        "Model type must be CHAT",
+        "Model type must be CHAT or RESPONSES",
         "modelId" to modelId.toString(),
         "actualType" to actualType
     )

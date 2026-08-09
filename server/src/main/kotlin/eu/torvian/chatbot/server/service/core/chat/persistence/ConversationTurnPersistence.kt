@@ -2,11 +2,12 @@ package eu.torvian.chatbot.server.service.core.chat.persistence
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Persists the message and tool-call state transitions that occur during a single conversation turn.
@@ -36,6 +37,8 @@ interface ConversationTurnPersistence {
      * @param parentMessageId Parent message that the assistant replies to.
      * @param model Model metadata associated with the assistant message.
      * @param settings Settings metadata associated with the assistant message.
+     * @param reasoningItems Optional raw reasoning items emitted with the assistant message. Must be `null` for
+     *                       non-reasoning models; opaque, never logged or rendered.
      * @return Saved assistant message and the refreshed parent message.
      */
     suspend fun saveAssistantMessage(
@@ -43,7 +46,8 @@ interface ConversationTurnPersistence {
         content: String,
         parentMessageId: Long,
         model: LLMModel,
-        settings: ChatModelSettings
+        settings: ModelSettings,
+        reasoningItems: List<JsonObject>? = null
     ): PersistedAssistantMessage
 
     /**
@@ -56,6 +60,19 @@ interface ConversationTurnPersistence {
     suspend fun updateAssistantMessageContent(
         messageId: Long,
         content: String
+    ): ChatMessage.AssistantMessage
+
+    /**
+     * Persists the reasoning items attached to an existing assistant message.
+     *
+     * @param messageId Assistant message to update.
+     * @param reasoningItems Raw reasoning items to persist. `null` clears any stored reasoning. Opaque payload;
+     *                       never logged or rendered.
+     * @return Updated assistant message.
+     */
+    suspend fun updateAssistantMessageReasoning(
+        messageId: Long,
+        reasoningItems: List<JsonObject>?
     ): ChatMessage.AssistantMessage
 
     /**

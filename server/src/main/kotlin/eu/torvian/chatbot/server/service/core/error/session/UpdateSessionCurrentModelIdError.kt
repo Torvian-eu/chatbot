@@ -19,7 +19,7 @@ sealed interface UpdateSessionCurrentModelIdError {
     data class InvalidRelatedEntity(val message: String) : UpdateSessionCurrentModelIdError
 
     /**
-     * Indicates that the model exists but doesn't have the required CHAT type.
+     * Indicates that the model exists but doesn't have the required CHAT or RESPONSES type.
      */
     data class InvalidModelType(val modelId: Long, val actualType: String) : UpdateSessionCurrentModelIdError
 
@@ -44,7 +44,7 @@ fun UpdateSessionCurrentModelIdError.toApiError(): ApiError = when (this) {
 
     is UpdateSessionCurrentModelIdError.InvalidModelType -> apiError(
         CommonApiErrorCodes.INVALID_ARGUMENT,
-        "Model type must be CHAT",
+        "Model type must be CHAT or RESPONSES",
         "modelId" to modelId.toString(),
         "actualType" to actualType
     )
