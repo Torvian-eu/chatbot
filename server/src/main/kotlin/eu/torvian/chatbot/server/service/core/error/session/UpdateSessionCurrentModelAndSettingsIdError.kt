@@ -46,11 +46,6 @@ sealed interface UpdateSessionCurrentModelAndSettingsIdError {
     data class InvalidSettingsType(val settingsId: Long, val actualType: String) : UpdateSessionCurrentModelAndSettingsIdError
 
     /**
-     * Indicates that the model exists but doesn't have the required CHAT or RESPONSES type.
-     */
-    data class InvalidModelType(val modelId: Long, val actualType: String) : UpdateSessionCurrentModelAndSettingsIdError
-
-    /**
      * Indicates that the model exists but is deprecated (not active).
      */
     data class DeprecatedModel(val modelId: Long) : UpdateSessionCurrentModelAndSettingsIdError
@@ -93,13 +88,6 @@ fun UpdateSessionCurrentModelAndSettingsIdError.toApiError(): ApiError = when (t
         CommonApiErrorCodes.INVALID_ARGUMENT,
         "Settings type must be CHAT or RESPONSES",
         "settingsId" to settingsId.toString(),
-        "actualType" to actualType
-    )
-
-    is UpdateSessionCurrentModelAndSettingsIdError.InvalidModelType -> apiError(
-        CommonApiErrorCodes.INVALID_ARGUMENT,
-        "Model type must be CHAT or RESPONSES",
-        "modelId" to modelId.toString(),
         "actualType" to actualType
     )
 

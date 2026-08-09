@@ -200,11 +200,6 @@ private fun ModelDetailsSection(
             value = model.name
         )
 
-        DetailRow(
-            label = "Type",
-            value = model.type.name
-        )
-
         val providerName = providers?.firstOrNull { it.id == model.providerId }?.name
             ?: model.providerId.toString()
 

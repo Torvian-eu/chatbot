@@ -12,7 +12,6 @@ import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
@@ -39,7 +38,6 @@ class KtorModelApiClient(client: HttpClient) : BaseApiResourceClient(client), Mo
     override suspend fun addModel(
         name: String,
         providerId: Long,
-        type: LLMModelType,
         active: Boolean,
         displayName: String?,
         capabilities: JsonObject?
@@ -50,7 +48,6 @@ class KtorModelApiClient(client: HttpClient) : BaseApiResourceClient(client), Mo
                     AddModelRequest(
                         name = name,
                         providerId = providerId,
-                        type = type,
                         active = active,
                         displayName = displayName,
                         capabilities = capabilities

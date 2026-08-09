@@ -10,6 +10,7 @@ import eu.torvian.chatbot.app.domain.contracts.ModelSettingsFormState
 import eu.torvian.chatbot.app.viewmodel.ModelSettingsViewModel
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import org.koin.compose.viewmodel.koinViewModel
 import eu.torvian.chatbot.app.repository.AuthState
@@ -35,8 +36,8 @@ import eu.torvian.chatbot.app.repository.AuthState
 @Composable
 fun ModelSettingsConfigTabRoute(
     authState: AuthState.Authenticated,
-    viewModel: ModelSettingsViewModel = koinViewModel(),
     modifier: Modifier = Modifier,
+    viewModel: ModelSettingsViewModel = koinViewModel(),
     categoryResetSignal: Int = 0,
     onBreadcrumbsChanged: (List<String>) -> Unit = {}
 ) {
@@ -103,6 +104,7 @@ fun ModelSettingsConfigTabRoute(
         }
 
         override fun onStartAddingNewSettings() = viewModel.startAddingNewSettings()
+        override fun onChooseNewSettingsType(modelType: LLMModelType) = viewModel.chooseNewSettingsType(modelType)
         override fun onStartEditingSettings(settings: ModelSettings) = viewModel.startEditingSettings(settings)
         override fun onStartDeletingSettings(settings: ModelSettings) = viewModel.startDeletingSettings(settings)
         override fun onUpdateSettingsForm(update: (ModelSettingsFormState) -> ModelSettingsFormState) =

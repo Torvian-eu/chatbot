@@ -13,7 +13,6 @@ import eu.torvian.chatbot.app.compose.common.ConfigDropdown
 import eu.torvian.chatbot.app.compose.common.ConfigTextField
 import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.app.domain.contracts.ModelFormState
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMModelCapabilities
 import kotlinx.serialization.json.JsonObject
@@ -150,15 +149,6 @@ private fun ModelFormContent(
             itemText = { it.name },
             isError = form.providerId == null,
             errorMessage = if (form.providerId == null) "Provider selection is required" else null
-        )
-
-        // Model Type Selection
-        ConfigDropdown(
-            selectedItem = form.type,
-            onItemSelected = { type -> onFormUpdate { it.copy(type = type) } },
-            items = LLMModelType.entries,
-            label = "Model Type",
-            itemText = { it.name }
         )
 
         // Active Status

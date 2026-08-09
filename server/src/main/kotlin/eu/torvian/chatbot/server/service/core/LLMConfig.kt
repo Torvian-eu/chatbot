@@ -16,9 +16,9 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  *
  * @property provider The LLM provider (OpenAI, Ollama, etc.)
  * @property model The specific model configuration
- * @property settings Model settings (temperature, max tokens, etc.). The concrete subtype depends on
- *                the [LLMModel.type] of the model (e.g., [ChatModelSettings] for CHAT models,
- *                [ResponsesModelSettings] for RESPONSES models).
+ * @property settings Model settings (temperature, max tokens, etc.). The concrete subtype decides the
+ *                API dialect and therefore which strategy handles the request (e.g., [ChatModelSettings]
+ *                routes to Chat Completions, [ResponsesModelSettings] routes to the Responses API).
  * @property apiKey Optional API key for authentication
  * @property tools Optional list of tool definitions available for this request.
  *                 Null if the model doesn't support tool calling (no tool calling capability).

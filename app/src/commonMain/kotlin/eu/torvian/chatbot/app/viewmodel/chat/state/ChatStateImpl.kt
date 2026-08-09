@@ -111,30 +111,9 @@ class ChatStateImpl(
             initialValue = DataState.Idle
         )
 
-    // Available models from repository, filtered for chat-capable (CHAT or RESPONSES) and active models only
-    override val availableModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> =
-        modelRepository.models.map { dataState ->
-            when (dataState) {
-                is DataState.Success -> {
-                    val filteredModels = dataState.data.filter { model ->
-                        (model.type == LLMModelType.CHAT || model.type == LLMModelType.RESPONSES) && model.active
-                    }
-                    DataState.Success(filteredModels)
-                }
-
-                is DataState.Error -> dataState
-                is DataState.Loading -> dataState
-                is DataState.Idle -> dataState
-            }
-        }.stateIn(
-            scope = backgroundScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = DataState.Idle
-        )
-
-    private val allModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> = modelRepository.models
-
-    // All settings from repository, filtered for chat-capable settings (CHAT or RESPONSES model types) only
+    // All settings from repository, filtered for chat-capable settings (CHAT or RESPONSES model types)
+    // only. This is the single source for chat-capable settings; it is used both to derive the
+    // chat-capable model catalog and the per-model settings lists below.
     private val allSettings: StateFlow<DataState<RepositoryError, List<ModelSettings>>> =
         modelSettingsRepository.allSettings.map { dataState ->
             when (dataState) {
@@ -154,6 +133,34 @@ class ChatStateImpl(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = DataState.Idle
         )
+
+    // Available models from repository, filtered for active models that have at least one
+    // chat-capable settings profile attached. A model carries no operational type of its own;
+    // chat-capability is decided by the settings profiles that exist for it.
+    override val availableModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> =
+        combine(modelRepository.models, allSettings) { modelsState, settingsState ->
+            when (modelsState) {
+                is DataState.Success -> {
+                    val chatCapableModelIds = settingsState.dataOrNull.orEmpty()
+                        .map { it.modelId }
+                        .toSet()
+                    val filteredModels = modelsState.data.filter { model ->
+                        model.active && model.id in chatCapableModelIds
+                    }
+                    DataState.Success(filteredModels)
+                }
+
+                is DataState.Error -> modelsState
+                is DataState.Loading -> modelsState
+                is DataState.Idle -> modelsState
+            }
+        }.stateIn(
+            scope = backgroundScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = DataState.Idle
+        )
+
+    private val allModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> = modelRepository.models
 
     // --- Derived Lookup Maps ---
     override val modelsById: StateFlow<Map<Long, LLMModel>> =

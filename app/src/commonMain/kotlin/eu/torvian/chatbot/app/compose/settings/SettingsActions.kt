@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.worker.WorkerDto
 
@@ -74,6 +75,7 @@ interface ModelSettingsConfigTabActions {
     fun onSelectModel(model: LLMModel?)
     fun onSelectSettings(settingsDetails: ModelSettingsDetails?)
     fun onStartAddingNewSettings()
+    fun onChooseNewSettingsType(modelType: LLMModelType)
     fun onStartEditingSettings(settings: ModelSettings)
     fun onStartDeletingSettings(settings: ModelSettings)
     fun onUpdateSettingsForm(update: (ModelSettingsFormState) -> ModelSettingsFormState)

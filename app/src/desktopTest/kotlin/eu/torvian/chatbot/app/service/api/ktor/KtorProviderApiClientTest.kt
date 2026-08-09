@@ -9,7 +9,6 @@ import eu.torvian.chatbot.common.api.resources.ProviderResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.api.llm.DiscoveredProviderModel
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import io.ktor.client.HttpClient
@@ -59,8 +58,7 @@ class KtorProviderApiClientTest {
         name = name,
         providerId = providerId,
         active = active,
-        displayName = name.replace("-", " ").capitalize(),
-        type = LLMModelType.CHAT
+        displayName = name.replace("-", " ").capitalize()
     )
 
     // --- Tests for getAllProviders ---

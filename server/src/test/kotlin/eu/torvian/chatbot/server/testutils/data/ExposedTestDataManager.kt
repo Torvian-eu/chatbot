@@ -369,7 +369,6 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 it[providerId] = llmModel.providerId
                 it[active] = llmModel.active
                 it[displayName] = llmModel.displayName
-                it[type] = llmModel.type
                 it[capabilities] = llmModel.capabilities?.let { cap ->
                     Json.encodeToString(cap)
                 }

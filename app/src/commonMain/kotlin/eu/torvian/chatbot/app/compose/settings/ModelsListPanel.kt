@@ -181,20 +181,6 @@ private fun ModelListItem(
                     )
 
                     Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        shape = RoundedCornerShape(999.dp)
-                    ) {
-                        Text(
-                            text = model.type.name,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-
-                    Surface(
                         color = if (model.active) {
                             MaterialTheme.colorScheme.primaryContainer
                         } else {

@@ -9,7 +9,6 @@ import arrow.core.right
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.error.InsertModelError
 import eu.torvian.chatbot.server.data.dao.error.ModelError
@@ -106,7 +105,6 @@ class ModelDaoExposed(
     override suspend fun insertModel(
         name: String,
         providerId: Long,
-        type: LLMModelType,
         active: Boolean,
         displayName: String?,
         capabilities: JsonObject?
@@ -117,7 +115,6 @@ class ModelDaoExposed(
                     val insertStatement = LLMModelTable.insert {
                         it[LLMModelTable.name] = name
                         it[LLMModelTable.providerId] = providerId
-                        it[LLMModelTable.type] = type
                         it[LLMModelTable.active] = active
                         it[LLMModelTable.displayName] = displayName
                         it[LLMModelTable.capabilities] = capabilities?.let { cap ->
@@ -142,7 +139,6 @@ class ModelDaoExposed(
                     val updatedRowCount = LLMModelTable.update({ LLMModelTable.id eq model.id }) {
                         it[name] = model.name
                         it[providerId] = model.providerId
-                        it[type] = model.type
                         it[active] = model.active
                         it[displayName] = model.displayName
                         it[capabilities] = model.capabilities?.let { cap ->

@@ -9,7 +9,6 @@ import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
@@ -43,8 +42,7 @@ class KtorModelApiClientTest {
         name = name,
         providerId = providerId,
         active = active,
-        displayName = name.replace("-", " ").capitalizeWords(),
-        type = LLMModelType.CHAT
+        displayName = name.replace("-", " ").capitalizeWords()
     )
 
     private fun mockApiKeyStatusResponse(isConfigured: Boolean) =
@@ -137,7 +135,7 @@ class KtorModelApiClientTest {
             val requestBody = request.body.toByteArray().decodeToString()
             assertTrue(requestBody.contains("new-model"), "Request body should contain model name")
             assertTrue(requestBody.contains("10"), "Request body should contain providerId")
-            assertTrue(requestBody.contains("CHAT"), "Request body should contain type")
+            assertTrue(!requestBody.contains("\"type\""), "Request body should not contain a model type")
             respond(
                 content = json.encodeToString(mockResponseModel),
                 status = HttpStatusCode.Created,
@@ -148,7 +146,6 @@ class KtorModelApiClientTest {
         val result = apiClient.addModel(
             name = "new-model",
             providerId = 10,
-            type = LLMModelType.CHAT,
             active = true,
             displayName = null,
             capabilities = null
@@ -169,7 +166,6 @@ class KtorModelApiClientTest {
     fun `addModel - failure - 400 Bad Request (Invalid Data)`() = runTest {
         val name = "" // Invalid name
         val providerId = 10L
-        val type = LLMModelType.CHAT
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals(href(ModelResource()), request.url.fullPath)
@@ -183,7 +179,6 @@ class KtorModelApiClientTest {
         val result = apiClient.addModel(
             name = name,
             providerId = providerId,
-            type = type,
             active = true,
             displayName = null,
             capabilities = null
@@ -203,7 +198,6 @@ class KtorModelApiClientTest {
     fun `addModel - failure - 400 Bad Request (Provider Not Found)`() = runTest {
         val name = "new-model"
         val providerId = 999L // Non-existent provider
-        val type = LLMModelType.CHAT
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals(href(ModelResource()), request.url.fullPath)
@@ -217,7 +211,6 @@ class KtorModelApiClientTest {
         val result = apiClient.addModel(
             name = name,
             providerId = providerId,
-            type = type,
             active = true,
             displayName = null,
             capabilities = null
@@ -237,7 +230,6 @@ class KtorModelApiClientTest {
     fun `addModel - failure - 409 Conflict (Already Exists)`() = runTest {
         val name = "gpt-3.5-turbo" // Name already exists
         val providerId = 10L
-        val type = LLMModelType.CHAT
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals(href(ModelResource()), request.url.fullPath)
@@ -256,7 +248,6 @@ class KtorModelApiClientTest {
         val result = apiClient.addModel(
             name = name,
             providerId = providerId,
-            type = type,
             active = true,
             displayName = null,
             capabilities = null
@@ -276,7 +267,6 @@ class KtorModelApiClientTest {
     fun `addModel - failure - 500 Internal Server Error`() = runTest {
         val name = "new-model"
         val providerId = 10L
-        val type = LLMModelType.CHAT
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals(href(ModelResource()), request.url.fullPath)
@@ -290,7 +280,6 @@ class KtorModelApiClientTest {
         val result = apiClient.addModel(
             name = name,
             providerId = providerId,
-            type = type,
             active = true,
             displayName = null,
             capabilities = null
@@ -310,7 +299,6 @@ class KtorModelApiClientTest {
     fun `addModel - failure - SerializationException`() = runTest {
         val name = "new-model"
         val providerId = 10L
-        val type = LLMModelType.CHAT
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals(href(ModelResource()), request.url.fullPath)
@@ -324,7 +312,6 @@ class KtorModelApiClientTest {
         val result = apiClient.addModel(
             name = name,
             providerId = providerId,
-            type = type,
             active = true,
             displayName = null,
             capabilities = null

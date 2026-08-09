@@ -5,7 +5,6 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
@@ -43,8 +42,7 @@ class DefaultConversationTurnPersistenceTest {
         name = "gpt-4o-mini",
         providerId = 1L,
         active = true,
-        displayName = "GPT-4o mini",
-        type = LLMModelType.CHAT
+        displayName = "GPT-4o mini"
     )
 
     private val testSettings = ChatModelSettings(

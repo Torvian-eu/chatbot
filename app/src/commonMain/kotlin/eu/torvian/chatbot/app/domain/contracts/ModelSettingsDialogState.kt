@@ -11,6 +11,17 @@ import eu.torvian.chatbot.common.models.user.UserGroup
 sealed class ModelSettingsDialogState {
     object None : ModelSettingsDialogState()
 
+    /**
+     * Asks the user which type of settings profile to create for the given model.
+     * A model carries no operational type of its own, so the user must pick the API dialect
+     * (e.g. CHAT, RESPONSES, EMBEDDING) that the new profile should describe.
+     *
+     * @property modelId The ID of the model the new profile will be attached to.
+     */
+    data class ChooseNewSettingsType(
+        val modelId: Long
+    ) : ModelSettingsDialogState()
+
     data class AddNewSettings(
         val formState: ModelSettingsFormState
     ) : ModelSettingsDialogState()

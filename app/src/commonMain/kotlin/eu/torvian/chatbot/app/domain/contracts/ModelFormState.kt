@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import kotlinx.serialization.json.JsonObject
 
@@ -12,7 +11,6 @@ data class ModelFormState(
     val mode: FormMode = FormMode.NEW,
     val name: String = "", // e.g., "gpt-3.5-turbo"
     val providerId: Long? = null,
-    val type: LLMModelType = LLMModelType.CHAT, // Default to CHAT type
     val active: Boolean = true,
     val displayName: String = "", // Optional, display name for UI
     val capabilities: JsonObject = JsonObject(emptyMap()), // Raw JsonObject for flexibility
@@ -31,7 +29,6 @@ data class ModelFormState(
             mode = FormMode.EDIT,
             name = model.name,
             providerId = model.providerId,
-            type = model.type,
             active = model.active,
             displayName = model.displayName ?: "",
             capabilities = model.capabilities ?: JsonObject(emptyMap())

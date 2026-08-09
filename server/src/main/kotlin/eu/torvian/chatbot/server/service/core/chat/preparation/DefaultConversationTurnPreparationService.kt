@@ -7,7 +7,6 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModelCapabilities
-import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.common.models.llm.hasCapability
@@ -94,14 +93,9 @@ class DefaultConversationTurnPreparationService(
                 modelSettingsService.getSettingsById(settingsId).bind()
             }
 
-            ensure(model.type == LLMModelType.CHAT || model.type == LLMModelType.RESPONSES) {
-                ValidateNewMessageError.ModelConfigurationError(
-                    "Model type ${model.type} is not supported for chat sessions"
-                )
-            }
             ensure(isChatLikeSettings(settings)) {
                 ValidateNewMessageError.ModelConfigurationError(
-                    "Settings type ${settings::class.simpleName} is not compatible with model type ${model.type}"
+                    "Settings type ${settings::class.simpleName} is not compatible with the selected chat model"
                 )
             }
             ensure(chatStreamFlag(settings) == isStreaming) {
