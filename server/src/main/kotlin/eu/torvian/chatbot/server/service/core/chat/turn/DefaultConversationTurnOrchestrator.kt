@@ -564,6 +564,27 @@ class DefaultConversationTurnOrchestrator(
                                     }
                                 }
 
+                                is LLMStreamChunk.ToolCallDone -> {
+                                    // The provider's authoritative final function call. It may carry a
+                                    // corrected arguments string (providers can fix up the raw delta stream),
+                                    // so override the delta-accumulated accumulator for this output_index.
+                                    // This chunk is optional (only the Responses dialect emits it); when it is
+                                    // absent, the delta-accumulated values are used unchanged.
+                                    val index = chunk.index ?: 0
+                                    if (index >= MAX_TOOL_CALLS_PER_STEP) {
+                                        return@fold
+                                    }
+                                    toolCallsByIndex[index] = MutableToolCallAccumulator(
+                                        id = chunk.id,
+                                        name = chunk.name,
+                                        arguments = StringBuilder(
+                                            chunk.arguments?.take(MAX_TOOL_CALL_ARGUMENT_CHARS) ?: ""
+                                        )
+                                    )
+                                    // The live-UI deltas were already streamed via ToolCallChunk; this chunk
+                                    // only corrects the authoritative payload used for execution/persistence.
+                                }
+
                                 is LLMStreamChunk.UsageChunk -> {
                                     logger.debug(
                                         "Usage stats: prompt=${chunk.promptTokens}, completion=${chunk.completionTokens}, total=${chunk.totalTokens}, reasoning=${chunk.reasoningTokens}"
