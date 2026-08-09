@@ -259,6 +259,79 @@ class ResponsesStrategyTest {
     }
 
     @Test
+    @DisplayName("processStreamingResponse should emit ToolCallDone for a completed function_call item")
+    fun processStreamingResponse_emitsToolCallDone() = runBlocking {
+        val events = flowOf(
+            """data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"getWeather"}}""",
+            """data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":0,"delta":"{\"loc\""}""",
+            """data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":0,"delta":":\"Paris\"}"}""",
+            // The final item may carry a corrected/authoritative arguments string.
+            """data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"getWeather","arguments":"{\"location\":\"Paris\"}"}}""",
+            """data: {"type":"response.completed","response":{"id":"resp_9","usage":{"input_tokens":5,"output_tokens":7,"total_tokens":12}}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = mutableListOf<LLMStreamChunk>()
+        strategy.processStreamingResponse(events).collect { either ->
+            either.fold(
+                ifLeft = { throw AssertionError("Expected no error, got $it") },
+                ifRight = { chunks.add(it) }
+            )
+        }
+
+        val toolCallDones = chunks.filterIsInstance<LLMStreamChunk.ToolCallDone>()
+        assertEquals(1, toolCallDones.size, "Expected a single ToolCallDone")
+        assertEquals(0, toolCallDones[0].index)
+        assertEquals("call_1", toolCallDones[0].id)
+        assertEquals("getWeather", toolCallDones[0].name)
+        assertEquals("""{"location":"Paris"}""", toolCallDones[0].arguments)
+        // Deltas are still emitted for live UI streaming.
+        assertTrue(chunks.any { it is LLMStreamChunk.ToolCallChunk })
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should map output_index to a sequential tool-call index")
+    fun processStreamingResponse_mapsOutputIndexToSequentialIndex() = runBlocking {
+        // The Responses API output_index is a position in the whole output[] array; here it starts at 2
+        // because two reasoning items precede the first function call.
+        val events = flowOf(
+            """data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_1"}}""",
+            """data: {"type":"response.output_item.added","output_index":1,"item":{"type":"reasoning","id":"rs_2"}}""",
+            """data: {"type":"response.output_item.added","output_index":2,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"findFiles"}}""",
+            """data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":2,"delta":"{\"pattern\":\"*.py\"}"}""",
+            """data: {"type":"response.output_item.added","output_index":3,"item":{"type":"function_call","id":"fc_2","call_id":"call_2","name":"readFile"}}""",
+            """data: {"type":"response.function_call_arguments.delta","item_id":"fc_2","output_index":3,"delta":"{\"path\":\"x\"}"}""",
+            """data: {"type":"response.output_item.done","output_index":2,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"findFiles","arguments":"{\"pattern\":\"*.py\"}"}}""",
+            """data: {"type":"response.output_item.done","output_index":3,"item":{"type":"function_call","id":"fc_2","call_id":"call_2","name":"readFile","arguments":"{\"path\":\"x\"}"}}""",
+            """data: {"type":"response.completed","response":{"id":"resp_9","usage":{"input_tokens":5,"output_tokens":7,"total_tokens":12}}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = mutableListOf<LLMStreamChunk>()
+        strategy.processStreamingResponse(events).collect { either ->
+            either.fold(
+                ifLeft = { throw AssertionError("Expected no error, got $it") },
+                ifRight = { chunks.add(it) }
+            )
+        }
+
+        // Deltas must be keyed by sequential 0-based index, not the provider's output_index.
+        val toolCallChunks = chunks.filterIsInstance<LLMStreamChunk.ToolCallChunk>()
+        val indexed = toolCallChunks.groupBy { it.index }
+        assertEquals(setOf(0, 1), indexed.keys)
+        assertTrue(indexed[0]!!.all { it.id == "call_1" })
+        assertTrue(indexed[1]!!.all { it.id == "call_2" })
+        assertEquals("""{"pattern":"*.py"}""", indexed[0]!!.joinToString("") { it.argumentsDelta.orEmpty() })
+        assertEquals("""{"path":"x"}""", indexed[1]!!.joinToString("") { it.argumentsDelta.orEmpty() })
+
+        // The authoritative ToolCallDone must use the same sequential indices.
+        val dones = chunks.filterIsInstance<LLMStreamChunk.ToolCallDone>()
+        assertEquals(2, dones.size)
+        assertEquals(listOf(0, 1), dones.map { it.index })
+        assertEquals(listOf("call_1", "call_2"), dones.map { it.id })
+    }
+
+    @Test
     @DisplayName("processStreamingResponse should emit content, and done chunks")
     fun processStreamingResponse_emitsContentChunks() = runBlocking {
         val events = flowOf(

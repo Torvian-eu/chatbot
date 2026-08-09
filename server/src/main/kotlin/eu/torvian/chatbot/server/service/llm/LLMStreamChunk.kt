@@ -67,6 +67,36 @@ sealed class LLMStreamChunk {
     data class ReasoningDone(val reasoningItem: JsonObject) : LLMStreamChunk()
 
     /**
+     * Represents the completed, authoritative function call for a streaming response.
+     *
+     * Unlike [ToolCallChunk] (incremental deltas for live rendering), this chunk carries the provider's
+     * **final** function-call payload (e.g. via the Responses API `response.output_item.done` event), which
+     * contains the authoritative `id`, `name`, and full `arguments` string. The final arguments may differ
+     * from the concatenation of the streamed deltas (providers may correct the raw model output), so consumers
+     * should prefer this payload over delta-accumulated arguments when present.
+     *
+     * This chunk is intentionally API-independent: the strategy that produced it is responsible for unpacking
+     * the provider's wire format into these typed fields, so downstream consumers never touch raw JSON.
+     *
+     * Not every dialect emits this chunk (OpenAI Chat Completions and Ollama only stream [ToolCallChunk]
+     * deltas); it is an optional authoritative override, never a replacement for delta accumulation.
+     *
+     * @property index The sequential index of this tool call within the streamed batch (0-based), matching
+     *            [ToolCallChunk.index] semantics. This is **not** the provider's raw output-array position,
+     *            which may be offset by other output items (e.g. reasoning); the producing strategy translates
+     *            the provider position into this sequential index.
+     * @property id The unique identifier for this tool call, if the provider assigns one.
+     * @property name The name of the function to call.
+     * @property arguments The full, authoritative arguments JSON string.
+     */
+    data class ToolCallDone(
+        val index: Int?,
+        val id: String?,
+        val name: String,
+        val arguments: String?
+    ) : LLMStreamChunk()
+
+    /**
      * Represents a usage statistics chunk (might be sent at the end).
      *
      * @property promptTokens Number of tokens in the prompt/context

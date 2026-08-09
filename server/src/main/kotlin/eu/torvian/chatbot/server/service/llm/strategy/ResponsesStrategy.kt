@@ -268,14 +268,18 @@ class ResponsesStrategy(
     ): Flow<Either<LLMCompletionError.InvalidResponseError, LLMStreamChunk>> = flow {
         logger.debug("Processing Responses streaming response")
 
-        // Track the identity of each in-progress tool call, keyed by output_index. The function-call
-        // identity (name and call_id) is only carried by the `response.output_item.added` event that
-        // introduces the call; the subsequent `response.function_call_arguments.delta` events are routed
-        // to the same tool call via their `output_index` and carry no name/id themselves.
+        // The Responses API `output_index` is a position in the whole `output[]` array, which may include
+        // non-function items (e.g. reasoning) before any function call. The upstream consumer, however,
+        // groups tool calls by a **sequential 0-based index** (ToolCallChunk.index) bounded by
+        // MAX_TOOL_CALLS_PER_STEP. We therefore translate each function call's `output_index` into its
+        // sequential position among the function calls, assigned in the order the calls are announced by
+        // `response.output_item.added`.
         //
-        // The upstream consumer groups ToolCallChunks by `index` (= output_index) and uses the first
-        // chunk's name/id, so we attach the captured name and call_id to each emitted delta chunk.
+        // The function-call identity (name and call_id) is only carried by `response.output_item.added`;
+        // the subsequent `response.function_call_arguments.delta` and `response.output_item.done` events are
+        // routed to the same call via their `output_index` and carry no name/id themselves.
         val toolCallMetaByOutputIndex = LinkedHashMap<Int, ToolCallMeta>()
+        var nextToolCallIndex = 0
 
         responseStream.collect { rawChunk ->
             try {
@@ -306,22 +310,26 @@ class ResponsesStrategy(
 
                     "response.output_item.added" -> {
                         // A function call is announced here with its name and call_id. Capture them keyed
-                        // by the event's output_index so subsequent argument deltas can be attributed to it.
+                        // by the event's output_index so subsequent argument deltas can be attributed to it,
+                        // and assign its sequential tool-call index (see translation note above).
                         if (item?.get("type")?.jsonPrimitive?.contentOrNull == "function_call") {
-                            val index = outputIndex ?: return@collect
-                            toolCallMetaByOutputIndex[index] = ToolCallMeta(
-                                name = item["name"]?.jsonPrimitive?.contentOrNull ?: "",
-                                callId = item["call_id"]?.jsonPrimitive?.contentOrNull
-                            )
+                            if (outputIndex == null) return@collect
+                            toolCallMetaByOutputIndex.getOrPut(outputIndex) {
+                                ToolCallMeta(
+                                    sequentialIndex = nextToolCallIndex++,
+                                    name = item["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                                    callId = item["call_id"]?.jsonPrimitive?.contentOrNull
+                                )
+                            }
                         }
                     }
 
                     "response.function_call_arguments.delta" -> {
-                        val index = outputIndex ?: return@collect
-                        val meta = toolCallMetaByOutputIndex[index]
+                        if (outputIndex == null) return@collect
+                        val meta = toolCallMetaByOutputIndex[outputIndex]
                         emit(
                             LLMStreamChunk.ToolCallChunk(
-                                index = index,
+                                index = meta?.sequentialIndex,
                                 id = meta?.callId,
                                 name = meta?.name,
                                 argumentsDelta = delta ?: ""
@@ -350,10 +358,24 @@ class ResponsesStrategy(
                         // raw item object verbatim (preserving e.g. `summary[].type` and `encrypted_content`)
                         // so higher layers can accumulate and persist it faithfully for replay. The payload is
                         // opaque and never rendered.
-                        if (item?.get("type")?.jsonPrimitive?.contentOrNull == "reasoning") {
-                            emit(
+                        when (item?.get("type")?.jsonPrimitive?.contentOrNull) {
+                            "reasoning" -> emit(
                                 LLMStreamChunk.ReasoningDone(
                                     reasoningItem = item
+                                ).right()
+                            )
+
+                            // The completed function_call item carries the authoritative final name, call_id
+                            // and full arguments string. Providers may correct the raw delta stream in this
+                            // final item, so consumers should prefer it over the delta-accumulated arguments.
+                            // Unpack the wire fields here so downstream consumers stay API-independent, and
+                            // use the same sequential tool-call index assigned at output_item.added time.
+                            "function_call" -> emit(
+                                LLMStreamChunk.ToolCallDone(
+                                    index = outputIndex?.let { toolCallMetaByOutputIndex[it]?.sequentialIndex },
+                                    id = item["call_id"]?.jsonPrimitive?.contentOrNull,
+                                    name = item["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                                    arguments = item["arguments"]?.jsonPrimitive?.contentOrNull
                                 ).right()
                             )
                         }
@@ -485,13 +507,18 @@ class ResponsesStrategy(
     }
 
     /**
-     * Captured identity of an in-progress function call, obtained from its `response.output_item.added`
-     * event and used to decorate the argument-delta [LLMStreamChunk.ToolCallChunk] instances that follow.
+     * Captured identity and sequential position of an in-progress function call, obtained from its
+     * `response.output_item.added` event and used to decorate the argument-delta [LLMStreamChunk.ToolCallChunk]
+     * and authoritative [LLMStreamChunk.ToolCallDone] instances that follow.
      *
+     * @property sequentialIndex The 0-based position of this call among the response's function calls, matching
+     *            the orchestrator's [LLMStreamChunk.ToolCallChunk.index] semantics (the provider's raw
+     *            `output_index` may be offset by non-function output items).
      * @property name The function name invoked by the model.
      * @property callId The `call_id` used to later submit the function-call output back to the API.
      */
     private data class ToolCallMeta(
+        val sequentialIndex: Int,
         val name: String,
         val callId: String?,
     )
