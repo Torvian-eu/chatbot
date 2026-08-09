@@ -74,16 +74,6 @@ fun InputArea(
 ) {
     val isSendButtonEnabled =
         turnExecutionState == TurnExecutionState.IDLE && textFieldState.text.isNotBlank()
-    val infiniteTransition = rememberInfiniteTransition(label = "stopping_pulse")
-    val pulsingAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 600, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "alpha"
-    )
 
     Column(modifier = modifier) {
         // Reply Target Banner
@@ -305,6 +295,7 @@ fun InputArea(
                                     modifier = Modifier.size(48.dp),
                                     enabled = true
                                 ) {
+                                    val pulsingAlpha = rememberPulsingAlpha()
                                     Icon(
                                         Icons.Default.Stop,
                                         contentDescription = "Stop immediately (Force cancel)",
@@ -322,6 +313,7 @@ fun InputArea(
                                     modifier = Modifier.size(48.dp),
                                     enabled = false
                                 ) {
+                                    val pulsingAlpha = rememberPulsingAlpha()
                                     Icon(
                                         Icons.Default.Stop,
                                         contentDescription = "Stopping...",
@@ -378,4 +370,26 @@ private fun ReplyTargetBanner(
             )
         }
     }
+}
+
+/**
+ * Returns a continuously pulsing alpha value (0.3f → 1.0f) used to signal that an operation is
+ * stopping. The underlying infinite transition is only created while this composable is present in
+ * the composition, so it does not consume CPU/GPU resources when no stopping indicator is shown.
+ *
+ * @return The current animated alpha value in the range [0.3f, 1.0f].
+ */
+@Composable
+private fun rememberPulsingAlpha(): Float {
+    val infiniteTransition = rememberInfiniteTransition(label = "stopping_pulse")
+    val pulsingAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 600, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
+    return pulsingAlpha
 }
