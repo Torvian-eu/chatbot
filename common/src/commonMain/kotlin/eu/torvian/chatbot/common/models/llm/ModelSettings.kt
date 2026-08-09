@@ -70,14 +70,14 @@ data class ChatModelSettings(
     override val modelType: LLMModelType = LLMModelType.CHAT
 
     init {
-        require(!name.isBlank()) { "Settings name cannot be blank." }
-        require(temperature == null || (temperature >= 0f && temperature <= 2f)) {
+        require(name.isNotBlank()) { "Settings name cannot be blank." }
+        require(temperature == null || (temperature in 0f..2f)) {
             "Temperature must be between 0.0 and 2.0 (inclusive)."
         }
         require(maxTokens == null || maxTokens > 0) {
             "Max tokens must be positive."
         }
-        require(topP == null || (topP >= 0f && topP <= 1f)) {
+        require(topP == null || (topP in 0f..1f)) {
             "Top P must be between 0.0 and 1.0 (inclusive)."
         }
     }
@@ -187,14 +187,14 @@ data class CompletionModelSettings(
     override val modelType: LLMModelType = LLMModelType.COMPLETION
 
     init {
-        require(!name.isBlank()) { "Settings name cannot be blank." }
-        require(temperature == null || (temperature >= 0f && temperature <= 2f)) {
+        require(name.isNotBlank()) { "Settings name cannot be blank." }
+        require(temperature == null || (temperature in 0f..2f)) {
             "Temperature must be between 0.0 and 2.0 (inclusive)."
         }
         require(maxTokens == null || maxTokens > 0) {
             "Max tokens must be positive."
         }
-        require(topP == null || (topP >= 0f && topP <= 1f)) {
+        require(topP == null || (topP in 0f..1f)) {
             "Top P must be between 0.0 and 1.0 (inclusive)."
         }
     }
@@ -228,7 +228,7 @@ data class EmbeddingModelSettings(
     override val modelType: LLMModelType = LLMModelType.EMBEDDING
 
     init {
-        require(!name.isBlank()) { "Settings name cannot be blank." }
+        require(name.isNotBlank()) { "Settings name cannot be blank." }
         require(dimensions == null || dimensions > 0) {
             "Embedding dimensions must be positive."
         }
@@ -265,7 +265,7 @@ data class ImageGenerationModelSettings(
     override val modelType: LLMModelType = LLMModelType.IMAGE_GENERATION
 
     init {
-        require(!name.isBlank()) { "Settings name cannot be blank." }
+        require(name.isNotBlank()) { "Settings name cannot be blank." }
         require(numImages == null || numImages > 0) {
             "Number of images must be positive."
         }
@@ -301,7 +301,7 @@ data class SpeechToTextModelSettings(
     override val modelType: LLMModelType = LLMModelType.SPEECH_TO_TEXT
 
     init {
-        require(!name.isBlank()) { "Settings name cannot be blank." }
+        require(name.isNotBlank()) { "Settings name cannot be blank." }
     }
 }
 
@@ -333,7 +333,7 @@ data class TextToSpeechModelSettings(
     override val modelType: LLMModelType = LLMModelType.TEXT_TO_SPEECH
 
     init {
-        require(!name.isBlank()) { "Settings name cannot be blank." }
+        require(name.isNotBlank()) { "Settings name cannot be blank." }
         require(speed == null || speed > 0f) {
             "Speed must be positive."
         }
@@ -369,11 +369,11 @@ data class AqaModelSettings(
     override val modelType: LLMModelType = LLMModelType.AQA
 
     init {
-        require(!name.isBlank()) { "Settings name cannot be blank." }
+        require(name.isNotBlank()) { "Settings name cannot be blank." }
         require(maxSources == null || maxSources > 0) {
             "Max sources must be positive."
         }
-        require(answerabilityThreshold == null || (answerabilityThreshold >= 0f && answerabilityThreshold <= 1f)) {
+        require(answerabilityThreshold == null || (answerabilityThreshold in 0f..1f)) {
             "Answerability threshold must be between 0.0 and 1.0 (inclusive)."
         }
     }
