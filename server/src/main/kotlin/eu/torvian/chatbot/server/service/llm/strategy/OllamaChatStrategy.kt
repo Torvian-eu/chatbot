@@ -31,7 +31,7 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ChatModelSettings,
+        settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?
     ): Either<LLMCompletionError.ConfigurationError, ApiRequestConfig> {
@@ -40,10 +40,18 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         // Ollama typically doesn't require an API key for local instances
         // But it's checked here for completeness
 
+        // This strategy handles the Chat Completions dialect, so it only understands ChatModelSettings.
+        if (settings !is ChatModelSettings) {
+            return LLMCompletionError.ConfigurationError(
+                "OllamaChatStrategy requires ChatModelSettings but received ${settings::class.simpleName}."
+            ).left()
+        }
+        val chatSettings: ChatModelSettings = settings
+
         // 1. Build the messages list with system message if present
         val apiMessages = buildList {
             // Add system message if present in settings
-            val systemMessage = settings.systemMessage
+            val systemMessage = chatSettings.systemMessage
             if (!systemMessage.isNullOrBlank()) {
                 add(buildJsonObject {
                     put("role", JsonPrimitive("system"))
@@ -58,15 +66,15 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         // 2. Build options object from settings
         val optionsJson = buildJsonObject {
             // Start with custom parameters from settings
-            settings.customParams?.let { params ->
+            chatSettings.customParams?.let { params ->
                 params.forEach { (key, value) -> put(key, value) }
             }
 
             // Add/overwrite with specific parameters from ChatModelSettings
-            settings.temperature?.let { put("temperature", JsonPrimitive(it)) }
-            settings.maxTokens?.let { put("num_predict", JsonPrimitive(it)) }
-            settings.topP?.let { put("top_p", JsonPrimitive(it)) }
-            settings.stopSequences?.takeIf { it.isNotEmpty() }?.let {
+            chatSettings.temperature?.let { put("temperature", JsonPrimitive(it)) }
+            chatSettings.maxTokens?.let { put("num_predict", JsonPrimitive(it)) }
+            chatSettings.topP?.let { put("top_p", JsonPrimitive(it)) }
+            chatSettings.stopSequences?.takeIf { it.isNotEmpty() }?.let {
                 put("stop", json.encodeToJsonElement(it))
             }
         }

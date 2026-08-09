@@ -3,16 +3,12 @@ package eu.torvian.chatbot.server.service.core.chat.turn
 import arrow.core.right
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
-import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
-import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
-import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
+import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.context.DefaultChatContextBuilder
@@ -31,6 +27,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -169,7 +166,8 @@ class DefaultConversationTurnOrchestratorTest {
                 assistantMessage.content,
                 userMessage.id,
                 testModel,
-                testSettings
+                testSettings,
+                reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
@@ -306,7 +304,8 @@ class DefaultConversationTurnOrchestratorTest {
                 assistantToolMessage.content,
                 userMessage.id,
                 testModel,
-                testSettings
+                testSettings,
+                reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
         coEvery {
@@ -315,7 +314,8 @@ class DefaultConversationTurnOrchestratorTest {
                 assistantFinalMessage.content,
                 assistantToolMessage.id,
                 testModel,
-                testSettings
+                testSettings,
+                reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantFinalMessage, assistantToolMessage)
         coEvery {
@@ -326,7 +326,13 @@ class DefaultConversationTurnOrchestratorTest {
             )
         } returns listOf(pendingToolCall)
         every {
-            toolCallOrchestrator.executeAndUpdateToolCalls(1L, listOf(pendingToolCall), listOf(toolDefinition), any(), any())
+            toolCallOrchestrator.executeAndUpdateToolCalls(
+                1L,
+                listOf(pendingToolCall),
+                listOf(toolDefinition),
+                any(),
+                any()
+            )
         } returns flowOf(
             ToolCallExecutionEvent.ToolCallApprovalRequested(pendingToolCall),
             ToolCallExecutionEvent.ToolCallExecuting(executingToolCall),
@@ -436,7 +442,8 @@ class DefaultConversationTurnOrchestratorTest {
                 "",
                 userMessage.id,
                 testModel,
-                streamingSettings
+                streamingSettings,
+                reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantStartedMessage, userMessage)
         coEvery {
@@ -473,6 +480,198 @@ class DefaultConversationTurnOrchestratorTest {
 
         coVerify(exactly = 1) {
             conversationTurnPersistence.updateAssistantMessageContent(assistantStartedMessage.id, "Hello there")
+        }
+    }
+
+    /**
+     * Verifies that reasoning items in a non-streaming result are persisted with the assistant message.
+     */
+    @Test
+    fun `processNonStreamingTurn persists reasoning items from the result`() = runTest {
+        val reasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_1")
+                put("encrypted_content", "opaque")
+            }
+        )
+        val userMessage = ChatMessage.UserMessage(
+            id = 61L,
+            sessionId = testSession.id,
+            content = "Reason",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = emptyList()
+        )
+        val reasoningModel = testModel.copy(type = LLMModelType.RESPONSES)
+        val reasoningSettings = ResponsesModelSettings(
+            id = 2L,
+            modelId = reasoningModel.id,
+            name = "Default Responses",
+            stream = false,
+            replayReasoning = true
+        )
+        val assistantMessage = ChatMessage.AssistantMessage(
+            id = 62L,
+            sessionId = testSession.id,
+            content = "Here is the answer",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = userMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = reasoningModel.id,
+            settingsId = reasoningSettings.id,
+            reasoningItems = reasoningItems
+        )
+        val completion = LLMCompletionResult(
+            id = "resp-1",
+            choices = listOf(
+                LLMCompletionResult.CompletionChoice(
+                    role = "assistant",
+                    content = assistantMessage.content,
+                    finishReason = "stop",
+                    index = 0
+                )
+            ),
+            usage = LLMCompletionResult.UsageStats(1, 1, 2),
+            reasoningItems = reasoningItems
+        )
+
+        coEvery {
+            conversationTurnPersistence.saveUserMessage(
+                testSession.id,
+                "Reason",
+                null,
+                any()
+            )
+        } returns PersistedUserMessage(userMessage, null)
+        coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns completion.right()
+        coEvery {
+            conversationTurnPersistence.saveAssistantMessage(
+                testSession.id,
+                assistantMessage.content,
+                userMessage.id,
+                reasoningModel,
+                reasoningSettings,
+                reasoningItems
+            )
+        } returns PersistedAssistantMessage(assistantMessage, userMessage)
+
+        orchestrator.processNonStreamingTurn(
+            ConversationTurnRequest(
+                userId = 1L,
+                session = testSession,
+                llmConfig = LLMConfig(testProvider, reasoningModel, reasoningSettings, "api-key"),
+                content = "Reason",
+                parentMessageId = null,
+                fileReferences = emptyList(),
+                toolApprovalFlow = emptyFlow(),
+                turnControlSignal = TurnControlSignal()
+            )
+        ).toList()
+
+        coVerify(exactly = 1) {
+            conversationTurnPersistence.saveAssistantMessage(
+                testSession.id,
+                assistantMessage.content,
+                userMessage.id,
+                reasoningModel,
+                reasoningSettings,
+                reasoningItems
+            )
+        }
+    }
+
+    /**
+     * Verifies that reasoning emitted during streaming is persisted on completion.
+     */
+    @Test
+    fun `processStreamingTurn persists reasoning emitted during streaming`() = runTest {
+        val reasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_s")
+                put("encrypted_content", "opaque-stream")
+            }
+        )
+        val userMessage = ChatMessage.UserMessage(
+            id = 71L,
+            sessionId = testSession.id,
+            content = "Stream reason",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = emptyList()
+        )
+        val reasoningModel = testModel.copy(type = LLMModelType.RESPONSES)
+        val reasoningSettings = ResponsesModelSettings(
+            id = 3L,
+            modelId = reasoningModel.id,
+            name = "Default Responses",
+            stream = true,
+            replayReasoning = true
+        )
+        val assistantStarted = ChatMessage.AssistantMessage(
+            id = 72L,
+            sessionId = testSession.id,
+            content = "",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = userMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = reasoningModel.id,
+            settingsId = reasoningSettings.id
+        )
+        val assistantFinished = assistantStarted.copy(content = "Answer")
+
+        coEvery {
+            conversationTurnPersistence.saveUserMessage(
+                testSession.id,
+                "Stream reason",
+                null,
+                any()
+            )
+        } returns PersistedUserMessage(userMessage, null)
+        coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
+        coEvery {
+            conversationTurnPersistence.saveAssistantMessage(
+                testSession.id, "", userMessage.id, reasoningModel, reasoningSettings, reasoningItems = null
+            )
+        } returns PersistedAssistantMessage(assistantStarted, userMessage)
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+            LLMStreamChunk.ReasoningDone(reasoningItem = reasoningItems[0]).right(),
+            // Plaintext reasoning deltas are render-only and must not be persisted.
+            LLMStreamChunk.ReasoningTextChunk(outputIndex = 0, contentIndex = 0, delta = "The").right(),
+            LLMStreamChunk.ContentChunk("Answer", finishReason = "stop").right(),
+            LLMStreamChunk.Done.right()
+        )
+        coEvery {
+            conversationTurnPersistence.updateAssistantMessageReasoning(assistantStarted.id, reasoningItems)
+        } returns assistantFinished
+        coEvery {
+            conversationTurnPersistence.updateAssistantMessageContent(
+                assistantStarted.id,
+                "Answer"
+            )
+        } returns assistantFinished
+
+        orchestrator.processStreamingTurn(
+            ConversationTurnRequest(
+                userId = 1L,
+                session = testSession,
+                llmConfig = LLMConfig(testProvider, reasoningModel, reasoningSettings, "api-key"),
+                content = "Stream reason",
+                parentMessageId = null,
+                fileReferences = emptyList(),
+                toolApprovalFlow = emptyFlow(),
+                turnControlSignal = TurnControlSignal()
+            )
+        ).toList()
+
+        coVerify(exactly = 1) {
+            conversationTurnPersistence.updateAssistantMessageReasoning(assistantStarted.id, reasoningItems)
         }
     }
 }

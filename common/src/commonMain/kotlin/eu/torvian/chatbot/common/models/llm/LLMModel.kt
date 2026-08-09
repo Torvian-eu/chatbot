@@ -8,7 +8,8 @@ import kotlinx.serialization.json.JsonObject
  * Used as a shared data model between frontend and backend API communication.
  *
  * @property id Unique identifier for the model (Database PK)
- * @property name Unique identifier for the LLM model (e.g., "gpt-3.5-turbo", "gpt-4", "claude-3-sonnet")
+ * @property name The model name (e.g., "gpt-3.5-turbo", "gpt-4", "claude-3-sonnet"). Not necessarily
+ *            unique — the same name may be reused across model types (e.g. a CHAT and a RESPONSES variant).
  * @property providerId Reference to the LLM provider that hosts this model
  * @property active Whether the model can still be actively used (false for deprecated models)
  * @property displayName Optional display name for UI purposes (falls back to name if null)

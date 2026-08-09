@@ -8,6 +8,8 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModelCapabilities
 import eu.torvian.chatbot.common.models.llm.LLMModelType
+import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.common.models.llm.hasCapability
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
@@ -92,19 +94,19 @@ class DefaultConversationTurnPreparationService(
                 modelSettingsService.getSettingsById(settingsId).bind()
             }
 
-            ensure(model.type == LLMModelType.CHAT) {
+            ensure(model.type == LLMModelType.CHAT || model.type == LLMModelType.RESPONSES) {
                 ValidateNewMessageError.ModelConfigurationError(
                     "Model type ${model.type} is not supported for chat sessions"
                 )
             }
-            ensure(settings is ChatModelSettings) {
+            ensure(isChatLikeSettings(settings)) {
                 ValidateNewMessageError.ModelConfigurationError(
                     "Settings type ${settings::class.simpleName} is not compatible with model type ${model.type}"
                 )
             }
-            ensure(settings.stream == isStreaming) {
+            ensure(chatStreamFlag(settings) == isStreaming) {
                 ValidateNewMessageError.ModelConfigurationError(
-                    "Settings stream mode ${settings.stream} does not match requested stream mode $isStreaming"
+                    "Settings stream mode does not match requested stream mode $isStreaming"
                 )
             }
 
@@ -146,5 +148,32 @@ class DefaultConversationTurnPreparationService(
                 llmConfig = LLMConfig(provider, model, settings, apiKey, tools)
             )
         }
+    }
+
+    /**
+     * Whether the given [ModelSettings] is compatible with a CHAT or RESPONSES chat-session model.
+     * Both [ChatModelSettings] and [ResponsesModelSettings] describe conversational generation and
+     * carry a `stream` flag, so either may be attached to a chat session.
+     *
+     * @receiver The settings profile to inspect.
+     * @return `true` if the settings describe a chat-capable model type.
+     */
+    private fun isChatLikeSettings(settings: ModelSettings): Boolean = when (settings) {
+        is ChatModelSettings -> true
+        is ResponsesModelSettings -> true
+        else -> false
+    }
+
+    /**
+     * Extracts the streaming flag from chat-capable settings. Returns `null` for settings that do not
+     * describe a chat-capable model (i.e. types other than [ChatModelSettings] and [ResponsesModelSettings]).
+     *
+     * @receiver The settings profile to inspect.
+     * @return The `stream` flag when the settings are chat-capable, otherwise `null`.
+     */
+    private fun chatStreamFlag(settings: ModelSettings): Boolean? = when (settings) {
+        is ChatModelSettings -> settings.stream
+        is ResponsesModelSettings -> settings.stream
+        else -> null
     }
 }

@@ -1,8 +1,5 @@
 package eu.torvian.chatbot.server.data.tables
 
-import eu.torvian.chatbot.server.data.tables.AssistantMessageTable.messageId
-import eu.torvian.chatbot.server.data.tables.AssistantMessageTable.modelId
-import eu.torvian.chatbot.server.data.tables.AssistantMessageTable.settingsId
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.Table
 
@@ -13,6 +10,8 @@ import org.jetbrains.exposed.v1.core.Table
  * @property messageId Reference to the parent message in ChatMessageTable (primary key)
  * @property modelId Reference to the LLM model used for the message
  * @property settingsId Reference to the model settings used for the message
+ * @property reasoningItemsJson JSON array of raw reasoning output items emitted with the message, for
+ *            Responses-capable models. Opaque and nullable; must not be logged or rendered.
  */
 object AssistantMessageTable : Table("assistant_messages") {
     val messageId = reference(
@@ -30,6 +29,7 @@ object AssistantMessageTable : Table("assistant_messages") {
         ModelSettingsTable,
         onDelete = ReferenceOption.SET_NULL
     ).nullable()
+    val reasoningItemsJson = text("reasoning_items_json").nullable()
 
     // Make messageId the primary key
     override val primaryKey = PrimaryKey(messageId)

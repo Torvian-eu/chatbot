@@ -4,6 +4,7 @@ import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.EmbeddingModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
@@ -46,6 +47,25 @@ sealed class ModelSettingsFormState {
     ) : ModelSettingsFormState() {
         override val modelType: LLMModelType = LLMModelType.EMBEDDING
     }
+
+    data class Responses(
+        override val mode: FormMode = FormMode.NEW,
+        override val name: String = "",
+        override val modelId: Long? = null,
+        val instructions: String = "",
+        val temperature: String = "",
+        val maxOutputTokens: String = "",
+        val topP: String = "",
+        val stopSequences: String = "",
+        val stream: Boolean = true,
+        val reasoningEffort: String = "",
+        val store: Boolean = false,
+        val replayReasoning: Boolean = true,
+        override val customParamsJson: String = "",
+        override val errorMessage: String? = null
+    ) : ModelSettingsFormState() {
+        override val modelType: LLMModelType = LLMModelType.RESPONSES
+    }
 }
 
 /**
@@ -72,6 +92,22 @@ fun ModelSettings.toEditFormState(): ModelSettingsFormState {
             modelId = this.modelId,
             dimensions = this.dimensions?.toString() ?: "",
             encodingFormat = this.encodingFormat ?: "",
+            customParamsJson = this.customParams?.let { Json.encodeToString(JsonObject.serializer(), it) } ?: ""
+        )
+
+        is ResponsesModelSettings -> ModelSettingsFormState.Responses(
+            mode = FormMode.EDIT,
+            name = this.name,
+            modelId = this.modelId,
+            instructions = this.instructions ?: "",
+            temperature = this.temperature?.toString() ?: "",
+            maxOutputTokens = this.maxOutputTokens?.toString() ?: "",
+            topP = this.topP?.toString() ?: "",
+            stopSequences = this.stopSequences?.joinToString(",") ?: "",
+            stream = this.stream,
+            reasoningEffort = this.reasoningEffort ?: "",
+            store = this.store,
+            replayReasoning = this.replayReasoning,
             customParamsJson = this.customParams?.let { Json.encodeToString(JsonObject.serializer(), it) } ?: ""
         )
 
@@ -121,6 +157,29 @@ fun ModelSettingsFormState.toModelSettings(
                 customParams = customParams
             )
         }
+
+        is ModelSettingsFormState.Responses -> {
+            val stopSequencesList = this.stopSequences.split(',')
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .takeIf { it.isNotEmpty() }
+
+            ResponsesModelSettings(
+                id = id,
+                modelId = modelId,
+                name = this.name.trim(),
+                instructions = this.instructions.trim().takeIf { it.isNotBlank() },
+                temperature = this.temperature.toFloatOrNull(),
+                maxOutputTokens = this.maxOutputTokens.toIntOrNull(),
+                topP = this.topP.toFloatOrNull(),
+                stopSequences = stopSequencesList,
+                stream = this.stream,
+                reasoningEffort = this.reasoningEffort.trim().takeIf { it.isNotBlank() },
+                store = this.store,
+                replayReasoning = this.replayReasoning,
+                customParams = customParams
+            )
+        }
     }
 }
 
@@ -160,6 +219,18 @@ fun ModelSettingsFormState.validate(): String? {
                 return "Dimensions must be an integer."
             }
         }
+
+        is ModelSettingsFormState.Responses -> {
+            if (this.temperature.isNotBlank() && this.temperature.toFloatOrNull() == null) {
+                return "Temperature must be a number."
+            }
+            if (this.maxOutputTokens.isNotBlank() && this.maxOutputTokens.toIntOrNull() == null) {
+                return "Max Output Tokens must be an integer."
+            }
+            if (this.topP.isNotBlank() && this.topP.toFloatOrNull() == null) {
+                return "Top P must be a number."
+            }
+        }
     }
 
     return null
@@ -172,6 +243,7 @@ fun ModelSettingsFormState.withError(errorMessage: String?): ModelSettingsFormSt
     return when (this) {
         is ModelSettingsFormState.Chat -> this.copy(errorMessage = errorMessage)
         is ModelSettingsFormState.Embedding -> this.copy(errorMessage = errorMessage)
+        is ModelSettingsFormState.Responses -> this.copy(errorMessage = errorMessage)
     }
 }
 
@@ -182,6 +254,7 @@ fun createEmptyNewSettingsForm(modelType: LLMModelType, modelId: Long): ModelSet
     return when (modelType) {
         LLMModelType.CHAT -> ModelSettingsFormState.Chat(mode = FormMode.NEW, modelId = modelId)
         LLMModelType.EMBEDDING -> ModelSettingsFormState.Embedding(mode = FormMode.NEW, modelId = modelId)
+        LLMModelType.RESPONSES -> ModelSettingsFormState.Responses(mode = FormMode.NEW, modelId = modelId)
         else -> throw IllegalArgumentException("Unsupported model type for settings form: $modelType")
     }
 }
@@ -190,7 +263,7 @@ fun createEmptyNewSettingsForm(modelType: LLMModelType, modelId: Long): ModelSet
  * Returns the list of supported model types that have form state implementations.
  */
 fun getSupportedSettingsTypes(): List<LLMModelType> {
-    return listOf(LLMModelType.CHAT, LLMModelType.EMBEDDING)
+    return listOf(LLMModelType.CHAT, LLMModelType.EMBEDDING, LLMModelType.RESPONSES)
 }
 
 /**

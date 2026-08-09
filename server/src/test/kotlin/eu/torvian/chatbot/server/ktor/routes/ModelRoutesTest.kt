@@ -252,45 +252,6 @@ class ModelRoutesTest {
     }
 
     @Test
-    fun `POST models should return 409 if model name already exists`() = modelTestApplication {
-        // Arrange
-        testDataManager.setup(
-            TestDataSet(
-                llmProviders = listOf(testProvider1),
-                llmModels = listOf(testModel1)
-            )
-        )
-
-        addCreatePermissionForUser()
-
-        val createRequest = AddModelRequest(
-            name = testModel1.name, // Use existing name
-            providerId = testProvider1.id,
-            type = LLMModelType.CHAT,
-            active = true,
-            displayName = "Another Display Name"
-        )
-
-        // Act
-        val response = client.post(href(ModelResource())) {
-            contentType(ContentType.Application.Json)
-            setBody(createRequest)
-            authenticate(authToken)
-        }
-
-        // Assert
-        assertEquals(HttpStatusCode.Conflict, response.status) // 409 Conflict
-        val error = response.body<ApiError>()
-        assertEquals(CommonApiErrorCodes.ALREADY_EXISTS.code, error.code)
-        assertEquals(409, error.statusCode)
-        assertEquals("Model name already exists", error.message)
-        assert(error.details?.containsKey("name") == true)
-        assertEquals(testModel1.name, error.details?.get("name"))
-    }
-
-    // --- GET /api/v1/models/{modelId} Tests ---
-
-    @Test
     fun `GET model by ID should return model successfully`() = modelTestApplication {
         // Arrange
         testDataManager.setup(
@@ -449,37 +410,6 @@ class ModelRoutesTest {
         assertEquals("Invalid model input", error.message)
         assert(error.details?.containsKey("reason") == true)
         assertEquals("Model name cannot be blank.", error.details?.get("reason"))
-    }
-
-    @Test
-    fun `PUT model should return 409 if updated name already exists for another model`() = modelTestApplication {
-        // Arrange
-        testDataManager.setup(
-            TestDataSet(
-                llmProviders = listOf(testProvider1, testProvider2),
-                llmModels = listOf(testModel1, testModel2) // name="gpt-4", name="claude-3"
-            )
-        )
-        testDataManager.insertModelOwnership(testModel1.id, testUser1.id)
-
-        val updatedModel =
-            testModel1.copy(name = testModel2.name) // Try to change testModel1's name to testModel2's name
-
-        // Act
-        val response = client.put(href(ModelResource.ById(modelId = testModel1.id))) {
-            contentType(ContentType.Application.Json)
-            setBody(updatedModel)
-            authenticate(authToken)
-        }
-
-        // Assert
-        assertEquals(HttpStatusCode.Conflict, response.status) // 409 Conflict
-        val error = response.body<ApiError>()
-        assertEquals(CommonApiErrorCodes.ALREADY_EXISTS.code, error.code)
-        assertEquals(409, error.statusCode)
-        assertEquals("Model name already exists", error.message)
-        assert(error.details?.containsKey("name") == true)
-        assertEquals(testModel2.name, error.details?.get("name"))
     }
 
     // --- DELETE /api/v1/models/{modelId} Tests ---

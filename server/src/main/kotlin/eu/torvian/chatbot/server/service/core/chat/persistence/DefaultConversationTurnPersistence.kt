@@ -5,8 +5,8 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -14,6 +14,7 @@ import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
+import kotlinx.serialization.json.JsonObject
 import kotlin.time.Clock
 
 /**
@@ -76,7 +77,8 @@ class DefaultConversationTurnPersistence(
         content: String,
         parentMessageId: Long,
         model: LLMModel,
-        settings: ChatModelSettings
+        settings: ModelSettings,
+        reasoningItems: List<JsonObject>?
     ): PersistedAssistantMessage = transactionScope.transaction {
         val assistantMessage = messageDao.insertMessage(
             sessionId = sessionId,
@@ -85,7 +87,8 @@ class DefaultConversationTurnPersistence(
             role = ChatMessage.Role.ASSISTANT,
             content = content,
             modelId = model.id,
-            settingsId = settings.id
+            settingsId = settings.id,
+            reasoningItems = reasoningItems
         ).getOrElse { daoError ->
             throw IllegalStateException(
                 "Failed to insert assistant message. Session id: $sessionId. " +
@@ -119,6 +122,15 @@ class DefaultConversationTurnPersistence(
         messageDao.updateMessageContent(messageId, content).getOrElse { error ->
             throw IllegalStateException("Failed to update assistant message content: $error")
         } as ChatMessage.AssistantMessage
+    }
+
+    override suspend fun updateAssistantMessageReasoning(
+        messageId: Long,
+        reasoningItems: List<JsonObject>?
+    ): ChatMessage.AssistantMessage = transactionScope.transaction {
+        messageDao.updateAssistantMessageReasoning(messageId, reasoningItems).getOrElse { error ->
+            throw IllegalStateException("Failed to update assistant message reasoning: $error")
+        }
     }
 
     override suspend fun persistPendingToolCalls(

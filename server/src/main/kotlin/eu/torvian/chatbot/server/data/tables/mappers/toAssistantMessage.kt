@@ -4,7 +4,9 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.server.data.tables.AssistantMessageTable
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.ResultRow
 import kotlin.time.Instant
 
@@ -28,6 +30,13 @@ fun ResultRow.toAssistantMessage(): ChatMessage.AssistantMessage {
     val modelId = this.getOrNull(AssistantMessageTable.modelId)?.value
     val settingsId = this.getOrNull(AssistantMessageTable.settingsId)?.value
 
+    // Deserialize the stored reasoning JSON array into raw items; unparseable/absent storage yields null.
+    val reasoningItems = this.getOrNull(AssistantMessageTable.reasoningItemsJson)
+        ?.takeIf { it.isNotBlank() }
+        ?.let { runCatching {
+            Json.decodeFromString(ListSerializer(JsonObject.serializer()), it)
+        }.getOrNull() }
+
     return ChatMessage.AssistantMessage(
         id = id,
         sessionId = sessionId,
@@ -38,6 +47,7 @@ fun ResultRow.toAssistantMessage(): ChatMessage.AssistantMessage {
         childrenMessageIds = childrenMessageIds,
         fileReferences = fileReferences,
         modelId = modelId,
-        settingsId = settingsId
+        settingsId = settingsId,
+        reasoningItems = reasoningItems
     )
 }

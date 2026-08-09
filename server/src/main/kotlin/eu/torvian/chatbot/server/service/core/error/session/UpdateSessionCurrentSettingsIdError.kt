@@ -22,8 +22,8 @@ sealed interface UpdateSessionCurrentSettingsIdError {
      */
     data class SettingsModelMismatch(val settingsId: Long, val settingsModelId: Long, val sessionModelId: Long?) : UpdateSessionCurrentSettingsIdError
     /**
-     * Indicates that the provided settings are not of the ChatModelSettings type.
-     * This occurs when trying to assign settings that are not suitable for chat sessions.
+     * Indicates that the provided settings are not of a chat-capable type (ChatModelSettings or
+     * ResponsesModelSettings). This occurs when trying to assign settings that are not suitable for chat sessions.
      */
     data class InvalidSettingsType(val settingsId: Long, val actualType: String) : UpdateSessionCurrentSettingsIdError
 }
@@ -51,7 +51,7 @@ fun UpdateSessionCurrentSettingsIdError.toApiError(): ApiError = when (this) {
 
     is UpdateSessionCurrentSettingsIdError.InvalidSettingsType -> apiError(
         CommonApiErrorCodes.INVALID_ARGUMENT,
-        "Settings must be of ChatModelSettings type for chat sessions",
+        "Settings must be of a chat-capable type for chat sessions",
         "settingsId" to settingsId.toString(),
         "actualType" to actualType
     )

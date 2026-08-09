@@ -7,8 +7,12 @@ import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.time.Instant
 
 /**
@@ -165,5 +169,57 @@ class DefaultChatContextBuilderTest {
             listOf("call-success", "call-pending", "call-invalid", "call-parameterless", "call-cancelled"),
             context.filterIsInstance<RawChatMessage.Tool>().map { it.toolCallId }
         )
+    }
+
+    /**
+     * Verifies persisted reasoning items are reconstructed onto the matching assistant message.
+     */
+    @Test
+    fun `buildContext reconstructs reasoning items onto the assistant message`() {
+        val builder = DefaultChatContextBuilder(
+            fileReferenceContentBuilder = DefaultFileReferenceContentBuilder(),
+            toolResultContentBuilder = DefaultToolResultContentBuilder()
+        )
+        val modifiedAt = Instant.fromEpochMilliseconds(1_700_000_000_000L)
+        val reasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_1")
+                put("encrypted_content", "opaque")
+            }
+        )
+        val userMessage = ChatMessage.UserMessage(
+            id = 1L,
+            sessionId = 44L,
+            content = "Question",
+            createdAt = modifiedAt,
+            updatedAt = modifiedAt,
+            parentMessageId = null,
+            childrenMessageIds = listOf(2L)
+        )
+        val assistantMessage = ChatMessage.AssistantMessage(
+            id = 2L,
+            sessionId = 44L,
+            content = "Answer",
+            createdAt = modifiedAt,
+            updatedAt = modifiedAt,
+            parentMessageId = 1L,
+            childrenMessageIds = emptyList(),
+            modelId = 5L,
+            settingsId = 6L,
+            reasoningItems = reasoningItems
+        )
+
+        val context = builder.buildContext(
+            startingMessageId = 2L,
+            sessionMessages = listOf(userMessage, assistantMessage),
+            toolCalls = emptyList()
+        )
+
+        assertEquals(2, context.size)
+        val reconstructedAssistant = context[1] as RawChatMessage.Assistant
+        assertNotNull(reconstructedAssistant.reasoningItems)
+        assertEquals(1, reconstructedAssistant.reasoningItems.size)
+        assertEquals("opaque", reconstructedAssistant.reasoningItems[0]["encrypted_content"]?.jsonPrimitive?.content)
     }
 }

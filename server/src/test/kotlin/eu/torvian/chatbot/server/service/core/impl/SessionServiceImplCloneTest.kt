@@ -210,8 +210,9 @@ class SessionServiceImplCloneTest {
             val content = arg<String>(4)
             val modelId = arg<Long?>(5)
             val settingsId = arg<Long?>(6)
-            val createdAt = arg<Instant>(8)
-            val updatedAt = arg<Instant>(9)
+            // index 9 = createdAt, 10 = updatedAt (after the reasoningItemsJson param at index 8)
+            val createdAt = arg<Instant>(9)
+            val updatedAt = arg<Instant>(10)
             val parentMessageId = arg<Long?>(1)
             val messageId = nextMessageId++
 
@@ -275,6 +276,7 @@ class SessionServiceImplCloneTest {
                 any(),
                 any(),
                 any(),
+                any(),
                 any()
             )
         }
@@ -301,10 +303,11 @@ class SessionServiceImplCloneTest {
 
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
-            val createdAt = arg<Instant>(8)
-            val updatedAt = arg<Instant>(9)
+            // index 9 = createdAt, 10 = updatedAt (after the reasoningItemsJson param at index 8)
+            val createdAt = arg<Instant>(9)
+            val updatedAt = arg<Instant>(10)
             ChatMessage.UserMessage(
                 id = nextMessageId++,
                 sessionId = testClonedSessionId,
@@ -333,8 +336,8 @@ class SessionServiceImplCloneTest {
                 any(),
                 any(),
                 any(),
-                testTimestamp1,
-                testTimestamp1
+                createdAt = testTimestamp1,
+                updatedAt = testTimestamp1
             )
         }
         coVerify {
@@ -347,8 +350,8 @@ class SessionServiceImplCloneTest {
                 any(),
                 any(),
                 any(),
-                testTimestamp2,
-                testTimestamp2
+                createdAt = testTimestamp2,
+                updatedAt = testTimestamp2
             )
         }
         coVerify {
@@ -361,8 +364,8 @@ class SessionServiceImplCloneTest {
                 any(),
                 any(),
                 any(),
-                testTimestamp3,
-                testTimestamp3
+                createdAt = testTimestamp3,
+                updatedAt = testTimestamp3
             )
         }
     }
@@ -385,7 +388,7 @@ class SessionServiceImplCloneTest {
         val insertedMessages = mutableListOf<Pair<Long?, String>>() // parentId, content
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
             val parentId = arg<Long?>(1)
             val content = arg<String>(4)
@@ -453,7 +456,7 @@ class SessionServiceImplCloneTest {
 
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
             ChatMessage.UserMessage(
                 id = nextMessageId++,
@@ -522,7 +525,7 @@ class SessionServiceImplCloneTest {
 
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
             ChatMessage.UserMessage(
                 id = nextMessageId++,

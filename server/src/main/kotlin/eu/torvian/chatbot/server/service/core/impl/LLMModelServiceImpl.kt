@@ -102,7 +102,6 @@ class LLMModelServiceImpl(
                 val createdModel = withError({ daoError: InsertModelError ->
                     when (daoError) {
                         is InsertModelError.ProviderNotFound -> AddModelError.ProviderNotFound(daoError.providerId)
-                        is InsertModelError.ModelNameAlreadyExists -> AddModelError.ModelNameAlreadyExists(daoError.name)
                     }
                 }) {
                     modelDao.insertModel(name, providerId, type, active, displayName, capabilities).bind()
@@ -133,9 +132,6 @@ class LLMModelServiceImpl(
                     when (daoError) {
                         is DaoUpdateModelError.ModelNotFound -> UpdateModelError.ModelNotFound(daoError.id)
                         is DaoUpdateModelError.ProviderNotFound -> UpdateModelError.ProviderNotFound(daoError.providerId)
-                        is DaoUpdateModelError.ModelNameAlreadyExists -> UpdateModelError.ModelNameAlreadyExists(
-                            daoError.name
-                        )
                     }
                 }) {
                     modelDao.updateModel(model).bind()

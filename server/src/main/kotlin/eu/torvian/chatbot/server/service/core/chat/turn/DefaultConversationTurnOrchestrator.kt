@@ -2,9 +2,9 @@ package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.getOrElse
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
@@ -18,6 +18,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import java.util.concurrent.CancellationException
@@ -236,21 +237,21 @@ class DefaultConversationTurnOrchestrator(
         } else {
             originalContent
         }
-        val assistantMessage = conversationTurnPersistence.saveAssistantMessage(
+        val persistedAssistantMessage = conversationTurnPersistence.saveAssistantMessage(
             sessionId = request.session.id,
             content = content,
             parentMessageId = parentMessageId,
             model = request.llmConfig.model,
-            settings = request.llmConfig.settings
-        ).let { persistedAssistantMessage ->
-            emit(
-                ConversationTurnEvent.AssistantMessageSaved(
-                    persistedAssistantMessage.assistantMessage,
-                    persistedAssistantMessage.updatedParentMessage
-                )
+            settings = request.llmConfig.settings,
+            reasoningItems = llmCompletionResult.reasoningItems
+        )
+        emit(
+            ConversationTurnEvent.AssistantMessageSaved(
+                persistedAssistantMessage.assistantMessage,
+                persistedAssistantMessage.updatedParentMessage
             )
-            persistedAssistantMessage.assistantMessage
-        }
+        )
+        val assistantMessage = persistedAssistantMessage.assistantMessage
 
         val boundedToolCalls = choice.toolCalls
             ?.take(MAX_TOOL_CALLS_PER_STEP)
@@ -285,21 +286,25 @@ class DefaultConversationTurnOrchestrator(
         parentMessageId: Long,
         emit: suspend (ConversationTurnEvent) -> Unit
     ): AssistantStepOutcome? {
-        val assistantMessage = conversationTurnPersistence.saveAssistantMessage(
+        val saveResult = conversationTurnPersistence.saveAssistantMessage(
             sessionId = request.session.id,
             content = "",
             parentMessageId = parentMessageId,
             model = request.llmConfig.model,
-            settings = request.llmConfig.settings
-        ).let { persistedAssistantMessage ->
-            emit(
-                ConversationTurnEvent.AssistantMessageStarted(
-                    persistedAssistantMessage.assistantMessage,
-                    persistedAssistantMessage.updatedParentMessage
-                )
+            settings = request.llmConfig.settings,
+            reasoningItems = null
+        )
+        emit(
+            ConversationTurnEvent.AssistantMessageStarted(
+                saveResult.assistantMessage,
+                saveResult.updatedParentMessage
             )
-            persistedAssistantMessage.assistantMessage
-        }
+        )
+        val assistantMessage = saveResult.assistantMessage
+
+        // Reasoning items complete asynchronously during streaming; accumulate them so they can be
+        // persisted together with the finalized message on completion.
+        val accumulatedReasoningItems = mutableListOf<JsonObject>()
 
         var assistantStepOutcome: AssistantStepOutcome? = null
         handleLlmStreaming(
@@ -324,7 +329,19 @@ class DefaultConversationTurnOrchestrator(
                     )
                 )
             },
+            onReasoningChunk = { reasoningDone ->
+                // Only the opaque completed item is persisted for replay; plaintext reasoning deltas
+                // (ReasoningTextChunk) are render-only and are not accumulated here.
+                accumulatedReasoningItems.add(reasoningDone.reasoningItem)
+            },
             onStreamComplete = { finalContent, toolCallRequests, finishReason ->
+                // Persist accumulated reasoning (if any) alongside the finalized message content.
+                if (accumulatedReasoningItems.isNotEmpty()) {
+                    conversationTurnPersistence.updateAssistantMessageReasoning(
+                        assistantMessage.id,
+                        accumulatedReasoningItems
+                    )
+                }
                 val updatedAssistantMessage = conversationTurnPersistence.updateAssistantMessageContent(
                     messageId = assistantMessage.id,
                     content = finalContent
@@ -455,6 +472,7 @@ class DefaultConversationTurnOrchestrator(
      * @param tools Enabled tools available for the request.
      * @param onContentDelta Callback for assistant text deltas.
      * @param onToolCallChunk Callback for streamed tool-call chunks.
+     * @param onReasoningChunk Callback for the completed, opaque reasoning item emitted by the provider.
      * @param onStreamComplete Callback invoked after the provider signals stream completion.
      * @param onError Callback for streaming errors.
      * @param onCancellation Callback used to persist partial content on cancellation.
@@ -463,12 +481,13 @@ class DefaultConversationTurnOrchestrator(
         context: List<RawChatMessage>,
         model: LLMModel,
         provider: LLMProvider,
-        settings: ChatModelSettings,
+        settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
         controlSignal: TurnControlSignal,
         onContentDelta: suspend (deltaContent: String) -> Unit,
         onToolCallChunk: suspend (toolCallChunk: LLMStreamChunk.ToolCallChunk) -> Unit,
+        onReasoningChunk: suspend (reasoningDone: LLMStreamChunk.ReasoningDone) -> Unit,
         onStreamComplete: suspend (
             finalContent: String,
             toolCallRequests: List<LLMCompletionResult.CompletionChoice.ToolCallRequest>,
@@ -547,7 +566,23 @@ class DefaultConversationTurnOrchestrator(
 
                                 is LLMStreamChunk.UsageChunk -> {
                                     logger.debug(
-                                        "Usage stats: prompt=${chunk.promptTokens}, completion=${chunk.completionTokens}, total=${chunk.totalTokens}"
+                                        "Usage stats: prompt=${chunk.promptTokens}, completion=${chunk.completionTokens}, total=${chunk.totalTokens}, reasoning=${chunk.reasoningTokens}"
+                                    )
+                                }
+
+                                is LLMStreamChunk.ReasoningDone -> {
+                                    // Reasoning items are opaque and forwarded as-is so the caller can
+                                    // accumulate and persist them for replay; they are never rendered.
+                                    onReasoningChunk(chunk)
+                                }
+
+                                is LLMStreamChunk.ReasoningTextChunk -> {
+                                    // Plaintext reasoning deltas are intended for live UI rendering and are
+                                    // not part of the persisted transcript. When no live-rendering consumer
+                                    // is wired, they carry no side effect here. Never persist or replay them.
+                                    logger.trace(
+                                        "Reasoning text delta discarded (no UI consumer): index=${chunk.outputIndex}, " +
+                                            "contentIndex=${chunk.contentIndex}, delta=${chunk.delta.take(200)}"
                                     )
                                 }
 

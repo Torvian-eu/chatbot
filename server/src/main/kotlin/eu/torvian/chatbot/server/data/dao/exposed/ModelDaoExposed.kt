@@ -129,7 +129,6 @@ class ModelDaoExposed(
                 }) { e: ExposedSQLException ->
                     when {
                         e.isForeignKeyViolation() -> raise(InsertModelError.ProviderNotFound(providerId))
-                        e.isUniqueConstraintViolation() -> raise(InsertModelError.ModelNameAlreadyExists(name))
                         else -> throw e
                     }
                 }
@@ -154,7 +153,6 @@ class ModelDaoExposed(
                 }) { e: ExposedSQLException ->
                     when {
                         e.isForeignKeyViolation() -> raise(UpdateModelError.ProviderNotFound(model.providerId))
-                        e.isUniqueConstraintViolation() -> raise(UpdateModelError.ModelNameAlreadyExists(model.name))
                         else -> throw e
                     }
                 }

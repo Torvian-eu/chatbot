@@ -9,14 +9,17 @@ import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
-import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
-import io.mockk.*
+import io.mockk.clearMocks
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -108,7 +111,7 @@ class DefaultConversationTurnPersistenceTest {
         )
 
         coEvery { messageDao.insertMessage(1L, 5L, any(), ChatMessage.Role.USER, "Hello", null, null, any()) } returns
-            savedUserMessage.right()
+                savedUserMessage.right()
         coEvery { sessionDao.updateSessionLeafMessageId(1L, savedUserMessage.id) } returns Unit.right()
         coEvery { messageDao.getMessageById(5L) } returns refreshedParent.right()
 
@@ -247,13 +250,42 @@ class DefaultConversationTurnPersistenceTest {
         )
 
         coEvery {
-            toolCallDao.insertToolCall(12L, toolDefinition.id, "search", "call-1", "{\"query\":\"docs\"}", null, ToolCallStatus.PENDING, null, null, any(), null, null, null)
+            toolCallDao.insertToolCall(
+                12L,
+                toolDefinition.id,
+                "search",
+                "call-1",
+                "{\"query\":\"docs\"}",
+                null,
+                ToolCallStatus.PENDING,
+                null,
+                null,
+                any(),
+                null,
+                null,
+                null
+            )
         } returns knownToolCall.right()
         coEvery {
-            toolCallDao.insertToolCall(12L, null, "missing", "call-2", "{}", null, ToolCallStatus.ERROR, "Tool 'missing' not found in enabled tools", null, any(), null, null, null)
+            toolCallDao.insertToolCall(
+                12L,
+                null,
+                "missing",
+                "call-2",
+                "{}",
+                null,
+                ToolCallStatus.ERROR,
+                "Tool 'missing' not found in enabled tools",
+                null,
+                any(),
+                null,
+                null,
+                null
+            )
         } returns missingToolCall.right()
 
-        val result = persistence.persistPendingToolCalls(12L, listOf(knownRequest, missingRequest), listOf(toolDefinition))
+        val result =
+            persistence.persistPendingToolCalls(12L, listOf(knownRequest, missingRequest), listOf(toolDefinition))
 
         assertEquals(listOf(knownToolCall, missingToolCall), result)
     }
@@ -281,5 +313,91 @@ class DefaultConversationTurnPersistenceTest {
         val result = persistence.loadSessionToolCalls(1L)
 
         assertEquals(listOf(21L, 22L), result.map { it.id })
+    }
+
+    /**
+     * Verifies assistant-message persistence forwards reasoning items to the DAO when present.
+     */
+    @Test
+    fun `saveAssistantMessage forwards reasoning items to the DAO`() = runTest {
+        val reasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_1")
+                put("encrypted_content", "opaque")
+            }
+        )
+        val savedAssistantMessage = ChatMessage.AssistantMessage(
+            id = 12L,
+            sessionId = 1L,
+            content = "Answer",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = 5L,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id,
+            reasoningItems = reasoningItems
+        )
+
+        coEvery {
+            messageDao.insertMessage(
+                1L,
+                5L,
+                any(),
+                ChatMessage.Role.ASSISTANT,
+                "Answer",
+                testModel.id,
+                testSettings.id,
+                any(),
+                reasoningItems
+            )
+        } returns savedAssistantMessage.right()
+        coEvery { sessionDao.updateSessionLeafMessageId(1L, savedAssistantMessage.id) } returns Unit.right()
+        coEvery { messageDao.getMessageById(5L) } returns ChatMessage.UserMessage(
+            id = 5L,
+            sessionId = 1L,
+            content = "Hello",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = emptyList()
+        ).right()
+
+        val result = persistence.saveAssistantMessage(1L, "Answer", 5L, testModel, testSettings, reasoningItems)
+
+        assertEquals(savedAssistantMessage, result.assistantMessage)
+    }
+
+    /**
+     * Verifies reasoning can be attached to an already-persisted assistant message (streaming completion).
+     */
+    @Test
+    fun `updateAssistantMessageReasoning delegates to the DAO`() = runTest {
+        val reasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_2")
+            }
+        )
+        val updated = ChatMessage.AssistantMessage(
+            id = 12L,
+            sessionId = 1L,
+            content = "",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = 5L,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id,
+            reasoningItems = reasoningItems
+        )
+
+        coEvery { messageDao.updateAssistantMessageReasoning(12L, reasoningItems) } returns updated.right()
+
+        val result = persistence.updateAssistantMessageReasoning(12L, reasoningItems)
+
+        assertEquals(updated, result)
+        coVerify(exactly = 1) { messageDao.updateAssistantMessageReasoning(12L, reasoningItems) }
     }
 }

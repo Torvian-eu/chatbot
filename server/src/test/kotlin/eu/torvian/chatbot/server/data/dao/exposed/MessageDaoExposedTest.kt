@@ -14,6 +14,9 @@ import eu.torvian.chatbot.server.testutils.data.TestDataSet
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -768,6 +771,88 @@ class MessageDaoExposedTest {
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
         assertEquals(999, error.id, "Expected error with correct ID")
+    }
+
+    @Test
+    fun `insertMessage and updateAssistantMessageReasoning should round-trip reasoning items`() = runTest {
+        // Setup session with a parent user message
+        val parentWithoutChildren = testUserMessage1.copy(childrenMessageIds = emptyList())
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup1),
+                llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
+                modelSettings = listOf(testSettings1),
+                chatSessions = listOf(testSession1),
+                chatMessages = listOf(parentWithoutChildren)
+            )
+        )
+
+        val reasoningItems = listOf<JsonObject>(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_1")
+                put("encrypted_content", "opaque")
+            }
+        )
+
+        // Insert assistant message with reasoning items attached at creation
+        val insertResult = messageDao.insertMessage(
+            sessionId = testSession1.id,
+            targetMessageId = parentWithoutChildren.id,
+            position = MessageInsertPosition.APPEND,
+            role = ChatMessage.Role.ASSISTANT,
+            content = "Answer",
+            modelId = testModel1.id,
+            settingsId = testSettings1.id,
+            reasoningItems = reasoningItems
+        )
+        assertTrue(insertResult.isRight())
+        val inserted = assertIs<ChatMessage.AssistantMessage>(insertResult.getOrNull())
+        assertEquals(reasoningItems, inserted.reasoningItems)
+
+        // Persisted message should reload with the reasoning items intact
+        val retrieved = messageDao.getMessageById(inserted.id).getOrNull()
+        assertNotNull(retrieved)
+        assertEquals(reasoningItems, (retrieved as ChatMessage.AssistantMessage).reasoningItems)
+
+        // Streaming-style path: update reasoning on the already-persisted message
+        val updatedReasoning = listOf<JsonObject>(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_2")
+                put("encrypted_content", "opaque2")
+            }
+        )
+        val updateResult = messageDao.updateAssistantMessageReasoning(inserted.id, updatedReasoning)
+        assertTrue(updateResult.isRight())
+        assertEquals(updatedReasoning, updateResult.getOrNull()?.reasoningItems)
+
+        val reloaded = messageDao.getMessageById(inserted.id).getOrNull()
+        assertNotNull(reloaded)
+        assertEquals(updatedReasoning, (reloaded as ChatMessage.AssistantMessage).reasoningItems)
+    }
+
+    @Test
+    fun `updateAssistantMessageReasoning should return MessageNotFound for non-assistant or missing message`() = runTest {
+        // Setup a user message so there is no assistant_messages row for the target id
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup1),
+                llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
+                modelSettings = listOf(testSettings1),
+                chatSessions = listOf(testSession1),
+                chatMessages = listOf(testUserMessage1)
+            )
+        )
+
+        val result = messageDao.updateAssistantMessageReasoning(testUserMessage1.id, emptyList())
+
+        assertTrue(result.isLeft())
+        val error = result.leftOrNull()
+        assertNotNull(error)
+        assertEquals(testUserMessage1.id, error.id)
     }
 
     @Test
