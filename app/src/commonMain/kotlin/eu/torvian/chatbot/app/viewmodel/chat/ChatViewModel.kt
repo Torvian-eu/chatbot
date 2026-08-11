@@ -93,6 +93,16 @@ class ChatViewModel(
     /** Job that bounds the time spent waiting for the server to acknowledge cancellation. */
     private var cancellationDrainJob: Job? = null
 
+    /**
+     * Whether an assistant turn is currently in progress (RUNNING, PAUSING, or STOPPING).
+     *
+     * Conversation-mutating and turn-starting actions must not run while a turn is active.
+     * This is a defense-in-depth guard behind the disabled UI controls: even if a caller
+     * bypasses the UI, no conflicting generation or destructive edit can start mid-turn.
+     */
+    private val isTurnActive: Boolean
+        get() = state.turnExecutionState.value != TurnExecutionState.IDLE
+
     // --- Public State Properties (delegated to Reactive ChatState) ---
 
     /**
@@ -334,6 +344,9 @@ class ChatViewModel(
      *                            from that point. When null, sends the current input content normally.
      */
     fun sendMessage(continueFromMessage: ChatMessage? = null) {
+        // Refuse to start a new turn while one is already active. This covers regular sends,
+        // Branch & Continue, and any caller that bypasses the disabled UI controls.
+        if (isTurnActive) return
         val job = normalScope.launch {
             sendMessageUC.execute(continueFromMessage = continueFromMessage)
         }
@@ -412,6 +425,8 @@ class ChatViewModel(
      * @param message The assistant message to regenerate.
      */
     fun regenerateMessage(message: ChatMessage) {
+        // Regenerating starts a new generation; it must be blocked while a turn is active.
+        if (isTurnActive) return
         val parentMessageId = message.parentMessageId ?: return // No parent, can't regenerate
         val parentMessage = displayedMessages.value.find { it.id == parentMessageId } ?: return
         sendMessage(continueFromMessage = parentMessage)
@@ -495,6 +510,8 @@ class ChatViewModel(
      * Deletes a specific message.
      */
     private fun deleteMessage(messageId: Long) {
+        // Deleting while a generation is streaming could corrupt the active conversation.
+        if (isTurnActive) return
         normalScope.launch {
             deleteMessageUC.execute(messageId)
         }
@@ -504,6 +521,8 @@ class ChatViewModel(
      * Deletes a specific message and all its replies recursively.
      */
     private fun deleteMessageRecursively(messageId: Long) {
+        // Deleting while a generation is streaming could corrupt the active conversation.
+        if (isTurnActive) return
         normalScope.launch {
             deleteMessageUC.execute(messageId, recursive = true)
         }
@@ -768,6 +787,9 @@ class ChatViewModel(
      * This is called when the user signals an intent to delete.
      */
     fun requestDeleteMessage(message: ChatMessage) {
+        // Do not offer deletion while a turn is active; the UI disables the trigger, but this
+        // also guards against callers bypassing the UI or racing an in-flight generation.
+        if (isTurnActive) return
         state.setDialogState(
             ChatAreaDialogState.DeleteMessage(
                 message = message,
@@ -785,6 +807,8 @@ class ChatViewModel(
      * This is called when the user signals an intent to delete a message and all its replies.
      */
     fun requestDeleteMessageRecursively(message: ChatMessage) {
+        // Do not offer thread deletion while a turn is active; see [requestDeleteMessage].
+        if (isTurnActive) return
         state.setDialogState(
             ChatAreaDialogState.DeleteMessageRecursively(
                 message = message,
@@ -817,6 +841,9 @@ class ChatViewModel(
      * Handles the request to insert a message (show dialog with pre-bound actions).
      */
     fun onRequestInsertMessage(message: ChatMessage) {
+        // Do not offer insertion while a turn is active; the UI disables the trigger, but this
+        // also guards against callers bypassing the UI or racing an in-flight generation.
+        if (isTurnActive) return
         state.setDialogState(
             ChatAreaDialogState.InsertMessage(
             targetMessage = message,
@@ -836,6 +863,8 @@ class ChatViewModel(
         role: ChatMessage.Role,
         content: String
     ) {
+        // Inserting while a generation is streaming could corrupt the active conversation.
+        if (isTurnActive) return
         cancelDialog()
         insertMessageUC.execute(
             scope = normalScope,
