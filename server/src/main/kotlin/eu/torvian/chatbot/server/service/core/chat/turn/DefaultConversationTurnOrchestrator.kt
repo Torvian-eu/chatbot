@@ -134,7 +134,8 @@ class DefaultConversationTurnOrchestrator(
             currentContext = appendAssistantAndToolResults(
                 currentContext = currentContext,
                 assistantContent = assistantStep.assistantContent,
-                completedToolCalls = completedToolCalls
+                completedToolCalls = completedToolCalls,
+                reasoningItems = assistantStep.reasoningItems
             )
         }
     }
@@ -267,7 +268,8 @@ class DefaultConversationTurnOrchestrator(
         return AssistantStepOutcome(
             assistantMessage = assistantMessage,
             assistantContent = content,
-            toolCallRequests = boundedToolCalls
+            toolCallRequests = boundedToolCalls,
+            reasoningItems = llmCompletionResult.reasoningItems
         )
     }
 
@@ -355,7 +357,8 @@ class DefaultConversationTurnOrchestrator(
                     assistantStepOutcome = AssistantStepOutcome(
                         assistantMessage = updatedAssistantMessage,
                         assistantContent = updatedAssistantMessage.content,
-                        toolCallRequests = toolCallRequests
+                        toolCallRequests = toolCallRequests,
+                        reasoningItems = accumulatedReasoningItems.takeIf { it.isNotEmpty() }
                     )
                 }
             },
@@ -429,12 +432,15 @@ class DefaultConversationTurnOrchestrator(
      * @param currentContext Context accumulated so far for the turn.
      * @param assistantContent Assistant content associated with the tool-call request.
      * @param completedToolCalls Completed tool calls whose calls and results should be appended.
+     * @param reasoningItems Raw reasoning items emitted with the assistant step, forwarded so the next
+     *            follow-up LLM request can replay chain-of-thought. Opaque payload; never logged or rendered.
      * @return Updated raw context used for the next assistant iteration.
      */
     private fun appendAssistantAndToolResults(
         currentContext: List<RawChatMessage>,
         assistantContent: String?,
-        completedToolCalls: List<ToolCall>
+        completedToolCalls: List<ToolCall>,
+        reasoningItems: List<JsonObject>?
     ): List<RawChatMessage> {
         // Derive both provider messages from the same ordered collection so a result can never
         // be emitted without its matching assistant tool call. Every recorded call is replayed,
@@ -447,7 +453,8 @@ class DefaultConversationTurnOrchestrator(
                     name = toolCall.toolName,
                     arguments = toolCall.input
                 )
-            }
+            },
+            reasoningItems = reasoningItems
         )
         // A provider transcript must not contain a result without its replayed assistant call.
         val toolResultMessages = completedToolCalls.map { toolCall ->
@@ -670,11 +677,14 @@ class DefaultConversationTurnOrchestrator(
      * @property assistantMessage Persisted assistant message for the current iteration.
      * @property assistantContent Assistant content that should be appended back into LLM context.
      * @property toolCallRequests Tool calls requested by the assistant.
+     * @property reasoningItems Raw reasoning items emitted with the assistant step, forwarded so the next
+     *            follow-up LLM request can replay chain-of-thought. Opaque payload; never logged or rendered.
      */
     private data class AssistantStepOutcome(
         val assistantMessage: ChatMessage.AssistantMessage,
         val assistantContent: String?,
-        val toolCallRequests: List<LLMCompletionResult.CompletionChoice.ToolCallRequest>
+        val toolCallRequests: List<LLMCompletionResult.CompletionChoice.ToolCallRequest>,
+        val reasoningItems: List<JsonObject>? = null
     )
 
     /**

@@ -824,4 +824,346 @@ class DefaultConversationTurnOrchestratorTest {
         assertEquals(authoritativeArguments, capturedRequests[0][0].arguments)
         assertEquals("call_weather", capturedRequests[0][0].toolCallId)
     }
+
+    /**
+     * Verifies that reasoning emitted during a non-streaming tool-calling step is replayed into the follow-up
+     * LLM request context alongside the tool result.
+     */
+    @Test
+    fun `processNonStreamingTurn replays reasoning into follow-up tool-loop iteration`() = runTest {
+        val reasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_loop")
+                put("encrypted_content", "opaque-nonstream")
+            }
+        )
+        val toolDefinition = LocalMCPToolDefinition(
+            id = 8L,
+            name = "lookup",
+            description = "Looks things up",
+            config = buildJsonObject { },
+            inputSchema = buildJsonObject { },
+            outputSchema = null,
+            isEnabled = true,
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            serverId = 1L,
+            mcpToolName = "lookup"
+        )
+        val reasoningModel = testModel.copy()
+        val reasoningSettings = ResponsesModelSettings(
+            id = 4L,
+            modelId = reasoningModel.id,
+            name = "Default Responses",
+            stream = false,
+            replayReasoning = true
+        )
+        val userMessage = ChatMessage.UserMessage(
+            id = 91L,
+            sessionId = testSession.id,
+            content = "Look up data",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = emptyList()
+        )
+        val assistantToolMessage = ChatMessage.AssistantMessage(
+            id = 92L,
+            sessionId = testSession.id,
+            content = "I will look it up.",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = userMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = reasoningModel.id,
+            settingsId = reasoningSettings.id,
+            reasoningItems = reasoningItems
+        )
+        val assistantFinalMessage = ChatMessage.AssistantMessage(
+            id = 93L,
+            sessionId = testSession.id,
+            content = "Done.",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = assistantToolMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = reasoningModel.id,
+            settingsId = reasoningSettings.id
+        )
+        val pendingToolCall = ToolCall(
+            id = 94L,
+            messageId = assistantToolMessage.id,
+            toolDefinitionId = toolDefinition.id,
+            toolName = toolDefinition.name,
+            toolCallId = "call_lookup",
+            input = "{\"key\":\"a\"}",
+            output = null,
+            status = ToolCallStatus.PENDING,
+            executedAt = baseInstant
+        )
+        val completedToolCall = pendingToolCall.copy(
+            output = "{\"results\":[]}",
+            status = ToolCallStatus.SUCCESS,
+            durationMs = 5L
+        )
+        val firstCompletion = LLMCompletionResult(
+            id = "resp-1",
+            choices = listOf(
+                LLMCompletionResult.CompletionChoice(
+                    role = "assistant",
+                    content = assistantToolMessage.content,
+                    finishReason = "tool_calls",
+                    index = 0,
+                    toolCalls = listOf(
+                        LLMCompletionResult.CompletionChoice.ToolCallRequest(
+                            name = toolDefinition.name,
+                            arguments = pendingToolCall.input,
+                            toolCallId = pendingToolCall.toolCallId
+                        )
+                    )
+                )
+            ),
+            usage = LLMCompletionResult.UsageStats(1, 1, 2),
+            reasoningItems = reasoningItems
+        )
+        val secondCompletion = LLMCompletionResult(
+            id = "resp-2",
+            choices = listOf(
+                LLMCompletionResult.CompletionChoice(
+                    role = "assistant",
+                    content = assistantFinalMessage.content,
+                    finishReason = "stop",
+                    index = 0
+                )
+            ),
+            usage = LLMCompletionResult.UsageStats(1, 1, 2)
+        )
+        val capturedContexts = mutableListOf<List<RawChatMessage>>()
+
+        coEvery {
+            conversationTurnPersistence.saveUserMessage(testSession.id, "Look up data", null, any())
+        } returns PersistedUserMessage(userMessage, null)
+        coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
+        coEvery {
+            llmApiClient.completeChat(capture(capturedContexts), any(), any(), any(), any(), any())
+        } returnsMany listOf(firstCompletion.right(), secondCompletion.right())
+        coEvery {
+            conversationTurnPersistence.saveAssistantMessage(
+                testSession.id,
+                assistantToolMessage.content,
+                userMessage.id,
+                reasoningModel,
+                reasoningSettings,
+                reasoningItems
+            )
+        } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
+        coEvery {
+            conversationTurnPersistence.saveAssistantMessage(
+                testSession.id,
+                assistantFinalMessage.content,
+                assistantToolMessage.id,
+                reasoningModel,
+                reasoningSettings,
+                reasoningItems = null
+            )
+        } returns PersistedAssistantMessage(assistantFinalMessage, assistantToolMessage)
+        coEvery {
+            conversationTurnPersistence.persistPendingToolCalls(
+                assistantToolMessage.id,
+                any(),
+                listOf(toolDefinition)
+            )
+        } returns listOf(pendingToolCall)
+        every {
+            toolCallOrchestrator.executeAndUpdateToolCalls(
+                1L,
+                listOf(pendingToolCall),
+                listOf(toolDefinition),
+                any(),
+                any()
+            )
+        } returns flowOf(ToolCallExecutionEvent.ToolCallCompleted(completedToolCall))
+
+        orchestrator.processNonStreamingTurn(
+            ConversationTurnRequest(
+                userId = 1L,
+                session = testSession,
+                llmConfig = LLMConfig(
+                    testProvider, reasoningModel, reasoningSettings, "api-key", listOf(toolDefinition)
+                ),
+                content = "Look up data",
+                parentMessageId = null,
+                fileReferences = emptyList(),
+                toolApprovalFlow = emptyFlow(),
+                turnControlSignal = TurnControlSignal()
+            )
+        ).toList()
+
+        // The follow-up request's context must carry the iteration-1 assistant message with the reasoning
+        // items replayed so the next LLM call sees the prior chain-of-thought.
+        assertEquals(2, capturedContexts.size)
+        val followUpAssistant = capturedContexts[1].filterIsInstance<RawChatMessage.Assistant>()
+            .first { it.toolCalls != null && it.toolCalls.isNotEmpty() }
+        assertEquals(reasoningItems, followUpAssistant.reasoningItems)
+    }
+
+    /**
+     * Verifies that reasoning streamed during a tool-calling assistant step is replayed into the follow-up
+     * streaming LLM request context alongside the tool result.
+     */
+    @Test
+    fun `processStreamingTurn replays reasoning into follow-up tool-loop iteration`() = runTest {
+        val reasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_loop_stream")
+                put("encrypted_content", "opaque-stream-loop")
+            }
+        )
+        val toolDefinition = LocalMCPToolDefinition(
+            id = 8L,
+            name = "lookup",
+            description = "Looks things up",
+            config = buildJsonObject { },
+            inputSchema = buildJsonObject { },
+            outputSchema = null,
+            isEnabled = true,
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            serverId = 1L,
+            mcpToolName = "lookup"
+        )
+        val reasoningModel = testModel.copy()
+        val reasoningSettings = ResponsesModelSettings(
+            id = 5L,
+            modelId = reasoningModel.id,
+            name = "Default Responses",
+            stream = true,
+            replayReasoning = true
+        )
+        val userMessage = ChatMessage.UserMessage(
+            id = 101L,
+            sessionId = testSession.id,
+            content = "Stream look up",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = emptyList()
+        )
+        val assistantToolStarted = ChatMessage.AssistantMessage(
+            id = 102L,
+            sessionId = testSession.id,
+            content = "",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = userMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = reasoningModel.id,
+            settingsId = reasoningSettings.id
+        )
+        val assistantToolFinished = assistantToolStarted.copy(content = "")
+        val assistantFinal = ChatMessage.AssistantMessage(
+            id = 104L,
+            sessionId = testSession.id,
+            content = "Done.",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = assistantToolStarted.id,
+            childrenMessageIds = emptyList(),
+            modelId = reasoningModel.id,
+            settingsId = reasoningSettings.id
+        )
+        val pendingToolCall = ToolCall(
+            id = 103L,
+            messageId = assistantToolStarted.id,
+            toolDefinitionId = toolDefinition.id,
+            toolName = toolDefinition.name,
+            toolCallId = "call_lookup_stream",
+            input = "{\"key\":\"a\"}",
+            output = null,
+            status = ToolCallStatus.PENDING,
+            executedAt = baseInstant
+        )
+
+        coEvery {
+            conversationTurnPersistence.saveUserMessage(testSession.id, "Stream look up", null, any())
+        } returns PersistedUserMessage(userMessage, null)
+        coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
+        coEvery {
+            conversationTurnPersistence.saveAssistantMessage(
+                testSession.id, "", userMessage.id, reasoningModel, reasoningSettings, reasoningItems = null
+            )
+        } returns PersistedAssistantMessage(assistantToolStarted, userMessage)
+        coEvery {
+            conversationTurnPersistence.saveAssistantMessage(
+                testSession.id, "", assistantToolStarted.id, reasoningModel, reasoningSettings, reasoningItems = null
+            )
+        } returns PersistedAssistantMessage(assistantFinal, assistantToolStarted)
+        // First iteration streams reasoning + a tool call; second iteration ends the loop.
+        val capturedContexts = mutableListOf<List<RawChatMessage>>()
+        coEvery {
+            llmApiClient.completeChatStreaming(capture(capturedContexts), any(), any(), any(), any(), any())
+        } returnsMany listOf(
+            flowOf(
+                LLMStreamChunk.ReasoningDone(reasoningItem = reasoningItems[0]).right(),
+                LLMStreamChunk.ToolCallChunk(
+                    index = 0, id = "call_lookup_stream", name = "lookup", argumentsDelta = "{\"key\":\"a\"}"
+                ).right(),
+                LLMStreamChunk.ContentChunk("", finishReason = "tool_calls").right(),
+                LLMStreamChunk.Done.right()
+            ),
+            flowOf(
+                LLMStreamChunk.ContentChunk("Done.", finishReason = "stop").right(),
+                LLMStreamChunk.Done.right()
+            )
+        )
+        coEvery {
+            conversationTurnPersistence.updateAssistantMessageReasoning(assistantToolStarted.id, reasoningItems)
+        } returns assistantToolFinished
+        coEvery {
+            conversationTurnPersistence.updateAssistantMessageContent(assistantToolStarted.id, "")
+        } returns assistantToolFinished
+        coEvery {
+            conversationTurnPersistence.updateAssistantMessageContent(assistantFinal.id, "Done.")
+        } returns assistantFinal
+        coEvery {
+            conversationTurnPersistence.persistPendingToolCalls(
+                assistantToolStarted.id,
+                any(),
+                listOf(toolDefinition)
+            )
+        } returns listOf(pendingToolCall)
+        every {
+            toolCallOrchestrator.executeAndUpdateToolCalls(
+                1L, listOf(pendingToolCall), listOf(toolDefinition), any(), any()
+            )
+        } returns flowOf(ToolCallExecutionEvent.ToolCallCompleted(pendingToolCall.copy(
+            output = "{\"results\":[]}",
+            status = ToolCallStatus.SUCCESS,
+            durationMs = 5L
+        )))
+
+        orchestrator.processStreamingTurn(
+            ConversationTurnRequest(
+                userId = 1L,
+                session = testSession,
+                llmConfig = LLMConfig(
+                    testProvider, reasoningModel, reasoningSettings, "api-key", listOf(toolDefinition)
+                ),
+                content = "Stream look up",
+                parentMessageId = null,
+                fileReferences = emptyList(),
+                toolApprovalFlow = emptyFlow(),
+                turnControlSignal = TurnControlSignal()
+            )
+        ).toList()
+
+        // The follow-up request's context must carry the iteration-1 assistant tool-call message with the
+        // reasoning items replayed so the next streaming LLM call sees the prior chain-of-thought.
+        assertEquals(2, capturedContexts.size)
+        val followUpAssistant = capturedContexts[1].filterIsInstance<RawChatMessage.Assistant>()
+            .first { it.toolCalls != null && it.toolCalls.isNotEmpty() }
+        assertEquals(reasoningItems, followUpAssistant.reasoningItems)
+    }
 }
