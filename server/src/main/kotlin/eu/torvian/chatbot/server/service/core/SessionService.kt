@@ -56,56 +56,20 @@ interface SessionService {
     suspend fun updateSessionGroupId(id: Long, groupId: Long?): Either<UpdateSessionGroupIdError, Unit>
 
     /**
-     * Updates the current model ID of an existing chat session.
-     * Automatically resets the currentSettingsId to null since settings
-     * will no longer be valid for the new model.
+     * Updates the agent role selected for an existing chat session.
+     * Model/settings/tools are resolved from the role at turn time; selecting or deselecting a role
+     * only updates the session's `agent_role_id`.
      * Verifies that the user owns the session before updating.
      *
      * @param id The ID of the session to update.
-     * @param modelId The new optional model ID for the session.
-     * @return Either an [UpdateSessionCurrentModelIdError] if the session or model is not found,
-     *         or access is denied, or Unit if successful.
+     * @param agentRoleId The new optional agent role ID for the session. Null deselects the role.
+     * @return Either an [UpdateSessionAgentRoleIdError] if the session is not found, access is denied,
+     *         or the referenced role is invalid, or Unit if successful.
      */
-    suspend fun updateSessionCurrentModelId(
+    suspend fun updateSessionAgentRoleId(
         id: Long,
-        modelId: Long?
-    ): Either<UpdateSessionCurrentModelIdError, Unit>
-
-    /**
-     * Updates the current settings ID of an existing chat session.
-     * Verifies that the settings are valid for the session's current model
-     * and are of the ChatModelSettings type.
-     * Verifies that the user owns the session before updating.
-     *
-     * @param id The ID of the session to update.
-     * @param settingsId The new optional settings ID for the session.
-     * @return Either an [UpdateSessionCurrentSettingsIdError] if the session or settings are not found,
-     *         or if the settings are incompatible with the current model, or if the settings are not
-     *         of the ChatModelSettings type, or access is denied, or Unit if successful.
-     */
-    suspend fun updateSessionCurrentSettingsId(
-        id: Long,
-        settingsId: Long?
-    ): Either<UpdateSessionCurrentSettingsIdError, Unit>
-
-    /**
-     * Updates both the current model ID and settings ID of an existing chat session atomically.
-     * This ensures consistency between model and settings, and automatically clears settings
-     * if they're incompatible with the new model. Also verifies that the settings are of the
-     * ChatModelSettings type.
-     * Verifies that the user owns the session before updating.
-     *
-     * @param id The ID of the session to update.
-     * @param modelId The new optional model ID for the session.
-     * @param settingsId The new optional settings ID for the session.
-     * @return Either an [UpdateSessionCurrentModelAndSettingsIdError] if the session, model, or settings are not found or incompatible,
-     *         or if the settings are not of the ChatModelSettings type, or access is denied, or Unit if successful.
-     */
-    suspend fun updateSessionCurrentModelAndSettingsId(
-        id: Long,
-        modelId: Long?,
-        settingsId: Long?
-    ): Either<UpdateSessionCurrentModelAndSettingsIdError, Unit>
+        agentRoleId: Long?
+    ): Either<UpdateSessionAgentRoleIdError, Unit>
 
     /**
      * Updates the current leaf message ID of an existing chat session.

@@ -58,7 +58,7 @@ fun serviceModule() = module {
     single { ToolNameValidator() }
     single { ToolNamePrefixValidator() }
 
-    single<SessionService> { SessionServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<SessionService> { SessionServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<GroupService> { GroupServiceImpl(get(), get(), get(), get()) }
     single<LLMModelService> { LLMModelServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<ModelSettingsService> { ModelSettingsServiceImpl(get(), get(), get(), get(), get(), get(), get()) }

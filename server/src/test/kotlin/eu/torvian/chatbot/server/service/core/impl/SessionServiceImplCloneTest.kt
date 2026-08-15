@@ -39,11 +39,10 @@ class SessionServiceImplCloneTest {
     // Mocked dependencies
     private lateinit var sessionDao: SessionDao
     private lateinit var sessionOwnershipDao: SessionOwnershipDao
-    private lateinit var settingsDao: SettingsDao
-    private lateinit var modelDao: ModelDao
     private lateinit var messageDao: MessageDao
     private lateinit var toolCallDao: ToolCallDao
     private lateinit var sessionToolConfigDao: SessionToolConfigDao
+    private lateinit var agentRoleDao: AgentRoleDao
     private lateinit var transactionScope: TransactionScope
 
     // Class under test
@@ -56,6 +55,7 @@ class SessionServiceImplCloneTest {
     private val testGroupId = 10L
     private val testModelId = 20L
     private val testSettingsId = 30L
+    private val testAgentRoleId = 40L
 
     private val testTimestamp1 = Instant.fromEpochMilliseconds(1000000000000L)
     private val testTimestamp2 = Instant.fromEpochMilliseconds(1000001000000L)
@@ -67,8 +67,7 @@ class SessionServiceImplCloneTest {
         createdAt = testTimestamp1,
         updatedAt = testTimestamp1,
         groupId = testGroupId,
-        currentModelId = testModelId,
-        currentSettingsId = testSettingsId,
+        agentRoleId = testAgentRoleId,
         currentLeafMessageId = 103L,
         messages = emptyList()
     )
@@ -79,8 +78,7 @@ class SessionServiceImplCloneTest {
         createdAt = testTimestamp1,
         updatedAt = testTimestamp1,
         groupId = testGroupId,
-        currentModelId = testModelId,
-        currentSettingsId = testSettingsId,
+        agentRoleId = testAgentRoleId,
         currentLeafMessageId = 203L, // Mapped from 103L
         messages = emptyList()
     )
@@ -126,22 +124,20 @@ class SessionServiceImplCloneTest {
         // Create mocks for all dependencies
         sessionDao = mockk()
         sessionOwnershipDao = mockk()
-        settingsDao = mockk()
-        modelDao = mockk()
         messageDao = mockk()
         toolCallDao = mockk()
         sessionToolConfigDao = mockk()
+        agentRoleDao = mockk()
         transactionScope = mockk()
 
         // Create the service instance with mocked dependencies
         sessionService = SessionServiceImpl(
             sessionDao,
             sessionOwnershipDao,
-            settingsDao,
-            modelDao,
             messageDao,
             toolCallDao,
             sessionToolConfigDao,
+            agentRoleDao,
             transactionScope
         )
 
@@ -157,11 +153,10 @@ class SessionServiceImplCloneTest {
         clearMocks(
             sessionDao,
             sessionOwnershipDao,
-            settingsDao,
-            modelDao,
             messageDao,
             toolCallDao,
             sessionToolConfigDao,
+            agentRoleDao,
             transactionScope
         )
     }
@@ -178,8 +173,7 @@ class SessionServiceImplCloneTest {
             sessionDao.insertSession(
                 cloneName,
                 testGroupId,
-                testModelId,
-                testSettingsId
+                testAgentRoleId
             )
         } returns clonedSession.copy(
             name = cloneName,
@@ -210,9 +204,9 @@ class SessionServiceImplCloneTest {
             val content = arg<String>(4)
             val modelId = arg<Long?>(5)
             val settingsId = arg<Long?>(6)
-            // index 9 = createdAt, 10 = updatedAt (after the reasoningItemsJson param at index 8)
-            val createdAt = arg<Instant>(9)
-            val updatedAt = arg<Instant>(10)
+            // index 10 = createdAt, 11 = updatedAt (after the agentRoleId param at index 7 and reasoningItemsJson at index 9)
+            val createdAt = arg<Instant>(10)
+            val updatedAt = arg<Instant>(11)
             val parentMessageId = arg<Long?>(1)
             val messageId = nextMessageId++
 
@@ -255,18 +249,19 @@ class SessionServiceImplCloneTest {
         assertEquals(testClonedSessionId, cloned.id)
         assertEquals(cloneName, cloned.name)
         assertEquals(testGroupId, cloned.groupId)
-        assertEquals(testModelId, cloned.currentModelId)
-        assertEquals(testSettingsId, cloned.currentSettingsId)
+        assertEquals(testAgentRoleId, cloned.agentRoleId)
+        assertEquals(testAgentRoleId, cloned.agentRoleId)
         assertEquals(203L, cloned.currentLeafMessageId)
 
         // Verify all DAOs were called correctly
         coVerify { sessionDao.getSessionById(testSessionId) }
         coVerify { sessionOwnershipDao.getOwner(testSessionId) }
-        coVerify { sessionDao.insertSession(cloneName, testGroupId, testModelId, testSettingsId) }
+        coVerify { sessionDao.insertSession(cloneName, testGroupId, testAgentRoleId) }
         coVerify { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) }
         coVerify { messageDao.getMessagesBySessionId(testSessionId) }
         coVerify(exactly = 3) {
             messageDao.insertMessage(
+                any(),
                 any(),
                 any(),
                 any(),
@@ -292,7 +287,7 @@ class SessionServiceImplCloneTest {
         val cloneName = "Cloned Session"
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns clonedSession.copy(
+        coEvery { sessionDao.insertSession(any(), any(), any()) } returns clonedSession.copy(
             name = cloneName,
             currentLeafMessageId = null
         ).right()
@@ -303,11 +298,11 @@ class SessionServiceImplCloneTest {
 
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
-            // index 9 = createdAt, 10 = updatedAt (after the reasoningItemsJson param at index 8)
-            val createdAt = arg<Instant>(9)
-            val updatedAt = arg<Instant>(10)
+            // index 10 = createdAt, 11 = updatedAt (after the agentRoleId param at index 7 and reasoningItemsJson at index 9)
+            val createdAt = arg<Instant>(10)
+            val updatedAt = arg<Instant>(11)
             ChatMessage.UserMessage(
                 id = nextMessageId++,
                 sessionId = testClonedSessionId,
@@ -376,7 +371,7 @@ class SessionServiceImplCloneTest {
         val cloneName = "Cloned Session"
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns clonedSession.copy(
+        coEvery { sessionDao.insertSession(any(), any(), any()) } returns clonedSession.copy(
             name = cloneName,
             currentLeafMessageId = null
         ).right()
@@ -388,7 +383,7 @@ class SessionServiceImplCloneTest {
         val insertedMessages = mutableListOf<Pair<Long?, String>>() // parentId, content
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
             val parentId = arg<Long?>(1)
             val content = arg<String>(4)
@@ -445,7 +440,7 @@ class SessionServiceImplCloneTest {
 
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns clonedSession.copy(
+        coEvery { sessionDao.insertSession(any(), any(), any()) } returns clonedSession.copy(
             name = cloneName,
             currentLeafMessageId = null
         ).right()
@@ -456,7 +451,7 @@ class SessionServiceImplCloneTest {
 
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
             ChatMessage.UserMessage(
                 id = nextMessageId++,
@@ -514,7 +509,7 @@ class SessionServiceImplCloneTest {
 
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns clonedSession.copy(
+        coEvery { sessionDao.insertSession(any(), any(), any()) } returns clonedSession.copy(
             name = cloneName,
             currentLeafMessageId = null
         ).right()
@@ -525,7 +520,7 @@ class SessionServiceImplCloneTest {
 
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
             ChatMessage.UserMessage(
                 id = nextMessageId++,
@@ -606,7 +601,7 @@ class SessionServiceImplCloneTest {
         // Arrange
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns
+        coEvery { sessionDao.insertSession(any(), any(), any()) } returns
                 SessionError.ForeignKeyViolation("Invalid groupId").left()
 
         // Act
@@ -624,7 +619,7 @@ class SessionServiceImplCloneTest {
         // Arrange
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns clonedSession.copy(
+        coEvery { sessionDao.insertSession(any(), any(), any()) } returns clonedSession.copy(
             currentLeafMessageId = null
         ).right()
         coEvery { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) } returns
