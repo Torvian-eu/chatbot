@@ -110,11 +110,13 @@ class UserAccountInitializer(
         val manageLlmProvidersPermId = createPermission(CommonPermissions.MANAGE_LLM_PROVIDERS)
         val manageLlmModelsPermId = createPermission(CommonPermissions.MANAGE_LLM_MODELS)
         val manageLlmModelSettingsPermId = createPermission(CommonPermissions.MANAGE_LLM_MODEL_SETTINGS)
+        val manageAgentRolesPermId = createPermission(CommonPermissions.MANAGE_AGENT_ROLES)
 
         // --- Create permissions ---
         createPermission(CommonPermissions.CREATE_LLM_PROVIDER)
         createPermission(CommonPermissions.CREATE_LLM_MODEL)
         createPermission(CommonPermissions.CREATE_LLM_MODEL_SETTINGS)
+        createPermission(CommonPermissions.CREATE_AGENT_ROLE)
 
         // Assign manage permissions to admin role
         assignPermissionToRole(adminRoleId, manageUsersPermId)
@@ -124,6 +126,7 @@ class UserAccountInitializer(
         assignPermissionToRole(adminRoleId, manageLlmProvidersPermId)
         assignPermissionToRole(adminRoleId, manageLlmModelsPermId)
         assignPermissionToRole(adminRoleId, manageLlmModelSettingsPermId)
+        assignPermissionToRole(adminRoleId, manageAgentRolesPermId)
         // Standard users get no special permissions by default
         // standardUserRoleId parameter kept for future extensibility
     }

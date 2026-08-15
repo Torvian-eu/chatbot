@@ -45,6 +45,7 @@ object CommonPermissions {
         const val ROLES = "roles"
         const val PERMISSIONS = "permissions"
         const val USER_GROUPS = "user_groups"
+        const val AGENT_ROLES = "agent_roles"
     }
 
     // Predefined permission specifications for common operations
@@ -55,9 +56,11 @@ object CommonPermissions {
     val MANAGE_ROLES = PermissionSpec(Actions.MANAGE, Subjects.ROLES)
     val MANAGE_PERMISSIONS = PermissionSpec(Actions.MANAGE, Subjects.PERMISSIONS)
     val MANAGE_USER_GROUPS = PermissionSpec(Actions.MANAGE, Subjects.USER_GROUPS)
+    val MANAGE_AGENT_ROLES = PermissionSpec(Actions.MANAGE, Subjects.AGENT_ROLES)
 
     val CREATE_LLM_PROVIDER = PermissionSpec(Actions.CREATE, Subjects.LLM_PROVIDERS)
     val CREATE_LLM_MODEL = PermissionSpec(Actions.CREATE, Subjects.LLM_MODELS)
     val CREATE_LLM_MODEL_SETTINGS = PermissionSpec(Actions.CREATE, Subjects.LLM_MODEL_SETTINGS)
+    val CREATE_AGENT_ROLE = PermissionSpec(Actions.CREATE, Subjects.AGENT_ROLES)
 
 }
