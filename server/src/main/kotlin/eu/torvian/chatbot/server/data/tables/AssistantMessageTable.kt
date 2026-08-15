@@ -10,6 +10,9 @@ import org.jetbrains.exposed.v1.core.Table
  * @property messageId Reference to the parent message in ChatMessageTable (primary key)
  * @property modelId Reference to the LLM model used for the message
  * @property settingsId Reference to the model settings used for the message
+ * @property agentRoleId Optional reference to the agent role used for the message. Null when the
+ *            message was not produced through an agent role; `SET NULL` when the role is deleted so
+ *            provenance survives role deletion.
  * @property reasoningItemsJson JSON array of raw reasoning output items emitted with the message, for
  *            Responses-capable models. Opaque and nullable; must not be logged or rendered.
  */
@@ -27,6 +30,11 @@ object AssistantMessageTable : Table("assistant_messages") {
     val settingsId = reference(
         "settings_id",
         ModelSettingsTable,
+        onDelete = ReferenceOption.SET_NULL
+    ).nullable()
+    val agentRoleId = reference(
+        "agent_role_id",
+        AgentRoleTable,
         onDelete = ReferenceOption.SET_NULL
     ).nullable()
     val reasoningItemsJson = text("reasoning_items_json").nullable()
