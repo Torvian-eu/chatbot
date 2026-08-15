@@ -38,7 +38,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-api-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -101,7 +101,8 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
             modelConfig = TestDefaults.llmModel1.copy(name = "openai/gpt-4o"),
             provider = provider,
             settings = TestDefaults.modelSettings1,
-            apiKey = apiKey
+            apiKey = apiKey,
+            systemMessage = TestDefaults.modelSettings1.systemMessage
         )
 
         assertTrue(result.isRight(), "Expected success result")
@@ -131,7 +132,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = null // API key is null
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -179,7 +180,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = null // API key is null
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
 
         // Then
         assertTrue(result.isLeft(), "Expected error result")
@@ -217,7 +218,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -269,7 +270,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -316,7 +317,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -373,7 +374,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -425,7 +426,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
 
         // Then
         assertTrue(result.isRight(), "Expected success result")

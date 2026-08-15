@@ -33,7 +33,8 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
-        tools: List<ToolDefinition>?
+        tools: List<ToolDefinition>?,
+        systemMessage: String?
     ): Either<LLMCompletionError.ConfigurationError, ApiRequestConfig> {
         logger.debug("Preparing request for model ${modelConfig.name}")
 
@@ -50,8 +51,9 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
 
         // 1. Build the messages list with system message if present
         val apiMessages = buildList {
-            // Add system message if present in settings
-            val systemMessage = chatSettings.systemMessage
+            // Add the composed system message (single source of truth) if present.
+            // The settings' own systemMessage is deliberately NOT injected here: it is only ever included
+            // deliberately, as a ModelSettingsInstruction inside an agent role.
             if (!systemMessage.isNullOrBlank()) {
                 add(buildJsonObject {
                     put("role", JsonPrimitive("system"))

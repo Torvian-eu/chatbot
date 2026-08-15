@@ -23,6 +23,7 @@ interface LLMApiClient {
      * @param settings Specific settings profile to use for this completion request.
      * @param apiKey The decrypted API key for authentication (nullable if not required by the provider).
      * @param tools Optional list of tool definitions that the model can call
+     * @param systemMessage Optional composed system prompt (single source of truth; see the strategies).
      * @return Either an [LLMCompletionError] if the process fails at any stage (configuration, network, API error, parsing),
      *         or the generic [LLMCompletionResult] on success.
      */
@@ -32,7 +33,8 @@ interface LLMApiClient {
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
-        tools: List<ToolDefinition>? = null
+        tools: List<ToolDefinition>? = null,
+        systemMessage: String? = null
     ): Either<LLMCompletionError, LLMCompletionResult>
 
     /**
@@ -45,6 +47,7 @@ interface LLMApiClient {
      * @param settings Specific settings profile to use for this completion request.
      * @param apiKey The decrypted API key for authentication (nullable if not required by the provider).
      * @param tools Optional list of tool definitions that the model can call
+     * @param systemMessage Optional composed system prompt (single source of truth; see the strategies).
      * @return A Flow of Either<LLMCompletionError, LLMStreamChunk> representing the stream.
      *         An error emitted in the Flow indicates a problem during the stream.
      *         The flow terminates with `LLMStreamChunk.Done` on success or an error.
@@ -55,7 +58,8 @@ interface LLMApiClient {
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
-        tools: List<ToolDefinition>? = null
+        tools: List<ToolDefinition>? = null,
+        systemMessage: String? = null
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>>
 
     /**

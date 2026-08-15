@@ -208,7 +208,8 @@ class DefaultConversationTurnOrchestrator(
                 provider = request.llmConfig.provider,
                 settings = request.llmConfig.settings,
                 apiKey = request.llmConfig.apiKey,
-                tools = request.llmConfig.tools
+                tools = request.llmConfig.tools,
+                systemMessage = request.llmConfig.systemMessage.takeIf { it.isNotBlank() }
             )
         }.getOrElse { error ->
             logger.error("LLM API call failed for session ${request.session.id}: $error")
@@ -244,6 +245,7 @@ class DefaultConversationTurnOrchestrator(
             parentMessageId = parentMessageId,
             model = request.llmConfig.model,
             settings = request.llmConfig.settings,
+            agentRoleId = request.session.agentRoleId,
             reasoningItems = llmCompletionResult.reasoningItems
         )
         emit(
@@ -294,6 +296,7 @@ class DefaultConversationTurnOrchestrator(
             parentMessageId = parentMessageId,
             model = request.llmConfig.model,
             settings = request.llmConfig.settings,
+            agentRoleId = request.session.agentRoleId,
             reasoningItems = null
         )
         emit(
@@ -316,6 +319,7 @@ class DefaultConversationTurnOrchestrator(
             settings = request.llmConfig.settings,
             apiKey = request.llmConfig.apiKey,
             tools = request.llmConfig.tools,
+            systemMessage = request.llmConfig.systemMessage.takeIf { it.isNotBlank() },
             controlSignal = request.turnControlSignal,
             onContentDelta = { delta ->
                 emit(ConversationTurnEvent.AssistantMessageDelta(assistantMessage.id, delta))
@@ -477,6 +481,7 @@ class DefaultConversationTurnOrchestrator(
      * @param settings Chat settings applied to the request.
      * @param apiKey Optional provider API key.
      * @param tools Enabled tools available for the request.
+     * @param systemMessage Composed system prompt (single source of truth), or null when absent.
      * @param onContentDelta Callback for assistant text deltas.
      * @param onToolCallChunk Callback for streamed tool-call chunks.
      * @param onReasoningChunk Callback for the completed, opaque reasoning item emitted by the provider.
@@ -491,6 +496,7 @@ class DefaultConversationTurnOrchestrator(
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
+        systemMessage: String?,
         controlSignal: TurnControlSignal,
         onContentDelta: suspend (deltaContent: String) -> Unit,
         onToolCallChunk: suspend (toolCallChunk: LLMStreamChunk.ToolCallChunk) -> Unit,
@@ -509,7 +515,7 @@ class DefaultConversationTurnOrchestrator(
         val toolCallsByIndex = mutableMapOf<Int, MutableToolCallAccumulator>()
 
         try {
-            llmApiClient.completeChatStreaming(context, model, provider, settings, apiKey, tools)
+            llmApiClient.completeChatStreaming(context, model, provider, settings, apiKey, tools, systemMessage)
                 .collect { llmStreamChunkEither ->
                     if (controlSignal.isCancelled) return@collect
                     llmStreamChunkEither.fold(

@@ -77,7 +77,8 @@ class LLMApiClientKtor(
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
-        tools: List<ToolDefinition>?
+        tools: List<ToolDefinition>?,
+        systemMessage: String?
     ): Either<LLMCompletionError, LLMCompletionResult> {
 
         logger.info("LLMApiClientKtor: Received request for model ${modelConfig.name} (Provider: ${provider.name}, Type: ${provider.type})")
@@ -101,7 +102,8 @@ class LLMApiClientKtor(
             provider = provider,
             settings = settings,
             apiKey = apiKey,
-            tools = tools
+            tools = tools,
+            systemMessage = systemMessage
         ).getOrElse { error -> // Handle ConfigurationError returned by the strategy
             logger.error("Strategy {} failed to prepare request: {}", strategy::class.simpleName, error.message)
             return error.left() // Propagate the specific error returned by the strategy
@@ -207,7 +209,8 @@ class LLMApiClientKtor(
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
-        tools: List<ToolDefinition>?
+        tools: List<ToolDefinition>?,
+        systemMessage: String?
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> = channelFlow {
         logger.info("LLMApiClientKtor: Received streaming request for model ${modelConfig.name} (Provider: ${provider.name}, Type: ${provider.type})")
 
@@ -225,7 +228,8 @@ class LLMApiClientKtor(
             provider = provider,
             settings = settings,
             apiKey = apiKey,
-            tools = tools
+            tools = tools,
+            systemMessage = systemMessage
         ).getOrElse { error ->
             logger.error("Strategy ${strategy::class.simpleName} failed to prepare streaming request: ${error.message}")
             send(error.left())

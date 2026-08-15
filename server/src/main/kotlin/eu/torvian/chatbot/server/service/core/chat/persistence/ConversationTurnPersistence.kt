@@ -37,6 +37,8 @@ interface ConversationTurnPersistence {
      * @param parentMessageId Parent message that the assistant replies to.
      * @param model Model metadata associated with the assistant message.
      * @param settings Settings metadata associated with the assistant message.
+     * @param agentRoleId Optional agent role associated with the assistant message (provenance); null
+     *                    when the message was not produced through an agent role.
      * @param reasoningItems Optional raw reasoning items emitted with the assistant message. Must be `null` for
      *                       non-reasoning models; opaque, never logged or rendered.
      * @return Saved assistant message and the refreshed parent message.
@@ -47,6 +49,7 @@ interface ConversationTurnPersistence {
         parentMessageId: Long,
         model: LLMModel,
         settings: ModelSettings,
+        agentRoleId: Long? = null,
         reasoningItems: List<JsonObject>? = null
     ): PersistedAssistantMessage
 

@@ -14,11 +14,14 @@ import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
+import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.LLMProviderService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
 import eu.torvian.chatbot.server.service.core.ToolService
+import eu.torvian.chatbot.server.service.core.agent.SystemPromptComposer
+import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
 import eu.torvian.chatbot.server.service.core.error.provider.GetProviderError
@@ -30,13 +33,19 @@ import eu.torvian.chatbot.server.service.security.error.CredentialError
  * Default implementation that preserves the existing request-validation and runtime-preparation flow
  * before a conversation turn is orchestrated.
  *
+ * Model, settings, tools and the composed system prompt are resolved from the session's selected agent
+ * role (a session no longer stores its own model/settings). A session without a role, or a role whose
+ * referenced model/settings were deleted (`ON DELETE SET NULL`), raises a [ValidateNewMessageError.ModelConfigurationError].
+ *
  * @property messageDao DAO used to verify the optional parent message.
  * @property sessionDao DAO used to load the target chat session.
- * @property toolService Service used to resolve enabled tools for the session.
+ * @property toolService Service used to load the role's tool definitions by ID.
  * @property llmModelService Service used to load the selected model.
  * @property modelSettingsService Service used to load the selected settings profile.
  * @property llmProviderService Service used to load the provider that owns the selected model.
  * @property credentialManager Service used to resolve provider credentials when required.
+ * @property agentRoleService Service used to load the session's selected agent role.
+ * @property systemPromptComposer Composer that builds the system prompt from the role's instructions.
  * @property transactionScope Transaction wrapper that keeps the validation lookup sequence consistent.
  */
 class DefaultConversationTurnPreparationService(
@@ -47,8 +56,11 @@ class DefaultConversationTurnPreparationService(
     private val modelSettingsService: ModelSettingsService,
     private val llmProviderService: LLMProviderService,
     private val credentialManager: CredentialManager,
+    private val agentRoleService: AgentRoleService,
+    private val systemPromptComposer: SystemPromptComposer,
     private val transactionScope: TransactionScope,
 ) : ConversationTurnPreparationService {
+
     override suspend fun prepareNewMessageTurn(
         sessionId: Long,
         content: String?,
@@ -76,10 +88,37 @@ class DefaultConversationTurnPreparationService(
                 }
             }
 
-            val modelId = session.currentModelId
-                ?: raise(ValidateNewMessageError.ModelConfigurationError("No model selected for session $sessionId"))
-            val settingsId = session.currentSettingsId
-                ?: raise(ValidateNewMessageError.ModelConfigurationError("No settings selected for session $sessionId"))
+            // A session is configured exclusively through its agent role: without one there is no
+            // model/settings to talk to, so the turn cannot be prepared.
+            val agentRoleId = session.agentRoleId
+                ?: raise(
+                    ValidateNewMessageError.ModelConfigurationError(
+                        "No agent role selected for session $sessionId"
+                    )
+                )
+
+            val role = withError({ _: AgentRoleError.NotFound ->
+                ValidateNewMessageError.ModelConfigurationError(
+                    "Agent role $agentRoleId selected for session $sessionId no longer exists"
+                )
+            }) {
+                agentRoleService.getAgentRoleById(agentRoleId).bind()
+            }
+
+            // model_id/model_settings_id are nullable because deleting the referenced model/settings
+            // nulls them (ON DELETE SET NULL); re-check at turn time so a broken role fails loudly.
+            val modelId = role.modelId
+                ?: raise(
+                    ValidateNewMessageError.ModelConfigurationError(
+                        "Agent role $agentRoleId for session $sessionId references a deleted model"
+                    )
+                )
+            val settingsId = role.modelSettingsId
+                ?: raise(
+                    ValidateNewMessageError.ModelConfigurationError(
+                        "Agent role $agentRoleId for session $sessionId references deleted settings"
+                    )
+                )
 
             val model = withError({ _: GetModelError ->
                 throw IllegalStateException("Model with ID $modelId not found after validation")
@@ -130,16 +169,25 @@ class DefaultConversationTurnPreparationService(
                 }
             }
 
-            // Preserve the existing null-vs-empty distinction because downstream tool handling relies on it.
+            // Tools come from the role's tool-id set (stored in the `agent_role_tools` join table).
+            // Load them with a single batch query rather than one query per id; `ON DELETE CASCADE`
+            // guarantees every id resolves, so the mapNotNull below is unreachable defense-in-depth.
+            // Preserve the null-vs-empty distinction because downstream tool handling relies on it.
             val tools = if (model.hasCapability(LLMModelCapabilities.TOOL_CALLING)) {
-                toolService.getEnabledToolsForSession(sessionId)
+                val toolsById = toolService.getToolsByIds(role.tools)
+                role.tools.mapNotNull { toolsById[it] }
             } else {
                 null
             }
 
+            // The composed system prompt is the single source of truth for the system message. When the
+            // role has no instructions (or all are blank) this is empty, and strategies omit the system
+            // message entirely — the settings' own system text is never injected.
+            val systemMessage = systemPromptComposer.compose(role.instructions)
+
             PreparedConversationTurn(
                 session = session,
-                llmConfig = LLMConfig(provider, model, settings, apiKey, tools)
+                llmConfig = LLMConfig(provider, model, settings, apiKey, tools, systemMessage)
             )
         }
     }

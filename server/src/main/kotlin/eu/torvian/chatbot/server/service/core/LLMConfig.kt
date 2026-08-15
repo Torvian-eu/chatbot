@@ -24,11 +24,17 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  *                 Null if the model doesn't support tool calling (no tool calling capability).
  *                 Empty list if the model supports tool calling but no tools are enabled for the session.
  *                 List with items if the model supports tool calling and specific tools are enabled.
+ * @property systemMessage The composed system prompt for this request. This is the **single source of
+ *                 truth** for the system message: strategies inject exactly this string (and only when
+ *                 it is non-blank) and never read the settings' own system text. For agent-role-driven
+ *                 sessions this is composed from the role's instructions by the `SystemPromptComposer`;
+ *                 for sessions without a role it stays empty (no settings fallback).
  */
 data class LLMConfig(
     val provider: LLMProvider,
     val model: LLMModel,
     val settings: ModelSettings,
     val apiKey: String?,
-    val tools: List<ToolDefinition>? = null
+    val tools: List<ToolDefinition>? = null,
+    val systemMessage: String = ""
 )

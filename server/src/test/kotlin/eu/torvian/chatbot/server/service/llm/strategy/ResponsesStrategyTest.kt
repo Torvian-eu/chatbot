@@ -56,7 +56,7 @@ class ResponsesStrategyTest {
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
         val apiKey = "sk-test"
 
-        val result = strategy.prepareRequest(messages, responsesModel, provider, responsesSettings, apiKey)
+        val result = strategy.prepareRequest(messages, responsesModel, provider, responsesSettings, apiKey, systemMessage = responsesSettings.instructions)
 
         assertTrue(result.isRight(), "Expected success result")
         val config = result.getOrNull()
@@ -106,7 +106,7 @@ class ResponsesStrategyTest {
         )
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
 
-        val result = strategy.prepareRequest(messages, responsesModel, provider, responsesSettings, "sk-test")
+        val result = strategy.prepareRequest(messages, responsesModel, provider, responsesSettings, "sk-test", systemMessage = responsesSettings.instructions)
 
         assertTrue(result.isRight())
         val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)
@@ -418,7 +418,7 @@ class ResponsesStrategyTest {
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
         val replaySettings = responsesSettings.copy(replayReasoning = true)
 
-        val result = strategy.prepareRequest(messages, responsesModel, provider, replaySettings, "sk-test")
+        val result = strategy.prepareRequest(messages, responsesModel, provider, replaySettings, "sk-test", systemMessage = replaySettings.instructions)
 
         assertTrue(result.isRight())
         val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)
@@ -451,7 +451,7 @@ class ResponsesStrategyTest {
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
         val noReplaySettings = responsesSettings.copy(replayReasoning = false)
 
-        val result = strategy.prepareRequest(messages, responsesModel, provider, noReplaySettings, "sk-test")
+        val result = strategy.prepareRequest(messages, responsesModel, provider, noReplaySettings, "sk-test", systemMessage = noReplaySettings.instructions)
 
         assertTrue(result.isRight())
         val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)

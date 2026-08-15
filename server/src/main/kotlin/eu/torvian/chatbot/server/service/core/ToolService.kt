@@ -27,6 +27,18 @@ interface ToolService {
     suspend fun getToolById(id: Long): Either<GetToolError, ToolDefinition>
 
     /**
+     * Retrieves the tool definitions matching any of the given ids in a single query.
+     *
+     * Batch variant of [getToolById] for callers that hold a whole set of ids (e.g. an agent role's
+     * tool set) and want to avoid one query per id. Missing ids are omitted from the result, so a
+     * partial map is normal and there is no error surface.
+     *
+     * @param ids The tool-definition identifiers to load.
+     * @return Map of resolved id → [ToolDefinition]; ids that do not resolve are absent.
+     */
+    suspend fun getToolsByIds(ids: Set<Long>): Map<Long, ToolDefinition>
+
+    /**
      * Creates a new tool definition.
      * Validates the tool name, description, config, and input schema before persisting.
      * @param name The unique name of the tool.

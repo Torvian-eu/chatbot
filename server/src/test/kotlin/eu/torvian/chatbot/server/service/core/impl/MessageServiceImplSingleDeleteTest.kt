@@ -54,8 +54,7 @@ class MessageServiceImplSingleDeleteTest {
         createdAt = Instant.fromEpochMilliseconds(1234567890000L),
         updatedAt = Instant.fromEpochMilliseconds(1234567890000L),
         groupId = null,
-        currentModelId = 1L,
-        currentSettingsId = 1L,
+        agentRoleId = null,
         currentLeafMessageId = null,
         messages = emptyList()
     )

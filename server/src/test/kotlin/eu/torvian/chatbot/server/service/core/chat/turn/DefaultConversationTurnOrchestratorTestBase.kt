@@ -78,8 +78,7 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
         createdAt = baseInstant,
         updatedAt = baseInstant,
         groupId = null,
-        currentModelId = 1L,
-        currentSettingsId = 1L,
+        agentRoleId = null,
         currentLeafMessageId = null,
         messages = emptyList()
     )

@@ -78,6 +78,7 @@ class DefaultConversationTurnPersistence(
         parentMessageId: Long,
         model: LLMModel,
         settings: ModelSettings,
+        agentRoleId: Long?,
         reasoningItems: List<JsonObject>?
     ): PersistedAssistantMessage = transactionScope.transaction {
         val assistantMessage = messageDao.insertMessage(
@@ -88,6 +89,7 @@ class DefaultConversationTurnPersistence(
             content = content,
             modelId = model.id,
             settingsId = settings.id,
+            agentRoleId = agentRoleId,
             reasoningItems = reasoningItems
         ).getOrElse { daoError ->
             throw IllegalStateException(
