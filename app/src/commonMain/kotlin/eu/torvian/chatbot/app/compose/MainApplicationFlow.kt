@@ -45,7 +45,6 @@ import org.koin.compose.viewmodel.koinViewModel
 /**
  * Main application flow for authenticated users.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainApplicationFlow(
     authState: AuthState.Authenticated,

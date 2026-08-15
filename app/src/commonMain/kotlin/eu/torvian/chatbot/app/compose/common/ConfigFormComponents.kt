@@ -8,22 +8,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,6 +29,10 @@ import androidx.compose.ui.unit.dp
  * @param errorMessage Error message to display
  * @param singleLine Whether this is a single line field
  * @param keyboardType Type of keyboard to show
+ * @param enabled Whether the field accepts user input. Disabled fields still display their value
+ *            (used for read-only, server-resolved content).
+ * @param minLines Minimum number of visible text lines.
+ * @param maxLines Maximum number of visible text lines; content beyond this scrolls inside the field.
  */
 @Composable
 fun ConfigTextField(
@@ -54,7 +44,10 @@ fun ConfigTextField(
     isError: Boolean = false,
     errorMessage: String? = null,
     singleLine: Boolean = true,
-    keyboardType: KeyboardType = KeyboardType.Text
+    keyboardType: KeyboardType = KeyboardType.Text,
+    enabled: Boolean = true,
+    minLines: Int = 1,
+    maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE
 ) {
     Column(modifier = modifier) {
         OutlinedTextField(
@@ -66,10 +59,13 @@ fun ConfigTextField(
             } else null,
             isError = isError,
             singleLine = singleLine,
+            minLines = minLines,
+            maxLines = maxLines,
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            enabled = enabled,
             modifier = Modifier.fillMaxWidth()
         )
-        
+
         if (isError && errorMessage != null) {
             Text(
                 text = errorMessage,
@@ -144,7 +140,7 @@ fun <T> ConfigDropdown(
     errorMessage: String? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
-    
+
     Column(modifier = modifier) {
         ExposedDropdownMenuBox(
             expanded = expanded,
@@ -162,7 +158,7 @@ fun <T> ConfigDropdown(
                     .fillMaxWidth()
                     .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable)
             )
-            
+
             ExposedDropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false }
@@ -181,7 +177,7 @@ fun <T> ConfigDropdown(
                 }
             }
         }
-        
+
         if (isError && errorMessage != null) {
             Text(
                 text = errorMessage,
@@ -246,7 +242,7 @@ fun CredentialField(
     errorMessage: String? = null
 ) {
     var isVisible by remember { mutableStateOf(false) }
-    
+
     Column(modifier = modifier) {
         OutlinedTextField(
             value = value,
@@ -274,7 +270,7 @@ fun CredentialField(
             },
             modifier = Modifier.fillMaxWidth()
         )
-        
+
         if (isError && errorMessage != null) {
             Text(
                 text = errorMessage,

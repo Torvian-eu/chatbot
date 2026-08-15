@@ -79,6 +79,7 @@ fun ChatArea(
                 inputContent = state.inputContent,
                 replyTargetMessage = state.replyTargetMessage,
                 turnExecutionState = state.turnExecutionState,
+                canSend = state.canSend,
                 editingMessage = state.editingMessage,
                 editingContent = state.editingContent,
                 editingFileReferences = state.editingFileReferences,
@@ -138,6 +139,7 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param inputContent The current text content in the message input field.
  * @param replyTargetMessage The message the user is currently explicitly replying to via the Reply action.
  * @param turnExecutionState Lifecycle state used by the composer action button.
+ * @param canSend Whether the composer is enabled (requires a resolvable agent role).
  * @param editingMessage The message currently being edited (E3.S1, E3.S2).
  * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
  * @param dialogState The current dialog state from the ViewModel.
@@ -157,6 +159,7 @@ private fun SuccessStateDisplay(
     inputContent: String,
     replyTargetMessage: ChatMessage?,
     turnExecutionState: TurnExecutionState,
+    canSend: Boolean,
     editingMessage: ChatMessage?,
     editingContent: String?,
     editingFileReferences: List<FileReference>,
@@ -319,6 +322,7 @@ private fun SuccessStateDisplay(
                 inputContent = inputContent,
                 replyTargetMessage = replyTargetMessage,
                 turnExecutionState = turnExecutionState,
+                canSend = canSend,
                 pendingFileReferences = pendingFileReferences,
                 searchQuery = searchQuery,
                 searchResults = searchResults,
@@ -338,6 +342,7 @@ private fun SuccessStateDisplay(
                     actions = inputAreaActions,
                     replyTargetMessage = replyTargetMessage,
                     turnExecutionState = turnExecutionState,
+                    canSend = canSend,
                     isExpanded = false,
                     fileReferences = pendingFileReferences,
                     focusRequester = inputFocusRequester,

@@ -34,8 +34,8 @@ class InsertMessageUseCase(
         content: String
     ) {
         val session = state.currentSession.value ?: return
-        val modelId = session.currentModelId
-        val settingsId = session.currentSettingsId
+        val modelId = state.currentModel.value?.id
+        val settingsId = state.currentSettings.value?.id
 
         scope.launch {
             sessionRepository.insertMessage(

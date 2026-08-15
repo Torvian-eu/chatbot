@@ -114,6 +114,13 @@ fun SettingsScreen(
                         breadcrumbSegments = breadcrumbs
                     }
 
+                    SettingsCategory.AgentRoles -> AgentRolesTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+
                     SettingsCategory.McpServers -> LocalMCPServersTabRoute(
                         authState = authState,
                         categoryResetSignal = categoryResetSignal

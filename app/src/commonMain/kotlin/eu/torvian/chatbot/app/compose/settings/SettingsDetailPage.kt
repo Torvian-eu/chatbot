@@ -1,28 +1,17 @@
 package eu.torvian.chatbot.app.compose.settings
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 
 /**
  * Shared shell for settings detail pages.
@@ -44,10 +33,10 @@ import androidx.compose.ui.unit.dp
 fun SettingsDetailPage(
     categoryName: String,
     itemName: String,
-    supportingText: String? = null,
     onBackToList: () -> Unit,
     backContentDescription: String,
     modifier: Modifier = Modifier,
+    supportingText: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable () -> Unit,
 ) {
@@ -57,59 +46,66 @@ fun SettingsDetailPage(
     ) {
         val scrollState = rememberScrollState()
 
-        val columnModifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-
-        Column(modifier = columnModifier) {
-            Row(
+        // The desktop scrollbar tracks the shared scroll state so every detail page gets a visible
+        // scroll indicator (Android/Web fall back to their native scrollbars via ScrollbarWrapper).
+        ScrollbarWrapper(
+            scrollState = scrollState,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
             ) {
-                IconButton(onClick = onBackToList) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = backContentDescription
-                    )
-                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconButton(onClick = onBackToList) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = backContentDescription
+                        )
+                    }
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = categoryName,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = itemName,
-                        style = MaterialTheme.typography.headlineSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (!supportingText.isNullOrBlank()) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = supportingText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = categoryName,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = itemName,
+                            style = MaterialTheme.typography.headlineSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                        if (!supportingText.isNullOrBlank()) {
+                            Text(
+                                text = supportingText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        content = actions
+                    )
                 }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    content = actions
-                )
-            }
+                HorizontalDivider()
 
-            HorizontalDivider()
-
-            Box(modifier = Modifier.fillMaxWidth()) {
-                content()
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    content()
+                }
             }
         }
     }

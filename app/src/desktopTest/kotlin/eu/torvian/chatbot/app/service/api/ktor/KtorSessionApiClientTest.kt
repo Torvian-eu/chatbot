@@ -7,7 +7,6 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -47,8 +46,7 @@ class KtorSessionApiClientTest {
         id: Long,
         name: String,
         groupId: Long? = null,
-        currentModelId: Long? = null,
-        currentSettingsId: Long? = null,
+        agentRoleId: Long? = null,
         currentLeafMessageId: Long? = null,
         messages: List<ChatMessage> = emptyList()
     ) = ChatSession(
@@ -57,8 +55,7 @@ class KtorSessionApiClientTest {
         now,
         now,
         groupId,
-        currentModelId,
-        currentSettingsId,
+        agentRoleId,
         currentLeafMessageId,
         messages
     )
@@ -446,82 +443,66 @@ class KtorSessionApiClientTest {
         }
     }
 
-    // --- Tests for updateSessionModel ---
+    // --- Tests for updateSessionAgentRole ---
     @Test
-    fun `updateSessionModel - success`() = runTest {
+    fun `updateSessionAgentRole - success`() = runTest {
         val sessionId = 123L
-        val modelId = 10L
+        val agentRoleId = 50L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             assertEquals(
-                href(SessionResource.ById.Model(SessionResource.ById(sessionId = sessionId))),
+                href(SessionResource.ById.AgentRole(SessionResource.ById(sessionId = sessionId))),
                 request.url.fullPath
             )
             val requestBody = request.body.toByteArray().decodeToString()
-            assertTrue(requestBody.contains("10"), "Request body should contain modelId")
+            assertTrue(requestBody.contains("50"), "Request body should contain agentRoleId")
             respond(
-                content = json.encodeToString(
-                    UpdateSessionModelResponse(
-                        currentModelId = modelId,
-                        currentSettingsId = null
-                    )
-                ),
-                status = HttpStatusCode.OK,
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
+                content = "",
+                status = HttpStatusCode.OK
             )
         }
         val apiClient = createTestClient(mockEngine)
-        when (val result = apiClient.updateSessionModel(sessionId, modelId)) {
-            is Either.Right -> {
-                assertEquals(modelId, result.value.currentModelId)
-                assertEquals(null, result.value.currentSettingsId)
-            }
+        when (val result = apiClient.updateSessionAgentRole(sessionId, agentRoleId)) {
+            is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
     }
 
     @Test
-    fun `updateSessionModel - success - unset model`() = runTest {
+    fun `updateSessionAgentRole - success - unset role`() = runTest {
         val sessionId = 123L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             assertEquals(
-                href(SessionResource.ById.Model(SessionResource.ById(sessionId = sessionId))),
+                href(SessionResource.ById.AgentRole(SessionResource.ById(sessionId = sessionId))),
                 request.url.fullPath
             )
+            val requestBody = request.body.toByteArray().decodeToString()
+            assertTrue(requestBody.contains("null"), "Request body should contain null agentRoleId")
             respond(
-                content = json.encodeToString(
-                    UpdateSessionModelResponse(
-                        currentModelId = null,
-                        currentSettingsId = null
-                    )
-                ),
-                status = HttpStatusCode.OK,
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
+                content = "",
+                status = HttpStatusCode.OK
             )
         }
         val apiClient = createTestClient(mockEngine)
-        when (val result = apiClient.updateSessionModel(sessionId, null)) {
-            is Either.Right -> {
-                assertEquals(null, result.value.currentModelId)
-                assertEquals(null, result.value.currentSettingsId)
-            }
+        when (val result = apiClient.updateSessionAgentRole(sessionId, null)) {
+            is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
     }
 
     @Test
-    fun `updateSessionModel - failure - 400 Bad Request (Invalid ModelId)`() = runTest {
+    fun `updateSessionAgentRole - failure - 400 Bad Request (Invalid AgentRoleId)`() = runTest {
         val sessionId = 123L
-        val modelId = 999L
+        val agentRoleId = 999L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             respond(
                 content = json.encodeToString(
                     apiError(
                         CommonApiErrorCodes.INVALID_ARGUMENT,
-                        "Model ID not found",
-                        "modelId" to modelId.toString()
+                        "Agent role ID not found",
+                        "agentRoleId" to agentRoleId.toString()
                     )
                 ),
                 status = HttpStatusCode.BadRequest,
@@ -529,20 +510,20 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        when (val result = apiClient.updateSessionModel(sessionId, modelId)) {
+        when (val result = apiClient.updateSessionAgentRole(sessionId, agentRoleId)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
                 assertEquals(400, error.apiError.statusCode)
                 assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
-                assertEquals("Model ID not found", error.apiError.message)
-                assertEquals("999", error.apiError.details?.get("modelId"))
+                assertEquals("Agent role ID not found", error.apiError.message)
+                assertEquals("999", error.apiError.details?.get("agentRoleId"))
             }
         }
     }
 
     @Test
-    fun `updateSessionModel - failure - 404 Not Found (Session)`() = runTest {
+    fun `updateSessionAgentRole - failure - 404 Not Found (Session)`() = runTest {
         val sessionId = 999L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
@@ -553,107 +534,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        when (val result = apiClient.updateSessionModel(sessionId, 10L)) {
-            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
-            is Either.Left -> {
-                val error = result.value as ApiResourceError.ServerError
-                assertEquals(404, error.apiError.statusCode)
-                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
-                assertEquals("Session not found", error.apiError.message)
-            }
-        }
-    }
-
-    // --- Tests for updateSessionSettings ---
-    @Test
-    fun `updateSessionSettings - success`() = runTest {
-        val sessionId = 123L
-        val settingsId = 20L
-        val mockEngine = MockEngine { request ->
-            assertEquals(HttpMethod.Put, request.method)
-            assertEquals(
-                href(SessionResource.ById.Settings(SessionResource.ById(sessionId = sessionId))),
-                request.url.fullPath
-            )
-            val requestBody = request.body.toByteArray().decodeToString()
-            assertTrue(requestBody.contains("20"), "Request body should contain settingsId")
-            respond(
-                content = "",
-                status = HttpStatusCode.OK
-            )
-        }
-        val apiClient = createTestClient(mockEngine)
-        when (val result = apiClient.updateSessionSettings(sessionId, settingsId)) {
-            is Either.Right -> assertEquals(Unit, result.value)
-            is Either.Left -> fail("Expected success, but got error: ${result.value}")
-        }
-    }
-
-    @Test
-    fun `updateSessionSettings - success - unset settings`() = runTest {
-        val sessionId = 123L
-        val mockEngine = MockEngine { request ->
-            assertEquals(HttpMethod.Put, request.method)
-            assertEquals(
-                href(SessionResource.ById.Settings(SessionResource.ById(sessionId = sessionId))),
-                request.url.fullPath
-            )
-            respond(
-                content = "",
-                status = HttpStatusCode.OK
-            )
-        }
-        val apiClient = createTestClient(mockEngine)
-        when (val result = apiClient.updateSessionSettings(sessionId, null)) {
-            is Either.Right -> assertEquals(Unit, result.value)
-            is Either.Left -> fail("Expected success, but got error: ${result.value}")
-        }
-    }
-
-    @Test
-    fun `updateSessionSettings - failure - 400 Bad Request (Invalid SettingsId)`() = runTest {
-        val sessionId = 123L
-        val settingsId = 999L
-        val mockEngine = MockEngine { request ->
-            assertEquals(HttpMethod.Put, request.method)
-            respond(
-                content = json.encodeToString(
-                    apiError(
-                        CommonApiErrorCodes.INVALID_ARGUMENT,
-                        "Settings ID not found",
-                        "settingsId" to settingsId.toString()
-                    )
-                ),
-                status = HttpStatusCode.BadRequest,
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
-            )
-        }
-        val apiClient = createTestClient(mockEngine)
-        when (val result = apiClient.updateSessionSettings(sessionId, settingsId)) {
-            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
-            is Either.Left -> {
-                val error = result.value as ApiResourceError.ServerError
-                assertEquals(400, error.apiError.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
-                assertEquals("Settings ID not found", error.apiError.message)
-                assertEquals("999", error.apiError.details?.get("settingsId"))
-            }
-        }
-    }
-
-    @Test
-    fun `updateSessionSettings - failure - 404 Not Found (Session)`() = runTest {
-        val sessionId = 999L
-        val mockEngine = MockEngine { request ->
-            assertEquals(HttpMethod.Put, request.method)
-            respond(
-                content = json.encodeToString(apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found")),
-                status = HttpStatusCode.NotFound,
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
-            )
-        }
-        val apiClient = createTestClient(mockEngine)
-        when (val result = apiClient.updateSessionSettings(sessionId, 20L)) {
+        when (val result = apiClient.updateSessionAgentRole(sessionId, 50L)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError

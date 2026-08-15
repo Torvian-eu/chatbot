@@ -56,6 +56,7 @@ import kotlinx.coroutines.yield
  * @param inputContent Current input content.
  * @param replyTargetMessage Current reply target, if replying.
  * @param turnExecutionState Lifecycle state used by the composer action button.
+ * @param canSend Whether the composer is enabled (requires a resolvable agent role).
  * @param pendingFileReferences File references attached to the composer.
  * @param searchQuery Current in-session search query.
  * @param searchResults Ordered occurrence-level matches for the current query, used to build the
@@ -85,6 +86,7 @@ fun MessageList(
     inputContent: String = "",
     replyTargetMessage: ChatMessage? = null,
     turnExecutionState: TurnExecutionState = TurnExecutionState.IDLE,
+    canSend: Boolean = true,
     pendingFileReferences: List<FileReference> = emptyList(),
     searchQuery: String = "",
     searchResults: List<MessageSearchMatch> = emptyList(),
@@ -294,6 +296,7 @@ fun MessageList(
                                 actions = inputAreaActions,
                                 replyTargetMessage = replyTargetMessage,
                                 turnExecutionState = turnExecutionState,
+                                canSend = canSend,
                                 isExpanded = true,
                                 fileReferences = pendingFileReferences,
                                 focusRequester = inputFocusRequester,
@@ -314,6 +317,7 @@ fun MessageList(
                             actions = inputAreaActions,
                             replyTargetMessage = replyTargetMessage,
                             turnExecutionState = turnExecutionState,
+                            canSend = canSend,
                             isExpanded = true,
                             fileReferences = pendingFileReferences,
                             focusRequester = inputFocusRequester,

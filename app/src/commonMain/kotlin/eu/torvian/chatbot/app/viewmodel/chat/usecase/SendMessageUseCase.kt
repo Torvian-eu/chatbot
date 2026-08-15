@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_sending_message_short
-import eu.torvian.chatbot.app.generated.resources.warning_model_or_settings_unavailable
+import eu.torvian.chatbot.app.generated.resources.warning_no_agent_role_selected
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.service.security.RequestSigningService
@@ -387,14 +387,17 @@ class SendMessageUseCase(
     suspend fun execute(continueFromMessage: ChatMessage? = null) {
         val currentSession = state.currentSession.value ?: return
 
-        // Check if model or model settings are available
+        // Check that the session has a resolvable agent role. The role bundles model and settings;
+        // a missing role (nothing selected or role deleted server-side) or a broken role (referenced
+        // model/settings deleted) makes the session inert until the role is repaired or re-selected.
+        val currentRole = state.currentAgentRole.value
         val currentModel = state.currentModel.value
         val currentSettings = state.currentSettings.value
 
-        if (currentModel == null || currentSettings == null) {
+        if (currentRole == null || currentModel == null || currentSettings == null) {
             notificationService.genericWarning(
-                shortMessageRes = Res.string.warning_model_or_settings_unavailable,
-                detailedMessage = "Model: ${currentModel?.name ?: "not available"}, Settings: ${if (currentSettings != null) "available" else "not available"}"
+                shortMessageRes = Res.string.warning_no_agent_role_selected,
+                detailedMessage = "Role: ${currentRole?.name ?: "none"}, Model: ${currentModel?.name ?: "not available"}, Settings: ${if (currentSettings != null) "available" else "not available"}"
             )
             return
         }

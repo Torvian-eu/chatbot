@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelResponse
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -80,36 +79,18 @@ interface SessionApi {
     suspend fun updateSessionName(sessionId: Long, name: String): Either<ApiResourceError, Unit>
 
     /**
-     * Updates the currently selected LLM model for a specific chat session.
+     * Selects (or deselects) the agent role attached to a chat session.
      *
-     * Corresponds to `PUT /api/v1/sessions/{sessionId}/model`.
-     * (E4.S7)
-     *
-     * @param sessionId The ID of the session.
-     * @param modelId The new optional model ID for the session.
-     * @param autoSelectFirstAvailableSettings When true, backend will try to pick the first
-     * available settings profile for the selected model.
-     * @return [Either.Right] with [UpdateSessionModelResponse] on successful update,
-     *         or [Either.Left] containing an [ApiResourceError] on failure.
-     */
-    suspend fun updateSessionModel(
-        sessionId: Long,
-        modelId: Long?,
-        autoSelectFirstAvailableSettings: Boolean = false
-    ): Either<ApiResourceError, UpdateSessionModelResponse>
-
-    /**
-     * Updates the currently selected settings profile for a specific chat session.
-     *
-     * Corresponds to `PUT /api/v1/sessions/{sessionId}/settings`.
-     * (E4.S7)
+     * Corresponds to `PUT /api/v1/sessions/{sessionId}/agentRole`. A session references an agent
+     * role instead of storing its own model/settings/tools; passing `null` deselects the role and
+     * makes the session inert until another role is selected.
      *
      * @param sessionId The ID of the session.
-     * @param settingsId The new optional settings ID for the session.
+     * @param agentRoleId The new optional agent role ID for the session, or `null` to deselect.
      * @return [Either.Right] with [Unit] on successful update,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun updateSessionSettings(sessionId: Long, settingsId: Long?): Either<ApiResourceError, Unit>
+    suspend fun updateSessionAgentRole(sessionId: Long, agentRoleId: Long?): Either<ApiResourceError, Unit>
 
     /**
      * Sets the current "active" leaf message for a session, affecting which branch is displayed.

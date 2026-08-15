@@ -9,6 +9,7 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
+import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
@@ -40,6 +41,7 @@ class ChatStateImpl(
     modelRepository: ModelRepository,
     private val toolRepository: ToolRepository,
     mcpServerRepository: LocalMCPServerRepository,
+    private val agentRoleRepository: AgentRoleRepository,
     private val threadBuilder: ThreadBuilder,
     backgroundScope: CoroutineScope
 ) : ChatState {
@@ -160,6 +162,11 @@ class ChatStateImpl(
             initialValue = DataState.Idle
         )
 
+    // All agent roles owned by the current user, exposed directly from the repository so the
+    // top-bar selector and the management tab share a single reactive source.
+    override val availableAgentRoles: StateFlow<DataState<RepositoryError, List<AgentRoleDto>>> =
+        agentRoleRepository.roles
+
     private val allModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> = modelRepository.models
 
     // --- Derived Lookup Maps ---
@@ -171,44 +178,43 @@ class ChatStateImpl(
         allSettings.map { it.dataOrNull?.associateBy { settings -> settings.id } ?: emptyMap() }
             .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    // Agent roles indexed by id, derived from the reactive role list for O(1) lookups when
+    // resolving the session's selected role.
+    private val rolesById: StateFlow<Map<Long, AgentRoleDto>> =
+        availableAgentRoles.map { it.dataOrNull?.associateBy { role -> role.id } ?: emptyMap() }
+            .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     // --- Derived "Current Item" States ---
     override val currentSession: StateFlow<ChatSession?> =
         sessionDataState.map { it.dataOrNull }
             .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
 
-    override val currentModel: StateFlow<LLMModel?> = currentSession
-        .map { session -> session?.currentModelId }
+    // The role attached to the active session. When the session references a role that is missing
+    // from the role list (deleted server-side) or no role is selected, this resolves to null and
+    // the session becomes inert until a role is selected.
+    override val currentAgentRole: StateFlow<AgentRoleDto?> = currentSession
+        .map { session -> session?.agentRoleId }
         .distinctUntilChanged()
-        .combine(modelsById) { currentModelId, modelsMap ->
-            currentModelId?.let { modelsMap[it] }
+        .combine(rolesById) { agentRoleId, rolesMap ->
+            agentRoleId?.let { rolesMap[it] }
         }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
 
-    override val currentSettings: StateFlow<ModelSettings?> = currentSession
-        .map { session -> session?.currentSettingsId }
+    // The role bundles the model and settings; a session no longer stores its own ids. Re-pointing
+    // the derivations at [currentAgentRole] keeps downstream consumers (send gate, message metadata
+    // rendering) working unchanged.
+    override val currentModel: StateFlow<LLMModel?> = currentAgentRole
+        .map { role -> role?.modelId }
         .distinctUntilChanged()
-        .combine(settingsById) { currentSettingsId, settingsMap ->
-            currentSettingsId?.let { settingsMap[it] }
+        .combine(modelsById) { modelId, modelsMap ->
+            modelId?.let { modelsMap[it] }
         }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
 
-    // --- Derived Filtered List for UI ---
-    override val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ModelSettings>>> =
-        combine(currentModel, allSettings) { model, settingsState ->
-            val currentModelId = model?.id
-            when (settingsState) {
-                is DataState.Success -> {
-                    val filtered = if (currentModelId != null) {
-                        settingsState.data.filter { it.modelId == currentModelId }
-                    } else {
-                        emptyList()
-                    }
-                    DataState.Success(filtered)
-                }
-                // Pass through Error, Loading, Idle states directly
-                is DataState.Error -> settingsState
-                is DataState.Loading -> DataState.Loading
-                is DataState.Idle -> DataState.Idle
-            }
-        }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), DataState.Idle)
+    override val currentSettings: StateFlow<ModelSettings?> = currentAgentRole
+        .map { role -> role?.modelSettingsId }
+        .distinctUntilChanged()
+        .combine(settingsById) { settingsId, settingsMap ->
+            settingsId?.let { settingsMap[it] }
+        }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
 
     // Available tools from repository, filtered for enabled tools only
     override val availableTools: StateFlow<DataState<RepositoryError, List<ToolDefinition>>> =
@@ -226,17 +232,6 @@ class ChatStateImpl(
         }.stateIn(
             scope = backgroundScope,
             started = SharingStarted.Eagerly,
-            initialValue = DataState.Idle
-        )
-
-    // Session-specific enabled tools - switches based on active session
-    override val enabledToolsForCurrentSession: StateFlow<DataState<RepositoryError, List<ToolDefinition>>> =
-        _activeSessionId.flatMapLatest { sessionId ->
-            if (sessionId == null) flowOf(DataState.Idle)
-            else toolRepository.getEnabledToolsForSessionFlow(sessionId)
-        }.stateIn(
-            scope = backgroundScope,
-            started = SharingStarted.WhileSubscribed(5000),
             initialValue = DataState.Idle
         )
 
@@ -267,15 +262,6 @@ class ChatStateImpl(
             )
 
     init {
-        // Reload enabled tools when data state is Idle
-        enabledToolsForCurrentSession.filterIsInstance<DataState.Idle>()
-            .onEach {
-                activeSessionId.value?.let { sessionId ->
-                    toolRepository.loadEnabledToolsForSession(sessionId)
-                }
-            }
-            .launchIn(backgroundScope)
-
         // Auto-collapse messages when a new session is loaded
         combine(activeSessionId, displayedMessages) { sessionId, messages ->
             sessionId to messages

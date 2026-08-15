@@ -24,8 +24,7 @@ fun ChatAreaPreview() {
         createdAt = Instant.fromEpochMilliseconds(1234567890000L),
         updatedAt = Instant.fromEpochMilliseconds(1234567890000L),
         groupId = null,
-        currentModelId = null,
-        currentSettingsId = null,
+        agentRoleId = null,
         currentLeafMessageId = 2L,
         messages = listOf(
             ChatMessage.UserMessage(
@@ -62,10 +61,6 @@ fun ChatAreaPreview() {
         state = ChatAreaState(
             sessionUiState = DataState.Success(mockChatSession),
             displayedMessages = mockChatSession.messages,
-            availableModels = DataState.Success(listOf(mockModel)),
-            availableSettingsForCurrentModel = DataState.Success(emptyList()),
-            currentModel = mockModel,
-            currentSettings = null,
             modelsById = mapOf(1L to mockModel)
         ),
         actions = object : ChatAreaActions {
@@ -86,10 +81,11 @@ fun ChatAreaPreview() {
             override fun onCancelDialog() {}
             override fun onSwitchBranchToMessage(messageId: Long) {}
             override fun onToggleMessageCollapsed(messageId: Long) {}
-            override fun onSelectModel(modelId: Long?) {}
-            override fun onSelectSettings(settingsId: Long?) {}
+            override fun onSelectAgentRole(agentRoleId: Long?) {}
+            override fun onRetryLoadRoles() {}
+            override fun onAddRole() {}
+            override fun onEditRole() {}
             override fun onRetryLoadingSession() {}
-            override fun onShowToolConfig() {}
             override fun onShowToolCallDetails(toolCall: ToolCall) {}
             override fun onCopyMessage(message: ChatMessage) {}
             override fun onCopyThread() {}

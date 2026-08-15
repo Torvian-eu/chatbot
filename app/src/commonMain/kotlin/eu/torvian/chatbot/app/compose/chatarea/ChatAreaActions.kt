@@ -109,26 +109,30 @@ interface ChatAreaActions {
     fun onToggleMessageCollapsed(messageId: Long)
 
     /**
-     * Callback for when the user selects a specific LLM model for the session.
-     * @param modelId The ID of the model to select, or null to clear selection.
+     * Callback for when the user selects (or deselects) an agent role for the session.
+     * @param agentRoleId The ID of the role to select, or null to clear the selection.
      */
-    fun onSelectModel(modelId: Long?)
+    fun onSelectAgentRole(agentRoleId: Long?)
 
     /**
-     * Callback for when the user selects a specific settings profile for the session.
-     * @param settingsId The ID of the settings profile to select, or null to clear selection.
+     * Callback for when the user requests to retry loading agent roles after a failure.
      */
-    fun onSelectSettings(settingsId: Long?)
+    fun onRetryLoadRoles()
+
+    /**
+     * Callback for when the user requests to open the add-role dialog on the chat screen.
+     */
+    fun onAddRole()
+
+    /**
+     * Callback for when the user requests to open the edit-role dialog for the currently selected role.
+     */
+    fun onEditRole()
 
     /**
      * Callback for when the user requests to retry loading the current chat session after a failure.
      */
     fun onRetryLoadingSession()
-
-    /**
-     * Callback for when the user requests to show the tool configuration dialog.
-     */
-    fun onShowToolConfig()
 
     /**
      * Callback for when the user requests to show the tool call details dialog.

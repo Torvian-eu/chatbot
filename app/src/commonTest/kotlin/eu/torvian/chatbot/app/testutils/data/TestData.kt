@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
+import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import kotlin.time.Instant
@@ -49,14 +50,34 @@ fun chatSession(
     createdAt: Instant = instant(id),
     updatedAt: Instant = instant(id),
     groupId: Long? = null,
-    currentModelId: Long? = null,
-    currentSettingsId: Long? = null,
+    agentRoleId: Long? = null,
     currentLeafMessageId: Long? = null,
     messages: List<ChatMessage> = emptyList()
 ): ChatSession = ChatSession(
     id = id, name = name, createdAt = createdAt, updatedAt = updatedAt, groupId = groupId,
-    currentModelId = currentModelId, currentSettingsId = currentSettingsId,
+    agentRoleId = agentRoleId,
     currentLeafMessageId = currentLeafMessageId, messages = messages
+)
+
+// Helper to create AgentRoleDto
+fun agentRole(
+    id: Long,
+    name: String,
+    displayName: String? = null,
+    description: String = "",
+    modelId: Long? = null,
+    modelSettingsId: Long? = null,
+    tools: Set<Long> = emptySet(),
+    instructions: List<eu.torvian.chatbot.common.models.agent.AgentInstructionDto> = emptyList()
+): AgentRoleDto = AgentRoleDto(
+    id = id,
+    name = name,
+    displayName = displayName,
+    description = description,
+    modelId = modelId,
+    modelSettingsId = modelSettingsId,
+    tools = tools,
+    instructions = instructions
 )
 
 // Helper to create a generic API error

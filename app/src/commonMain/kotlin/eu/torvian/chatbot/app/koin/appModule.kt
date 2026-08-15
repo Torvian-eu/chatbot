@@ -31,6 +31,7 @@ import eu.torvian.chatbot.app.viewmodel.common.CoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.DefaultCoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.app.viewmodel.settings.AboutViewModel
+import eu.torvian.chatbot.app.viewmodel.settings.AgentRolesViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.BuiltInToolsViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.E2EASecurityViewModel
 import io.ktor.client.*
@@ -209,6 +210,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<RoleApi> {
         KtorRoleApiClient(get())
     }
+    single<AgentRoleApi> {
+        KtorAgentRoleApiClient(get())
+    }
     single<UserGroupApi> {
         KtorUserGroupApiClient(get())
     }
@@ -266,6 +270,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<RoleRepository> {
         DefaultRoleRepository(get())
     }
+    single<AgentRoleRepository> {
+        DefaultAgentRoleRepository(get())
+    }
     single<UserGroupRepository> {
         DefaultUserGroupRepository(get())
     }
@@ -322,6 +329,7 @@ fun appModule(config: AppConfiguration): Module = module {
             modelRepository = get(),
             toolRepository = get(),
             mcpServerRepository = get(),
+            agentRoleRepository = get(),
             threadBuilder = get(),
             backgroundScope = backgroundScope
         )
@@ -335,6 +343,7 @@ fun appModule(config: AppConfiguration): Module = module {
             get<ModelRepository>(),
             get<ToolRepository>(),
             get<LocalMCPServerRepository>(),
+            get<AgentRoleRepository>(),
             chatState,
             get(),
             get(),
@@ -350,12 +359,12 @@ fun appModule(config: AppConfiguration): Module = module {
         ReplyUseCase(chatState)
     }
 
-    factory<SelectModelUseCase> { (chatState: ChatState) ->
-        SelectModelUseCase(get<SessionRepository>(), chatState, get())
+    factory<SelectAgentRoleUseCase> { (chatState: ChatState) ->
+        SelectAgentRoleUseCase(get<SessionRepository>(), chatState, get())
     }
 
-    factory<SelectSettingsUseCase> { (chatState: ChatState) ->
-        SelectSettingsUseCase(get<SessionRepository>(), chatState, get())
+    factory<LoadAgentRolesUseCase> { (chatState: ChatState) ->
+        LoadAgentRolesUseCase(get<AgentRoleRepository>(), get())
     }
 
     factory<SwitchBranchUseCase> { (chatState: ChatState) ->
@@ -380,10 +389,6 @@ fun appModule(config: AppConfiguration): Module = module {
 
     factory<CopyToClipboardUseCase> { (chatState: ChatState) ->
         CopyToClipboardUseCase(chatState, get(), get())
-    }
-
-    factory<ToggleToolsUseCase> { (chatState: ChatState) ->
-        ToggleToolsUseCase(chatState, get(), get())
     }
 
     factory<FileReferenceUseCase> { (chatState: ChatState, scope: CoroutineScope) ->
@@ -416,11 +421,10 @@ fun appModule(config: AppConfiguration): Module = module {
             deleteMessageUC = get { parametersOf(chatState) },
             insertMessageUC = get { parametersOf(chatState) },
             switchBranchUC = get { parametersOf(chatState) },
-            selectModelUC = get { parametersOf(chatState) },
-            selectSettingsUC = get { parametersOf(chatState) },
+            selectAgentRoleUC = get { parametersOf(chatState) },
+            loadAgentRolesUC = get { parametersOf(chatState) },
             updateInputUC = get { parametersOf(chatState) },
             copyToClipboardUC = get { parametersOf(chatState) },
-            toggleToolsUC = get { parametersOf(chatState) },
             fileReferenceUC = get { parametersOf(chatState, normalScope) },
             navigationState = get(),
             normalScope = normalScope,
@@ -497,6 +501,15 @@ fun appModule(config: AppConfiguration): Module = module {
             get<ModelRepository>(),
             get<UserGroupRepository>(),
             get<NotificationService>()
+        )
+    }
+    viewModel {
+        AgentRolesViewModel(
+            agentRoleRepository = get(),
+            modelRepository = get(),
+            modelSettingsRepository = get(),
+            toolRepository = get(),
+            notificationService = get()
         )
     }
     viewModel {
