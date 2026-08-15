@@ -19,16 +19,10 @@ class SessionResource(val parent: Api = Api()) {
         class Name(val parent: ById)
 
         /**
-         * Resource for updating a session's model: /api/v1/sessions/{sessionId}/model
+         * Resource for selecting the agent role of a session: /api/v1/sessions/{sessionId}/agentRole
          */
-        @Resource("model")
-        class Model(val parent: ById)
-
-        /**
-         * Resource for updating a session's settings: /api/v1/sessions/{sessionId}/settings
-         */
-        @Resource("settings")
-        class Settings(val parent: ById)
+        @Resource("agentRole")
+        class AgentRole(val parent: ById)
 
         /**
          * Resource for updating a session's leaf message: /api/v1/sessions/{sessionId}/leafMessage
@@ -61,4 +55,3 @@ class SessionResource(val parent: Api = Api()) {
         class ToolCalls(val parent: ById)
     }
 }
-

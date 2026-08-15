@@ -35,6 +35,21 @@ enum class Table {
     MODEL_SETTINGS,
 
     /**
+     * Table for storing user-defined agent roles.
+     */
+    AGENT_ROLES,
+
+    /**
+     * Table for storing model settings.
+     */
+    AGENT_ROLE_OWNERS,
+
+    /**
+     * Table for linking agent roles to their enabled tool definitions.
+     */
+    AGENT_ROLE_TOOLS,
+
+    /**
      * Table for storing API secrets.
      */
     API_SECRETS,

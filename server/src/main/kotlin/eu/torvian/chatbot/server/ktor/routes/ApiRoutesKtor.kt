@@ -121,9 +121,9 @@ class ApiRoutesKtor(
     fun configureSessionRoutes(route: Route) {
         route.configureSessionRoutes(
             sessionService,
-            modelSettingsService,
             chatService,
             toolCallService,
+            agentRoleService,
             authorizationService,
             json
         )

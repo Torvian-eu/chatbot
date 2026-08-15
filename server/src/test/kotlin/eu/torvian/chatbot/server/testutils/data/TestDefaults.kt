@@ -151,14 +151,37 @@ object TestDefaults {
         customParams = null
     )
 
+    val agentRole1 = AgentRoleEntity(
+        id = 1L,
+        name = "Senior Architect",
+        displayName = "Senior Software Architect",
+        description = "A senior software architect role",
+        modelId = llmModel1.id,
+        modelSettingsId = modelSettings1.id,
+        instructionsJson = """[{"type":"role","name":"Role","message":"You are a senior software architect."}]""",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT
+    )
+
+    val agentRole2 = AgentRoleEntity(
+        id = 2L,
+        name = "Code Reviewer",
+        displayName = "Code Reviewer",
+        description = "A code review specialist role",
+        modelId = llmModel2.id,
+        modelSettingsId = modelSettings2.id,
+        instructionsJson = """[{"type":"role","name":"Role","message":"You are a meticulous code reviewer."}]""",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT
+    )
+
     val chatSession1 = ChatSessionEntity(
         id = 1L,
         name = "First Chat Session",
         createdAt = DEFAULT_INSTANT,
         updatedAt = DEFAULT_INSTANT,
         groupId = chatGroup1.id,
-        currentModelId = llmModel1.id,
-        currentSettingsId = modelSettings1.id
+        agentRoleId = null
     )
 
     val chatSession2 = ChatSessionEntity(
@@ -167,8 +190,7 @@ object TestDefaults {
         createdAt = DEFAULT_INSTANT,
         updatedAt = DEFAULT_INSTANT,
         groupId = chatGroup2.id,
-        currentModelId = llmModel2.id,
-        currentSettingsId = modelSettings2.id
+        agentRoleId = null
     )
 
     val sessionCurrentLeaf1 = SessionCurrentLeafEntity(

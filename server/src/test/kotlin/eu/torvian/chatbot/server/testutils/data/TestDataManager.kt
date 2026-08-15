@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
+import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.data.entities.UserEntity
@@ -216,6 +217,30 @@ interface TestDataManager {
     suspend fun getModelSettings(id: Long): ModelSettings?
 
     /**
+     * Inserts an agent role into the database. Creates the table if it does not exist.
+     *
+     * @param agentRole The agent role entity to insert (including its ID).
+     */
+    suspend fun insertAgentRole(agentRole: AgentRoleEntity)
+
+    /**
+     * Retrieves an agent role from the database.
+     *
+     * @param id The ID of the agent role to retrieve.
+     * @return The agent role if found, null otherwise.
+     */
+    suspend fun getAgentRole(id: Long): AgentRoleEntity?
+
+    /**
+     * Inserts an agent-role → tool-definition link into the `agent_role_tools` join table. Creates
+     * the table if it does not exist.
+     *
+     * @param roleId The ID of the agent role.
+     * @param toolId The ID of the tool definition to attach.
+     */
+    suspend fun insertAgentRoleTool(roleId: Long, toolId: Long)
+
+    /**
      * Inserts an LLM provider into the database. Creates the table if it does not exist.
      *
      * @param provider The LLM provider to insert.
@@ -271,6 +296,14 @@ interface TestDataManager {
      * @param userId The ID of the user who owns the settings.
      */
     suspend fun insertSettingsOwnership(settingsId: Long, userId: Long)
+
+    /**
+     * Inserts an agent role ownership record into the database. Creates the table if it does not exist.
+     *
+     * @param roleId The ID of the agent role.
+     * @param userId The ID of the user who owns the role.
+     */
+    suspend fun insertAgentRoleOwnership(roleId: Long, userId: Long)
 
     // --- Access records ---
 
