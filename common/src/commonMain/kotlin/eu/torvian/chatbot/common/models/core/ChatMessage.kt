@@ -73,6 +73,8 @@ sealed class ChatMessage {
      * @property fileReferences List of file references attached to this message.
      * @property modelId ID of the LLM model used to generate this message.
      * @property settingsId ID of the settings profile used to generate this message.
+     * @property agentRoleId ID of the agent role used to generate this message, when the message was
+     *            produced through an agent role. Null for assistant messages not tied to a role.
      * @property reasoningItems For Responses-capable models, the raw reasoning output items
      *            (e.g. `{"type":"reasoning",...}`) emitted alongside this assistant message, used to replay
      *            reasoning context across turns in a stateless fashion. `null` when the model did not emit
@@ -91,6 +93,7 @@ sealed class ChatMessage {
         override val fileReferences: List<FileReference> = emptyList(),
         val modelId: Long?,
         val settingsId: Long?,
+        val agentRoleId: Long? = null,
         val reasoningItems: List<JsonObject>? = null
     ) : ChatMessage() {
         override val role: Role = Role.ASSISTANT
