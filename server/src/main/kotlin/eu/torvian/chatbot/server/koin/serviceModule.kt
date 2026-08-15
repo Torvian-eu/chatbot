@@ -103,6 +103,18 @@ fun serviceModule() = module {
     }
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
+    single<AgentRoleService> {
+        AgentRoleServiceImpl(
+            agentRoleDao = get(),
+            agentRoleToolDao = get(),
+            agentRoleOwnershipDao = get(),
+            modelDao = get(),
+            settingsDao = get(),
+            toolDefinitionDao = get(),
+            json = get(),
+            transactionScope = get()
+        )
+    }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
     single<UserPreferenceService> { UserPreferenceServiceImpl(get(), get(), get()) }
 
