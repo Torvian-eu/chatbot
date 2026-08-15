@@ -29,6 +29,17 @@ interface ToolDefinitionDao {
     suspend fun getToolDefinitionById(id: Long): Either<ToolDefinitionError.NotFound, ToolDefinition>
 
     /**
+     * Retrieves the tool definitions matching any of the given ids in a single query.
+     *
+     * Unlike [getToolDefinitionById], a partial result is normal (ids that do not resolve are simply
+     * omitted), so there is no error surface.
+     *
+     * @param ids The tool-definition identifiers to load.
+     * @return The resolved [ToolDefinition]s; ids that do not resolve are omitted.
+     */
+    suspend fun getToolDefinitionsByIds(ids: Collection<Long>): List<ToolDefinition>
+
+    /**
      * Retrieves a tool definition by its unique name.
      * Use this when you have the tool name from LLM API responses.
      *

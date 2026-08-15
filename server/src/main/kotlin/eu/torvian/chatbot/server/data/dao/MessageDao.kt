@@ -63,6 +63,7 @@ interface MessageDao {
      * @param content The content of the new message.
      * @param modelId Optional model ID (for assistant messages).
      * @param settingsId Optional settings ID (for assistant messages).
+     * @param agentRoleId Optional agent role ID (for assistant messages, provenance).
      * @param reasoningItems Optional raw reasoning items emitted with an assistant message. Opaque; never rendered.
      * @param fileReferences Optional list of file references.
      * @param createdAt Optional creation timestamp. If null, uses current time.
@@ -77,6 +78,7 @@ interface MessageDao {
         content: String,
         modelId: Long?,
         settingsId: Long?,
+        agentRoleId: Long? = null,
         fileReferences: List<FileReference> = emptyList(),
         reasoningItems: List<JsonObject>? = null,
         createdAt: Instant? = null,
