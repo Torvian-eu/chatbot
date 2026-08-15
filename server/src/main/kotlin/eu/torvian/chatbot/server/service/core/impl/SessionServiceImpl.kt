@@ -3,16 +3,12 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.ensure
-import arrow.core.raise.ensureNotNull
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
-import eu.torvian.chatbot.common.models.llm.ModelSettings
-import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.*
 import eu.torvian.chatbot.server.service.core.SessionService
@@ -24,11 +20,10 @@ import eu.torvian.chatbot.server.service.core.error.session.*
 class SessionServiceImpl(
     private val sessionDao: SessionDao,
     private val sessionOwnershipDao: SessionOwnershipDao,
-    private val settingsDao: SettingsDao,
-    private val modelDao: ModelDao,
     private val messageDao: MessageDao,
     private val toolCallDao: ToolCallDao,
     private val sessionToolConfigDao: SessionToolConfigDao,
+    private val agentRoleDao: AgentRoleDao,
     private val transactionScope: TransactionScope,
 ) : SessionService {
 
@@ -82,7 +77,7 @@ class SessionServiceImpl(
     override suspend fun updateSessionName(id: Long, name: String): Either<UpdateSessionNameError, Unit> =
         transactionScope.transaction {
             either {
-                ensure(!name.isBlank()) {
+                ensure(name.isNotBlank()) {
                     UpdateSessionNameError.InvalidName("Session name cannot be blank.")
                 }
                 withError({ daoError: SessionError.SessionNotFound ->
@@ -107,167 +102,31 @@ class SessionServiceImpl(
             }
         }
 
-    override suspend fun updateSessionCurrentModelId(
+    override suspend fun updateSessionAgentRoleId(
         id: Long,
-        modelId: Long?
-    ): Either<UpdateSessionCurrentModelIdError, Unit> =
+        agentRoleId: Long?
+    ): Either<UpdateSessionAgentRoleIdError, Unit> =
         transactionScope.transaction {
             either {
-                // If modelId is provided, validate that the model exists and is active.
-                // A model has no operational type of its own; chat-capability is determined by the
-                // settings profile attached to the session, so no type check is performed here.
-                if (modelId != null) {
-                    val model = withError({ _: ModelError.ModelNotFound ->
-                        UpdateSessionCurrentModelIdError.InvalidRelatedEntity("Model with ID $modelId not found")
+                // When a role is selected, verify the role row exists so a session cannot be pointed at a
+                // deleted role (ownership is enforced by the route layer).
+                if (agentRoleId != null) {
+                    withError({ _: AgentRoleError.NotFound ->
+                        UpdateSessionAgentRoleIdError.AgentRoleNotFound(agentRoleId)
                     }) {
-                        modelDao.getModelById(modelId).bind()
-                    }
-                    // Guard against setting a deprecated (inactive) model
-                    ensure(model.active) {
-                        UpdateSessionCurrentModelIdError.DeprecatedModel(modelId)
+                        agentRoleDao.getRoleById(agentRoleId).bind()
                     }
                 }
 
                 withError({ daoError: SessionError ->
                     when (daoError) {
-                        is SessionError.SessionNotFound -> UpdateSessionCurrentModelIdError.SessionNotFound(daoError.id)
-                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentModelIdError.InvalidRelatedEntity(
-                            daoError.message
+                        is SessionError.SessionNotFound -> UpdateSessionAgentRoleIdError.SessionNotFound(daoError.id)
+                        is SessionError.ForeignKeyViolation -> UpdateSessionAgentRoleIdError.AgentRoleNotFound(
+                            agentRoleId ?: 0L
                         )
                     }
                 }) {
-                    // Update the model ID
-                    sessionDao.updateSessionCurrentModelId(id, modelId).bind()
-
-                    // Reset the currentSettingsId to null since settings are no longer valid for the new model
-                    sessionDao.updateSessionCurrentSettingsId(id, null).bind()
-                }
-            }
-        }
-
-    override suspend fun updateSessionCurrentSettingsId(
-        id: Long,
-        settingsId: Long?
-    ): Either<UpdateSessionCurrentSettingsIdError, Unit> =
-        transactionScope.transaction {
-            either {
-                if (settingsId != null) {
-                    // First get the current session to check its model ID
-                    val session = withError({ daoError: SessionError.SessionNotFound ->
-                        UpdateSessionCurrentSettingsIdError.SessionNotFound(daoError.id)
-                    }) {
-                        sessionDao.getSessionById(id).bind()
-                    }
-
-                    // Then get the settings to check its model ID and type
-                    val settings = withError({ _: SettingsError.SettingsNotFound ->
-                        UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity("Settings with ID $settingsId not found")
-                    }) {
-                        settingsDao.getSettingsById(settingsId).bind()
-                    }
-
-                    // Verify that the settings are of a chat-capable type (CHAT or RESPONSES)
-                    ensure(isChatLikeSettings(settings)) {
-                        UpdateSessionCurrentSettingsIdError.InvalidSettingsType(
-                            settingsId = settingsId,
-                            actualType = settings::class.simpleName ?: "Unknown"
-                        )
-                    }
-
-                    // Verify that the settings are valid for the current model
-                    ensure(session.currentModelId != null && session.currentModelId == settings.modelId) {
-                        UpdateSessionCurrentSettingsIdError.SettingsModelMismatch(
-                            settingsId = settingsId,
-                            settingsModelId = settings.modelId,
-                            sessionModelId = session.currentModelId
-                        )
-                    }
-                }
-
-                // If validation passes (or settingsId is null), update the settings ID
-                withError({ daoError: SessionError ->
-                    when (daoError) {
-                        is SessionError.SessionNotFound -> UpdateSessionCurrentSettingsIdError.SessionNotFound(daoError.id)
-                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity(
-                            daoError.message
-                        )
-                    }
-                }) {
-                    sessionDao.updateSessionCurrentSettingsId(id, settingsId).bind()
-                }
-            }
-        }
-
-    override suspend fun updateSessionCurrentModelAndSettingsId(
-        id: Long,
-        modelId: Long?,
-        settingsId: Long?
-    ): Either<UpdateSessionCurrentModelAndSettingsIdError, Unit> =
-        transactionScope.transaction {
-            either {
-                // If modelId is provided, validate it exists and is active. The model carries no
-                // operational type of its own; chat-capability is validated via the settings profile.
-                if (modelId != null) {
-                    val model = withError({ _: ModelError.ModelNotFound ->
-                        UpdateSessionCurrentModelAndSettingsIdError.ModelNotFound(modelId)
-                    }) {
-                        modelDao.getModelById(modelId).bind()
-                    }
-                    // Guard against setting a deprecated (inactive) model
-                    ensure(model.active) {
-                        UpdateSessionCurrentModelAndSettingsIdError.DeprecatedModel(modelId)
-                    }
-                }
-
-                // If settingsId is provided, validate it exists and is compatible with the model
-                if (settingsId != null) {
-                    val settings = withError({ _: SettingsError.SettingsNotFound ->
-                        UpdateSessionCurrentModelAndSettingsIdError.SettingsNotFound(settingsId)
-                    }) {
-                        settingsDao.getSettingsById(settingsId).bind()
-                    }
-
-                    // Verify that the settings are of a chat-capable type (CHAT or RESPONSES)
-                    ensure(isChatLikeSettings(settings)) {
-                        UpdateSessionCurrentModelAndSettingsIdError.InvalidSettingsType(
-                            settingsId = settingsId,
-                            actualType = settings::class.simpleName ?: "Unknown"
-                        )
-                    }
-
-                    // If modelId is also provided, ensure compatibility
-                    ensureNotNull(modelId) {
-                        UpdateSessionCurrentModelAndSettingsIdError.InvalidRelatedEntity(
-                            "Cannot assign settings without specifying a model"
-                        )
-                    }
-                    ensure(settings.modelId == modelId) {
-                        UpdateSessionCurrentModelAndSettingsIdError.SettingsModelMismatch(
-                            settingsId = settingsId,
-                            settingsModelId = settings.modelId,
-                            providedModelId = modelId
-                        )
-                    }
-                }
-
-                // All validations passed, perform the updates
-                withError({ daoError: SessionError ->
-                    when (daoError) {
-                        is SessionError.SessionNotFound -> UpdateSessionCurrentModelAndSettingsIdError.SessionNotFound(
-                            daoError.id
-                        )
-
-                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentModelAndSettingsIdError.InvalidRelatedEntity(
-                            daoError.message
-                        )
-                    }
-                }) {
-                    // Update model ID first
-                    sessionDao.updateSessionCurrentModelId(id, modelId).bind()
-
-                    // Update settings ID (will be null if modelId is null)
-                    val finalSettingsId = if (modelId == null) null else settingsId
-                    sessionDao.updateSessionCurrentSettingsId(id, finalSettingsId).bind()
+                    sessionDao.updateSessionAgentRoleId(id, agentRoleId).bind()
                 }
             }
         }
@@ -331,8 +190,7 @@ class SessionServiceImpl(
                     sessionDao.insertSession(
                         name = name,
                         groupId = originalSession.groupId,
-                        currentModelId = originalSession.currentModelId,
-                        currentSettingsId = originalSession.currentSettingsId
+                        agentRoleId = originalSession.agentRoleId
                     ).bind()
                 }
 
@@ -358,6 +216,7 @@ class SessionServiceImpl(
                     // Extract modelId and settingsId if this is an AssistantMessage
                     val modelId = (message as? ChatMessage.AssistantMessage)?.modelId
                     val settingsId = (message as? ChatMessage.AssistantMessage)?.settingsId
+                    val agentRoleId = (message as? ChatMessage.AssistantMessage)?.agentRoleId
                     val reasoningItems = (message as? ChatMessage.AssistantMessage)?.reasoningItems
 
                     // Clone this message
@@ -372,6 +231,7 @@ class SessionServiceImpl(
                             content = message.content,
                             modelId = modelId,
                             settingsId = settingsId,
+                            agentRoleId = agentRoleId,
                             fileReferences = message.fileReferences,
                             reasoningItems = reasoningItems,
                             createdAt = message.createdAt,
@@ -399,7 +259,7 @@ class SessionServiceImpl(
                 val newLeafMessageId = originalSession.currentLeafMessageId?.let { messageIdMap[it] }
                 if (newLeafMessageId != null) {
                     withError({ daoError: SessionError ->
-                        CloneSessionError.InternalError("Failed to update leaf message: ${daoError}")
+                        CloneSessionError.InternalError("Failed to update leaf message: $daoError")
                     }) {
                         sessionDao.updateSessionLeafMessageId(newSession.id, newLeafMessageId).bind()
                     }
@@ -437,7 +297,7 @@ class SessionServiceImpl(
                 if (enabledTools.isNotEmpty()) {
                     val toolIds = enabledTools.map { it.id }
                     withError({ daoError: SetToolsEnabledError ->
-                        CloneSessionError.InternalError("Failed to clone tool configurations: ${daoError}")
+                        CloneSessionError.InternalError("Failed to clone tool configurations: $daoError")
                     }) {
                         sessionToolConfigDao.setToolsEnabledForSession(
                             sessionId = newSession.id,
@@ -455,18 +315,4 @@ class SessionServiceImpl(
                 }
             }
         }
-
-    /**
-     * Whether the given [ModelSettings] can be attached to a chat session. Both [ChatModelSettings] and
-     * [ResponsesModelSettings] describe conversational generation, so either is accepted for CHAT or
-     * RESPONSES models.
-     *
-     * @receiver The settings profile to inspect.
-     * @return `true` if the settings describe a chat-capable model type.
-     */
-    private fun isChatLikeSettings(settings: ModelSettings): Boolean = when (settings) {
-        is ChatModelSettings -> true
-        is ResponsesModelSettings -> true
-        else -> false
-    }
 }

@@ -5,6 +5,7 @@ import eu.torvian.chatbot.app.chat.search.SearchDirection
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
+import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -42,21 +43,16 @@ interface ChatState {
     val availableModels: StateFlow<DataState<RepositoryError, List<LLMModel>>>
 
     /**
-     * The list of settings profiles available for the currently selected model.
+     * The list of agent roles owned by the current user, used by the top-bar role selector
+     * and the role management surface.
      */
-    val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ModelSettings>>>
+    val availableAgentRoles: StateFlow<DataState<RepositoryError, List<AgentRoleDto>>>
 
     /**
      * The list of all available tool definitions.
      * Filtered to show only globally enabled tools.
      */
     val availableTools: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>
-
-    /**
-     * The list of tools enabled for the current session.
-     * Returns empty list if no session is active.
-     */
-    val enabledToolsForCurrentSession: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>
 
     /**
      * Tool calls for the current session, organized by message ID.
@@ -93,14 +89,23 @@ interface ChatState {
     val currentSession: StateFlow<ChatSession?>
 
     /**
+     * The agent role currently selected for the active session, or null when no role is attached
+     * or the referenced role cannot be resolved from [availableAgentRoles].
+     * Derived from `currentSession.agentRoleId` and the role list.
+     */
+    val currentAgentRole: StateFlow<AgentRoleDto?>
+
+    /**
      * The fully resolved LLMModel object for the current session, or null.
-     * Derived by combining currentSession and modelsById.
+     * Derived from the role attached to the session ([currentAgentRole]) and [modelsById].
+     * A session no longer stores its own model id, so this is the model bundled by the role.
      */
     val currentModel: StateFlow<LLMModel?>
 
     /**
      * The fully resolved [ModelSettings] object for the current session, or null.
-     * Derived by combining currentSession and settingsById.
+     * Derived from the role attached to the session ([currentAgentRole]) and [settingsById].
+     * A session no longer stores its own settings id, so this is the settings bundled by the role.
      */
     val currentSettings: StateFlow<ModelSettings?>
 

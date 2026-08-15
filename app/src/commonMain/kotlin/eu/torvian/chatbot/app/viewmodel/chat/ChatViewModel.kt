@@ -13,6 +13,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
+import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
@@ -21,7 +22,6 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -47,11 +47,10 @@ import kotlin.time.Duration.Companion.milliseconds
  * @param deleteMessageUC Use case for deleting messages
  * @param insertMessageUC Use case for inserting messages
  * @param switchBranchUC Use case for switching branches
- * @param selectModelUC Use case for selecting models
- * @param selectSettingsUC Use case for selecting settings
+ * @param selectAgentRoleUC Use case for selecting agent roles
+ * @param loadAgentRolesUC Use case for loading the user's agent roles
  * @param updateInputUC Use case for updating input content
  * @param copyToClipboardUC Use case for copying content to clipboard
- * @param toggleToolsUC Use case for toggling tools for sessions
  * @param fileReferenceUC Use case for managing file references
  * @param navigationState State holder for cross-session search navigation intent.
  * @param normalScope Coroutine scope for UI operations
@@ -66,11 +65,10 @@ class ChatViewModel(
     private val deleteMessageUC: DeleteMessageUseCase,
     private val insertMessageUC: InsertMessageUseCase,
     private val switchBranchUC: SwitchBranchUseCase,
-    private val selectModelUC: SelectModelUseCase,
-    private val selectSettingsUC: SelectSettingsUseCase,
+    private val selectAgentRoleUC: SelectAgentRoleUseCase,
+    private val loadAgentRolesUC: LoadAgentRolesUseCase,
     private val updateInputUC: UpdateInputUseCase,
     private val copyToClipboardUC: CopyToClipboardUseCase,
-    private val toggleToolsUC: ToggleToolsUseCase,
     private val fileReferenceUC: FileReferenceUseCase,
     private val navigationState: SearchNavigationState,
     private val normalScope: CoroutineScope,
@@ -121,16 +119,9 @@ class ChatViewModel(
     val availableModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> = state.availableModels
 
     /**
-     * The list of settings profiles available for the currently selected model.
+     * The list of agent roles owned by the current user, for the top-bar role selector.
      */
-    val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ModelSettings>>> =
-        state.availableSettingsForCurrentModel
-
-    /**
-     * The list of tools enabled for the current session.
-     */
-    val enabledToolsForCurrentSession: StateFlow<DataState<RepositoryError, List<ToolDefinition>>> =
-        state.enabledToolsForCurrentSession
+    val availableAgentRoles: StateFlow<DataState<RepositoryError, List<AgentRoleDto>>> = state.availableAgentRoles
 
     /**
      * Tool calls for the current session, organized by message ID.
@@ -142,6 +133,11 @@ class ChatViewModel(
      * A map of model IDs to LLMModel objects for quick lookups.
      */
     val modelsById: StateFlow<Map<Long, LLMModel>> = state.modelsById
+
+    /**
+     * The agent role currently selected for the active session, or null when no role is attached.
+     */
+    val currentAgentRole: StateFlow<AgentRoleDto?> = state.currentAgentRole
 
     /**
      * The fully resolved LLMModel object for the current session, or null.
@@ -540,20 +536,20 @@ class ChatViewModel(
     }
 
     /**
-     * Selects a model for the current session.
+     * Selects an agent role for the current session, or deselects it when null.
      */
-    fun selectModel(modelId: Long?) {
+    fun selectAgentRole(agentRoleId: Long?) {
         normalScope.launch {
-            selectModelUC.execute(modelId)
+            selectAgentRoleUC.execute(agentRoleId)
         }
     }
 
     /**
-     * Selects settings for the current session.
+     * Loads the current user's agent roles (used by the top-bar retry action).
      */
-    fun selectSettings(settingsId: Long?) {
+    fun loadAgentRoles() {
         normalScope.launch {
-            selectSettingsUC.execute(settingsId)
+            loadAgentRolesUC.execute()
         }
     }
 
@@ -682,25 +678,7 @@ class ChatViewModel(
         }
     }
 
-    // --- Tool Management ---
-
-    /**
-     * Toggles a tool for the current session.
-     */
-    fun toggleToolForSession(toolDefinition: ToolDefinition, enabled: Boolean) {
-        normalScope.launch {
-            toggleToolsUC.toggleTool(toolDefinition, enabled)
-        }
-    }
-
-    /**
-     * Batch toggles multiple tools for the current session.
-     */
-    fun toggleToolsForSession(toolDefinitions: List<ToolDefinition>, enabled: Boolean) {
-        normalScope.launch {
-            toggleToolsUC.toggleTools(toolDefinitions, enabled)
-        }
-    }
+    // --- Tool Approval ---
 
     /**
      * Approves a tool call and updates its status to EXECUTING.
@@ -721,29 +699,6 @@ class ChatViewModel(
     }
 
     // --- Dialog Management ---
-
-    /**
-     * Shows the tool configuration dialog for the current session.
-     */
-    fun showToolConfigDialog() {
-        state.setDialogState(
-            ChatAreaDialogState.ToolConfig(
-                enabledToolsFlow = state.enabledToolsForCurrentSession,
-                availableToolsFlow = state.availableTools,
-                mcpServersFlow = state.mcpServers,
-                onToggleTool = { toolDefinition, isEnabled ->
-                    toggleToolForSession(toolDefinition, isEnabled)
-                },
-                onToggleTools = { toolDefinitions, isEnabled ->
-                    toggleToolsForSession(toolDefinitions, isEnabled)
-                },
-                onDismiss = {
-                    state.setDialogState(ChatAreaDialogState.None)
-                }
-            )
-        )
-    }
-
     /**
      * Shows the tool call details dialog.
      * If the tool call is awaiting approval, approval actions will be available.

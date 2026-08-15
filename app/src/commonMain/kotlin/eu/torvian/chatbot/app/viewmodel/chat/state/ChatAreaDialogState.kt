@@ -1,13 +1,9 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
-import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
-import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.tool.ToolCall
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -62,25 +58,6 @@ sealed class ChatAreaDialogState {
     data class InsertMessage(
         val targetMessage: ChatMessage,
         val onConfirm: (MessageInsertPosition, ChatMessage.Role, String) -> Unit,
-        val onDismiss: () -> Unit
-    ) : ChatAreaDialogState()
-
-    /**
-     * State for the Tool Configuration dialog.
-     *
-     * @property enabledToolsFlow Reactive flow of tools currently enabled for the session.
-     * @property availableToolsFlow Reactive flow of all available tools.
-     * @property mcpServersFlow Reactive flow of MCP server configurations for grouping and enablement checks.
-     * @property onToggleTool Action to toggle a tool on/off.
-     * @property onToggleTools Action to toggle multiple tools on/off at once.
-     * @property onDismiss Action to close the dialog.
-     */
-    data class ToolConfig(
-        val enabledToolsFlow: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>,
-        val availableToolsFlow: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>,
-        val mcpServersFlow: StateFlow<DataState<RepositoryError, List<LocalMCPServerDto>>>,
-        val onToggleTool: (ToolDefinition, Boolean) -> Unit,
-        val onToggleTools: (List<ToolDefinition>, Boolean) -> Unit,
         val onDismiss: () -> Unit
     ) : ChatAreaDialogState()
 

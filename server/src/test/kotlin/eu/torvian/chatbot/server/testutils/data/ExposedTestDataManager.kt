@@ -64,6 +64,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             Table.LLM_PROVIDERS to LLMProviderTable,
             Table.LLM_MODELS to LLMModelTable,
             Table.MODEL_SETTINGS to ModelSettingsTable,
+            Table.AGENT_ROLES to AgentRoleTable,
             Table.CHAT_GROUPS to ChatGroupTable,
             Table.CHAT_SESSIONS to ChatSessionTable,
             Table.CHAT_MESSAGES to ChatMessageTable,
@@ -77,6 +78,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             Table.LLM_MODEL_OWNERS to LLMModelOwnersTable,
             Table.MODEL_SETTINGS_OWNERS to ModelSettingsOwnersTable,
             Table.API_SECRET_OWNERS to ApiSecretOwnersTable,
+            Table.AGENT_ROLE_OWNERS to AgentRoleOwnersTable,
 
             // Access tables (must come after both resources and user groups)
             Table.LLM_PROVIDER_ACCESS to LLMProviderAccessTable,
@@ -85,6 +87,9 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
 
             // Tool tables (must come after chat messages for tool calls)
             Table.TOOL_DEFINITIONS to ToolDefinitionTable,
+            // agent_role_tools references both agent_roles (core block above) and tool_definitions,
+            // so it must be created after both.
+            Table.AGENT_ROLE_TOOLS to AgentRoleToolsTable,
             Table.TOOL_CALLS to ToolCallTable,
             Table.SESSION_TOOL_CONFIG to SessionToolConfigTable,
 
@@ -124,6 +129,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         dataSet.llmModels.forEach { insertLLMModel(it) }
         dataSet.modelSettings.forEach { insertModelSettings(it) }
         dataSet.chatGroups.forEach { insertChatGroup(it) }
+        dataSet.agentRoles.forEach { insertAgentRole(it) }
         dataSet.chatSessions.forEach { insertChatSession(it) }
         dataSet.chatMessages.forEach { insertChatMessage(it) }
         dataSet.sessionCurrentLeaves.forEach { insertSessionCurrentLeaf(it) }
@@ -263,8 +269,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 it[createdAt] = chatSession.createdAt.toEpochMilliseconds()
                 it[updatedAt] = chatSession.updatedAt.toEpochMilliseconds()
                 it[groupId] = chatSession.groupId
-                it[currentModelId] = chatSession.currentModelId
-                it[currentSettingsId] = chatSession.currentSettingsId
+                it[agentRoleId] = chatSession.agentRoleId
             }
             return@transaction
         }
@@ -315,6 +320,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                     it[messageId] = chatMessage.id
                     it[modelId] = chatMessage.modelId
                     it[settingsId] = chatMessage.settingsId
+                    it[agentRoleId] = chatMessage.agentRoleId
                 }
             }
             return@transaction
@@ -407,6 +413,41 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 .singleOrNull()
         }
 
+    override suspend fun insertAgentRole(agentRole: AgentRoleEntity) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.AGENT_ROLES)
+            AgentRoleTable.insert {
+                it[id] = agentRole.id
+                it[name] = agentRole.name
+                it[displayName] = agentRole.displayName
+                it[description] = agentRole.description
+                it[modelId] = agentRole.modelId
+                it[modelSettingsId] = agentRole.modelSettingsId
+                it[instructionsJson] = agentRole.instructionsJson
+                it[createdAt] = agentRole.createdAt.toEpochMilliseconds()
+                it[updatedAt] = agentRole.updatedAt.toEpochMilliseconds()
+            }
+            return@transaction
+        }
+
+    override suspend fun getAgentRole(id: Long): AgentRoleEntity? =
+        transactionScope.transaction {
+            ensureTableCreated(Table.AGENT_ROLES)
+            AgentRoleTable.selectAll().where { AgentRoleTable.id eq id }
+                .map { it.toAgentRoleEntity() }
+                .singleOrNull()
+        }
+
+    override suspend fun insertAgentRoleTool(roleId: Long, toolId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.AGENT_ROLE_TOOLS)
+            AgentRoleToolsTable.insert {
+                it[AgentRoleToolsTable.roleId] = roleId
+                it[AgentRoleToolsTable.toolDefinitionId] = toolId
+            }
+            return@transaction
+        }
+
     override suspend fun insertUser(user: UserEntity) =
         transactionScope.transaction {
             ensureTableCreated(Table.USERS)
@@ -471,6 +512,16 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             ModelSettingsOwnersTable.insert {
                 it[ModelSettingsOwnersTable.settingsId] = settingsId
                 it[ModelSettingsOwnersTable.userId] = userId
+            }
+            return@transaction
+        }
+
+    override suspend fun insertAgentRoleOwnership(roleId: Long, userId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.AGENT_ROLE_OWNERS)
+            AgentRoleOwnersTable.insert {
+                it[AgentRoleOwnersTable.roleId] = roleId
+                it[AgentRoleOwnersTable.userId] = userId
             }
             return@transaction
         }
@@ -700,6 +751,11 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         if (data.chatMessages.isNotEmpty()) required += Table.CHAT_MESSAGES
         if (data.llmModels.isNotEmpty()) required += Table.LLM_MODELS
         if (data.modelSettings.isNotEmpty()) required += Table.MODEL_SETTINGS
+        if (data.agentRoles.isNotEmpty()) required += Table.AGENT_ROLES
+        // Agent roles always have an associated (possibly empty) `agent_role_tools` join table, and
+        // every role read loads the tool set from it — so the join table must exist whenever roles
+        // are set up.
+        if (data.agentRoles.isNotEmpty()) required += Table.AGENT_ROLE_TOOLS
         if (data.sessionCurrentLeaves.isNotEmpty()) required += Table.SESSION_CURRENT_LEAF
 
         return required

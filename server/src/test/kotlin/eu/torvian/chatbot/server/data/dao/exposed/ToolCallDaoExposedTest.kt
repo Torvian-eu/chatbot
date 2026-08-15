@@ -73,8 +73,7 @@ class ToolCallDaoExposedTest {
         testSessionId = sessionDao.insertSession(
             name = "Test Session",
             groupId = null,
-            currentModelId = null,
-            currentSettingsId = null
+            agentRoleId = null
         ).getOrElse { throw IllegalStateException("Failed to create test session") }.id
 
         // Create test assistant message (required for tool calls)

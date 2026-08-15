@@ -389,7 +389,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 userMessage.id,
                 reasoningModel,
                 reasoningSettings,
-                reasoningItems
+                reasoningItems = reasoningItems
             )
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
@@ -413,7 +413,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 userMessage.id,
                 reasoningModel,
                 reasoningSettings,
-                reasoningItems
+                reasoningItems = reasoningItems
             )
         }
     }
@@ -548,7 +548,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 userMessage.id,
                 reasoningModel,
                 reasoningSettings,
-                reasoningItems
+                reasoningItems = reasoningItems
             )
         } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
         coEvery {

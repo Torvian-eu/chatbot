@@ -28,6 +28,7 @@ class LoadSessionUseCase(
     private val modelRepository: ModelRepository,
     private val toolRepository: ToolRepository,
     private val mcpServerRepository: LocalMCPServerRepository,
+    private val agentRoleRepository: AgentRoleRepository,
     private val state: ChatState,
     private val notificationService: NotificationService,
     private val eventBus: EventBus,
@@ -75,17 +76,18 @@ class LoadSessionUseCase(
         lastFailedLoadEventId = null
         lastUserId = userId
 
-        // Load all dependencies in parallel
+        // Load all dependencies in parallel. Agent roles, models, settings and tools feed the
+        // top-bar role selector and the role-derived current model/settings derivations.
         parZip(
             { sessionRepository.loadSessionDetails(sessionId) },
             { sessionRepository.loadSessionToolCalls(sessionId) },
             { modelRepository.loadModels() },
             { modelSettingsRepository.loadAllSettings() },
             { toolRepository.loadTools() },
-            { toolRepository.loadEnabledToolsForSession(sessionId) },
+            { agentRoleRepository.loadRoles() },
             { mcpServerRepository.loadServers(userId) },
             { toolRepository.loadUserToolApprovalPreferences() }
-        ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, enabledToolsResult, _, preferencesResult ->
+        ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, agentRolesResult, _, preferencesResult ->
             sessionResult
                 .onLeft { error ->
                     val eventId = notificationService.repositoryError(
@@ -128,10 +130,10 @@ class LoadSessionUseCase(
                 )
                 return@parZip
             }
-            enabledToolsResult.onLeft { error ->
+            agentRolesResult.onLeft { error ->
                 notificationService.repositoryError(
                     error = error,
-                    shortMessage = "Failed to load enabled tools for session"
+                    shortMessage = "Failed to load agent roles"
                 )
                 return@parZip
             }

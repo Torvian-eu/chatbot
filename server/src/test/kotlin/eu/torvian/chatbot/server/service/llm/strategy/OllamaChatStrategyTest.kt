@@ -60,7 +60,8 @@ class OllamaChatStrategyTest {
             modelConfig = testModel,
             provider = testProvider,
             settings = testSettings,
-            apiKey = null
+            apiKey = null,
+            systemMessage = testSettings.systemMessage
         )
 
         // Assert

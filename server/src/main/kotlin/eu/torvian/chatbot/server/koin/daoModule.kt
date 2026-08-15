@@ -39,6 +39,7 @@ fun daoModule() = module {
     single<ProviderOwnershipDao> { ProviderOwnershipDaoExposed(get()) }
     single<ModelOwnershipDao> { ModelOwnershipDaoExposed(get()) }
     single<SettingsOwnershipDao> { SettingsOwnershipDaoExposed(get()) }
+    single<AgentRoleOwnershipDao> { AgentRoleOwnershipDaoExposed(get()) }
 
     // Access DAOs
     single<ProviderAccessDao> { ProviderAccessDaoExposed(get()) }
@@ -50,6 +51,8 @@ fun daoModule() = module {
     single<PermissionDao> { PermissionDaoExposed(get()) }
     single<UserRoleAssignmentDao> { UserRoleAssignmentDaoExposed(get()) }
     single<RolePermissionDao> { RolePermissionDaoExposed(get()) }
+    single<AgentRoleDao> { AgentRoleDaoExposed(get()) }
+    single<AgentRoleToolDao> { AgentRoleToolDaoExposed(get()) }
 
     // Tool-related DAOs
     single<ToolDefinitionDao> { ToolDefinitionDaoExposed(get()) }

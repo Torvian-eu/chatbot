@@ -348,6 +348,7 @@ class DefaultConversationTurnPersistenceTest {
                 testModel.id,
                 testSettings.id,
                 any(),
+                any(),
                 reasoningItems
             )
         } returns savedAssistantMessage.right()
@@ -362,7 +363,7 @@ class DefaultConversationTurnPersistenceTest {
             childrenMessageIds = emptyList()
         ).right()
 
-        val result = persistence.saveAssistantMessage(1L, "Answer", 5L, testModel, testSettings, reasoningItems)
+        val result = persistence.saveAssistantMessage(1L, "Answer", 5L, testModel, testSettings, reasoningItems = reasoningItems)
 
         assertEquals(savedAssistantMessage, result.assistantMessage)
     }

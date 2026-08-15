@@ -4,13 +4,8 @@ import arrow.core.getOrElse
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
-import eu.torvian.chatbot.server.data.dao.LocalMCPServerDao
-import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
-import eu.torvian.chatbot.server.data.dao.SessionDao
-import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
-import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
+import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError
 import eu.torvian.chatbot.server.data.entities.CreateLocalMCPServerEntity
 import eu.torvian.chatbot.server.data.entities.LocalMCPSecretEnvironmentVariableReference
@@ -26,8 +21,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -91,15 +86,13 @@ class SessionToolConfigDaoExposedTest {
         testSessionId1 = sessionDao.insertSession(
             name = "Test Session 1",
             groupId = null,
-            currentModelId = null,
-            currentSettingsId = null
+            agentRoleId = null
         ).getOrElse { throw IllegalStateException("Failed to create test session 1") }.id
 
         testSessionId2 = sessionDao.insertSession(
             name = "Test Session 2",
             groupId = null,
-            currentModelId = null,
-            currentSettingsId = null
+            agentRoleId = null
         ).getOrElse { throw IllegalStateException("Failed to create test session 2") }.id
 
         // Create test tool definitions
@@ -332,7 +325,10 @@ class SessionToolConfigDaoExposedTest {
         // Verify
         assertTrue(result.isLeft(), "Expected Left (error)")
         result.onLeft { error ->
-            assertIs<SetToolEnabledError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error but got $error")
+            assertIs<SetToolEnabledError.ForeignKeyViolation>(
+                error,
+                "Expected ForeignKeyViolation error but got $error"
+            )
         }
     }
 
@@ -348,7 +344,10 @@ class SessionToolConfigDaoExposedTest {
         // Verify
         assertTrue(result.isLeft(), "Expected Left (error)")
         result.onLeft { error ->
-            assertIs<SetToolEnabledError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error but got $error")
+            assertIs<SetToolEnabledError.ForeignKeyViolation>(
+                error,
+                "Expected ForeignKeyViolation error but got $error"
+            )
         }
     }
 }

@@ -5,6 +5,8 @@ import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.app.domain.contracts.ModelFormState
 import eu.torvian.chatbot.app.domain.contracts.ModelSettingsFormState
 import eu.torvian.chatbot.app.domain.contracts.WorkersFormState
+import eu.torvian.chatbot.app.domain.contracts.AgentRoleFormState
+import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
@@ -104,5 +106,20 @@ interface WorkersTabActions {
     fun onUpdateWorkerForm(update: (WorkersFormState) -> WorkersFormState)
     fun onSaveWorker()
     fun onDeleteWorker(workerId: Long)
+    fun onCancelDialog()
+}
+
+/**
+ * Action callbacks for the Agent Roles tab.
+ */
+interface AgentRolesTabActions {
+    fun onLoadRolesAndCatalogs()
+    fun onSelectRole(role: AgentRoleDto?)
+    fun onStartAddingNewRole()
+    fun onStartEditingRole(role: AgentRoleDto)
+    fun onStartDeletingRole(role: AgentRoleDto)
+    fun onUpdateRoleForm(update: (AgentRoleFormState) -> AgentRoleFormState)
+    fun onSaveRole()
+    fun onDeleteRole(roleId: Long)
     fun onCancelDialog()
 }

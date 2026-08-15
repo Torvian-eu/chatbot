@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.api.agent.UpdateSessionAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -85,19 +86,38 @@ class SessionRoutesTest {
         name = "Non-Streaming Settings for Model 1",
         stream = false
     )
+    private val testAgentRole = TestDefaults.agentRole1.copy(
+        id = 1L,
+        name = "Test Agent Role",
+        modelId = testModel.id,
+        modelSettingsId = testSettings.id,
+        instructionsJson = "[]"
+    )
+    private val testAgentRole2 = TestDefaults.agentRole2.copy(
+        id = 2L,
+        name = "Test Agent Role 2",
+        modelId = testModel2.id,
+        modelSettingsId = testSettings2.id,
+        instructionsJson = "[]"
+    )
+    private val testNonStreamingAgentRole = TestDefaults.agentRole1.copy(
+        id = 3L,
+        name = "Non-Streaming Agent Role",
+        modelId = testModel.id,
+        modelSettingsId = testNonStreamingSettings.id,
+        instructionsJson = "[]"
+    )
     private val testSession = TestDefaults.chatSession1.copy(
         id = 1L,
         name = "Test Session",
         groupId = testGroup.id,
-        currentModelId = testModel.id,
-        currentSettingsId = testSettings.id
+        agentRoleId = testAgentRole.id
     )
     private val testSession2 = TestDefaults.chatSession2.copy(
         id = 2L,
         name = "Test Session 2",
         groupId = testGroup.id,
-        currentModelId = testModel.id,
-        currentSettingsId = testSettings.id
+        agentRoleId = testAgentRole.id
     )
 
     // Create a test session configured for non-streaming
@@ -105,8 +125,7 @@ class SessionRoutesTest {
         id = 3L,
         name = "Non-Streaming Test Session",
         groupId = testGroup.id,
-        currentModelId = testModel.id,
-        currentSettingsId = testNonStreamingSettings.id
+        agentRoleId = testNonStreamingAgentRole.id
     )
     private val testUserMessage = TestDefaults.chatMessage1.copy(
         id = 1L,
@@ -138,7 +157,8 @@ class SessionRoutesTest {
                 chatGroups = listOf(testGroup, testGroup2),
                 llmProviders = listOf(TestDefaults.llmProvider1, TestDefaults.llmProvider2),
                 llmModels = listOf(testModel, testModel2),
-                modelSettings = listOf(testSettings, testSettings2, testSettings3, testNonStreamingSettings)
+                modelSettings = listOf(testSettings, testSettings2, testSettings3, testNonStreamingSettings),
+                agentRoles = listOf(testAgentRole, testAgentRole2, testNonStreamingAgentRole)
             )
         )
         testDataManager.createTables(
@@ -154,7 +174,9 @@ class SessionRoutesTest {
                 Table.CHAT_SESSION_OWNERS,
                 Table.CHAT_GROUP_OWNERS,
                 Table.LLM_MODEL_OWNERS,
-                Table.MODEL_SETTINGS_OWNERS
+                Table.MODEL_SETTINGS_OWNERS,
+                Table.AGENT_ROLES,
+                Table.AGENT_ROLE_OWNERS
             )
         )
 
@@ -275,8 +297,7 @@ class SessionRoutesTest {
         assertEquals(testSession.id, session.id)
         assertEquals(testSession.name, session.name)
         assertEquals(testSession.groupId, session.groupId)
-        assertEquals(testSession.currentModelId, session.currentModelId)
-        assertEquals(testSession.currentSettingsId, session.currentSettingsId)
+        assertEquals(testSession.agentRoleId, session.agentRoleId)
     }
 
     @Test
@@ -413,20 +434,20 @@ class SessionRoutesTest {
         assertEquals("Session name cannot be blank.", error.details?.get("reason"))
     }
 
-    // --- PUT /api/v1/sessions/{sessionId}/model Tests ---
+    // --- PUT /api/v1/sessions/{sessionId}/agentRole Tests ---
 
     @Test
-    fun `PUT session model should update model ID successfully`() = sessionTestApplication {
+    fun `PUT session agentRole should update agent role ID successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
         testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
-        testDataManager.insertModelOwnership(testModel2.id, authHelper.defaultTestUser.id)
-        val newModelId = testModel2.id
-        val updateRequest = UpdateSessionModelRequest(modelId = newModelId)
+        testDataManager.insertAgentRoleOwnership(testAgentRole2.id, authHelper.defaultTestUser.id)
+        val newAgentRoleId = testAgentRole2.id
+        val updateRequest = UpdateSessionAgentRoleRequest(agentRoleId = newAgentRoleId)
 
         // Act
         val response =
-            client.put(href(SessionResource.ById.Model(parent = SessionResource.ById(sessionId = testSession.id)))) {
+            client.put(href(SessionResource.ById.AgentRole(parent = SessionResource.ById(sessionId = testSession.id)))) {
                 contentType(ContentType.Application.Json)
                 setBody(updateRequest)
                 authenticate(authToken)
@@ -435,26 +456,22 @@ class SessionRoutesTest {
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
 
-        // Verify the session model ID was actually updated
+        // Verify the session agent role ID was actually updated
         val retrievedSession = testDataManager.getChatSession(testSession.id)
         assertNotNull(retrievedSession)
-        assertEquals(newModelId, retrievedSession.currentModelId)
+        assertEquals(newAgentRoleId, retrievedSession.agentRoleId)
     }
 
-    // --- PUT /api/v1/sessions/{sessionId}/settings Tests ---
-
     @Test
-    fun `PUT session settings should update settings ID successfully`() = sessionTestApplication {
+    fun `PUT session agentRole should deselect the role when agentRoleId is null`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
         testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
-        testDataManager.insertSettingsOwnership(testSettings3.id, authHelper.defaultTestUser.id)
-        val newSettingsId = testSettings3.id // Use settings that belong to the same model as the session
-        val updateRequest = UpdateSessionSettingsRequest(settingsId = newSettingsId)
+        val updateRequest = UpdateSessionAgentRoleRequest(agentRoleId = null)
 
         // Act
         val response =
-            client.put(href(SessionResource.ById.Settings(parent = SessionResource.ById(sessionId = testSession.id)))) {
+            client.put(href(SessionResource.ById.AgentRole(parent = SessionResource.ById(sessionId = testSession.id)))) {
                 contentType(ContentType.Application.Json)
                 setBody(updateRequest)
                 authenticate(authToken)
@@ -463,10 +480,28 @@ class SessionRoutesTest {
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
 
-        // Verify the session settings ID was actually updated
+        // Verify the session agent role ID was cleared
         val retrievedSession = testDataManager.getChatSession(testSession.id)
         assertNotNull(retrievedSession)
-        assertEquals(newSettingsId, retrievedSession.currentSettingsId)
+        assertNull(retrievedSession.agentRoleId)
+    }
+
+    @Test
+    fun `PUT session agentRole should return 404 for non-existent session`() = sessionTestApplication {
+        // Arrange
+        val nonExistentId = 999L
+        val updateRequest = UpdateSessionAgentRoleRequest(agentRoleId = testAgentRole.id)
+
+        // Act
+        val response =
+            client.put(href(SessionResource.ById.AgentRole(parent = SessionResource.ById(sessionId = nonExistentId)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
+
+        // Assert
+        assertEquals(HttpStatusCode.NotFound, response.status)
     }
 
     // --- PUT /api/v1/sessions/{sessionId}/group Tests ---
@@ -657,9 +692,9 @@ class SessionRoutesTest {
     }
 
     @Test
-    fun `WS session message should emit error event for missing model`() = sessionTestApplication {
+    fun `WS session message should emit error event for missing agent role`() = sessionTestApplication {
         // Arrange
-        testDataManager.insertChatSession(testSession.copy(currentModelId = null))
+        testDataManager.insertChatSession(testSession.copy(agentRoleId = null))
         testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
         val processRequest = ProcessNewMessageRequest(content = "Test message", isStreaming = false)
 
@@ -816,44 +851,18 @@ class SessionRoutesTest {
     }
 
     @Test
-    fun `PUT session model as non-owner should return 403`() = sessionTestApplication {
+    fun `PUT session agentRole as non-owner should return 403`() = sessionTestApplication {
         // Arrange
         val otherUser = authHelper.createTestUser(id = 996L, email = "otheruser4@example.com", username = "otheruser4")
         testDataManager.insertUser(otherUser)
         testDataManager.insertChatSession(testSession)
         testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
 
-        val updateRequest = UpdateSessionModelRequest(modelId = 2L)
+        val updateRequest = UpdateSessionAgentRoleRequest(agentRoleId = testAgentRole2.id)
 
         // Act
         val response =
-            client.put(href(SessionResource.ById.Model(parent = SessionResource.ById(sessionId = testSession.id)))) {
-                contentType(ContentType.Application.Json)
-                setBody(updateRequest)
-                authenticate(authToken)
-            }
-
-        // Assert
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-        val error = response.body<ApiError>()
-        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
-        assertEquals(403, error.statusCode)
-        assertEquals("Access denied", error.message)
-    }
-
-    @Test
-    fun `PUT session settings as non-owner should return 403`() = sessionTestApplication {
-        // Arrange
-        val otherUser = authHelper.createTestUser(id = 995L, email = "otheruser5@example.com", username = "otheruser5")
-        testDataManager.insertUser(otherUser)
-        testDataManager.insertChatSession(testSession)
-        testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
-
-        val updateRequest = UpdateSessionSettingsRequest(settingsId = testSettings3.id)
-
-        // Act
-        val response =
-            client.put(href(SessionResource.ById.Settings(parent = SessionResource.ById(sessionId = testSession.id)))) {
+            client.put(href(SessionResource.ById.AgentRole(parent = SessionResource.ById(sessionId = testSession.id)))) {
                 contentType(ContentType.Application.Json)
                 setBody(updateRequest)
                 authenticate(authToken)

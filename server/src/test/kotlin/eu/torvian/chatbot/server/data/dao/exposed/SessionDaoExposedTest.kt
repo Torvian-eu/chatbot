@@ -119,8 +119,7 @@ class SessionDaoExposedTest {
         assertEquals(testSession1.id, session.id, "Expected matching ID")
         assertEquals(testSession1.name, session.name, "Expected matching name")
         assertEquals(testSession1.groupId, session.groupId, "Expected matching groupId")
-        assertEquals(testSession1.currentModelId, session.currentModelId, "Expected matching currentModelId")
-        assertEquals(testSession1.currentSettingsId, session.currentSettingsId, "Expected matching currentSettingsId")
+        assertEquals(testSession1.agentRoleId, session.agentRoleId, "Expected matching agentRoleId")
         assertEquals(
             testSessionLeaf1.messageId,
             session.currentLeafMessageId,
@@ -158,8 +157,7 @@ class SessionDaoExposedTest {
         assertNotNull(session.createdAt, "Expected non-null createdAt")
         assertNotNull(session.updatedAt, "Expected non-null updatedAt")
         assertNull(session.groupId, "Expected null groupId")
-        assertNull(session.currentModelId, "Expected null currentModelId")
-        assertNull(session.currentSettingsId, "Expected null currentSettingsId")
+        assertNull(session.agentRoleId, "Expected null agentRoleId")
         assertNull(session.currentLeafMessageId, "Expected null currentLeafMessageId")
         assertTrue(session.messages.isEmpty(), "Expected empty messages list")
     }
@@ -170,8 +168,7 @@ class SessionDaoExposedTest {
         val result = sessionDao.insertSession(
             name = testSession2.name,
             groupId = testSession2.groupId,
-            currentModelId = testSession2.currentModelId,
-            currentSettingsId = testSession2.currentSettingsId
+            agentRoleId = testSession2.agentRoleId
         )
 
         // Verify
@@ -179,8 +176,7 @@ class SessionDaoExposedTest {
         assertNotNull(session, "Expected Right result for successful insertion")
         assertEquals(testSession2.name, session.name, "Expected matching name")
         assertEquals(testSession2.groupId, session.groupId, "Expected matching groupId")
-        assertEquals(testSession2.currentModelId, session.currentModelId, "Expected matching currentModelId")
-        assertEquals(testSession2.currentSettingsId, session.currentSettingsId, "Expected matching currentSettingsId")
+        assertEquals(testSession2.agentRoleId, session.agentRoleId, "Expected matching agentRoleId")
     }
 
     @Test
@@ -198,7 +194,7 @@ class SessionDaoExposedTest {
         // Verify the session was updated
         val getResult = testDataManager.getChatSession(testSession1.id)
         assertNotNull(getResult, "Expected non-null session")
-        assertEquals(getResult.name, newName, "Expected updated name")
+        assertEquals(newName, getResult.name, "Expected updated name")
     }
 
     @Test
@@ -236,13 +232,13 @@ class SessionDaoExposedTest {
     }
 
     @Test
-    fun `updateSessionCurrentModelId should update model ID of an existing session`() = runTest {
+    fun `updateSessionAgentRoleId should update agent role ID of an existing session`() = runTest {
         // Insert a session
         testDataManager.insertChatSession(testSession1)
 
-        // Update the session model ID
-        val newModelId = testSession2.currentModelId
-        val result = sessionDao.updateSessionCurrentModelId(testSession1.id, newModelId)
+        // Update the session agent role ID
+        val newAgentRoleId = testSession2.agentRoleId
+        val result = sessionDao.updateSessionAgentRoleId(testSession1.id, newAgentRoleId)
 
         // Verify operation succeeded
         assertTrue(result.isRight(), "Expected Right result for successful update")
@@ -250,27 +246,23 @@ class SessionDaoExposedTest {
         // Verify the session was updated
         val updatedSession = testDataManager.getChatSession(testSession1.id)
         assertNotNull(updatedSession, "Expected non-null session")
-        assertEquals(newModelId, updatedSession.currentModelId, "Expected updated model ID")
+        assertEquals(newAgentRoleId, updatedSession.agentRoleId, "Expected updated agent role ID")
         assertNotEquals(testSession1.updatedAt, updatedSession.updatedAt, "Expected updated timestamp")
     }
 
     @Test
-    fun `updateSessionCurrentSettingsId should update settings ID of an existing session`() = runTest {
+    fun `updateSessionAgentRoleId should return SessionNotFound when session does not exist`() = runTest {
         // Insert a session
         testDataManager.insertChatSession(testSession1)
 
-        // Update the session settings ID
-        val newSettingsId = testSession2.currentSettingsId
-        val result = sessionDao.updateSessionCurrentSettingsId(testSession1.id, newSettingsId)
+        // Try to update a non-existent session
+        val result = sessionDao.updateSessionAgentRoleId(999, null)
 
-        // Verify operation succeeded
-        assertTrue(result.isRight(), "Expected Right result for successful update")
-
-        // Verify the session was updated
-        val updatedSession = testDataManager.getChatSession(testSession1.id)
-        assertNotNull(updatedSession, "Expected non-null session")
-        assertEquals(newSettingsId, updatedSession.currentSettingsId, "Expected updated settings ID")
-        assertNotEquals(testSession1.updatedAt, updatedSession.updatedAt, "Expected updated timestamp")
+        // Verify
+        val error = result.leftOrNull()
+        assertNotNull(error, "Expected Left result for non-existent session")
+        assertIs<SessionError.SessionNotFound>(error, "Expected SessionNotFound error")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 
     @Test

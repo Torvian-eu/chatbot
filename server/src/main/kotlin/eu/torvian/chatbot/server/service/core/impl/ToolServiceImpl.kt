@@ -58,6 +58,15 @@ class ToolServiceImpl(
             }
         }
 
+    override suspend fun getToolsByIds(ids: Set<Long>): Map<Long, ToolDefinition> =
+        transactionScope.transaction {
+            if (ids.isEmpty()) {
+                emptyMap()
+            } else {
+                toolDefinitionDao.getToolDefinitionsByIds(ids).associateBy { it.id }
+            }
+        }
+
     override suspend fun createTool(
         name: String,
         description: String,

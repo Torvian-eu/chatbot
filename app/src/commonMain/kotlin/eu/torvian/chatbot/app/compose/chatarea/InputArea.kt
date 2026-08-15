@@ -55,6 +55,8 @@ import org.jetbrains.compose.resources.stringResource
  * @param actions Grouped callbacks for input area interactions.
  * @param replyTargetMessage The message being replied to, if any.
  * @param turnExecutionState Lifecycle state used to select the action button.
+ * @param canSend Whether the composer is enabled. False when no resolvable agent role is attached
+ *                to the session; the send button is disabled and an inline hint is shown.
  * @param modifier Modifier applied to the input container.
  * @param fileReferences List of file references attached to the current message.
  * @param focusRequester Focus requester to programmatically control focus on the text field.
@@ -67,13 +69,14 @@ fun InputArea(
     replyTargetMessage: ChatMessage?,
     turnExecutionState: TurnExecutionState,
     modifier: Modifier = Modifier,
+    canSend: Boolean = true,
     isExpanded: Boolean = false,
     fileReferences: List<FileReference> = emptyList(),
     focusRequester: FocusRequester = remember { FocusRequester() },
     textFieldState: TextFieldState = rememberTextFieldState()
 ) {
     val isSendButtonEnabled =
-        turnExecutionState == TurnExecutionState.IDLE && textFieldState.text.isNotBlank()
+        canSend && turnExecutionState == TurnExecutionState.IDLE && textFieldState.text.isNotBlank()
 
     Column(modifier = modifier) {
         // Reply Target Banner
@@ -138,7 +141,11 @@ fun InputArea(
                         ) {
                             if (textFieldState.text.isEmpty()) {
                                 Text(
-                                    "Type a message...",
+                                    if (canSend) {
+                                        "Type a message..."
+                                    } else {
+                                        "Select an agent role to start chatting"
+                                    },
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                 )

@@ -28,15 +28,13 @@ interface SessionDao {
      * Inserts a new chat session record into the database.
      * @param name The name for the new session.
      * @param groupId Optional ID of the group to assign the session to.
-     * @param currentModelId Optional ID of the model to set as current for the session.
-     * @param currentSettingsId Optional ID of the settings to set as current for the session.
+     * @param agentRoleId Optional ID of the agent role to select for the session.
      * @return Either a [SessionError.ForeignKeyViolation] or the newly created [ChatSession] object.
      */
     suspend fun insertSession(
         name: String,
         groupId: Long? = null,
-        currentModelId: Long? = null,
-        currentSettingsId: Long? = null
+        agentRoleId: Long? = null
     ): Either<SessionError.ForeignKeyViolation, ChatSession>
 
     /**
@@ -58,22 +56,13 @@ interface SessionDao {
     suspend fun updateSessionGroupId(id: Long, groupId: Long?): Either<SessionError, Unit>
 
     /**
-     * Updates the current model ID of an existing chat session.
+     * Updates the agent role selected for an existing chat session.
      * Also updates the `updatedAt` timestamp.
      * @param id The ID of the session to update.
-     * @param modelId The new optional model ID for the session.
+     * @param agentRoleId The new optional agent role ID for the session. Null deselects the role.
      * @return Either a [SessionError] or Unit if successful.
      */
-    suspend fun updateSessionCurrentModelId(id: Long, modelId: Long?): Either<SessionError, Unit>
-
-    /**
-     * Updates the current settings ID of an existing chat session.
-     * Also updates the `updatedAt` timestamp.
-     * @param id The ID of the session to update.
-     * @param settingsId The new optional settings ID for the session.
-     * @return Either a [SessionError] or Unit if successful.
-     */
-    suspend fun updateSessionCurrentSettingsId(id: Long, settingsId: Long?): Either<SessionError, Unit>
+    suspend fun updateSessionAgentRoleId(id: Long, agentRoleId: Long?): Either<SessionError, Unit>
 
     /**
      * Updates the current leaf message ID of an existing chat session.

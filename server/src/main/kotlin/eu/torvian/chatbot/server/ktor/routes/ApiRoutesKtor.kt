@@ -42,6 +42,7 @@ class ApiRoutesKtor(
     private val userService: UserService,
     private val userGroupService: UserGroupService,
     private val roleService: RoleService,
+    private val agentRoleService: AgentRoleService,
     private val authorizationService: AuthorizationService,
     private val workerService: WorkerService,
     private val json: Json,
@@ -59,6 +60,7 @@ class ApiRoutesKtor(
         configureMeRoutes(route)
         configureUserGroupRoutes(route)
         configureRoleRoutes(route)
+        configureAgentRoleRoutes(route)
         configureSessionRoutes(route)
         configureGroupRoutes(route)
         configureProviderRoutes(route)
@@ -116,14 +118,21 @@ class ApiRoutesKtor(
     }
 
     /**
+     * Configures routes related to Agent Role Management (/api/v1/agent-roles).
+     */
+    fun configureAgentRoleRoutes(route: Route) {
+        route.configureAgentRoleRoutes(agentRoleService, authorizationService)
+    }
+
+    /**
      * Configures routes related to Sessions (/api/v1/sessions).
      */
     fun configureSessionRoutes(route: Route) {
         route.configureSessionRoutes(
             sessionService,
-            modelSettingsService,
             chatService,
             toolCallService,
+            agentRoleService,
             authorizationService,
             json
         )

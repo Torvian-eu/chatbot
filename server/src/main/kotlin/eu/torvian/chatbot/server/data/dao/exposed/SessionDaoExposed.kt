@@ -74,8 +74,7 @@ class SessionDaoExposed(
     override suspend fun insertSession(
         name: String,
         groupId: Long?,
-        currentModelId: Long?,
-        currentSettingsId: Long?
+        agentRoleId: Long?
     ): Either<SessionError.ForeignKeyViolation, ChatSession> =
         transactionScope.transaction {
             either {
@@ -86,14 +85,13 @@ class SessionDaoExposed(
                         it[ChatSessionTable.createdAt] = now
                         it[ChatSessionTable.updatedAt] = now
                         it[ChatSessionTable.groupId] = groupId
-                        it[ChatSessionTable.currentModelId] = currentModelId
-                        it[ChatSessionTable.currentSettingsId] = currentSettingsId
+                        it[ChatSessionTable.agentRoleId] = agentRoleId
                     }
                     insertStatement.resultedValues?.first()?.toChatSession(emptyList())
                         ?: throw IllegalStateException("Failed to retrieve newly inserted session")
                 }) { e: ExposedSQLException ->
                     val message =
-                        "Failed to insert session with name $name, group $groupId, model $currentModelId, settings $currentSettingsId"
+                        "Failed to insert session with name $name, group $groupId, agent role $agentRoleId"
                     logger.error(message, e)
                     ensure(!e.isForeignKeyViolation()) { SessionError.ForeignKeyViolation(message) }
                     throw e
@@ -130,35 +128,17 @@ class SessionDaoExposed(
             }
         }
 
-    override suspend fun updateSessionCurrentModelId(id: Long, modelId: Long?): Either<SessionError, Unit> =
+    override suspend fun updateSessionAgentRoleId(id: Long, agentRoleId: Long?): Either<SessionError, Unit> =
         transactionScope.transaction {
             either {
                 catch({
                     val updatedRowCount = ChatSessionTable.update({ ChatSessionTable.id eq id }) {
-                        it[ChatSessionTable.currentModelId] = modelId
+                        it[ChatSessionTable.agentRoleId] = agentRoleId
                         it[ChatSessionTable.updatedAt] = System.currentTimeMillis()
                     }
                     ensure(updatedRowCount != 0) { SessionError.SessionNotFound(id) }
                 }) { e: ExposedSQLException ->
-                    val message = "Failed to update session current model ID $modelId for session $id"
-                    logger.error(message, e)
-                    ensure(!e.isForeignKeyViolation()) { SessionError.ForeignKeyViolation(message) }
-                    throw e
-                }
-            }
-        }
-
-    override suspend fun updateSessionCurrentSettingsId(id: Long, settingsId: Long?): Either<SessionError, Unit> =
-        transactionScope.transaction {
-            either {
-                catch({
-                    val updatedRowCount = ChatSessionTable.update({ ChatSessionTable.id eq id }) {
-                        it[ChatSessionTable.currentSettingsId] = settingsId
-                        it[ChatSessionTable.updatedAt] = System.currentTimeMillis()
-                    }
-                    ensure(updatedRowCount != 0) { SessionError.SessionNotFound(id) }
-                }) { e: ExposedSQLException ->
-                    val message = "Failed to update session current settings ID $settingsId for session $id"
+                    val message = "Failed to update session agent role ID $agentRoleId for session $id"
                     logger.error(message, e)
                     ensure(!e.isForeignKeyViolation()) { SessionError.ForeignKeyViolation(message) }
                     throw e
@@ -235,8 +215,7 @@ class SessionDaoExposed(
         createdAt = Instant.fromEpochMilliseconds(this[ChatSessionTable.createdAt]),
         updatedAt = Instant.fromEpochMilliseconds(this[ChatSessionTable.updatedAt]),
         groupId = this[ChatSessionTable.groupId]?.value,
-        currentModelId = this[ChatSessionTable.currentModelId]?.value,
-        currentSettingsId = this[ChatSessionTable.currentSettingsId]?.value,
+        agentRoleId = this[ChatSessionTable.agentRoleId]?.value,
         currentLeafMessageId = this.getOrNull(SessionCurrentLeafTable.messageId)?.value,
         messages = messages
     )

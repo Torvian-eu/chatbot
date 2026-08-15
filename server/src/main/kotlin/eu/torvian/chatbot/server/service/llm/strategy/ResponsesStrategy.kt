@@ -59,7 +59,8 @@ class ResponsesStrategy(
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
-        tools: List<ToolDefinition>?
+        tools: List<ToolDefinition>?,
+        systemMessage: String?
     ): Either<LLMCompletionError.ConfigurationError, ApiRequestConfig> {
         logger.debug("Preparing Responses request for model ${modelConfig.name}")
 
@@ -88,7 +89,12 @@ class ResponsesStrategy(
             put("input", JsonArray(inputItems))
             put("stream", JsonPrimitive(settings.stream))
 
-            settings.instructions?.let { put("instructions", JsonPrimitive(it)) }
+            // The composed system prompt is the single source of truth. The settings' own `instructions`
+            // are deliberately NOT injected here: they are only ever included deliberately, as a
+            // ModelSettingsInstruction inside an agent role.
+            if (!systemMessage.isNullOrBlank()) {
+                put("instructions", JsonPrimitive(systemMessage))
+            }
             settings.temperature?.let { put("temperature", JsonPrimitive(it)) }
             settings.maxOutputTokens?.let { put("max_output_tokens", JsonPrimitive(it)) }
             settings.topP?.let { put("top_p", JsonPrimitive(it)) }

@@ -21,7 +21,8 @@ class LLMApiClientStub : LLMApiClient {
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
-        tools: List<ToolDefinition>?
+        tools: List<ToolDefinition>?,
+        systemMessage: String?
     ): Either<LLMCompletionError, LLMCompletionResult> {
         return LLMCompletionResult(
             id = "test-completion-id",
@@ -52,7 +53,8 @@ class LLMApiClientStub : LLMApiClient {
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
-        tools: List<ToolDefinition>?
+        tools: List<ToolDefinition>?,
+        systemMessage: String?
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> {
         TODO("Not yet implemented")
     }

@@ -91,8 +91,8 @@ class EditMessageUseCase(
 
         val parentId = messageToEdit.parentMessageId
         val session = state.currentSession.value ?: return
-        val modelId = session.currentModelId
-        val settingsId = session.currentSettingsId
+        val modelId = state.currentModel.value?.id
+        val settingsId = state.currentSettings.value?.id
 
         logger.info("Saving edited message ${messageToEdit.id} as copy (sibling)")
 

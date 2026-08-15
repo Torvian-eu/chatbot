@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.common.api.resources.SessionResource
+import eu.torvian.chatbot.common.models.api.agent.UpdateSessionAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -72,34 +73,15 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiResourceClient(client), 
         }
     }
 
-    override suspend fun updateSessionModel(
+    override suspend fun updateSessionAgentRole(
         sessionId: Long,
-        modelId: Long?,
-        autoSelectFirstAvailableSettings: Boolean
-    ): Either<ApiResourceError, UpdateSessionModelResponse> {
-        // Use safeApiCall to wrap the Ktor request
-        return safeApiCall {
-            // Use Ktor resources: /api/v1/sessions/{sessionId}/model
-            client.put(SessionResource.ById.Model(SessionResource.ById(sessionId = sessionId))) {
-                setBody(
-                    UpdateSessionModelRequest(
-                        modelId = modelId,
-                        autoSelectFirstAvailableSettings = autoSelectFirstAvailableSettings
-                    )
-                )
-            }.body<UpdateSessionModelResponse>()
-        }
-    }
-
-    override suspend fun updateSessionSettings(
-        sessionId: Long,
-        settingsId: Long?
+        agentRoleId: Long?
     ): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
-            // Use Ktor resources: /api/v1/sessions/{sessionId}/settings
-            client.put(SessionResource.ById.Settings(SessionResource.ById(sessionId = sessionId))) {
-                setBody(UpdateSessionSettingsRequest(settingsId = settingsId))
+            // Use Ktor resources: /api/v1/sessions/{sessionId}/agentRole
+            client.put(SessionResource.ById.AgentRole(SessionResource.ById(sessionId = sessionId))) {
+                setBody(UpdateSessionAgentRoleRequest(agentRoleId = agentRoleId))
             }.body<Unit>() // Expect Unit body (HTTP 200/204)
         }
     }

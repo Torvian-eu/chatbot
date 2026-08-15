@@ -11,6 +11,8 @@ import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.DefaultBuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.service.core.agent.DefaultSystemPromptComposer
+import eu.torvian.chatbot.server.service.core.agent.SystemPromptComposer
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.FileReferenceContentBuilder
@@ -58,7 +60,7 @@ fun serviceModule() = module {
     single { ToolNameValidator() }
     single { ToolNamePrefixValidator() }
 
-    single<SessionService> { SessionServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<SessionService> { SessionServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<GroupService> { GroupServiceImpl(get(), get(), get(), get()) }
     single<LLMModelService> { LLMModelServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<ModelSettingsService> { ModelSettingsServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
@@ -71,7 +73,18 @@ fun serviceModule() = module {
     single<ChatContextBuilder> { DefaultChatContextBuilder(get(), get()) }
     single<ConversationTurnPersistence> { DefaultConversationTurnPersistence(get(), get(), get(), get()) }
     single<ConversationTurnPreparationService> {
-        DefaultConversationTurnPreparationService(get(), get(), get(), get(), get(), get(), get(), get())
+        DefaultConversationTurnPreparationService(
+            messageDao = get(),
+            sessionDao = get(),
+            toolService = get(),
+            llmModelService = get(),
+            modelSettingsService = get(),
+            llmProviderService = get(),
+            credentialManager = get(),
+            agentRoleService = get(),
+            systemPromptComposer = get(),
+            transactionScope = get()
+        )
     }
     single<ConversationTurnOrchestrator> {
         DefaultConversationTurnOrchestrator(get(), get(), get(), get(), get())
@@ -103,6 +116,19 @@ fun serviceModule() = module {
     }
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
+    single<AgentRoleService> {
+        AgentRoleServiceImpl(
+            agentRoleDao = get(),
+            agentRoleToolDao = get(),
+            agentRoleOwnershipDao = get(),
+            modelDao = get(),
+            settingsDao = get(),
+            toolDefinitionDao = get(),
+            json = get(),
+            transactionScope = get()
+        )
+    }
+    single<SystemPromptComposer> { DefaultSystemPromptComposer() }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
     single<UserPreferenceService> { UserPreferenceServiceImpl(get(), get(), get()) }
 

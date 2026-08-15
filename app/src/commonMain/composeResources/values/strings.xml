@@ -24,9 +24,35 @@
     <string name="error_updating_session_settings">Failed to update session settings</string>
     <string name="error_switching_branch">Failed to switch conversation branch</string>
     <string name="error_unsupported_model_type">Unsupported model type</string>
+    <string name="error_loading_agent_roles">Failed to load agent roles</string>
+    <string name="error_updating_session_agent_role">Failed to update session agent role</string>
+    <string name="error_creating_agent_role">Failed to create agent role</string>
+    <string name="error_updating_agent_role">Failed to update agent role</string>
+    <string name="error_deleting_agent_role">Failed to delete agent role</string>
 
     <!-- Warning Messages -->
     <string name="warning_model_or_settings_unavailable">Cannot send message: model or settings are not available</string>
+    <string name="warning_no_agent_role_selected">Cannot send message: select an agent role first</string>
+
+    <!-- Agent Roles -->
+    <string name="agent_roles">Agent Roles</string>
+    <string name="select_agent_role">Select Agent Role</string>
+    <string name="no_role">No role</string>
+    <string name="edit_agent_roles">Edit roles…</string>
+    <string name="add_agent_role">Add Role</string>
+    <string name="save_agent_role">Save Changes</string>
+    <string name="role_name">Role Name</string>
+    <string name="display_name">Display Name</string>
+    <string name="role_description">Description</string>
+    <string name="model">Model</string>
+    <string name="settings">Settings Profile</string>
+    <string name="tools">Tools</string>
+    <string name="instructions">Instructions</string>
+    <string name="instruction_role">Role</string>
+    <string name="instruction_main">Main</string>
+    <string name="instruction_custom">Custom</string>
+    <string name="instruction_model_settings">Model Settings</string>
+    <string name="select_role_hint">Select an agent role to start chatting</string>
 
     <!-- Input Area -->
     <string name="replying_to_prefix">Replying to:</string>

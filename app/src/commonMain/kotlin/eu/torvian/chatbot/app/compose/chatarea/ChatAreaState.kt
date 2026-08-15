@@ -5,11 +5,11 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
+import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
 
@@ -17,10 +17,9 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * Encapsulates all UI state relevant to the main Chat Area.
  *
  * @property sessionUiState The state of the currently loaded chat session.
- * @property availableModels The state of all available LLM models for selection.
- * @property availableSettingsForCurrentModel The state of settings profiles available for the current model.
- * @property currentModel The currently selected LLM model for the session.
- * @property currentSettings The currently selected model settings for the session.
+ * @property availableAgentRoles The state of all agent roles owned by the current user.
+ * @property currentAgentRole The agent role currently selected for the session, or null when none is attached.
+ * @property canSend Whether the composer is enabled: a resolvable agent role with a model and settings is required.
  * @property modelsById A map of all available models indexed by their ID for quick lookup.
  * @property displayedMessages The list of messages to display in the UI, representing the currently selected thread branch.
  * @property collapsedMessageIds Message IDs that should render in collapsed mode.
@@ -32,7 +31,6 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @property editingBasePathOverride The base path override being edited (E3.S2).
  * @property turnExecutionState Lifecycle state used by the composer action button.
  * @property dialogState The current dialog state for the chat area (e.g., delete confirmation).
- * @property enabledToolsCount The number of tools currently enabled for the session.
  * @property toolCallsMap Tool calls for the current session, organized by message ID.
  * @property pendingFileReferences File references attached to the current message being composed.
  * @property searchQuery Current in-session search query.
@@ -42,10 +40,9 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  */
 data class ChatAreaState(
     val sessionUiState: DataState<RepositoryError, ChatSession> = DataState.Idle,
-    val availableModels: DataState<RepositoryError, List<LLMModel>> = DataState.Idle,
-    val availableSettingsForCurrentModel: DataState<RepositoryError, List<ModelSettings>> = DataState.Idle,
-    val currentModel: LLMModel? = null,
-    val currentSettings: ModelSettings? = null,
+    val availableAgentRoles: DataState<RepositoryError, List<AgentRoleDto>> = DataState.Idle,
+    val currentAgentRole: AgentRoleDto? = null,
+    val canSend: Boolean = false,
     val modelsById: Map<Long, LLMModel> = emptyMap(),
     val displayedMessages: List<ChatMessage> = emptyList(),
     val collapsedMessageIds: Set<Long> = emptySet(),
@@ -57,7 +54,6 @@ data class ChatAreaState(
     val editingBasePathOverride: String? = null,
     val turnExecutionState: TurnExecutionState = TurnExecutionState.IDLE,
     val dialogState: ChatAreaDialogState = ChatAreaDialogState.None,
-    val enabledToolsCount: Int = 0,
     val toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),
     val pendingFileReferences: List<FileReference> = emptyList(),
     val searchQuery: String = "",

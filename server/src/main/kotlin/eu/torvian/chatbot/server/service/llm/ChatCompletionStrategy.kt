@@ -33,6 +33,9 @@ interface ChatCompletionStrategy {
      *              Only applicable for models with tool calling capability.
      *              The strategy will map these domain ToolDefinitions to the
      *              provider-specific tool format (e.g., OpenAI function format).
+     * @param systemMessage Optional composed system prompt. This is the single source of truth for the
+     *              system message: when non-blank it is injected as the system message, and the strategy
+     *              must NOT read the settings' own system text. When null/blank, no system message is sent.
      * @return Either a [LLMCompletionError.ConfigurationError] if preparation fails (e.g., missing key),
      *         or the [ApiRequestConfig] containing details for the HTTP call.
      */
@@ -42,7 +45,8 @@ interface ChatCompletionStrategy {
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
-        tools: List<ToolDefinition>? = null
+        tools: List<ToolDefinition>? = null,
+        systemMessage: String? = null
     ): Either<LLMCompletionError.ConfigurationError, ApiRequestConfig>
 
     /**

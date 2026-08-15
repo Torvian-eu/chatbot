@@ -215,40 +215,18 @@ class DefaultSessionRepository(
             }
     }
 
-    override suspend fun updateSessionModel(
+    override suspend fun updateSessionAgentRole(
         sessionId: Long,
-        modelId: Long?,
-        autoSelectFirstAvailableSettings: Boolean
+        agentRoleId: Long?
     ): Either<RepositoryError, Unit> {
-        return sessionApi.updateSessionModel(
-            sessionId = sessionId,
-            modelId = modelId,
-            autoSelectFirstAvailableSettings = autoSelectFirstAvailableSettings
-        ).map { response ->
-                updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(
-                        currentModelId = response.currentModelId,
-                        currentSettingsId = response.currentSettingsId
-                    )
-                }
-            }
-            .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to update session model")
-            }
-    }
-
-    override suspend fun updateSessionSettings(
-        sessionId: Long,
-        settingsId: Long?
-    ): Either<RepositoryError, Unit> {
-        return sessionApi.updateSessionSettings(sessionId, settingsId)
+        return sessionApi.updateSessionAgentRole(sessionId, agentRoleId)
             .map {
                 updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(currentSettingsId = settingsId)
+                    session.copy(agentRoleId = agentRoleId)
                 }
             }
             .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to update session settings")
+                apiResourceError.toRepositoryError("Failed to update session agent role")
             }
     }
 

@@ -11,8 +11,8 @@ import kotlin.time.Instant
  * @property createdAt Timestamp when the session was created.
  * @property updatedAt Timestamp when the session was last updated.
  * @property groupId Optional group ID for organizing chat sessions together.
- * @property currentModelId Optional reference to the current LLM model being used.
- * @property currentSettingsId Optional reference to the current model settings being used.
+ * @property agentRoleId Optional reference to the user-defined agent role selected for this session.
+ *            Model/settings/tools are resolved from the role at turn time; null means no role selected.
  */
 data class ChatSessionEntity(
     val id: Long,
@@ -20,6 +20,5 @@ data class ChatSessionEntity(
     val createdAt: Instant,
     val updatedAt: Instant,
     val groupId: Long?,
-    val currentModelId: Long?,
-    val currentSettingsId: Long?
+    val agentRoleId: Long?
 )

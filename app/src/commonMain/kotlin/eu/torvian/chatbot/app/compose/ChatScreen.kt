@@ -8,12 +8,17 @@ import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
 import eu.torvian.chatbot.app.compose.chatarea.ChatTopBarContent
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
+import eu.torvian.chatbot.app.compose.settings.AgentRoleDialogs
+import eu.torvian.chatbot.app.compose.settings.AgentRolesTabActions
 import eu.torvian.chatbot.app.compose.topbar.TopBarContentProvider
+import eu.torvian.chatbot.app.domain.contracts.AgentRoleFormState
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelSlotManager
+import eu.torvian.chatbot.app.viewmodel.settings.AgentRolesViewModel
+import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -38,11 +43,15 @@ import org.koin.compose.viewmodel.koinViewModel
  * so it survives navigation between Chat and other destinations.
  *
  * @param sessionListViewModel The ViewModel managing the session list state.
+ * @param authState The current authentication state.
+ * @param agentRoleManagementViewModel The ViewModel backing the quick add/edit role dialogs opened
+ *   from the top-bar role selector, so roles can be tweaked without leaving the chat screen.
  */
 @Composable
 fun ChatScreen(
     sessionListViewModel: SessionListViewModel = koinViewModel(),
-    authState: AuthState
+    authState: AuthState,
+    agentRoleManagementViewModel: AgentRolesViewModel = koinViewModel()
 ) {
     val crossSessionSearchViewModel: CrossSessionSearchViewModel = koinViewModel()
 
@@ -73,8 +82,8 @@ fun ChatScreen(
     // --- Collect States for ChatArea ---
     val activeChatSessionId by chatViewModel.activeSessionId.collectAsState()
     val chatSessionUiState by chatViewModel.sessionDataState.collectAsState()
-    val availableModels by chatViewModel.availableModels.collectAsState()
-    val availableSettings by chatViewModel.availableSettingsForCurrentModel.collectAsState()
+    val availableAgentRoles by chatViewModel.availableAgentRoles.collectAsState()
+    val currentAgentRole by chatViewModel.currentAgentRole.collectAsState()
     val currentModel by chatViewModel.currentModel.collectAsState()
     val currentSettings by chatViewModel.currentSettings.collectAsState()
     val modelsById by chatViewModel.modelsById.collectAsState()
@@ -88,9 +97,14 @@ fun ChatScreen(
     val chatCollapsedMessageIds by chatViewModel.collapsedMessageIds.collectAsState()
     val chatTurnExecutionState by chatViewModel.turnExecutionState.collectAsState()
     val chatDialogState by chatViewModel.dialogState.collectAsState()
-    val enabledToolsForCurrentSession by chatViewModel.enabledToolsForCurrentSession.collectAsState()
     val toolCallsForCurrentSession by chatViewModel.toolCallsForCurrentSession.collectAsState()
     val pendingFileReferences by chatViewModel.pendingFileReferences.collectAsState()
+
+    // --- Agent-role quick management (add/edit dialogs hosted on the chat screen) ---
+    val agentRoleDialogState by agentRoleManagementViewModel.dialogState.collectAsState()
+    val agentRoleModelsState by agentRoleManagementViewModel.modelsState.collectAsState()
+    val agentRoleSettingsForForm by agentRoleManagementViewModel.settingsForFormModel.collectAsState()
+    val agentRoleToolsState by agentRoleManagementViewModel.toolsState.collectAsState()
 
     // --- Collect states for cross-session search ---
     val crossSessionSearchState by crossSessionSearchViewModel.uiState.collectAsState()
@@ -102,8 +116,8 @@ fun ChatScreen(
     val currentSearchIndex by chatViewModel.currentSearchIndex.collectAsState()
     val canReturnToPreviousThread = chatViewModel.canReturnToPreviousThread
 
-    // Derive enabled tools count
-    val enabledToolsCount = enabledToolsForCurrentSession.dataOrNull?.size ?: 0
+    // Derive whether the composer is enabled: a resolvable role (with a model and settings) is required.
+    val canSend = currentAgentRole != null && currentModel != null && currentSettings != null
 
     // Derive tool calls map
     val toolCallsMap = toolCallsForCurrentSession.dataOrNull ?: emptyMap()
@@ -117,16 +131,18 @@ fun ChatScreen(
             ChatTopBarContent(
                 userMenu = userMenu,
                 navItems = navItems,
-                currentModel = currentModel,
-                currentSettings = currentSettings,
-                availableModels = availableModels,
-                availableSettings = availableSettings,
-                onSelectModel = { chatViewModel.selectModel(it) },
-                onSelectSettings = { chatViewModel.selectSettings(it) },
-                onRetryLoadModels = { /* TODO: wire up retry */ },
-                onRetryLoadSettings = { /* TODO: wire up retry */ },
-                onShowToolConfig = { chatViewModel.showToolConfigDialog() },
-                enabledToolsCount = enabledToolsCount,
+                currentRole = currentAgentRole,
+                availableRoles = availableAgentRoles,
+                onSelectRole = { chatViewModel.selectAgentRole(it) },
+                onRetryLoadRoles = { chatViewModel.loadAgentRoles() },
+                onAddRole = {
+                    agentRoleManagementViewModel.loadRolesAndCatalogs()
+                    agentRoleManagementViewModel.startAddingNewRole()
+                },
+                onEditRole = {
+                    agentRoleManagementViewModel.loadRolesAndCatalogs()
+                    chatViewModel.currentAgentRole.value?.let(agentRoleManagementViewModel::startEditingRole)
+                },
                 isSessionListCollapsed = isSessionListCollapsed,
                 onToggleSessionList = { isSessionListCollapsed = !isSessionListCollapsed },
                 onCopyThread = { chatViewModel.copyThreadToClipboard() },
@@ -210,18 +226,17 @@ fun ChatScreen(
 
     // --- ChatArea Contract Construction ---
     val chatAreaState = remember(
-        chatSessionUiState, availableModels, availableSettings, currentModel, currentSettings, modelsById,
+        chatSessionUiState, availableAgentRoles, currentAgentRole, canSend, modelsById,
         chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
         chatEditingFileReferences, chatEditingBasePathOverride, chatDisplayedMessages, chatCollapsedMessageIds,
-        chatTurnExecutionState, chatDialogState, enabledToolsCount, toolCallsMap, pendingFileReferences,
+        chatTurnExecutionState, chatDialogState, toolCallsMap, pendingFileReferences,
         isSearchActive, searchQuery, searchResults, currentSearchIndex,
     ) {
         ChatAreaState(
             sessionUiState = chatSessionUiState,
-            availableModels = availableModels,
-            availableSettingsForCurrentModel = availableSettings,
-            currentModel = currentModel,
-            currentSettings = currentSettings,
+            availableAgentRoles = availableAgentRoles,
+            currentAgentRole = currentAgentRole,
+            canSend = canSend,
             modelsById = modelsById,
             inputContent = chatInputContent,
             replyTargetMessage = chatReplyTargetMessage,
@@ -233,7 +248,6 @@ fun ChatScreen(
             collapsedMessageIds = chatCollapsedMessageIds,
             turnExecutionState = chatTurnExecutionState,
             dialogState = chatDialogState,
-            enabledToolsCount = enabledToolsCount,
             toolCallsMap = toolCallsMap,
             pendingFileReferences = pendingFileReferences,
             searchQuery = searchQuery,
@@ -266,9 +280,16 @@ fun ChatScreen(
             }
 
             override fun onToggleMessageCollapsed(messageId: Long) = chatViewModel.toggleMessageCollapsed(messageId)
-            override fun onSelectModel(modelId: Long?) = chatViewModel.selectModel(modelId)
-            override fun onSelectSettings(settingsId: Long?) = chatViewModel.selectSettings(settingsId)
-            override fun onShowToolConfig() = chatViewModel.showToolConfigDialog()
+            override fun onSelectAgentRole(agentRoleId: Long?) = chatViewModel.selectAgentRole(agentRoleId)
+            override fun onRetryLoadRoles() = chatViewModel.loadAgentRoles()
+            override fun onAddRole() {
+                agentRoleManagementViewModel.loadRolesAndCatalogs()
+                agentRoleManagementViewModel.startAddingNewRole()
+            }
+            override fun onEditRole() {
+                agentRoleManagementViewModel.loadRolesAndCatalogs()
+                chatViewModel.currentAgentRole.value?.let(agentRoleManagementViewModel::startEditingRole)
+            }
             override fun onShowToolCallDetails(toolCall: ToolCall) =
                 chatViewModel.showToolCallDetails(toolCall)
 
@@ -330,6 +351,23 @@ fun ChatScreen(
         }
     }
 
+    // Actions for the chat-screen agent-role add/edit dialogs. Selection and delete flows are
+    // unused here (they belong to the Settings tab) but are forwarded for interface completeness.
+    val agentRoleManagementActions = remember(agentRoleManagementViewModel) {
+        object : AgentRolesTabActions {
+            override fun onLoadRolesAndCatalogs() = agentRoleManagementViewModel.loadRolesAndCatalogs()
+            override fun onSelectRole(role: AgentRoleDto?) = agentRoleManagementViewModel.selectRole(role)
+            override fun onStartAddingNewRole() = agentRoleManagementViewModel.startAddingNewRole()
+            override fun onStartEditingRole(role: AgentRoleDto) = agentRoleManagementViewModel.startEditingRole(role)
+            override fun onStartDeletingRole(role: AgentRoleDto) = agentRoleManagementViewModel.startDeletingRole(role)
+            override fun onUpdateRoleForm(update: (AgentRoleFormState) -> AgentRoleFormState) =
+                agentRoleManagementViewModel.updateRoleForm(update)
+            override fun onSaveRole() = agentRoleManagementViewModel.saveRole()
+            override fun onDeleteRole(roleId: Long) = agentRoleManagementViewModel.deleteRole(roleId)
+            override fun onCancelDialog() = agentRoleManagementViewModel.cancelDialog()
+        }
+    }
+
     // Pass all collected states and actions to the stateless ChatScreenContent
     ChatScreenContent(
         sessionListState = sessionListPanelUiState,
@@ -343,5 +381,14 @@ fun ChatScreen(
         onUpdateSearchScope = crossSessionSearchViewModel::updateSearchScope,
         onPerformSearch = crossSessionSearchViewModel::performSearch,
         onSearchResultClick = crossSessionSearchViewModel::onSearchResultClick
+    )
+
+    // Quick add/edit role dialogs hosted on the chat screen; the Settings tab keeps its own copies.
+    AgentRoleDialogs(
+        dialogState = agentRoleDialogState,
+        actions = agentRoleManagementActions,
+        models = agentRoleModelsState.dataOrNull.orEmpty(),
+        settingsForModel = agentRoleSettingsForForm,
+        tools = agentRoleToolsState.dataOrNull.orEmpty()
     )
 }

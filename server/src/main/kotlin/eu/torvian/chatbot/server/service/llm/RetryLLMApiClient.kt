@@ -60,11 +60,12 @@ class RetryLLMApiClient(
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
-        tools: List<ToolDefinition>?
+        tools: List<ToolDefinition>?,
+        systemMessage: String?
     ): Either<LLMCompletionError, LLMCompletionResult> {
         for (attempt in 0..maxRetries) {
             currentCoroutineContext().ensureActive()
-            when (val result = inner.completeChat(messages, modelConfig, provider, settings, apiKey, tools)) {
+            when (val result = inner.completeChat(messages, modelConfig, provider, settings, apiKey, tools, systemMessage)) {
                 is Either.Right -> return result
                 is Either.Left -> {
                     val error = result.value
@@ -102,7 +103,8 @@ class RetryLLMApiClient(
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
-        tools: List<ToolDefinition>?
+        tools: List<ToolDefinition>?,
+        systemMessage: String?
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> = flow {
         for (attempt in 0..maxRetries) {
             currentCoroutineContext().ensureActive()
@@ -110,7 +112,7 @@ class RetryLLMApiClient(
             var contentEmitted = false
             var retryableErrorEncountered: LLMCompletionError.ApiError? = null
 
-            inner.completeChatStreaming(messages, modelConfig, provider, settings, apiKey, tools)
+            inner.completeChatStreaming(messages, modelConfig, provider, settings, apiKey, tools, systemMessage)
                 .collect { chunkEither ->
                     if (retryableErrorEncountered != null) {
                         // Once a retry decision is made, ignore remaining chunks from this attempt.

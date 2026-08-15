@@ -142,36 +142,18 @@ interface SessionRepository {
     suspend fun updateSessionName(sessionId: Long, name: String): Either<RepositoryError, Unit>
 
     /**
-     * Updates the currently selected LLM model for a specific chat session.
+     * Selects (or deselects) the agent role attached to a chat session.
      *
      * Upon successful update, the modified session's details flow in the cache
      * will emit the updated session, triggering updates to all its observers.
      *
      * @param sessionId The unique identifier of the session
-     * @param modelId The new optional model ID for the session
-     * @param autoSelectFirstAvailableSettings When true, backend will try to pick the first
-     * available settings profile for the selected model.
+     * @param agentRoleId The new optional agent role ID for the session, or null to deselect.
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
-    suspend fun updateSessionModel(
+    suspend fun updateSessionAgentRole(
         sessionId: Long,
-        modelId: Long?,
-        autoSelectFirstAvailableSettings: Boolean = false
-    ): Either<RepositoryError, Unit>
-
-    /**
-     * Updates the currently selected settings profile for a specific chat session.
-     *
-     * Upon successful update, the modified session's details flow in the cache
-     * will emit the updated session, triggering updates to all its observers.
-     *
-     * @param sessionId The unique identifier of the session
-     * @param settingsId The new optional settings ID for the session
-     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
-     */
-    suspend fun updateSessionSettings(
-        sessionId: Long,
-        settingsId: Long?
+        agentRoleId: Long?
     ): Either<RepositoryError, Unit>
 
     /**

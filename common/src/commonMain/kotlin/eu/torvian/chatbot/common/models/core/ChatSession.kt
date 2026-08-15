@@ -5,15 +5,19 @@ import kotlin.time.Instant
 
 /**
  * Represents a single chat session or conversation thread.
- * Used as a shared data model between frontend and backend.
+ * Used as a shared data model between frontend and backend communication.
+ *
+ * A session no longer stores its own model/settings selection: it references an agent role (when one
+ * is selected) that bundles the model, settings profile, tools and composed system prompt. Model,
+ * settings and tools are resolved from that role at turn-preparation time.
  *
  * @property id Unique identifier for the session (Database PK).
  * @property name The name or title of the session.
  * @property createdAt Timestamp when the session was created.
  * @property updatedAt Timestamp when the session was last updated (e.g., message added).
  * @property groupId Optional ID referencing a parent group session.
- * @property currentModelId Optional ID of the currently selected LLM model for this session.
- * @property currentSettingsId Optional ID of the currently selected settings profile for this session.
+ * @property agentRoleId Optional ID of the user-defined agent role selected for this session. `null`
+ *            means no role is selected and the session cannot send messages until one is selected.
  * @property currentLeafMessageId The current leaf message in the session, used for displaying the
  *                                correct branch in the UI. (Null only when no messages exist)
  * @property messages List of messages within this session (included when loading full details).
@@ -25,8 +29,7 @@ data class ChatSession(
     val createdAt: Instant,
     val updatedAt: Instant,
     val groupId: Long?,
-    val currentModelId: Long?,
-    val currentSettingsId: Long?,
+    val agentRoleId: Long?,
     val currentLeafMessageId: Long?,
     val messages: List<ChatMessage> = emptyList()
 )
