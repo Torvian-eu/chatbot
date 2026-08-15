@@ -15,7 +15,6 @@ fun ResultRow.toChatSessionEntity(): ChatSessionEntity {
         createdAt = Instant.fromEpochMilliseconds(this[ChatSessionTable.createdAt]),
         updatedAt = Instant.fromEpochMilliseconds(this[ChatSessionTable.updatedAt]),
         groupId = this[ChatSessionTable.groupId]?.value,
-        currentModelId = this[ChatSessionTable.currentModelId]?.value,
-        currentSettingsId = this[ChatSessionTable.currentSettingsId]?.value
+        agentRoleId = this[ChatSessionTable.agentRoleId]?.value
     )
 }

@@ -26,9 +26,10 @@ fun ResultRow.toAssistantMessage(): ChatMessage.AssistantMessage {
     val fileReferencesString = this[ChatMessageTable.fileReferences]
     val fileReferences = Json.decodeFromString<List<FileReference>>(fileReferencesString)
 
-    // Get model and settings IDs from the joined result
+    // Get model, settings and agent role IDs from the joined result
     val modelId = this.getOrNull(AssistantMessageTable.modelId)?.value
     val settingsId = this.getOrNull(AssistantMessageTable.settingsId)?.value
+    val agentRoleId = this.getOrNull(AssistantMessageTable.agentRoleId)?.value
 
     // Deserialize the stored reasoning JSON array into raw items; unparseable/absent storage yields null.
     val reasoningItems = this.getOrNull(AssistantMessageTable.reasoningItemsJson)
@@ -48,6 +49,7 @@ fun ResultRow.toAssistantMessage(): ChatMessage.AssistantMessage {
         fileReferences = fileReferences,
         modelId = modelId,
         settingsId = settingsId,
+        agentRoleId = agentRoleId,
         reasoningItems = reasoningItems
     )
 }

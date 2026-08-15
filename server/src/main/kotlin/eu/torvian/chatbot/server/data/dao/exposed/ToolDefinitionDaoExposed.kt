@@ -19,6 +19,7 @@ import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinition
 import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinitionEntity
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.core.not
 import org.jetbrains.exposed.v1.core.or
@@ -72,6 +73,17 @@ class ToolDefinitionDaoExposed(
                 ?.toToolDefinition()
                 ?.right()
                 ?: ToolDefinitionError.NotFound(id).left()
+        }
+
+    override suspend fun getToolDefinitionsByIds(ids: Collection<Long>): List<ToolDefinition> =
+        transactionScope.transaction {
+            if (ids.isEmpty()) {
+                return@transaction emptyList()
+            }
+            joinedToolDefinitions()
+                .selectAll()
+                .where { ToolDefinitionTable.id inList ids }
+                .map { it.toToolDefinition() }
         }
 
     override suspend fun getToolDefinitionByName(name: String): Either<ToolDefinitionError.NameNotFound, ToolDefinition> =

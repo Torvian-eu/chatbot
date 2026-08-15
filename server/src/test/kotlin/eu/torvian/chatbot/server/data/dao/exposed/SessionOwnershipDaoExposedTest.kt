@@ -71,8 +71,7 @@ class SessionOwnershipDaoExposedTest {
         createdAt = TestDefaults.DEFAULT_INSTANT,
         updatedAt = TestDefaults.DEFAULT_INSTANT,
         groupId = TestDefaults.chatGroup1.id,
-        currentModelId = TestDefaults.llmModel1.id,
-        currentSettingsId = TestDefaults.modelSettings1.id
+        agentRoleId = null
     )
 
     private val testSession2 = ChatSessionEntity(
@@ -81,8 +80,7 @@ class SessionOwnershipDaoExposedTest {
         createdAt = TestDefaults.DEFAULT_INSTANT.plus(1.hours), // 1 hour later
         updatedAt = TestDefaults.DEFAULT_INSTANT.plus(1.hours),
         groupId = TestDefaults.chatGroup2.id,
-        currentModelId = TestDefaults.llmModel2.id,
-        currentSettingsId = TestDefaults.modelSettings2.id
+        agentRoleId = null
     )
 
     private val testSession3 = ChatSessionEntity(
@@ -91,8 +89,7 @@ class SessionOwnershipDaoExposedTest {
         createdAt = TestDefaults.DEFAULT_INSTANT.plus(30.minutes), // 30 minutes later
         updatedAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours), // 2 hours later (most recent update)
         groupId = null, // Ungrouped session
-        currentModelId = TestDefaults.llmModel1.id,
-        currentSettingsId = TestDefaults.modelSettings1.id
+        agentRoleId = null
     )
 
     @BeforeEach

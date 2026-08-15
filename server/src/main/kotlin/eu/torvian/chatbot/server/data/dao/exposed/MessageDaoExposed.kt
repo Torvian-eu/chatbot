@@ -228,6 +228,7 @@ class MessageDaoExposed(
         content: String,
         modelId: Long?,
         settingsId: Long?,
+        agentRoleId: Long?,
         fileReferences: List<FileReference>,
         reasoningItems: List<JsonObject>?,
         createdAt: Instant?,
@@ -297,6 +298,7 @@ class MessageDaoExposed(
                         it[AssistantMessageTable.messageId] = newMessageId
                         it[AssistantMessageTable.modelId] = modelId
                         it[AssistantMessageTable.settingsId] = settingsId
+                        it[AssistantMessageTable.agentRoleId] = agentRoleId
                         it[AssistantMessageTable.reasoningItemsJson] = serializeReasoning(reasoningItems)
                     }
                 }
@@ -375,6 +377,7 @@ class MessageDaoExposed(
                         fileReferences = fileReferences,
                         modelId = modelId,
                         settingsId = settingsId,
+                        agentRoleId = agentRoleId,
                         reasoningItems = reasoningItems
                     )
                 } else {
