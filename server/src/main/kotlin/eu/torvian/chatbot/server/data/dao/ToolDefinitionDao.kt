@@ -102,14 +102,15 @@ interface ToolDefinitionDao {
      * Retrieves all tools accessible to a specific user in a single SQL query.
      *
      * Returns a combination of:
-     * - All global tools (non-MCP_LOCAL type)
-     * - User-specific MCP_LOCAL tools (where the MCP server is owned by the user)
+     * - The user's own MCP_LOCAL tools (where the MCP server is owned by the user)
+     * - Built-in worker tools of workers the user owns
+     * - The user's own operator tools (e.g. spawn_agent)
      *
-     * Uses a LEFT JOIN with LocalMCPToolDefinitionTable and LocalMCPServerTable to fetch
-     * all tools in one database query for efficiency.
+     * Uses three focused, owner-scoped joins instead of one big LEFT JOIN + OR filter, so a user never
+     * sees another user's tools (this fixed the historical cross-user leak for built-in worker tools).
      *
      * @param userId The ID of the user
-     * @return List of ToolDefinition (mix of MiscToolDefinition and LocalMCPToolDefinition)
+     * @return List of ToolDefinition owned by the user
      */
     suspend fun getToolsForUser(userId: Long): List<ToolDefinition>
 }

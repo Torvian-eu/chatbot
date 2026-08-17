@@ -5,17 +5,16 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
+import eu.torvian.chatbot.common.models.tool.OperatorToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.user.UserStatus
-import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
-import eu.torvian.chatbot.server.data.dao.LocalMCPServerDao
-import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
+import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
 import eu.torvian.chatbot.server.data.entities.CreateLocalMCPServerEntity
-import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable
 import eu.torvian.chatbot.server.data.tables.UsersTable
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
+import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
@@ -24,11 +23,7 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
+import kotlin.test.*
 import kotlin.time.Clock
 
 /**
@@ -51,6 +46,9 @@ class ToolDefinitionDaoExposedTest {
     private lateinit var toolDefinitionDao: ToolDefinitionDao
     private lateinit var localMCPToolDefinitionDao: LocalMCPToolDefinitionDao
     private lateinit var localMCPServerDao: LocalMCPServerDao
+    private lateinit var operatorToolDefinitionDao: OperatorToolDefinitionDao
+    private lateinit var builtInToolDefinitionDao: BuiltInToolDefinitionDao
+    private lateinit var workerDao: WorkerDao
     private lateinit var transactionScope: TransactionScope
     private lateinit var testDataManager: TestDataManager
 
@@ -60,6 +58,9 @@ class ToolDefinitionDaoExposedTest {
         toolDefinitionDao = container.get()
         localMCPToolDefinitionDao = container.get()
         localMCPServerDao = container.get()
+        operatorToolDefinitionDao = container.get()
+        builtInToolDefinitionDao = container.get()
+        workerDao = container.get()
         transactionScope = container.get()
         testDataManager = container.get()
 
@@ -456,5 +457,145 @@ class ToolDefinitionDaoExposedTest {
         assertTrue(result.any { it.name == "enabled1" }, "Expected enabled1 tool")
         assertTrue(result.any { it.name == "enabled2" }, "Expected enabled2 tool")
         assertFalse(result.any { it.name == "disabled1" }, "Should not include disabled1 tool")
+    }
+
+    /**
+     * Creates an OPERATOR tool definition linked to the given user.
+     *
+     * @param name Public tool name (defaults to the catalog `spawn_agent` name).
+     * @param userId Owning user.
+     * @return The persisted [OperatorToolDefinition].
+     */
+    private suspend fun createOperatorTool(
+        name: String = OperatorToolCatalog.SPAWN_AGENT_NAME,
+        userId: Long
+    ): OperatorToolDefinition {
+        val entity = toolDefinitionDao.insertToolDefinition(
+            name = name,
+            description = "Spawns an agent",
+            type = ToolType.OPERATOR,
+            config = buildJsonObject { },
+            inputSchema = OperatorToolCatalog.allTools.single().inputSchema,
+            outputSchema = null,
+            isEnabled = true
+        )
+        operatorToolDefinitionDao.insertTool(entity.id, userId)
+        return toolDefinitionDao.getToolDefinitionById(entity.id).getOrElse {
+            throw AssertionError("Expected operator tool to be retrievable")
+        } as OperatorToolDefinition
+    }
+
+    @Test
+    fun `OPERATOR tool maps to OperatorToolDefinition reading userId from the side table`() = runTest {
+        // The linkage table enforces a user FK, so the owning user must exist first.
+        transactionScope.transaction {
+            UsersTable.insert {
+                it[id] = 42L
+                it[username] = "operator_owner"
+                it[passwordHash] = "hash"
+                it[email] = "operator_owner@example.com"
+                it[status] = UserStatus.ACTIVE
+                it[createdAt] = Clock.System.now().toEpochMilliseconds()
+                it[updatedAt] = Clock.System.now().toEpochMilliseconds()
+            }
+        }
+        val tool = createOperatorTool(userId = 42L)
+
+        val retrieved = toolDefinitionDao.getToolDefinitionById(tool.id).getOrElse {
+            throw AssertionError("Expected tool to be retrievable")
+        }
+
+        assertIs<OperatorToolDefinition>(retrieved)
+        assertEquals(ToolType.OPERATOR, retrieved.type)
+        assertEquals(42L, retrieved.userId)
+        assertEquals(OperatorToolCatalog.SPAWN_AGENT_NAME, retrieved.name)
+    }
+
+    @Test
+    fun `getToolsForUser returns only the user's own operator tools`() = runTest {
+        val user1 = TestDefaults.user1
+        val user2 = TestDefaults.user2
+        transactionScope.transaction {
+            UsersTable.insert {
+                it[id] = user1.id
+                it[username] = user1.username
+                it[passwordHash] = "hash"
+                it[email] = user1.email
+                it[status] = UserStatus.ACTIVE
+                it[createdAt] = user1.createdAt.toEpochMilliseconds()
+                it[updatedAt] = user1.updatedAt.toEpochMilliseconds()
+            }
+            UsersTable.insert {
+                it[id] = user2.id
+                it[username] = user2.username
+                it[passwordHash] = "hash"
+                it[email] = user2.email
+                it[status] = UserStatus.ACTIVE
+                it[createdAt] = user2.createdAt.toEpochMilliseconds()
+                it[updatedAt] = user2.updatedAt.toEpochMilliseconds()
+            }
+        }
+
+        val user1Tool = createOperatorTool(userId = user1.id)
+        createOperatorTool(userId = user2.id)
+
+        val user1Tools = toolDefinitionDao.getToolsForUser(user1.id)
+        val user2Tools = toolDefinitionDao.getToolsForUser(user2.id)
+
+        // No cross-user leak: each user sees only their own operator instance.
+        assertTrue(user1Tools.any { it.id == user1Tool.id })
+        assertTrue(user2Tools.none { it.id == user1Tool.id })
+    }
+
+    @Test
+    fun `getToolsForUser does not leak built-in tools of workers owned by other users`() = runTest {
+        val user1 = TestDefaults.user1
+        val user2 = TestDefaults.user2
+        transactionScope.transaction {
+            UsersTable.insert {
+                it[id] = user1.id
+                it[username] = user1.username
+                it[passwordHash] = "hash"
+                it[email] = user1.email
+                it[status] = UserStatus.ACTIVE
+                it[createdAt] = user1.createdAt.toEpochMilliseconds()
+                it[updatedAt] = user1.updatedAt.toEpochMilliseconds()
+            }
+            UsersTable.insert {
+                it[id] = user2.id
+                it[username] = user2.username
+                it[passwordHash] = "hash"
+                it[email] = user2.email
+                it[status] = UserStatus.ACTIVE
+                it[createdAt] = user2.createdAt.toEpochMilliseconds()
+                it[updatedAt] = user2.updatedAt.toEpochMilliseconds()
+            }
+        }
+
+        // A worker owned by user1 exposes a built-in tool; user2 must never see it.
+        val worker = workerDao.createWorker(
+            ownerUserId = user1.id,
+            workerUid = "owner-leak-worker",
+            displayName = "owner-leak-worker",
+            certificatePem = "pem",
+            certificateFingerprint = "fp",
+            allowedScopes = emptyList()
+        ).getOrNull()!!
+        val builtInEntity = toolDefinitionDao.insertToolDefinition(
+            name = "read_text_file",
+            description = "Read a file",
+            type = ToolType.BUILTIN_WORKER,
+            config = buildJsonObject { },
+            inputSchema = buildJsonObject { put("type", "object") },
+            outputSchema = null,
+            isEnabled = true
+        )
+        builtInToolDefinitionDao.insertTool(builtInEntity.id, worker.id, "read_text_file")
+
+        val user1Tools = toolDefinitionDao.getToolsForUser(user1.id)
+        val user2Tools = toolDefinitionDao.getToolsForUser(user2.id)
+
+        assertTrue(user1Tools.any { it.id == builtInEntity.id }, "Owner should see their worker's built-in tool")
+        assertTrue(user2Tools.none { it.id == builtInEntity.id }, "Other users must not see the built-in tool")
     }
 }

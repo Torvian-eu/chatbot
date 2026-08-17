@@ -14,15 +14,15 @@ import eu.torvian.chatbot.server.data.entities.ToolDefinitionEntity
 import eu.torvian.chatbot.server.data.tables.BuiltInToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
+import eu.torvian.chatbot.server.data.tables.OperatorToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
+import eu.torvian.chatbot.server.data.tables.WorkersTable
 import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinition
 import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinitionEntity
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.leftJoin
-import org.jetbrains.exposed.v1.core.not
-import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -43,9 +43,9 @@ class ToolDefinitionDaoExposed(
      * Builds the joined query over [ToolDefinitionTable] that carries the columns required to
      * reconstruct a fully typed [ToolDefinition] via [toToolDefinition].
      *
-     * LEFT JOINs the MCP and built-in linkage tables so that every tool type (MCP_LOCAL,
-     * BUILTIN_WORKER, and any future generic type) can be mapped polymorphically without a
-     * separate generic fallback type.
+     * LEFT JOINs the MCP, built-in and operator linkage tables so that every tool type (MCP_LOCAL,
+     * BUILTIN_WORKER, OPERATOR) can be mapped polymorphically without a separate generic fallback
+     * type.
      */
     private fun joinedToolDefinitions() =
         ToolDefinitionTable
@@ -58,6 +58,11 @@ class ToolDefinitionDaoExposed(
                 BuiltInToolDefinitionTable,
                 { ToolDefinitionTable.id },
                 { BuiltInToolDefinitionTable.toolDefinitionId }
+            )
+            .leftJoin(
+                OperatorToolDefinitionTable,
+                { ToolDefinitionTable.id },
+                { OperatorToolDefinitionTable.toolDefinitionId }
             )
 
     override suspend fun getAllToolDefinitions(): List<ToolDefinition> =
@@ -158,27 +163,31 @@ class ToolDefinitionDaoExposed(
 
     override suspend fun getToolsForUser(userId: Long): List<ToolDefinition> =
         transactionScope.transaction {
-            // LEFT JOIN LocalMCPToolDefinitionTable and LocalMCPServerTable to get all tools
-            // Returns global tools (non-MCP_LOCAL) and user-specific MCP tools in one query
-            val joinedQuery = ToolDefinitionTable
-                .leftJoin(
-                    LocalMCPToolDefinitionTable,
-                    { ToolDefinitionTable.id },
-                    { LocalMCPToolDefinitionTable.toolDefinitionId })
-                .leftJoin(LocalMCPServerTable, { LocalMCPToolDefinitionTable.mcpServerId }, { LocalMCPServerTable.id })
-                .leftJoin(
-                    BuiltInToolDefinitionTable,
-                    { ToolDefinitionTable.id },
-                    { BuiltInToolDefinitionTable.toolDefinitionId }
-                )
-
-            joinedQuery
+            // Every tool is owned by exactly one principal (an MCP server, a worker, or a user), so
+            // user access is resolved with three focused, owner-scoped INNER joins instead of one
+            // big LEFT JOIN + OR filter. This also fixes the historical cross-user leak where a user
+            // saw every non-MCP_LOCAL tool (including other users' built-in worker tools) because the
+            // built-in ownership filter was missing entirely.
+            val mcpTools = ToolDefinitionTable
+                .innerJoin(LocalMCPToolDefinitionTable)
+                .innerJoin(LocalMCPServerTable)
                 .selectAll()
-                .where {
-                    // Include global tools OR user-specific MCP tools
-                    not(ToolDefinitionTable.type eq ToolType.MCP_LOCAL) or
-                            (LocalMCPServerTable.userId eq userId)
-                }
+                .where { LocalMCPServerTable.userId eq userId }
                 .map { it.toToolDefinition() }
+
+            val builtInTools = ToolDefinitionTable
+                .innerJoin(BuiltInToolDefinitionTable)
+                .innerJoin(WorkersTable)
+                .selectAll()
+                .where { WorkersTable.ownerUserId eq userId }
+                .map { it.toToolDefinition() }
+
+            val operatorTools = ToolDefinitionTable
+                .innerJoin(OperatorToolDefinitionTable)
+                .selectAll()
+                .where { OperatorToolDefinitionTable.userId eq userId }
+                .map { it.toToolDefinition() }
+
+            mcpTools + builtInTools + operatorTools
         }
 }
