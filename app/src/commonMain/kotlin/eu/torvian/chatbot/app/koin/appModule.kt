@@ -404,7 +404,7 @@ fun appModule(config: AppConfiguration): Module = module {
         SelectAgentRoleUseCase(get<SessionRepository>(), chatState, get())
     }
 
-    factory<LoadAgentRolesUseCase> { (chatState: ChatState) ->
+    factory<LoadAgentRolesUseCase> { (_: ChatState) ->
         LoadAgentRolesUseCase(get<AgentRoleRepository>(), get())
     }
 
@@ -413,7 +413,7 @@ fun appModule(config: AppConfiguration): Module = module {
     }
 
     factory<SendMessageUseCase> { (chatState: ChatState) ->
-        SendMessageUseCase(get<SessionRepository>(), get<ToolRepository>(), get(), chatState, get())
+        SendMessageUseCase(get<SessionRepository>(), get<ToolRepository>(), get(), get(), chatState, get())
     }
 
     factory<EditMessageUseCase> { (chatState: ChatState) ->

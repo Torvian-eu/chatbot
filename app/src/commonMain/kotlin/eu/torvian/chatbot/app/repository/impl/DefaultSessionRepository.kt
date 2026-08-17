@@ -500,6 +500,12 @@ class DefaultSessionRepository(
             is ChatEvent.StreamCompleted -> {
                 logger.info("Event stream completed for session $sessionId")
             }
+
+            is ChatEvent.OperatorToolExecutionRequested -> {
+                logger.debug("Operator tool execution requested: toolCallId=${event.toolCallId}, name=${event.toolName}")
+                // No session-cache mutation: the operator executor drives the spawned conversation on
+                // its own second WebSocket and reports the result back through the chat socket.
+            }
         }
     }
 
@@ -617,6 +623,12 @@ class DefaultSessionRepository(
 
             is ChatStreamEvent.StreamCompleted -> {
                 logger.info("Streaming completed for session $sessionId")
+            }
+
+            is ChatStreamEvent.OperatorToolExecutionRequested -> {
+                logger.debug("Operator tool execution requested: toolCallId=${event.toolCallId}, name=${event.toolName}")
+                // No session-cache mutation: the operator executor drives the spawned conversation on
+                // its own second WebSocket and reports the result back through the chat socket.
             }
         }
 
