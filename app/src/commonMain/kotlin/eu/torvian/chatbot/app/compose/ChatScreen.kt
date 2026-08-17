@@ -274,7 +274,12 @@ fun ChatScreen(
     val chatAreaActions = remember(chatViewModel, sessionListViewModel) {
         object : ChatAreaActions {
             override fun onUpdateInput(newText: String) = chatViewModel.updateInput(newText)
-            override fun onSendMessage() = chatViewModel.sendMessage()
+            override fun onSendMessage() {
+                // The returned Job is intentionally discarded: the composer is a fire-and-forget
+                // action, and send refusal (e.g. an unresolved role) is surfaced by the disabled
+                // composer state rather than here.
+                chatViewModel.sendMessage()
+            }
             override fun onCancelSendMessage() = chatViewModel.cancelSendMessage()
             override fun onPauseSendMessage() = chatViewModel.pauseSendMessage()
             override fun onStartReplyTo(message: ChatMessage) = chatViewModel.startReplyTo(message)
@@ -323,8 +328,9 @@ fun ChatScreen(
             override fun onJumpToSearchResult(index: Int) =
                 chatViewModel.jumpToSearchResult(index)
 
-            override fun onBranchAndContinue(message: ChatMessage) =
+            override fun onBranchAndContinue(message: ChatMessage) {
                 chatViewModel.sendMessage(continueFromMessage = message)
+            }
 
             override fun onRegenerateMessage(message: ChatMessage) =
                 chatViewModel.regenerateMessage(message)

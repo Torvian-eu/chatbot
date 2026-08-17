@@ -5,6 +5,8 @@ import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
+import eu.torvian.chatbot.app.service.agent.AgentSpawnExecutor
+import eu.torvian.chatbot.app.service.agent.DefaultAgentSpawnExecutor
 import eu.torvian.chatbot.app.service.auth.*
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
@@ -338,6 +340,16 @@ fun appModule(config: AppConfiguration): Module = module {
             slotManager = get(),
             scope = this,
             ownerProvider = get()
+        )
+    }
+
+    // Coordinator for operator tools (e.g. spawn_agent): drives the spawned conversation through the
+    // spawned session's own ChatViewModel and reports the result back on the original chat socket.
+    single<AgentSpawnExecutor> {
+        DefaultAgentSpawnExecutor(
+            sessionRepository = get(),
+            authRepository = get(),
+            spawnedViewModelResolver = get()
         )
     }
 

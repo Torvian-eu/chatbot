@@ -7,8 +7,11 @@ import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
+import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import io.mockk.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -50,6 +53,12 @@ class ChatViewModelTurnGuardTest {
         state = mockk(relaxed = true)
         turnState = MutableStateFlow(TurnExecutionState.IDLE)
         every { state.turnExecutionState } returns turnState
+        // The send guard reads these to decide whether a turn may start; keep them resolvable so a
+        // normal idle send proceeds through the guard and reaches the send use case.
+        every { state.inputContent } returns MutableStateFlow("Hello")
+        every { state.currentAgentRole } returns MutableStateFlow<AgentRoleDto?>(mockk())
+        every { state.currentModel } returns MutableStateFlow<LLMModel?>(mockk())
+        every { state.currentSettings } returns MutableStateFlow<ModelSettings?>(mockk())
 
         sendMessageUC = mockk(relaxed = true)
         deleteMessageUC = mockk(relaxed = true)
