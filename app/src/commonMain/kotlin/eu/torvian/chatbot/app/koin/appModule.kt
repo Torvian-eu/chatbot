@@ -22,6 +22,10 @@ import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.*
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelSlotManager
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelStoreOwnerProvider
+import eu.torvian.chatbot.app.viewmodel.chat.KoinSpawnedChatViewModelResolver
+import eu.torvian.chatbot.app.viewmodel.chat.MutableChatViewModelStoreOwnerProvider
+import eu.torvian.chatbot.app.viewmodel.chat.SpawnedChatViewModelResolver
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatStateImpl
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
@@ -320,6 +324,21 @@ fun appModule(config: AppConfiguration): Module = module {
     }
     single<ServerMetadataRepository> {
         DefaultServerMetadataRepository(get())
+    }
+
+    // Resolver that obtains a session's ChatViewModel (the same instance the UI resolves) from
+    // regular code, so the spawn executor can drive a spawned session through its own ViewModel.
+    // The root scope is the one the `viewModel` DSL definitions are installed into. The
+    // ViewModelStoreOwner the spawned session must resolve against is NOT captured here: it is the
+    // Chat destination's owner (the NavHost entry ChatScreen's koinViewModel resolves from), which
+    // ChatScreen publishes into the provider during composition and the resolver reads at spawn time.
+    single<ChatViewModelStoreOwnerProvider> { MutableChatViewModelStoreOwnerProvider() }
+    single<SpawnedChatViewModelResolver> {
+        KoinSpawnedChatViewModelResolver(
+            slotManager = get(),
+            scope = this,
+            ownerProvider = get()
+        )
     }
 
     single<LocalMCPServerManager> {
