@@ -22,6 +22,7 @@ import eu.torvian.chatbot.server.service.core.MessageStreamEvent
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
+import eu.torvian.chatbot.server.service.core.toolcall.OperatorToolExecutionResult
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.security.AuthorizationService
@@ -135,6 +136,7 @@ class SessionMessagesWebSocketHandler(
                         }
                     )
                     val approvalResponseFlow = clientEventFlow.toApprovalSubmissionFlow()
+                    val operatorToolResultFlow = clientEventFlow.toOperatorToolResultFlow()
 
                     // Collect on the outer session scope so cooperative cancellation cannot stop event mapping
                     // or WebSocket forwarding.
@@ -145,6 +147,7 @@ class SessionMessagesWebSocketHandler(
                             llmConfig = llmConfig,
                             request = processRequest,
                             approvalResponseFlow = approvalResponseFlow,
+                            operatorToolResultFlow = operatorToolResultFlow,
                             controlSignal = controlSignal
                         )
                     } else {
@@ -154,6 +157,7 @@ class SessionMessagesWebSocketHandler(
                             llmConfig = llmConfig,
                             request = processRequest,
                             approvalResponseFlow = approvalResponseFlow,
+                            operatorToolResultFlow = operatorToolResultFlow,
                             controlSignal = controlSignal
                         )
                     }
@@ -220,12 +224,10 @@ class SessionMessagesWebSocketHandler(
      * Normalizes WebSocket approval variants into the server-facing approval submission model.
      *
      * @receiver Decoded client-event stream for one live chat socket.
-     * @return Flow containing regular, Local MCP, and built-in worker tool approval submissions.
+     * @return Flow containing Local MCP, built-in worker, and operator tool approval submissions.
      */
     private fun Flow<ChatClientEvent>.toApprovalSubmissionFlow(): Flow<ToolCallApprovalSubmission> {
         return merge(
-            filterIsInstance<ChatClientEvent.ToolCallApproval>()
-                .map { event -> ToolCallApprovalSubmission.Standard(event.response) },
             filterIsInstance<ChatClientEvent.LocalMcpToolCallApproval>()
                 .map { event ->
                     ToolCallApprovalSubmission.LocalMcpSigned(
@@ -237,8 +239,39 @@ class SessionMessagesWebSocketHandler(
                     ToolCallApprovalSubmission.BuiltInSigned(
                         signedRequest = event.signedRequest
                     )
+                },
+            filterIsInstance<ChatClientEvent.OperatorToolCallApproval>()
+                .map { event ->
+                    ToolCallApprovalSubmission.OperatorToolApproval(
+                        toolCallId = event.toolCallId,
+                        approved = event.approved,
+                        denialReason = event.denialReason
+                    )
                 }
         )
+    }
+
+    /**
+     * Maps operator tool execution results onto their dedicated server-facing channel.
+     *
+     * The flow is derived from the **same** shared [ChatClientEvent] stream as
+     * [toApprovalSubmissionFlow], so the two channels never compete for frames. A result is
+     * deliberately not an approval: it is consumed only by the operator-tool executor of the
+     * matching tool call.
+     *
+     * @receiver Decoded client-event stream for one live chat socket.
+     * @return Flow of [OperatorToolExecutionResult] replies from the operator.
+     */
+    private fun Flow<ChatClientEvent>.toOperatorToolResultFlow(): Flow<OperatorToolExecutionResult> {
+        return filterIsInstance<ChatClientEvent.ToolExecutionResult>()
+            .map { event ->
+                OperatorToolExecutionResult(
+                    toolCallId = event.toolCallId,
+                    output = event.output,
+                    isError = event.isError,
+                    errorMessage = event.errorMessage
+                )
+            }
     }
 
     /**
@@ -250,6 +283,7 @@ class SessionMessagesWebSocketHandler(
      * @param llmConfig Validated LLM configuration resolved during initial request validation.
      * @param request Initial non-streaming request frame payload.
      * @param approvalResponseFlow Normalized approval submissions from subsequent client events.
+     * @param operatorToolResultFlow Dedicated channel carrying operator tool execution results.
      * @param controlSignal Cooperative cancellation requested for this turn.
      */
     private suspend fun DefaultWebSocketServerSession.processNonStreamingRequest(
@@ -258,6 +292,7 @@ class SessionMessagesWebSocketHandler(
         llmConfig: LLMConfig,
         request: ProcessNewMessageRequest,
         approvalResponseFlow: Flow<ToolCallApprovalSubmission>,
+        operatorToolResultFlow: Flow<OperatorToolExecutionResult>,
         controlSignal: TurnControlSignal
     ) {
         chatService.processNewMessage(
@@ -268,6 +303,7 @@ class SessionMessagesWebSocketHandler(
             parentMessageId = request.parentMessageId,
             fileReferences = request.fileReferences,
             toolApprovalFlow = approvalResponseFlow,
+            operatorToolResultFlow = operatorToolResultFlow,
             controlSignal = controlSignal
         ).collect { eitherEvent ->
             eitherEvent.fold(
@@ -290,6 +326,7 @@ class SessionMessagesWebSocketHandler(
      * @param llmConfig Validated LLM configuration resolved during initial request validation.
      * @param request Initial streaming request frame payload.
      * @param approvalResponseFlow Normalized approval submissions from subsequent client events.
+     * @param operatorToolResultFlow Dedicated channel carrying operator tool execution results.
      * @param controlSignal Cooperative cancellation requested for this turn.
      */
     private suspend fun DefaultWebSocketServerSession.processStreamingRequest(
@@ -298,6 +335,7 @@ class SessionMessagesWebSocketHandler(
         llmConfig: LLMConfig,
         request: ProcessNewMessageRequest,
         approvalResponseFlow: Flow<ToolCallApprovalSubmission>,
+        operatorToolResultFlow: Flow<OperatorToolExecutionResult>,
         controlSignal: TurnControlSignal
     ) {
         chatService.processNewMessageStreaming(
@@ -308,6 +346,7 @@ class SessionMessagesWebSocketHandler(
             parentMessageId = request.parentMessageId,
             fileReferences = request.fileReferences,
             toolApprovalFlow = approvalResponseFlow,
+            operatorToolResultFlow = operatorToolResultFlow,
             controlSignal = controlSignal
         ).collect { eitherEvent ->
             eitherEvent.fold(

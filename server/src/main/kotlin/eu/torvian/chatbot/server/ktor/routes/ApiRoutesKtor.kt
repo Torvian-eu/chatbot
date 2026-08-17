@@ -34,6 +34,7 @@ class ApiRoutesKtor(
     private val localMCPServerConfigSyncService: LocalMCPServerConfigSyncService,
     private val localMCPToolDefinitionService: LocalMCPToolDefinitionService,
     private val builtInToolDefinitionService: BuiltInToolDefinitionService,
+    private val operatorToolDefinitionService: OperatorToolDefinitionService,
     private val authenticationService: AuthenticationService,
     private val tokenService: TokenService,
     private val accountManagementService: AccountManagementService,
@@ -72,6 +73,7 @@ class ApiRoutesKtor(
         configureLocalMCPServerRoutes(route)
         configureLocalMCPToolRoutes(route)
         configureBuiltInToolRoutes(route)
+        configureOperatorToolRoutes(route)
     }
 
     /**
@@ -211,5 +213,12 @@ class ApiRoutesKtor(
      */
     fun configureBuiltInToolRoutes(route: Route) {
         route.configureBuiltInToolRoutes(builtInToolDefinitionService)
+    }
+
+    /**
+     * Configures routes related to Operator Tool management (/api/v1/operator-tools).
+     */
+    fun configureOperatorToolRoutes(route: Route) {
+        route.configureOperatorToolRoutes(operatorToolDefinitionService)
     }
 }

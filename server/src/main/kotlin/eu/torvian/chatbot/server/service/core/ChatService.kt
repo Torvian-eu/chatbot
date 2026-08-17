@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
+import eu.torvian.chatbot.server.service.core.toolcall.OperatorToolExecutionResult
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import kotlinx.coroutines.flow.Flow
@@ -57,6 +58,8 @@ interface ChatService {
      * @param parentMessageId Optional ID of the message being replied to. Must be non-null when [content] is null.
      * @param fileReferences Optional list of file references attached to the message.
      * @param toolApprovalFlow A flow of tool-call approval submissions from the client.
+     * @param operatorToolResultFlow Dedicated client→server channel carrying operator tool execution
+     *            results; semantically unrelated to [toolApprovalFlow].
      * @param controlSignal Signal that requests cooperative cancellation of the turn.
      * @return A Flow of Either<ProcessNewMessageError, MessageEvent>.
      *         The flow emits MessageEvent objects as processing progresses,
@@ -70,6 +73,7 @@ interface ChatService {
         parentMessageId: Long? = null,
         fileReferences: List<FileReference> = emptyList(),
         toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        operatorToolResultFlow: Flow<OperatorToolExecutionResult>,
         controlSignal: TurnControlSignal
     ): Flow<Either<ProcessNewMessageError, MessageEvent>>
 
@@ -116,6 +120,8 @@ interface ChatService {
      *                        when [content] is null.
      * @param fileReferences Optional list of file references attached to the message.
      * @param toolApprovalFlow A flow of tool-call approval submissions from the client.
+     * @param operatorToolResultFlow Dedicated client→server channel carrying operator tool execution
+     *            results; semantically unrelated to [toolApprovalFlow].
      * @param controlSignal Signal that requests cooperative cancellation of the turn.
      * @return A Flow of Either<ProcessNewMessageError, MessageStreamEvent>.
      *
@@ -130,6 +136,7 @@ interface ChatService {
         parentMessageId: Long? = null,
         fileReferences: List<FileReference> = emptyList(),
         toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        operatorToolResultFlow: Flow<OperatorToolExecutionResult>,
         controlSignal: TurnControlSignal
     ): Flow<Either<ProcessNewMessageError, MessageStreamEvent>>
 }

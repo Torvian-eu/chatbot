@@ -74,8 +74,9 @@ sealed class MessageEvent {
     /**
      * Emitted when a tool call requires user approval before execution.
      *
-     * The client should show an approval dialog to the user and send back a
-     * `ToolCallApprovalResponse` via the appropriate channel (e.g., WebSocket).
+     * The client should show an approval dialog to the user and send back the matching typed
+     * approval event (Local MCP / built-in worker signed authorizations or an operator tool
+     * approval) over the chat WebSocket.
      *
      * @property toolCall The tool call awaiting approval (with AWAITING_APPROVAL status).
      */
@@ -93,6 +94,25 @@ sealed class MessageEvent {
      */
     data class ToolCallExecuting(
         val toolCall: ToolCall
+    ) : MessageEvent()
+
+    /**
+     * Emitted to relay one operator tool execution to the operator.
+     *
+     * This is a generic envelope: [payload] is the JSON-serialized, tool-specific execution request
+     * (e.g. [eu.torvian.chatbot.common.models.agent.AgentSpawnRequest] for `spawn_agent`) and
+     * [toolName] tells the operator which deserializer to use. The operator echoes [toolCallId] back
+     * in `ChatClientEvent.ToolExecutionResult` to correlate the reply.
+     *
+     * @property toolCallId Persisted tool-call identifier (correlation key).
+     * @property toolName Operator-tool name (e.g. `spawn_agent`); unique per user because operator
+     *            tools are per-user instances, so it doubles as the payload discriminator.
+     * @property payload JSON text of the tool-specific payload.
+     */
+    data class OperatorToolExecutionRequested(
+        val toolCallId: Long,
+        val toolName: String,
+        val payload: String
     ) : MessageEvent()
 
     /**

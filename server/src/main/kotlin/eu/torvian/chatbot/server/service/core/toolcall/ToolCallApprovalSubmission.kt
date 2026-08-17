@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.server.service.core.toolcall
 
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
-import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionAuthorization
 import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.common.security.SignedRequestPayloadDecodingResult
@@ -10,8 +9,9 @@ import eu.torvian.chatbot.common.security.decodePayload
 /**
  * Normalized approval submissions received from the chat WebSocket client.
  *
- * This server-only model lets the chat service distinguish between regular tool approvals and
- * Local MCP approvals that must carry detached app authorization metadata.
+ * This server-only model lets the chat service distinguish between Local MCP approvals, built-in
+ * worker approvals that must carry detached app authorization metadata, and operator tool
+ * approvals that carry a plain decision.
  */
 sealed interface ToolCallApprovalSubmission {
     /** Persisted tool-call identifier that this approval refers to. */
@@ -22,19 +22,6 @@ sealed interface ToolCallApprovalSubmission {
 
     /** Optional denial reason supplied by the client. */
     val denialReason: String?
-
-    /**
-     * Plain approval response used for non-Local-MCP tools.
-     *
-     * @property response Original client response.
-     */
-    data class Standard(
-        val response: ToolCallApprovalResponse
-    ) : ToolCallApprovalSubmission {
-        override val toolCallId: Long = response.toolCallId
-        override val approved: Boolean = response.approved
-        override val denialReason: String? = response.denialReason
-    }
 
     /**
      * Local MCP approval carrying only the detached signed request.
@@ -177,4 +164,21 @@ sealed interface ToolCallApprovalSubmission {
             }
         }
     }
+
+    /**
+     * Operator tool approval that carries no signed request.
+     *
+     * Operator tools (e.g. `spawn_agent`) are executed by the operator over the chat WebSocket, so
+     * there is nothing for a worker to verify — no on-device signature is produced. The approval
+     * gate only needs the plain decision and an optional denial reason.
+     *
+     * @property toolCallId Persisted tool-call identifier this approval refers to.
+     * @property approved Whether execution was approved.
+     * @property denialReason Optional denial reason supplied by the user or an auto-deny preference.
+     */
+    data class OperatorToolApproval(
+        override val toolCallId: Long,
+        override val approved: Boolean,
+        override val denialReason: String?,
+    ) : ToolCallApprovalSubmission
 }

@@ -9,7 +9,6 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.agent.UpdateSessionAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.core.*
-import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -744,8 +743,9 @@ class SessionRoutesTest {
                     offerWebSocketAuthSubprotocolMarker()
                 }
             ) {
-                val invalidInitialEvent: ChatClientEvent = ChatClientEvent.ToolCallApproval(
-                    ToolCallApprovalResponse(toolCallId = 1L, approved = true)
+                val invalidInitialEvent: ChatClientEvent = ChatClientEvent.OperatorToolCallApproval(
+                    toolCallId = 1L,
+                    approved = true
                 )
                 send(Frame.Text(json.encodeToString(invalidInitialEvent)))
 

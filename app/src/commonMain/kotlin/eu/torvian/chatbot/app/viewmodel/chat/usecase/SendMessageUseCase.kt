@@ -5,7 +5,9 @@ import eu.torvian.chatbot.app.generated.resources.error_sending_message_short
 import eu.torvian.chatbot.app.generated.resources.warning_no_agent_role_selected
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.repository.ToolRepository
+import eu.torvian.chatbot.app.service.agent.AgentSpawnExecutor
 import eu.torvian.chatbot.app.service.security.RequestSigningService
+import eu.torvian.chatbot.app.utils.misc.isStreamingEnabled
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
@@ -14,21 +16,16 @@ import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
-import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
-import eu.torvian.chatbot.common.models.llm.ModelSettings
-import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
-import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
-import eu.torvian.chatbot.common.models.tool.ToolCall
-import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
+import eu.torvian.chatbot.common.models.tool.*
 import eu.torvian.chatbot.common.security.SignedRequest
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.launch
 
 /**
  * Use case for sending messages in chat sessions.
@@ -37,6 +34,8 @@ import kotlinx.coroutines.flow.merge
  * @property sessionRepository Repository responsible for chat message transport and session updates.
  * @property toolRepository Repository used to resolve tool definitions and cached approval preferences.
  * @property requestSigningService Service that signs Local MCP authorization payloads on-device.
+ * @property agentSpawnExecutor Executor that runs `spawn_agent` operator-tool requests headlessly on a
+ *            second WebSocket and reports the result back on the original socket.
  * @property state Shared chat UI state observed and updated during message sending.
  * @property notificationService Notification sink for repository, API, and signing errors.
  */
@@ -44,6 +43,7 @@ class SendMessageUseCase(
     private val sessionRepository: SessionRepository,
     private val toolRepository: ToolRepository,
     private val requestSigningService: RequestSigningService,
+    private val agentSpawnExecutor: AgentSpawnExecutor,
     private val state: ChatState,
     private val notificationService: NotificationService
 ) {
@@ -102,7 +102,11 @@ class SendMessageUseCase(
     }
 
     /**
-     * Emits either a plain approval response or a signed Local MCP approval event for [toolCall].
+     * Emits the typed approval event matching [toolCall]'s tool kind.
+     *
+     * Built-in worker and Local MCP tools are authorized with an on-device signed request; operator
+     * tools are authorized with a plain [ChatClientEvent.OperatorToolCallApproval] because they are
+     * executed by the operator over the chat socket, not dispatched to a worker.
      *
      * @param toolCall Tool call the user approved or denied.
      * @param approved Whether execution should proceed.
@@ -113,38 +117,49 @@ class SendMessageUseCase(
         approved: Boolean,
         denialReason: String?
     ) {
-        // Built-in worker tools require an on-device cryptographic signature before the worker executes them.
-        val builtInTool = findBuiltInToolDefinition(toolCall)
-        if (builtInTool != null) {
-            emitBuiltInApprovalEvent(
-                toolCall = toolCall,
-                toolDefinition = builtInTool,
-                approved = approved,
-                denialReason = denialReason
-            )
-            return
-        }
+        when (val toolDefinition = findToolDefinition(toolCall)) {
+            is BuiltInWorkerToolDefinition -> {
+                // Built-in worker tools require an on-device cryptographic signature before execution.
+                emitBuiltInApprovalEvent(
+                    toolCall = toolCall,
+                    toolDefinition = toolDefinition,
+                    approved = approved,
+                    denialReason = denialReason
+                )
+            }
 
-        val localMcpTool = findLocalMcpToolDefinition(toolCall)
-        if (localMcpTool == null) {
-            clientEventFlow.emit(
-                ChatClientEvent.ToolCallApproval(
-                    ToolCallApprovalResponse(
+            is OperatorToolDefinition -> {
+                // Operator tools run over the chat socket, so the operator approval needs no signature.
+                clientEventFlow.emit(
+                    ChatClientEvent.OperatorToolCallApproval(
                         toolCallId = toolCall.id,
                         approved = approved,
                         denialReason = denialReason
                     )
                 )
-            )
-            return
-        }
+            }
 
-        emitLocalMcpApprovalEvent(
-            toolCall = toolCall,
-            toolDefinition = localMcpTool,
-            approved = approved,
-            denialReason = denialReason
-        )
+            is LocalMCPToolDefinition -> {
+                // Local MCP tools are dispatched to a worker and therefore require a signed authorization.
+                emitLocalMcpApprovalEvent(
+                    toolCall = toolCall,
+                    toolDefinition = toolDefinition,
+                    approved = approved,
+                    denialReason = denialReason
+                )
+            }
+
+            // A missing or future unsupported definition cannot be authorized safely.
+            else -> {
+                logger.warn(
+                    "No tool definition resolved for tool call ${toolCall.id} (${toolCall.toolName}); cannot emit approval"
+                )
+                notificationService.genericError(
+                    shortMessage = "Failed to authorize tool call",
+                    detailedMessage = "No tool definition could be resolved for tool call ${toolCall.id} (${toolCall.toolName})."
+                )
+            }
+        }
     }
 
     /**
@@ -278,43 +293,27 @@ class SendMessageUseCase(
     }
 
     /**
-     * Resolves the built-in worker tool definition for [toolCall] when the current tool cache contains one.
+     * Resolves the persisted definition for a tool call from the current cache or the repository.
+     *
+     * The caller performs the subtype dispatch because all approval paths share the same lookup
+     * semantics, while the subtype determines whether signing or operator relaying is required.
+     * A cached definition is authoritative for its ID; this avoids making one repository request
+     * for each possible tool category.
      *
      * @param toolCall Tool call whose definition should be resolved.
-     * @return Matching [BuiltInWorkerToolDefinition] or `null` when the tool is not a built-in worker tool
-     *   or the cache lacks it.
+     * @return Matching tool definition, or `null` when the call has no definition ID or resolution fails.
      */
-    private suspend fun findBuiltInToolDefinition(toolCall: ToolCall): BuiltInWorkerToolDefinition? {
+    private suspend fun findToolDefinition(toolCall: ToolCall): ToolDefinition? {
         val toolDefinitionId = toolCall.toolDefinitionId ?: return null
         val cachedDefinition = toolRepository.tools.value.dataOrNull
-            ?.firstOrNull { toolDefinition -> toolDefinition.id == toolDefinitionId } as? BuiltInWorkerToolDefinition
+            ?.firstOrNull { toolDefinition -> toolDefinition.id == toolDefinitionId }
         if (cachedDefinition != null) {
             return cachedDefinition
         }
 
         return toolRepository.getToolById(toolDefinitionId).fold(
             ifLeft = { null },
-            ifRight = { it as? BuiltInWorkerToolDefinition }
-        )
-    }
-
-    /**
-     * Resolves the Local MCP tool definition for [toolCall] when the current tool cache contains one.
-     *
-     * @param toolCall Tool call whose definition should be resolved.
-     * @return Matching [LocalMCPToolDefinition] or `null` when the tool is not Local MCP or the cache lacks it.
-     */
-    private suspend fun findLocalMcpToolDefinition(toolCall: ToolCall): LocalMCPToolDefinition? {
-        val toolDefinitionId = toolCall.toolDefinitionId ?: return null
-        val cachedDefinition = toolRepository.tools.value.dataOrNull
-            ?.firstOrNull { toolDefinition -> toolDefinition.id == toolDefinitionId } as? LocalMCPToolDefinition
-        if (cachedDefinition != null) {
-            return cachedDefinition
-        }
-
-        return toolRepository.getToolById(toolDefinitionId).fold(
-            ifLeft = { null },
-            ifRight = { it as? LocalMCPToolDefinition }
+            ifRight = { it }
         )
     }
 
@@ -341,40 +340,61 @@ class SendMessageUseCase(
     private suspend fun handleToolCallApprovalRequested(toolCall: ToolCall) {
         logger.debug("Tool call approval requested: ${toolCall.toolName}")
 
-        // Built-in worker tools participate in the on-device signing trust chain, so auto-decisions
-        // must be signed locally before being relayed to the worker.
-        val builtInTool = findBuiltInToolDefinition(toolCall)
-        if (builtInTool != null) {
-            val preference = findApprovalPreference(builtInTool.id) ?: return
-            val denialReason = if (preference.autoApprove) {
-                null
-            } else {
-                preference.denialReason ?: "Auto-denied by user preference"
+        when (val toolDefinition = findToolDefinition(toolCall)) {
+            is BuiltInWorkerToolDefinition -> {
+                // Built-in worker approvals must be signed locally before they are relayed to a worker.
+                val preference = findApprovalPreference(toolDefinition.id) ?: return
+                val denialReason = if (preference.autoApprove) {
+                    null
+                } else {
+                    preference.denialReason ?: "Auto-denied by user preference"
+                }
+
+                emitBuiltInApprovalEvent(
+                    toolCall = toolCall,
+                    toolDefinition = toolDefinition,
+                    approved = preference.autoApprove,
+                    denialReason = denialReason
+                )
             }
 
-            emitBuiltInApprovalEvent(
-                toolCall = toolCall,
-                toolDefinition = builtInTool,
-                approved = preference.autoApprove,
-                denialReason = denialReason
-            )
-            return
-        }
+            is OperatorToolDefinition -> {
+                // Operator tools are relayed over the chat socket and do not need an on-device signature.
+                val preference = findApprovalPreference(toolDefinition.id) ?: return
+                val denialReason = if (preference.autoApprove) {
+                    null
+                } else {
+                    preference.denialReason ?: "Auto-denied by user preference"
+                }
 
-        val localMcpTool = findLocalMcpToolDefinition(toolCall) ?: return
-        val preference = findApprovalPreference(localMcpTool.id) ?: return
-        val denialReason = if (preference.autoApprove) {
-            null
-        } else {
-            preference.denialReason ?: "Auto-denied by user preference"
-        }
+                clientEventFlow.emit(
+                    ChatClientEvent.OperatorToolCallApproval(
+                        toolCallId = toolCall.id,
+                        approved = preference.autoApprove,
+                        denialReason = denialReason
+                    )
+                )
+            }
 
-        emitLocalMcpApprovalEvent(
-            toolCall = toolCall,
-            toolDefinition = localMcpTool,
-            approved = preference.autoApprove,
-            denialReason = denialReason
-        )
+            is LocalMCPToolDefinition -> {
+                val preference = findApprovalPreference(toolDefinition.id) ?: return
+                val denialReason = if (preference.autoApprove) {
+                    null
+                } else {
+                    preference.denialReason ?: "Auto-denied by user preference"
+                }
+
+                emitLocalMcpApprovalEvent(
+                    toolCall = toolCall,
+                    toolDefinition = toolDefinition,
+                    approved = preference.autoApprove,
+                    denialReason = denialReason
+                )
+            }
+
+            // Unknown or unresolved definitions cannot be auto-approved safely.
+            else -> return
+        }
     }
 
     /**
@@ -452,44 +472,59 @@ class SendMessageUseCase(
             clientEventFlow
         )
 
-        // Call the repository with the combined event flow and collect server responses.
-        sessionRepository.processNewMessageStreaming(sessionId, clientEvents).collect { eitherUpdate ->
-            eitherUpdate.fold(
-                ifLeft = { repositoryError ->
-                    logger.error("Streaming message repository error: ${repositoryError.message}")
-                    notificationService.repositoryError(
-                        error = repositoryError,
-                        shortMessageRes = Res.string.error_sending_message_short
-                    )
-                },
-                ifRight = { chatUpdate ->
-                    // Handle specific events that require UI state updates or further action.
-                    when (chatUpdate) {
-                        is ChatStreamEvent.UserMessageSaved -> {
-                            // Clear input, reply target, and file references after user message is confirmed.
-                            state.setInputContent("")
-                            state.setReplyTarget(null)
-                            state.updateFileReferences { emptyList() }
-                        }
+        // Call the repository with the combined event flow and collect server responses. The collector
+        // runs inside a coroutine scope so the spawned executor coroutine (which owns the second
+        // WebSocket for operator tools) is cancelled when the primary socket closes or the turn ends.
+        coroutineScope {
+            sessionRepository.processNewMessageStreaming(sessionId, clientEvents).collect { eitherUpdate ->
+                eitherUpdate.fold(
+                    ifLeft = { repositoryError ->
+                        logger.error("Streaming message repository error: ${repositoryError.message}")
+                        notificationService.repositoryError(
+                            error = repositoryError,
+                            shortMessageRes = Res.string.error_sending_message_short
+                        )
+                    },
+                    ifRight = { chatUpdate ->
+                        // Handle specific events that require UI state updates or further action.
+                        when (chatUpdate) {
+                            is ChatStreamEvent.UserMessageSaved -> {
+                                // Clear input, reply target, and file references after user message is confirmed.
+                                state.setInputContent("")
+                                state.setReplyTarget(null)
+                                state.updateFileReferences { emptyList() }
+                            }
 
-                        is ChatStreamEvent.ToolCallApprovalRequested -> {
-                            handleToolCallApprovalRequested(chatUpdate.toolCall)
-                        }
+                            is ChatStreamEvent.ToolCallApprovalRequested -> {
+                                handleToolCallApprovalRequested(chatUpdate.toolCall)
+                            }
 
-                        is ChatStreamEvent.ErrorOccurred -> {
-                            notificationService.apiError(
-                                error = chatUpdate.error,
-                                shortMessageRes = Res.string.error_sending_message_short
-                            )
-                        }
+                            is ChatStreamEvent.OperatorToolExecutionRequested -> {
+                                this@coroutineScope.launch {
+                                    agentSpawnExecutor.execute(
+                                        toolCallId = chatUpdate.toolCallId,
+                                        toolName = chatUpdate.toolName,
+                                        payload = chatUpdate.payload,
+                                        clientEvents = { result -> clientEventFlow.emit(result) }
+                                    )
+                                }
+                            }
 
-                        else -> {
-                            // Other events (e.g., delta, tool completed) are handled by the repository's
-                            // applyStreamEvent method, which updates the UI state reactively.
+                            is ChatStreamEvent.ErrorOccurred -> {
+                                notificationService.apiError(
+                                    error = chatUpdate.error,
+                                    shortMessageRes = Res.string.error_sending_message_short
+                                )
+                            }
+
+                            else -> {
+                                // Other events (e.g., delta, tool completed) are handled by the repository's
+                                // applyStreamEvent method, which updates the UI state reactively.
+                            }
                         }
                     }
-                }
-            )
+                )
+            }
         }
     }
 
@@ -509,60 +544,59 @@ class SendMessageUseCase(
             clientEventFlow
         )
 
-        // Call the repository with the combined event flow and collect server responses.
-        sessionRepository.processNewMessage(sessionId, clientEvents).collect { eitherEvent ->
-            eitherEvent.fold(
-                ifLeft = { repositoryError ->
-                    logger.error("Non-streaming message repository error: ${repositoryError.message}")
-                    notificationService.repositoryError(
-                        error = repositoryError,
-                        shortMessageRes = Res.string.error_sending_message_short
-                    )
-                },
-                ifRight = { event ->
-                    // Handle specific events that require UI state updates or further action.
-                    when (event) {
-                        is ChatEvent.UserMessageSaved -> {
-                            // Clear input, reply target, and file references after user message is confirmed.
-                            state.setInputContent("")
-                            state.setReplyTarget(null)
-                            state.updateFileReferences { emptyList() }
-                        }
+        // Call the repository with the combined event flow and collect server responses. The collector
+        // runs inside a coroutine scope so the spawned executor coroutine (which owns the second
+        // WebSocket for operator tools) is cancelled when the primary socket closes or the turn ends.
+        coroutineScope {
+            sessionRepository.processNewMessage(sessionId, clientEvents).collect { eitherEvent ->
+                eitherEvent.fold(
+                    ifLeft = { repositoryError ->
+                        logger.error("Non-streaming message repository error: ${repositoryError.message}")
+                        notificationService.repositoryError(
+                            error = repositoryError,
+                            shortMessageRes = Res.string.error_sending_message_short
+                        )
+                    },
+                    ifRight = { event ->
+                        // Handle specific events that require UI state updates or further action.
+                        when (event) {
+                            is ChatEvent.UserMessageSaved -> {
+                                // Clear input, reply target, and file references after user message is confirmed.
+                                state.setInputContent("")
+                                state.setReplyTarget(null)
+                                state.updateFileReferences { emptyList() }
+                            }
 
+                            is ChatEvent.ToolCallApprovalRequested -> {
+                                handleToolCallApprovalRequested(event.toolCall)
+                            }
 
-                        is ChatEvent.ToolCallApprovalRequested -> {
-                            handleToolCallApprovalRequested(event.toolCall)
-                        }
+                            is ChatEvent.OperatorToolExecutionRequested -> {
+                                this@coroutineScope.launch {
+                                    agentSpawnExecutor.execute(
+                                        toolCallId = event.toolCallId,
+                                        toolName = event.toolName,
+                                        payload = event.payload,
+                                        clientEvents = { result -> clientEventFlow.emit(result) }
+                                    )
+                                }
+                            }
 
-                        is ChatEvent.ErrorOccurred -> {
-                            notificationService.apiError(
-                                error = event.error,
-                                shortMessageRes = Res.string.error_sending_message_short
-                            )
-                        }
+                            is ChatEvent.ErrorOccurred -> {
+                                notificationService.apiError(
+                                    error = event.error,
+                                    shortMessageRes = Res.string.error_sending_message_short
+                                )
+                            }
 
-                        else -> {
-                            // Other events (e.g., AssistantMessageSaved, StreamCompleted) are handled
-                            // by the repository, which updates the UI state reactively.
+                            else -> {
+                                // Other events (e.g., AssistantMessageSaved, StreamCompleted) are handled
+                                // by the repository, which updates the UI state reactively.
+                            }
                         }
                     }
-                }
-            )
+                )
+            }
         }
     }
-}
-
-/**
- * Resolves whether streaming is enabled for a chat-capable settings profile.
- *
- * Both [ChatModelSettings] and [ResponsesModelSettings] are valid chat-capable profiles and expose
- * their own `stream` flag, so this resolves the concrete subtype before reading the value.
- *
- * @receiver The resolved chat-capable settings profile, or null if no profile is active.
- * @return True when streaming is enabled, false when disabled or no profile is active.
- */
-private fun ModelSettings?.isStreamingEnabled(): Boolean = when (this) {
-    is ChatModelSettings -> stream
-    is ResponsesModelSettings -> stream
-    else -> false
 }

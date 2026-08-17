@@ -210,6 +210,11 @@ enum class Table {
     BUILT_IN_TOOL_DEFINITIONS,
 
     /**
+     * Table for linking operator-executed tools (e.g. spawn_agent) to their owning user.
+     */
+    OPERATOR_TOOL_DEFINITIONS,
+
+    /**
      * Table for storing signed Local MCP server configuration snapshots.
      */
     LOCAL_MCP_SERVER_SIGNATURES,

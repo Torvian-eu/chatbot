@@ -32,5 +32,11 @@ fun MessageEvent.toChatEvent(): ChatEvent {
         is MessageEvent.ToolCallExecuting -> ChatEvent.ToolCallExecuting(
             toolCall = toolCall
         )
+
+        is MessageEvent.OperatorToolExecutionRequested -> ChatEvent.OperatorToolExecutionRequested(
+            toolCallId = toolCallId,
+            toolName = toolName,
+            payload = payload
+        )
     }
 }

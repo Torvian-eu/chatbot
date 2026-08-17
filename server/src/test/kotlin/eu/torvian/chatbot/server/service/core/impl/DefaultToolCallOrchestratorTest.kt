@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolE
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.tool.OperatorToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.security.SignedRequest
@@ -14,6 +15,7 @@ import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorError
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
+import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
 import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallExecutionEvent
@@ -24,6 +26,7 @@ import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -57,6 +60,7 @@ class DefaultToolCallOrchestratorTest {
     private lateinit var toolCallDao: ToolCallDao
     private lateinit var localMcpExecutor: LocalMCPExecutor
     private lateinit var builtInWorkerToolExecutor: BuiltInWorkerToolExecutor
+    private lateinit var operatorToolExecutor: OperatorToolExecutor
     private lateinit var orchestrator: DefaultToolCallOrchestrator
 
     @BeforeEach
@@ -64,17 +68,19 @@ class DefaultToolCallOrchestratorTest {
         toolCallDao = mockk()
         localMcpExecutor = mockk()
         builtInWorkerToolExecutor = mockk()
+        operatorToolExecutor = mockk()
 
         orchestrator = DefaultToolCallOrchestrator(
             toolCallDao = toolCallDao,
             localMcpExecutor = localMcpExecutor,
             builtInWorkerToolExecutor = builtInWorkerToolExecutor,
+            operatorToolExecutor = operatorToolExecutor,
         )
     }
 
     @AfterEach
     fun tearDown() {
-        clearMocks(toolCallDao, localMcpExecutor, builtInWorkerToolExecutor)
+        clearMocks(toolCallDao, localMcpExecutor, builtInWorkerToolExecutor, operatorToolExecutor)
     }
 
     // --- executeAndUpdateToolCalls tests (approval/execution orchestration) ---
@@ -257,6 +263,7 @@ class DefaultToolCallOrchestratorTest {
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
+            operatorToolResultFlow = emptyFlow(),
             controlSignal = TurnControlSignal()
         ).toList()
 
@@ -291,6 +298,7 @@ class DefaultToolCallOrchestratorTest {
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
+            operatorToolResultFlow = emptyFlow(),
             controlSignal = TurnControlSignal()
         ).toList()
 
@@ -343,6 +351,7 @@ class DefaultToolCallOrchestratorTest {
                 pendingToolCalls = listOf(pending),
                 toolDefinitions = listOf(toolDef),
                 toolApprovalFlow = flowOf(approval),
+                operatorToolResultFlow = emptyFlow(),
                 controlSignal = TurnControlSignal()
             ).toList()
 
@@ -401,6 +410,7 @@ class DefaultToolCallOrchestratorTest {
                 pendingToolCalls = listOf(pending),
                 toolDefinitions = listOf(toolDef),
                 toolApprovalFlow = flowOf(approval),
+                operatorToolResultFlow = emptyFlow(),
                 controlSignal = TurnControlSignal()
             ).toList()
 
@@ -456,6 +466,7 @@ class DefaultToolCallOrchestratorTest {
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
+            operatorToolResultFlow = emptyFlow(),
             controlSignal = TurnControlSignal()
         ).toList()
 
@@ -507,6 +518,7 @@ class DefaultToolCallOrchestratorTest {
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
+            operatorToolResultFlow = emptyFlow(),
             controlSignal = TurnControlSignal()
         ).toList()
 
@@ -544,6 +556,7 @@ class DefaultToolCallOrchestratorTest {
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
+            operatorToolResultFlow = emptyFlow(),
             controlSignal = TurnControlSignal()
         ).toList()
 
@@ -592,6 +605,7 @@ class DefaultToolCallOrchestratorTest {
                     approved = true,
                 )
             ),
+            operatorToolResultFlow = emptyFlow(),
             controlSignal = TurnControlSignal()
         ).toList()
 
@@ -607,5 +621,160 @@ class DefaultToolCallOrchestratorTest {
         coVerify(exactly = 0) { builtInWorkerToolExecutor.executeTool(any(), any(), any()) }
         coVerify(exactly = 0) { localMcpExecutor.executeTool(any(), any(), any()) }
         coVerify(exactly = 0) { toolCallDao.updateToolCall(any()) }
+    }
+
+    // --- Operator tool-call tests ---
+
+    /**
+     * Fixture builder for an Operator tool definition.
+     */
+    private fun operatorToolDefinition(
+        id: Long = 3L,
+        name: String = "spawn_agent",
+        userId: Long = 1L
+    ): OperatorToolDefinition = OperatorToolDefinition(
+        id = id,
+        name = name,
+        description = "Spawns an agent from a user-defined role",
+        config = buildJsonObject { },
+        inputSchema = buildJsonObject { },
+        outputSchema = null,
+        isEnabled = true,
+        createdAt = testToolCallInstant,
+        updatedAt = testToolCallInstant,
+        userId = userId
+    )
+
+    /**
+     * Fixture builder for an Operator tool approval submission.
+     */
+    private fun operatorToolApproval(
+        toolCallId: Long,
+        approved: Boolean,
+        denialReason: String? = null
+    ): ToolCallApprovalSubmission.OperatorToolApproval =
+        ToolCallApprovalSubmission.OperatorToolApproval(
+            toolCallId = toolCallId,
+            approved = approved,
+            denialReason = denialReason
+        )
+
+    @Test
+    fun `executeAndUpdateToolCalls should relay and complete an approved operator tool call`() = runTest {
+        val toolDef = operatorToolDefinition()
+        val pending = pendingToolCall(id = 20L, toolDefinitionId = toolDef.id, toolName = toolDef.name)
+        val approval = operatorToolApproval(pending.id, approved = true)
+        val updates = trackToolCallUpdates()
+
+        coEvery {
+            operatorToolExecutor.executeTool(1L, pending, any(), any())
+        } coAnswers {
+            // Emulate the real executor: emit the relay event through the emitEvent sink, then return
+            // a terminal success call carrying the spawned agent's summary.
+            val emit = arg<suspend (ToolCallExecutionEvent) -> Unit>(2)
+            emit(
+                ToolCallExecutionEvent.OperatorToolExecutionRequested(
+                    toolCallId = pending.id,
+                    toolName = pending.toolName,
+                    payloadJson = "{}"
+                )
+            )
+            pending.copy(status = ToolCallStatus.SUCCESS, output = "summary", durationMs = 5L)
+        }
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            pendingToolCalls = listOf(pending),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = flowOf(approval),
+            operatorToolResultFlow = emptyFlow(),
+            controlSignal = TurnControlSignal()
+        ).toList()
+
+        assertEquals(4, events.size)
+        val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
+        assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
+        assertIs<ToolCallExecutionEvent.ToolCallExecuting>(events[1])
+        val relayed = assertIs<ToolCallExecutionEvent.OperatorToolExecutionRequested>(events[2])
+        assertEquals(pending.id, relayed.toolCallId)
+        assertEquals(pending.toolName, relayed.toolName)
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[3])
+        assertEquals(ToolCallStatus.SUCCESS, completed.toolCall.status)
+        assertEquals("summary", completed.toolCall.output)
+
+        assertEquals(
+            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.SUCCESS),
+            updates.map { it.status }
+        )
+        coVerify(exactly = 1) { operatorToolExecutor.executeTool(1L, pending, any(), any()) }
+    }
+
+    @Test
+    fun `executeAndUpdateToolCalls should deny a rejected operator tool call and skip execution`() = runTest {
+        val toolDef = operatorToolDefinition()
+        val pending = pendingToolCall(id = 21L, toolDefinitionId = toolDef.id, toolName = toolDef.name)
+        val approval = operatorToolApproval(pending.id, approved = false, denialReason = "No spawns")
+        val updates = trackToolCallUpdates()
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            pendingToolCalls = listOf(pending),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = flowOf(approval),
+            operatorToolResultFlow = emptyFlow(),
+            controlSignal = TurnControlSignal()
+        ).toList()
+
+        assertEquals(2, events.size)
+        val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
+        assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[1])
+        assertEquals(ToolCallStatus.USER_DENIED, completed.toolCall.status)
+        assertEquals("No spawns", completed.toolCall.denialReason)
+
+        assertEquals(
+            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.USER_DENIED),
+            updates.map { it.status }
+        )
+        coVerify(exactly = 0) { operatorToolExecutor.executeTool(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `executeAndUpdateToolCalls should surface the operator executor's error result`() = runTest {
+        val toolDef = operatorToolDefinition()
+        val pending = pendingToolCall(id = 22L, toolDefinitionId = toolDef.id, toolName = toolDef.name)
+        val approval = operatorToolApproval(pending.id, approved = true)
+        val updates = trackToolCallUpdates()
+
+        // The executor maps a payload-build failure (e.g. role not found) into a terminal ERROR call
+        // without emitting a relay event; the orchestrator must persist and relay that as-is.
+        coEvery {
+            operatorToolExecutor.executeTool(1L, pending, any(), any())
+        } returns pending.copy(
+            status = ToolCallStatus.ERROR,
+            errorMessage = "Role 'ghost' not found.",
+            durationMs = 2L
+        )
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            pendingToolCalls = listOf(pending),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = flowOf(approval),
+            operatorToolResultFlow = emptyFlow(),
+            controlSignal = TurnControlSignal()
+        ).toList()
+
+        assertEquals(3, events.size)
+        assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
+        assertIs<ToolCallExecutionEvent.ToolCallExecuting>(events[1])
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[2])
+        assertEquals(ToolCallStatus.ERROR, completed.toolCall.status)
+        assertEquals("Role 'ghost' not found.", completed.toolCall.errorMessage)
+
+        assertEquals(
+            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.ERROR),
+            updates.map { it.status }
+        )
     }
 }

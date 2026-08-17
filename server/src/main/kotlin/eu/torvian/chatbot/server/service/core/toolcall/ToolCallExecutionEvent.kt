@@ -30,4 +30,23 @@ sealed interface ToolCallExecutionEvent {
      * @property toolCall The tool call awaiting approval (with AWAITING_APPROVAL status).
      */
     data class ToolCallApprovalRequested(val toolCall: ToolCall) : ToolCallExecutionEvent
+
+    /**
+     * Emitted to relay one operator tool execution to the operator.
+     *
+     * This is a generic envelope: [payloadJson] is the JSON-serialized, tool-specific execution
+     * request (e.g. [eu.torvian.chatbot.common.models.agent.AgentSpawnRequest] for `spawn_agent`) and
+     * [toolName] tells the operator which deserializer to use. The operator echoes [toolCallId] back
+     * in `ChatClientEvent.ToolExecutionResult` to correlate the reply.
+     *
+     * @property toolCallId Persisted tool-call identifier (correlation key).
+     * @property toolName Operator-tool name (e.g. `spawn_agent`); unique per user because operator
+     *            tools are per-user instances, so it doubles as the payload discriminator.
+     * @property payloadJson JSON text of the tool-specific payload.
+     */
+    data class OperatorToolExecutionRequested(
+        val toolCallId: Long,
+        val toolName: String,
+        val payloadJson: String
+    ) : ToolCallExecutionEvent
 }

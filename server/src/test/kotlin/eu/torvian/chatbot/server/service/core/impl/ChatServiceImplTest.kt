@@ -171,7 +171,7 @@ class ChatServiceImplTest {
         )
 
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), TurnControlSignal())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), emptyFlow(), TurnControlSignal())
             .collect { event -> events.add(event) }
 
         assertEquals(3, events.size)
@@ -191,7 +191,7 @@ class ChatServiceImplTest {
         )
 
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), TurnControlSignal())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), emptyFlow(), TurnControlSignal())
             .collect { event -> events.add(event) }
 
         assertIs<ProcessNewMessageError.ExternalServiceError>(events[0].leftOrNull())
@@ -221,6 +221,7 @@ class ChatServiceImplTest {
             null,
             emptyList(),
             emptyFlow(),
+            emptyFlow(),
             TurnControlSignal()
         )
             .collect { event -> events.add(event) }
@@ -239,7 +240,7 @@ class ChatServiceImplTest {
         every { conversationTurnOrchestrator.processNonStreamingTurn(any()) } throws IllegalStateException("boom")
 
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), TurnControlSignal())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), emptyFlow(), TurnControlSignal())
             .collect { event -> events.add(event) }
 
         assertIs<ProcessNewMessageError.UnexpectedError>(events[0].leftOrNull())
@@ -258,6 +259,7 @@ class ChatServiceImplTest {
             "Hello",
             null,
             emptyList(),
+            emptyFlow(),
             emptyFlow(),
             TurnControlSignal()
         )

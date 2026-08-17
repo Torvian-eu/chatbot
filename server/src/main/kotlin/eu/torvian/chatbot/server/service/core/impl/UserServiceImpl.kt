@@ -37,6 +37,8 @@ import kotlin.time.Clock
  * @param userGroupService Service for group operations
  * @param transactionScope Transaction scope for database operations
  * @param policy The account validation policy containing username and password rules
+ * @param operatorToolDefinitionSeeder Seeder that grants each new user their own operator-tool
+ *            instances (e.g. `spawn_agent`) immediately after registration.
  */
 class UserServiceImpl(
     private val userDao: UserDao,
@@ -45,7 +47,8 @@ class UserServiceImpl(
     private val userRoleAssignmentDao: UserRoleAssignmentDao,
     private val userGroupService: UserGroupService,
     private val transactionScope: TransactionScope,
-    private val policy: AccountValidationPolicy
+    private val policy: AccountValidationPolicy,
+    private val operatorToolDefinitionSeeder: OperatorToolDefinitionSeeder
 ) : UserService {
 
     companion object {
@@ -137,6 +140,16 @@ class UserServiceImpl(
                 userGroupService.addUserToGroup(newUser.id, allUsersGroup.id).bind()
             }
 
+            // Seed the new user's operator-tool instances (e.g. spawn_agent) so their per-user tool
+            // rows exist before they ever open a chat. The seeder joins the active registration
+            // transaction, keeping account creation atomic.
+            withError({ error ->
+                logger.error("Failed to seed operator tools for new user $username: $error")
+                RegisterUserError.InvalidInput("Failed to initialize user tool configuration")
+            }) {
+                operatorToolDefinitionSeeder.ensureForUser(newUser.id).bind()
+            }
+
             logger.info("Successfully registered user: $username (ID: ${newUser.id})")
             newUser.toUser()
         }
@@ -209,7 +222,7 @@ class UserServiceImpl(
             logger.info("Updating user $userId: username=$username, email=$email")
 
             // Validate input
-            ensure(!username.isBlank()) {
+            ensure(username.isNotBlank()) {
                 UpdateUserError.InvalidInput("Username cannot be blank")
             }
             ensure(email?.isBlank() != true) {

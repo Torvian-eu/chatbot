@@ -5,6 +5,8 @@ import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
+import eu.torvian.chatbot.app.service.agent.AgentSpawnExecutor
+import eu.torvian.chatbot.app.service.agent.DefaultAgentSpawnExecutor
 import eu.torvian.chatbot.app.service.auth.*
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
@@ -22,6 +24,10 @@ import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.*
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelSlotManager
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelStoreOwnerProvider
+import eu.torvian.chatbot.app.viewmodel.chat.KoinSpawnedChatViewModelResolver
+import eu.torvian.chatbot.app.viewmodel.chat.MutableChatViewModelStoreOwnerProvider
+import eu.torvian.chatbot.app.viewmodel.chat.SpawnedChatViewModelResolver
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatStateImpl
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
@@ -33,6 +39,7 @@ import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.app.viewmodel.settings.AboutViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.AgentRolesViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.BuiltInToolsViewModel
+import eu.torvian.chatbot.app.viewmodel.settings.OperatorToolsViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.E2EASecurityViewModel
 import io.ktor.client.*
 import io.ktor.client.plugins.logging.*
@@ -232,6 +239,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<BuiltInToolApi> {
         KtorBuiltInToolApiClient(get())
     }
+    single<OperatorToolApi> {
+        KtorOperatorToolApiClient(get())
+    }
     single<WorkerApi> {
         KtorWorkerApiClient(get())
     }
@@ -308,8 +318,39 @@ fun appModule(config: AppConfiguration): Module = module {
             toolRepository = get()
         )
     }
+    single<OperatorToolRepository> {
+        DefaultOperatorToolRepository(
+            operatorToolApi = get(),
+            toolRepository = get()
+        )
+    }
     single<ServerMetadataRepository> {
         DefaultServerMetadataRepository(get())
+    }
+
+    // Resolver that obtains a session's ChatViewModel (the same instance the UI resolves) from
+    // regular code, so the spawn executor can drive a spawned session through its own ViewModel.
+    // The root scope is the one the `viewModel` DSL definitions are installed into. The
+    // ViewModelStoreOwner the spawned session must resolve against is NOT captured here: it is the
+    // Chat destination's owner (the NavHost entry ChatScreen's koinViewModel resolves from), which
+    // ChatScreen publishes into the provider during composition and the resolver reads at spawn time.
+    single<ChatViewModelStoreOwnerProvider> { MutableChatViewModelStoreOwnerProvider() }
+    single<SpawnedChatViewModelResolver> {
+        KoinSpawnedChatViewModelResolver(
+            slotManager = get(),
+            scope = this,
+            ownerProvider = get()
+        )
+    }
+
+    // Coordinator for operator tools (e.g. spawn_agent): drives the spawned conversation through the
+    // spawned session's own ChatViewModel and reports the result back on the original chat socket.
+    single<AgentSpawnExecutor> {
+        DefaultAgentSpawnExecutor(
+            sessionRepository = get(),
+            authRepository = get(),
+            spawnedViewModelResolver = get()
+        )
     }
 
     single<LocalMCPServerManager> {
@@ -363,7 +404,7 @@ fun appModule(config: AppConfiguration): Module = module {
         SelectAgentRoleUseCase(get<SessionRepository>(), chatState, get())
     }
 
-    factory<LoadAgentRolesUseCase> { (chatState: ChatState) ->
+    factory<LoadAgentRolesUseCase> { (_: ChatState) ->
         LoadAgentRolesUseCase(get<AgentRoleRepository>(), get())
     }
 
@@ -372,7 +413,7 @@ fun appModule(config: AppConfiguration): Module = module {
     }
 
     factory<SendMessageUseCase> { (chatState: ChatState) ->
-        SendMessageUseCase(get<SessionRepository>(), get<ToolRepository>(), get(), chatState, get())
+        SendMessageUseCase(get<SessionRepository>(), get<ToolRepository>(), get(), get(), chatState, get())
     }
 
     factory<EditMessageUseCase> { (chatState: ChatState) ->
@@ -543,6 +584,13 @@ fun appModule(config: AppConfiguration): Module = module {
         BuiltInToolsViewModel(
             workerRepository = get(),
             builtInToolRepository = get(),
+            toolRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
+        OperatorToolsViewModel(
+            operatorToolRepository = get(),
             toolRepository = get(),
             notificationService = get()
         )

@@ -115,7 +115,8 @@ class AuthRoutesTest {
                 Table.USER_DEVICES,
                 Table.FAILED_LOGIN_ATTEMPTS,
                 Table.TOOL_DEFINITIONS,
-                Table.BUILT_IN_TOOL_DEFINITIONS
+                Table.BUILT_IN_TOOL_DEFINITIONS,
+                Table.OPERATOR_TOOL_DEFINITIONS
             )
         )
 

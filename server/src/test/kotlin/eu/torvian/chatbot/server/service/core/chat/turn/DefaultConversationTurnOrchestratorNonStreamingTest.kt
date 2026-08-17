@@ -93,6 +93,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 parentMessageId = null,
                 fileReferences = emptyList(),
                 toolApprovalFlow = emptyFlow(),
+                operatorToolResultFlow = emptyFlow(),
                 turnControlSignal = TurnControlSignal()
             )
         ).toList()
@@ -244,6 +245,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 listOf(pendingToolCall),
                 listOf(toolDefinition),
                 any(),
+                any(),
                 any()
             )
         } returns flowOf(
@@ -261,6 +263,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 parentMessageId = null,
                 fileReferences = emptyList(),
                 toolApprovalFlow = emptyFlow(),
+                operatorToolResultFlow = emptyFlow(),
                 turnControlSignal = TurnControlSignal()
             )
         ).toList()
@@ -307,6 +310,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 parentMessageId = null,
                 fileReferences = emptyList(),
                 toolApprovalFlow = emptyFlow(),
+                operatorToolResultFlow = emptyFlow(),
                 turnControlSignal = turnControlSignal
             )
         ).toList()
@@ -402,6 +406,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 parentMessageId = null,
                 fileReferences = emptyList(),
                 toolApprovalFlow = emptyFlow(),
+                operatorToolResultFlow = emptyFlow(),
                 turnControlSignal = TurnControlSignal()
             )
         ).toList()
@@ -574,6 +579,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 listOf(pendingToolCall),
                 listOf(toolDefinition),
                 any(),
+                any(),
                 any()
             )
         } returns flowOf(ToolCallExecutionEvent.ToolCallCompleted(completedToolCall))
@@ -589,6 +595,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 parentMessageId = null,
                 fileReferences = emptyList(),
                 toolApprovalFlow = emptyFlow(),
+                operatorToolResultFlow = emptyFlow(),
                 turnControlSignal = TurnControlSignal()
             )
         ).toList()

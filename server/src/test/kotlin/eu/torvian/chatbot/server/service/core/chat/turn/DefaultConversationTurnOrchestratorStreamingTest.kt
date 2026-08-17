@@ -93,6 +93,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
                 parentMessageId = null,
                 fileReferences = emptyList(),
                 toolApprovalFlow = emptyFlow(),
+                operatorToolResultFlow = emptyFlow(),
                 turnControlSignal = TurnControlSignal()
             )
         ).toList()
@@ -192,6 +193,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
                 parentMessageId = null,
                 fileReferences = emptyList(),
                 toolApprovalFlow = emptyFlow(),
+                operatorToolResultFlow = emptyFlow(),
                 turnControlSignal = TurnControlSignal()
             )
         ).toList()
@@ -325,6 +327,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
                 listOf(pendingToolCall),
                 listOf(toolDefinition),
                 any(),
+                any(),
                 any()
             )
         } returns flowOf(
@@ -340,6 +343,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
                 parentMessageId = null,
                 fileReferences = emptyList(),
                 toolApprovalFlow = emptyFlow(),
+                operatorToolResultFlow = emptyFlow(),
                 turnControlSignal = TurnControlSignal()
             )
         ).toList()
@@ -480,7 +484,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
         } returns listOf(pendingToolCall)
         every {
             toolCallOrchestrator.executeAndUpdateToolCalls(
-                1L, listOf(pendingToolCall), listOf(toolDefinition), any(), any()
+                1L, listOf(pendingToolCall), listOf(toolDefinition), any(), any(), any()
             )
         } returns flowOf(ToolCallExecutionEvent.ToolCallCompleted(pendingToolCall.copy(
             output = "{\"results\":[]}",
@@ -499,6 +503,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
                 parentMessageId = null,
                 fileReferences = emptyList(),
                 toolApprovalFlow = emptyFlow(),
+                operatorToolResultFlow = emptyFlow(),
                 turnControlSignal = TurnControlSignal()
             )
         ).toList()

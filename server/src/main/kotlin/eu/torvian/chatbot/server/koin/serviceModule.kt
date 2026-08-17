@@ -10,7 +10,11 @@ import eu.torvian.chatbot.common.security.PasswordValidator
 import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.DefaultBuiltInWorkerToolExecutor
+import eu.torvian.chatbot.server.service.builtin.DefaultOperatorToolExecutor
+import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.service.core.agent.AgentSpawnRequestBuilder
+import eu.torvian.chatbot.server.service.core.agent.DefaultAgentSpawnRequestBuilder
 import eu.torvian.chatbot.server.service.core.agent.DefaultSystemPromptComposer
 import eu.torvian.chatbot.server.service.core.agent.SystemPromptComposer
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
@@ -67,7 +71,7 @@ fun serviceModule() = module {
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get()) }
     single<SearchService> { SearchServiceImpl(get()) }
-    single<ToolCallOrchestrator> { DefaultToolCallOrchestrator(get(), get(), get()) }
+    single<ToolCallOrchestrator> { DefaultToolCallOrchestrator(get(), get(), get(), get()) }
     single<FileReferenceContentBuilder> { DefaultFileReferenceContentBuilder() }
     single<ToolResultContentBuilder> { DefaultToolResultContentBuilder() }
     single<ChatContextBuilder> { DefaultChatContextBuilder(get(), get()) }
@@ -110,6 +114,19 @@ fun serviceModule() = module {
             workerDao = get(),
             builtInToolDefinitionDao = get(),
             builtInToolDefinitionSeeder = get(),
+            toolService = get(),
+            transactionScope = get()
+        )
+    }
+
+    // --- Operator tool services (server-relayed, operator-executed) ---
+    single<AgentSpawnRequestBuilder> { DefaultAgentSpawnRequestBuilder(get(), get()) }
+    single<OperatorToolExecutor> { DefaultOperatorToolExecutor(get(), get()) }
+    single<OperatorToolDefinitionSeeder> { OperatorToolDefinitionSeeder(get(), get(), get()) }
+    single<OperatorToolDefinitionService> {
+        OperatorToolDefinitionServiceImpl(
+            operatorToolDefinitionDao = get(),
+            operatorToolDefinitionSeeder = get(),
             toolService = get(),
             transactionScope = get()
         )
@@ -161,7 +178,7 @@ fun serviceModule() = module {
     single<PasswordService> {
         BCryptPasswordService(PasswordValidator(get<AppConfiguration>().authPolicy.passwordConfig))
     }
-    single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
+    single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
     single<TokenService> {
         TokenServiceImpl(
             userService = get(),
@@ -241,7 +258,10 @@ fun serviceModule() = module {
     single<UserAccountInitializer> { UserAccountInitializer(get(), get(), get()) }
     single<InitializationCoordinator> {
         InitializationCoordinator(
-            listOf(get<UserAccountInitializer>())
+            listOf(
+                get<UserAccountInitializer>(),
+                get<OperatorToolDefinitionSeeder>()
+            )
         )
     }
 }

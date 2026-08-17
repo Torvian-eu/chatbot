@@ -410,6 +410,7 @@ class DefaultConversationTurnOrchestrator(
             pendingToolCalls,
             request.llmConfig.tools,
             request.toolApprovalFlow,
+            request.operatorToolResultFlow,
             request.turnControlSignal
         ).collect { event ->
             when (event) {
@@ -424,6 +425,16 @@ class DefaultConversationTurnOrchestrator(
 
                 is ToolCallExecutionEvent.ToolCallApprovalRequested -> {
                     emit(ConversationTurnEvent.ToolCallApprovalRequested(event.toolCall))
+                }
+
+                is ToolCallExecutionEvent.OperatorToolExecutionRequested -> {
+                    emit(
+                        ConversationTurnEvent.OperatorToolExecutionRequested(
+                            toolCallId = event.toolCallId,
+                            toolName = event.toolName,
+                            payload = event.payloadJson
+                        )
+                    )
                 }
             }
         }

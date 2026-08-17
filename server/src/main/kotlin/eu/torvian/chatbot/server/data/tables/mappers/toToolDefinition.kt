@@ -2,10 +2,12 @@ package eu.torvian.chatbot.server.data.tables.mappers
 
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.tool.OperatorToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.tables.BuiltInToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
+import eu.torvian.chatbot.server.data.tables.OperatorToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -15,13 +17,14 @@ import kotlin.time.Instant
 /**
  * Maps a ResultRow to a ToolDefinition, handling all tool types polymorphically.
  *
- * This mapper handles both simple JOINs and LEFT JOINs with LocalMCPToolDefinitionTable and
- * BuiltInToolDefinitionTable:
+ * This mapper handles both simple JOINs and LEFT JOINs with LocalMCPToolDefinitionTable,
+ * BuiltInToolDefinitionTable and OperatorToolDefinitionTable:
  * - If type is MCP_LOCAL and MCP columns are present: returns LocalMCPToolDefinition
  * - If type is BUILTIN_WORKER and built-in columns are present: returns BuiltInWorkerToolDefinition
+ * - If type is OPERATOR and operator columns are present: returns OperatorToolDefinition
  * - Otherwise: throws, since no generic tool type is supported anymore.
  *
- * Safely handles NULL values from LEFT JOINs on non-MCP tools.
+ * Safely handles NULL values from LEFT JOINs on non-matching tools.
  */
 fun ResultRow.toToolDefinition(): ToolDefinition {
     val toolType = this[ToolDefinitionTable.type]
@@ -64,6 +67,19 @@ fun ResultRow.toToolDefinition(): ToolDefinition {
             updatedAt = updatedAt,
             workerId = this[BuiltInToolDefinitionTable.workerId].value,
             builtInToolName = this[BuiltInToolDefinitionTable.builtInToolName]
+        )
+
+        ToolType.OPERATOR -> OperatorToolDefinition(
+            id = id,
+            name = name,
+            description = description,
+            config = config,
+            inputSchema = inputSchema,
+            outputSchema = outputSchema,
+            isEnabled = isEnabled,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+            userId = this[OperatorToolDefinitionTable.userId].value
         )
 
         // MCP_REMOTE is declared but never persisted; no generic fallback type exists anymore.

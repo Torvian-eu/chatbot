@@ -300,9 +300,14 @@ class ChatViewModel(
     /**
      * Loads a chat session and its messages by ID.
      * Resets all state before loading the new session.
+     *
+     * @param sessionId The identifier of the session to load.
+     * @param userId The authenticated user's identifier, required for loading user-scoped MCP servers.
+     * @return The [Job] that performs the load and completes once the session and its dependencies
+     *         (models, settings, roles, tools, tool approval preferences) have been loaded.
      */
-    fun loadSession(sessionId: Long, userId: Long) {
-        normalScope.launch {
+    fun loadSession(sessionId: Long, userId: Long): Job {
+        return normalScope.launch {
             // Clear all state (shared and use case internal state) before loading
             clearSession()
             loadSessionUC.execute(sessionId, userId)
@@ -336,13 +341,25 @@ class ChatViewModel(
      * Sends the current message content to the active session, or continues from a specific message.
      *
      * @param continueFromMessage When provided, uses Branch & Continue mode: sends null content
-     *                            with this message's ID as parentMessageId to continue the conversation
-     *                            from that point. When null, sends the current input content normally.
+     *            with this message's ID as parentMessageId to continue the conversation
+     *            from that point. When null, sends the current input content normally.
+     * @return The [Job] that performs the send and completes when the turn ends, or `null` when the
+     *         send is refused: a turn is already active, the input is blank in normal mode, or the
+     *         session's role/model/settings cannot be resolved. The last two mirror the guards inside
+     *         [SendMessageUseCase.execute] so the spawned-turn coordinator can observe a refusal
+     *         deterministically instead of awaiting a silently-completed no-op turn.
      */
-    fun sendMessage(continueFromMessage: ChatMessage? = null) {
+    fun sendMessage(continueFromMessage: ChatMessage? = null): Job? {
         // Refuse to start a new turn while one is already active. This covers regular sends,
         // Branch & Continue, and any caller that bypasses the disabled UI controls.
-        if (isTurnActive) return
+        if (isTurnActive) return null
+        // Normal-mode sends need non-blank input; the spawned-turn path always sets the input first.
+        if (continueFromMessage == null && state.inputContent.value.isBlank()) return null
+        // A session role with a resolvable model/settings profile is required for a turn to run.
+        // Returning null here lets the spawned-turn executor report a deterministic tool error.
+        if (state.currentAgentRole.value == null || state.currentModel.value == null || state.currentSettings.value == null) {
+            return null
+        }
         val job = normalScope.launch {
             sendMessageUC.execute(continueFromMessage = continueFromMessage)
         }
@@ -355,6 +372,7 @@ class ChatViewModel(
                 state.setTurnExecutionState(TurnExecutionState.IDLE)
             }
         }
+        return job
     }
 
     /**
@@ -412,6 +430,38 @@ class ChatViewModel(
      * Compatibility action used by callers that previously exposed a dedicated stop callback.
      */
     fun cancelSendMessage() = handlePauseOrStop()
+
+    /**
+     * Hard-cancels the in-flight send without the pause/stop state machine.
+     *
+     * This is the cancellation hook for the spawned-turn coordinator: a spawned send runs in this
+     * ViewModel's `normalScope`, so it survives the primary socket closing on its own. When the
+     * primary turn ends mid-spawn, the coordinator calls this to stop the spawned turn: it emits a
+     * [eu.torvian.chatbot.common.models.api.core.ChatClientEvent.Cancel] so the server cancels the
+     * turn on the spawned socket, then cancels the send job so the socket is closed and the turn
+     * state falls back to IDLE through the job's completion handler. Deliberately not routed through
+     * [handlePauseOrStop], whose RUNNING branch only sends a soft Pause.
+     */
+    fun forceCancelSend() {
+        val activeSendJob = sendMessageJob
+        if (activeSendJob == null || !activeSendJob.isActive) return
+        normalScope.launch {
+            sendMessageUC.requestCancellation()
+        }
+        activeSendJob.cancel()
+    }
+
+    /**
+     * Returns the content of the last assistant message in the currently displayed branch.
+     *
+     * This is the aggregation point for spawned-turn results: after the send job completes, the
+     * turn's final assistant message has been applied to the session cache, so this accessor yields
+     * the summary the spawned conversation produced without exposing the full message list.
+     *
+     * @return The content of the last assistant message, or `null` when the branch has none.
+     */
+    fun lastAssistantMessageContent(): String? =
+        displayedMessages.value.filterIsInstance<ChatMessage.AssistantMessage>().lastOrNull()?.content
 
     /**
      * Regenerates an assistant message by continuing from its parent message.

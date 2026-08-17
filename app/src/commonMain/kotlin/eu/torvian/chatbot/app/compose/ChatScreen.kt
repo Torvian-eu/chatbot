@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.compose
 
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import eu.torvian.chatbot.app.chat.search.SearchDirection
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
@@ -17,6 +18,7 @@ import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelSlotManager
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelStoreOwnerProvider
 import eu.torvian.chatbot.app.viewmodel.settings.AgentRolesViewModel
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.core.ChatGroup
@@ -53,6 +55,19 @@ fun ChatScreen(
     authState: AuthState,
     agentRoleManagementViewModel: AgentRolesViewModel = koinViewModel()
 ) {
+    // Publish the Chat destination's ViewModelStoreOwner (the NavHost back-stack entry this screen
+    // resolves `koinViewModel()` from) into the shared provider, so the spawned-session coordinator
+    // resolves session ChatViewModels against the SAME store the UI uses. This must happen while this
+    // screen is composed: navigation-compose scopes ViewModels per destination, so the platform-root
+    // owner is a different store. Without this, the spawn executor would drive a parallel
+    // ChatViewModel, and switching to the spawned session would reload it (`clearSession`) instead of
+    // reusing the live turn state, breaking the manual tool-approval flow.
+    val chatViewModelStoreOwnerProvider: ChatViewModelStoreOwnerProvider = koinInject()
+    val destinationViewModelStoreOwner = LocalViewModelStoreOwner.current
+    remember(destinationViewModelStoreOwner) {
+        chatViewModelStoreOwnerProvider.owner = destinationViewModelStoreOwner
+    }
+
     val crossSessionSearchViewModel: CrossSessionSearchViewModel = koinViewModel()
 
     // Collect selected session first — its ID is used as the key for the ChatViewModel.
@@ -259,7 +274,12 @@ fun ChatScreen(
     val chatAreaActions = remember(chatViewModel, sessionListViewModel) {
         object : ChatAreaActions {
             override fun onUpdateInput(newText: String) = chatViewModel.updateInput(newText)
-            override fun onSendMessage() = chatViewModel.sendMessage()
+            override fun onSendMessage() {
+                // The returned Job is intentionally discarded: the composer is a fire-and-forget
+                // action, and send refusal (e.g. an unresolved role) is surfaced by the disabled
+                // composer state rather than here.
+                chatViewModel.sendMessage()
+            }
             override fun onCancelSendMessage() = chatViewModel.cancelSendMessage()
             override fun onPauseSendMessage() = chatViewModel.pauseSendMessage()
             override fun onStartReplyTo(message: ChatMessage) = chatViewModel.startReplyTo(message)
@@ -308,8 +328,9 @@ fun ChatScreen(
             override fun onJumpToSearchResult(index: Int) =
                 chatViewModel.jumpToSearchResult(index)
 
-            override fun onBranchAndContinue(message: ChatMessage) =
+            override fun onBranchAndContinue(message: ChatMessage) {
                 chatViewModel.sendMessage(continueFromMessage = message)
+            }
 
             override fun onRegenerateMessage(message: ChatMessage) =
                 chatViewModel.regenerateMessage(message)

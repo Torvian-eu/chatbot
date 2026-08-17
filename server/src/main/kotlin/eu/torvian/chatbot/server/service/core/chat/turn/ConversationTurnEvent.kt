@@ -106,6 +106,25 @@ sealed interface ConversationTurnEvent {
     ) : ConversationTurnEvent
 
     /**
+     * Signals that one operator tool execution must be relayed to the operator.
+     *
+     * This is a generic envelope: [payload] is the JSON-serialized, tool-specific execution request
+     * (e.g. [eu.torvian.chatbot.common.models.agent.AgentSpawnRequest] for `spawn_agent`) and
+     * [toolName] tells the operator which deserializer to use. The operator echoes [toolCallId] back
+     * in `ChatClientEvent.ToolExecutionResult` to correlate the reply.
+     *
+     * @property toolCallId Persisted tool-call identifier (correlation key).
+     * @property toolName Operator-tool name (e.g. `spawn_agent`); unique per user because operator
+     *            tools are per-user instances, so it doubles as the payload discriminator.
+     * @property payload JSON text of the tool-specific payload.
+     */
+    data class OperatorToolExecutionRequested(
+        val toolCallId: Long,
+        val toolName: String,
+        val payload: String
+    ) : ConversationTurnEvent
+
+    /**
      * Signals that a tool call reached a terminal state.
      *
      * @property toolCall Completed tool call.
