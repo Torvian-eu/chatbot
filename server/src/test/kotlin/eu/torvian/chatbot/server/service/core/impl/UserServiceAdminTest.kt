@@ -38,6 +38,7 @@ class UserServiceAdminTest {
     private lateinit var userRoleAssignmentDao: UserRoleAssignmentDao
     private lateinit var userGroupService: UserGroupService
     private lateinit var transactionScope: TransactionScope
+    private lateinit var operatorToolDefinitionSeeder: OperatorToolDefinitionSeeder
     private lateinit var userService: UserService
 
     @BeforeEach
@@ -48,6 +49,7 @@ class UserServiceAdminTest {
         userRoleAssignmentDao = mockk()
         userGroupService = mockk()
         transactionScope = mockk()
+        operatorToolDefinitionSeeder = mockk()
 
         // Mock transaction scope to execute block directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
@@ -67,7 +69,8 @@ class UserServiceAdminTest {
             userRoleAssignmentDao,
             userGroupService,
             transactionScope,
-            defaultPolicy
+            defaultPolicy,
+            operatorToolDefinitionSeeder
         )
     }
 

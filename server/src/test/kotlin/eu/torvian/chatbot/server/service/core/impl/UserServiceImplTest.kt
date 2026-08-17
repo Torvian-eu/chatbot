@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserGroup
 import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.models.tool.OperatorToolDefinition
 import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import eu.torvian.chatbot.common.security.PasswordValidationConfig
 import eu.torvian.chatbot.common.security.UsernameValidationConfig
@@ -36,6 +37,7 @@ class UserServiceImplTest {
     private val userRoleAssignmentDao = mockk<UserRoleAssignmentDao>()
     private val userGroupService = mockk<UserGroupService>()
     private val transactionScope = mockk<TransactionScope>()
+    private val operatorToolDefinitionSeeder = mockk<OperatorToolDefinitionSeeder>()
 
     private val defaultPolicy = AccountValidationPolicy(
         passwordConfig = PasswordValidationConfig(),
@@ -43,7 +45,7 @@ class UserServiceImplTest {
     )
 
     private val userService =
-        UserServiceImpl(userDao, passwordService, roleDao, userRoleAssignmentDao, userGroupService, transactionScope, defaultPolicy)
+        UserServiceImpl(userDao, passwordService, roleDao, userRoleAssignmentDao, userGroupService, transactionScope, defaultPolicy, operatorToolDefinitionSeeder)
 
     private val testUserEntity = UserEntity(
         id = 1L,
@@ -67,12 +69,13 @@ class UserServiceImplTest {
 
     @BeforeEach
     fun setUp() {
-        clearMocks(userDao, passwordService, transactionScope, roleDao, userRoleAssignmentDao, userGroupService)
+        clearMocks(userDao, passwordService, transactionScope, roleDao, userRoleAssignmentDao, userGroupService, operatorToolDefinitionSeeder)
 
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
             block()
         }
+        coEvery { operatorToolDefinitionSeeder.ensureForUser(any()) } returns emptyList<OperatorToolDefinition>().right()
     }
 
     @Test

@@ -114,6 +114,7 @@ fun serviceModule() = module {
             transactionScope = get()
         )
     }
+    single<OperatorToolDefinitionSeeder> { OperatorToolDefinitionSeeder(get(), get(), get()) }
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<AgentRoleService> {
@@ -161,7 +162,7 @@ fun serviceModule() = module {
     single<PasswordService> {
         BCryptPasswordService(PasswordValidator(get<AppConfiguration>().authPolicy.passwordConfig))
     }
-    single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
+    single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
     single<TokenService> {
         TokenServiceImpl(
             userService = get(),
@@ -241,7 +242,10 @@ fun serviceModule() = module {
     single<UserAccountInitializer> { UserAccountInitializer(get(), get(), get()) }
     single<InitializationCoordinator> {
         InitializationCoordinator(
-            listOf(get<UserAccountInitializer>())
+            listOf(
+                get<UserAccountInitializer>(),
+                get<OperatorToolDefinitionSeeder>()
+            )
         )
     }
 }
