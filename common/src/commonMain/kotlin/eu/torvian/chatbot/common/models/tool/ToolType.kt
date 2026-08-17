@@ -23,5 +23,16 @@ enum class ToolType {
      * and executes the matching implementation inside its `workspace` directory. Tool-name
      * prefixing is a server-side catalog concern and is not applied at the worker runtime.
      */
-    BUILTIN_WORKER
+    BUILTIN_WORKER,
+
+    /**
+     * Operator-executed tools: the server relays the tool call to the operator (in v1 the client
+     * app itself), who runs the tool and returns the result over the chat WebSocket.
+     *
+     * Unlike [BUILTIN_WORKER] tools there is no worker dispatch and therefore no on-device
+     * signature; the operator is the same principal that drives the chat socket. Each operator
+     * tool is a per-user instance (see [OperatorToolDefinition]), so approval preferences and
+     * enable/disable stay user-scoped.
+     */
+    OPERATOR
 }
