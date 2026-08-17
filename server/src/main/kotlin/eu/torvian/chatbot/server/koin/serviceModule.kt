@@ -10,7 +10,11 @@ import eu.torvian.chatbot.common.security.PasswordValidator
 import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.DefaultBuiltInWorkerToolExecutor
+import eu.torvian.chatbot.server.service.builtin.DefaultOperatorToolExecutor
+import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.service.core.agent.AgentSpawnRequestBuilder
+import eu.torvian.chatbot.server.service.core.agent.DefaultAgentSpawnRequestBuilder
 import eu.torvian.chatbot.server.service.core.agent.DefaultSystemPromptComposer
 import eu.torvian.chatbot.server.service.core.agent.SystemPromptComposer
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
@@ -114,7 +118,10 @@ fun serviceModule() = module {
             transactionScope = get()
         )
     }
+
     // --- Operator tool services (server-relayed, operator-executed) ---
+    single<AgentSpawnRequestBuilder> { DefaultAgentSpawnRequestBuilder(get(), get()) }
+    single<OperatorToolExecutor> { DefaultOperatorToolExecutor(get(), get()) }
     single<OperatorToolDefinitionSeeder> { OperatorToolDefinitionSeeder(get(), get(), get()) }
     single<OperatorToolDefinitionService> {
         OperatorToolDefinitionServiceImpl(
