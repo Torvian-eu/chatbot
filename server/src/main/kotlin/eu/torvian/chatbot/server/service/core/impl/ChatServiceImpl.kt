@@ -12,6 +12,7 @@ import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnOrchestr
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnRequest
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
+import eu.torvian.chatbot.server.service.core.toolcall.OperatorToolExecutionResult
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import kotlinx.coroutines.CancellationException
@@ -62,6 +63,7 @@ class ChatServiceImpl(
         parentMessageId: Long?,
         fileReferences: List<FileReference>,
         toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        operatorToolResultFlow: Flow<OperatorToolExecutionResult>,
         controlSignal: TurnControlSignal
     ): Flow<Either<ProcessNewMessageError, MessageEvent>> = channelFlow {
         try {
@@ -74,6 +76,7 @@ class ChatServiceImpl(
                     parentMessageId = parentMessageId,
                     fileReferences = fileReferences,
                     toolApprovalFlow = toolApprovalFlow,
+                    operatorToolResultFlow = operatorToolResultFlow,
                     turnControlSignal = controlSignal
                 )
             ).collect { event ->
@@ -100,6 +103,7 @@ class ChatServiceImpl(
         parentMessageId: Long?,
         fileReferences: List<FileReference>,
         toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        operatorToolResultFlow: Flow<OperatorToolExecutionResult>,
         controlSignal: TurnControlSignal
     ): Flow<Either<ProcessNewMessageError, MessageStreamEvent>> = channelFlow {
         try {
@@ -112,6 +116,7 @@ class ChatServiceImpl(
                     parentMessageId = parentMessageId,
                     fileReferences = fileReferences,
                     toolApprovalFlow = toolApprovalFlow,
+                    operatorToolResultFlow = operatorToolResultFlow,
                     turnControlSignal = controlSignal
                 )
             ).collect { event ->
@@ -143,6 +148,11 @@ class ChatServiceImpl(
             is ConversationTurnEvent.ToolCallApprovalRequested -> MessageEvent.ToolCallApprovalRequested(toolCall).right()
             is ConversationTurnEvent.ToolCallExecuting -> MessageEvent.ToolCallExecuting(toolCall).right()
             is ConversationTurnEvent.ToolExecutionCompleted -> MessageEvent.ToolExecutionCompleted(toolCall).right()
+            is ConversationTurnEvent.OperatorToolExecutionRequested -> MessageEvent.OperatorToolExecutionRequested(
+                toolCallId = toolCallId,
+                toolName = toolName,
+                payload = payload
+            ).right()
             is ConversationTurnEvent.ExternalServiceError -> ProcessNewMessageError.ExternalServiceError(llmError).left()
             ConversationTurnEvent.TurnCompleted -> MessageEvent.StreamCompleted.right()
             is ConversationTurnEvent.AssistantMessageStarted,
@@ -182,6 +192,11 @@ class ChatServiceImpl(
             is ConversationTurnEvent.ToolCallApprovalRequested -> MessageStreamEvent.ToolCallApprovalRequested(toolCall).right()
             is ConversationTurnEvent.ToolCallExecuting -> MessageStreamEvent.ToolCallExecuting(toolCall).right()
             is ConversationTurnEvent.ToolExecutionCompleted -> MessageStreamEvent.ToolExecutionCompleted(toolCall).right()
+            is ConversationTurnEvent.OperatorToolExecutionRequested -> MessageStreamEvent.OperatorToolExecutionRequested(
+                toolCallId = toolCallId,
+                toolName = toolName,
+                payload = payload
+            ).right()
             is ConversationTurnEvent.ExternalServiceError -> ProcessNewMessageError.ExternalServiceError(llmError).left()
             ConversationTurnEvent.TurnCompleted -> MessageStreamEvent.StreamCompleted.right()
             is ConversationTurnEvent.AssistantMessageSaved -> {

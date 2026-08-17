@@ -6,6 +6,7 @@ import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
+import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
 import kotlinx.coroutines.NonCancellable
@@ -24,20 +25,24 @@ import kotlin.time.Clock
 /**
  * Default implementation of [ToolCallOrchestrator].
  *
- * Handles approval resolution and execution for both Local MCP and Built-in Worker tool calls.
- * Built-in tools always require an app-signed authorization, mirroring Local MCP.
+ * Handles approval resolution and execution for Local MCP, Built-in Worker, and Operator tool calls.
+ * Local MCP and built-in tools always require an app-signed authorization, mirroring Local MCP;
+ * operator tools are approved with a plain [ToolCallApprovalSubmission.OperatorToolApproval] (no
+ * worker dispatch) and executed by the operator over the chat WebSocket.
  *
- * Any tool definition that is neither a [LocalMCPToolDefinition] nor a
- * [BuiltInWorkerToolDefinition] is a configuration error and causes an [IllegalStateException].
+ * Any tool definition that is neither a [LocalMCPToolDefinition], a [BuiltInWorkerToolDefinition]
+ * nor an [OperatorToolDefinition] is a configuration error and causes an [IllegalStateException].
  *
  * @property toolCallDao DAO for persisting tool-call status transitions and results.
  * @property localMcpExecutor Executor for Local MCP tools that dispatches to the worker.
  * @property builtInWorkerToolExecutor Executor for built-in worker tools that dispatches to the worker.
+ * @property operatorToolExecutor Executor for operator tools that relays execution to the operator.
  */
 class DefaultToolCallOrchestrator(
     private val toolCallDao: ToolCallDao,
     private val localMcpExecutor: LocalMCPExecutor,
     private val builtInWorkerToolExecutor: BuiltInWorkerToolExecutor,
+    private val operatorToolExecutor: OperatorToolExecutor,
 ) : ToolCallOrchestrator {
 
     private val logger: Logger = LogManager.getLogger(DefaultToolCallOrchestrator::class.java)
@@ -47,6 +52,7 @@ class DefaultToolCallOrchestrator(
         pendingToolCalls: List<ToolCall>,
         toolDefinitions: List<ToolDefinition>?,
         toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        operatorToolResultFlow: Flow<OperatorToolExecutionResult>,
         controlSignal: TurnControlSignal
     ): Flow<ToolCallExecutionEvent> = channelFlow {
         try {
@@ -72,6 +78,12 @@ class DefaultToolCallOrchestrator(
                     )
 
                     is BuiltInWorkerToolDefinition -> resolveBuiltInWorkerApproval(
+                        pendingToolCall,
+                        toolApprovalFlow,
+                        controlSignal
+                    )
+
+                    is OperatorToolDefinition -> resolveOperatorToolApproval(
                         pendingToolCall,
                         toolApprovalFlow,
                         controlSignal
@@ -115,6 +127,13 @@ class DefaultToolCallOrchestrator(
                         executeBuiltInWorkerTool(pendingToolCall, toolDef, builtInApproval)
                     }
 
+                    is OperatorToolDefinition -> {
+                        executeOperatorTool(
+                            userId = userId,
+                            toolCall = pendingToolCall,
+                            operatorToolResultFlow = operatorToolResultFlow
+                        )
+                    }
                 }
 
                 // Step 4: Persist and emit completion
@@ -213,6 +232,36 @@ class DefaultToolCallOrchestrator(
             matches = { submission ->
                 submission.toolCallId == pendingToolCall.id &&
                         submission is ToolCallApprovalSubmission.BuiltInSigned
+            }
+        )
+        if (submission == null || controlSignal.isCancelled) return ApprovalOutcome.Cancelled
+        return if (submission.approved) {
+            ApprovalOutcome.Approved(submission)
+        } else {
+            ApprovalOutcome.Denied(submission.denialReason)
+        }
+    }
+
+    /**
+     * Resolves the user's approval decision for an operator tool call.
+     */
+    private suspend fun ProducerScope<ToolCallExecutionEvent>.resolveOperatorToolApproval(
+        pendingToolCall: ToolCall,
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
+    ): ApprovalOutcome {
+        val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
+        toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
+            throw IllegalStateException("Failed to update tool call to AWAITING_APPROVAL: $error")
+        }
+        send(ToolCallExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
+
+        val submission = awaitApprovalOrCancellation(
+            toolApprovalFlow = toolApprovalFlow,
+            controlSignal = controlSignal,
+            matches = { submission ->
+                submission.toolCallId == pendingToolCall.id &&
+                        submission is ToolCallApprovalSubmission.OperatorToolApproval
             }
         )
         if (submission == null || controlSignal.isCancelled) return ApprovalOutcome.Cancelled
@@ -352,6 +401,22 @@ class DefaultToolCallOrchestrator(
                 )
             }
         }
+    }
+
+    /**
+     * Executes an operator tool by relaying execution to the operator and awaiting the result.
+     */
+    private suspend fun ProducerScope<ToolCallExecutionEvent>.executeOperatorTool(
+        userId: Long,
+        toolCall: ToolCall,
+        operatorToolResultFlow: Flow<OperatorToolExecutionResult>
+    ): ToolCall {
+        return operatorToolExecutor.executeTool(
+            userId = userId,
+            toolCall = toolCall,
+            emitEvent = { event -> send(event) },
+            operatorToolResultFlow = operatorToolResultFlow
+        )
     }
 
     /**

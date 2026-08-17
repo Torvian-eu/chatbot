@@ -141,12 +141,12 @@ interface ToolService {
     /**
      * Retrieves all tools accessible to a specific user.
      *
-     * Returns a combination of:
-     * - All global tools (non-MCP_LOCAL type)
-     * - User-specific MCP_LOCAL tools (where the MCP server is owned by the user)
+     * Returns a combination of the user's own MCP tools (where the MCP server is owned by the user),
+     * built-in worker tools of workers the user owns, and the user's own operator tools. Ownership is
+     * enforced with three owner-scoped queries, so no user ever sees another user's tools.
      *
      * @param userId The ID of the user
-     * @return List of ToolDefinition (mix of LocalMCPToolDefinition and BuiltInWorkerToolDefinition)
+     * @return List of ToolDefinition owned by the user
      */
     suspend fun getToolsForUser(userId: Long): List<ToolDefinition>
 

@@ -20,6 +20,8 @@ interface ToolCallOrchestrator {
      * @param pendingToolCalls Pending tool calls to process.
      * @param toolDefinitions Enabled tool definitions available to the current LLM turn.
      * @param toolApprovalFlow Normalized client approval submissions emitted by the chat WebSocket.
+     * @param operatorToolResultFlow Dedicated client→server channel carrying operator tool execution
+     *            results; semantically unrelated to [toolApprovalFlow].
      * @param controlSignal Signal that requests cooperative cancellation of approval and execution work.
      * @return Flow of tool execution lifecycle events.
      */
@@ -28,6 +30,7 @@ interface ToolCallOrchestrator {
         pendingToolCalls: List<ToolCall>,
         toolDefinitions: List<ToolDefinition>?,
         toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        operatorToolResultFlow: Flow<OperatorToolExecutionResult>,
         controlSignal: TurnControlSignal
     ): Flow<ToolCallExecutionEvent>
 }

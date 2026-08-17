@@ -3,6 +3,7 @@ package eu.torvian.chatbot.common.models.api.core
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -93,6 +94,29 @@ sealed interface ChatEvent {
         val toolCall: ToolCall
     ) : ChatEvent {
         override val eventType: String = "tool_execution_completed"
+    }
+
+    /**
+     * Sent by the server to relay one operator tool execution to the operator.
+     *
+     * This is a generic envelope: [payload] is the JSON-serialized, tool-specific execution request
+     * (e.g. [eu.torvian.chatbot.common.models.agent.AgentSpawnRequest] for `spawn_agent`) and
+     * [toolName] tells the operator which deserializer to use. The operator echoes [toolCallId] back
+     * in `ChatClientEvent.ToolExecutionResult` to correlate the reply.
+     *
+     * @property toolCallId Persisted tool-call identifier (correlation key).
+     * @property toolName Operator-tool name (e.g. `spawn_agent`); unique per user because operator
+     *            tools are per-user instances, so it doubles as the payload discriminator.
+     * @property payload JSON text of the tool-specific payload.
+     */
+    @Serializable
+    @SerialName("server_tool_execution_requested")
+    data class OperatorToolExecutionRequested(
+        val toolCallId: Long,
+        val toolName: String,
+        val payload: String
+    ) : ChatEvent {
+        override val eventType: String = "server_tool_execution_requested"
     }
 
     /**
