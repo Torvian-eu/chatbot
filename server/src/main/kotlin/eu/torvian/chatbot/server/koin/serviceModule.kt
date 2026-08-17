@@ -114,7 +114,16 @@ fun serviceModule() = module {
             transactionScope = get()
         )
     }
+    // --- Operator tool services (server-relayed, operator-executed) ---
     single<OperatorToolDefinitionSeeder> { OperatorToolDefinitionSeeder(get(), get(), get()) }
+    single<OperatorToolDefinitionService> {
+        OperatorToolDefinitionServiceImpl(
+            operatorToolDefinitionDao = get(),
+            operatorToolDefinitionSeeder = get(),
+            toolService = get(),
+            transactionScope = get()
+        )
+    }
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<AgentRoleService> {
