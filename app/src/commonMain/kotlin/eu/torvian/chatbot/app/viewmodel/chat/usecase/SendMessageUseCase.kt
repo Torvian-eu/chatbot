@@ -117,53 +117,49 @@ class SendMessageUseCase(
         approved: Boolean,
         denialReason: String?
     ) {
-        // Built-in worker tools require an on-device cryptographic signature before the worker executes them.
-        val builtInTool = findBuiltInToolDefinition(toolCall)
-        if (builtInTool != null) {
-            emitBuiltInApprovalEvent(
-                toolCall = toolCall,
-                toolDefinition = builtInTool,
-                approved = approved,
-                denialReason = denialReason
-            )
-            return
-        }
-
-        // Operator tools are executed by the operator over the chat socket — no worker dispatch and
-        // therefore no on-device signature is needed for the operator tool call itself.
-        val operatorTool = findOperatorToolDefinition(toolCall)
-        if (operatorTool != null) {
-            clientEventFlow.emit(
-                ChatClientEvent.OperatorToolCallApproval(
-                    toolCallId = toolCall.id,
+        when (val toolDefinition = findToolDefinition(toolCall)) {
+            is BuiltInWorkerToolDefinition -> {
+                // Built-in worker tools require an on-device cryptographic signature before execution.
+                emitBuiltInApprovalEvent(
+                    toolCall = toolCall,
+                    toolDefinition = toolDefinition,
                     approved = approved,
                     denialReason = denialReason
                 )
-            )
-            return
-        }
+            }
 
-        // Every persisted tool is either a built-in worker tool, an operator tool, or a Local MCP
-        // tool. The built-in and operator branches above already returned, so the remaining path is
-        // Local MCP: it always requires an on-device signature before the worker executes it.
-        val localMcpTool = findLocalMcpToolDefinition(toolCall)
-        if (localMcpTool == null) {
-            logger.warn(
-                "No tool definition resolved for tool call ${toolCall.id} (${toolCall.toolName}); cannot emit approval"
-            )
-            notificationService.genericError(
-                shortMessage = "Failed to authorize tool call",
-                detailedMessage = "No tool definition could be resolved for tool call ${toolCall.id} (${toolCall.toolName})."
-            )
-            return
-        }
+            is OperatorToolDefinition -> {
+                // Operator tools run over the chat socket, so the operator approval needs no signature.
+                clientEventFlow.emit(
+                    ChatClientEvent.OperatorToolCallApproval(
+                        toolCallId = toolCall.id,
+                        approved = approved,
+                        denialReason = denialReason
+                    )
+                )
+            }
 
-        emitLocalMcpApprovalEvent(
-            toolCall = toolCall,
-            toolDefinition = localMcpTool,
-            approved = approved,
-            denialReason = denialReason
-        )
+            is LocalMCPToolDefinition -> {
+                // Local MCP tools are dispatched to a worker and therefore require a signed authorization.
+                emitLocalMcpApprovalEvent(
+                    toolCall = toolCall,
+                    toolDefinition = toolDefinition,
+                    approved = approved,
+                    denialReason = denialReason
+                )
+            }
+
+            // A missing or future unsupported definition cannot be authorized safely.
+            else -> {
+                logger.warn(
+                    "No tool definition resolved for tool call ${toolCall.id} (${toolCall.toolName}); cannot emit approval"
+                )
+                notificationService.genericError(
+                    shortMessage = "Failed to authorize tool call",
+                    detailedMessage = "No tool definition could be resolved for tool call ${toolCall.id} (${toolCall.toolName})."
+                )
+            }
+        }
     }
 
     /**
@@ -297,64 +293,27 @@ class SendMessageUseCase(
     }
 
     /**
-     * Resolves the built-in worker tool definition for [toolCall] when the current tool cache contains one.
+     * Resolves the persisted definition for a tool call from the current cache or the repository.
+     *
+     * The caller performs the subtype dispatch because all approval paths share the same lookup
+     * semantics, while the subtype determines whether signing or operator relaying is required.
+     * A cached definition is authoritative for its ID; this avoids making one repository request
+     * for each possible tool category.
      *
      * @param toolCall Tool call whose definition should be resolved.
-     * @return Matching [BuiltInWorkerToolDefinition] or `null` when the tool is not a built-in worker tool
-     *   or the cache lacks it.
+     * @return Matching tool definition, or `null` when the call has no definition ID or resolution fails.
      */
-    private suspend fun findBuiltInToolDefinition(toolCall: ToolCall): BuiltInWorkerToolDefinition? {
+    private suspend fun findToolDefinition(toolCall: ToolCall): ToolDefinition? {
         val toolDefinitionId = toolCall.toolDefinitionId ?: return null
         val cachedDefinition = toolRepository.tools.value.dataOrNull
-            ?.firstOrNull { toolDefinition -> toolDefinition.id == toolDefinitionId } as? BuiltInWorkerToolDefinition
+            ?.firstOrNull { toolDefinition -> toolDefinition.id == toolDefinitionId }
         if (cachedDefinition != null) {
             return cachedDefinition
         }
 
         return toolRepository.getToolById(toolDefinitionId).fold(
             ifLeft = { null },
-            ifRight = { it as? BuiltInWorkerToolDefinition }
-        )
-    }
-
-    /**
-     * Resolves the Local MCP tool definition for [toolCall] when the current tool cache contains one.
-     *
-     * @param toolCall Tool call whose definition should be resolved.
-     * @return Matching [LocalMCPToolDefinition] or `null` when the tool is not Local MCP or the cache lacks it.
-     */
-    private suspend fun findLocalMcpToolDefinition(toolCall: ToolCall): LocalMCPToolDefinition? {
-        val toolDefinitionId = toolCall.toolDefinitionId ?: return null
-        val cachedDefinition = toolRepository.tools.value.dataOrNull
-            ?.firstOrNull { toolDefinition -> toolDefinition.id == toolDefinitionId } as? LocalMCPToolDefinition
-        if (cachedDefinition != null) {
-            return cachedDefinition
-        }
-
-        return toolRepository.getToolById(toolDefinitionId).fold(
-            ifLeft = { null },
-            ifRight = { it as? LocalMCPToolDefinition }
-        )
-    }
-
-    /**
-     * Resolves the operator tool definition for [toolCall] when the current tool cache contains one.
-     *
-     * @param toolCall Tool call whose definition should be resolved.
-     * @return Matching [OperatorToolDefinition] or `null` when the tool is not an operator tool or the
-     *   cache lacks it.
-     */
-    private suspend fun findOperatorToolDefinition(toolCall: ToolCall): OperatorToolDefinition? {
-        val toolDefinitionId = toolCall.toolDefinitionId ?: return null
-        val cachedDefinition = toolRepository.tools.value.dataOrNull
-            ?.firstOrNull { toolDefinition -> toolDefinition.id == toolDefinitionId } as? OperatorToolDefinition
-        if (cachedDefinition != null) {
-            return cachedDefinition
-        }
-
-        return toolRepository.getToolById(toolDefinitionId).fold(
-            ifLeft = { null },
-            ifRight = { it as? OperatorToolDefinition }
+            ifRight = { it }
         )
     }
 
@@ -381,65 +340,61 @@ class SendMessageUseCase(
     private suspend fun handleToolCallApprovalRequested(toolCall: ToolCall) {
         logger.debug("Tool call approval requested: ${toolCall.toolName}")
 
-        // Built-in worker tools participate in the on-device signing trust chain, so auto-decisions
-        // must be signed locally before being relayed to the worker.
-        val builtInTool = findBuiltInToolDefinition(toolCall)
-        if (builtInTool != null) {
-            val preference = findApprovalPreference(builtInTool.id) ?: return
-            val denialReason = if (preference.autoApprove) {
-                null
-            } else {
-                preference.denialReason ?: "Auto-denied by user preference"
-            }
+        when (val toolDefinition = findToolDefinition(toolCall)) {
+            is BuiltInWorkerToolDefinition -> {
+                // Built-in worker approvals must be signed locally before they are relayed to a worker.
+                val preference = findApprovalPreference(toolDefinition.id) ?: return
+                val denialReason = if (preference.autoApprove) {
+                    null
+                } else {
+                    preference.denialReason ?: "Auto-denied by user preference"
+                }
 
-            emitBuiltInApprovalEvent(
-                toolCall = toolCall,
-                toolDefinition = builtInTool,
-                approved = preference.autoApprove,
-                denialReason = denialReason
-            )
-            return
-        }
-
-        // Operator tools follow the standard approval flow: an explicit preference drives the
-        // auto-decision, while with no stored preference the call is left to the user in the UI
-        // approval dialog. (The earlier default-approve stopgap existed only because there was no
-        // way to configure operator-tool approval settings; the Operator Tools tab now provides
-        // that configuration.) The operator-tool call needs no signature — it is executed by the
-        // operator over the chat socket.
-        val operatorTool = findOperatorToolDefinition(toolCall)
-        if (operatorTool != null) {
-            val preference = findApprovalPreference(operatorTool.id) ?: return
-            val denialReason = if (preference.autoApprove) {
-                null
-            } else {
-                preference.denialReason ?: "Auto-denied by user preference"
-            }
-
-            clientEventFlow.emit(
-                ChatClientEvent.OperatorToolCallApproval(
-                    toolCallId = toolCall.id,
+                emitBuiltInApprovalEvent(
+                    toolCall = toolCall,
+                    toolDefinition = toolDefinition,
                     approved = preference.autoApprove,
                     denialReason = denialReason
                 )
-            )
-            return
-        }
+            }
 
-        val localMcpTool = findLocalMcpToolDefinition(toolCall) ?: return
-        val preference = findApprovalPreference(localMcpTool.id) ?: return
-        val denialReason = if (preference.autoApprove) {
-            null
-        } else {
-            preference.denialReason ?: "Auto-denied by user preference"
-        }
+            is OperatorToolDefinition -> {
+                // Operator tools are relayed over the chat socket and do not need an on-device signature.
+                val preference = findApprovalPreference(toolDefinition.id) ?: return
+                val denialReason = if (preference.autoApprove) {
+                    null
+                } else {
+                    preference.denialReason ?: "Auto-denied by user preference"
+                }
 
-        emitLocalMcpApprovalEvent(
-            toolCall = toolCall,
-            toolDefinition = localMcpTool,
-            approved = preference.autoApprove,
-            denialReason = denialReason
-        )
+                clientEventFlow.emit(
+                    ChatClientEvent.OperatorToolCallApproval(
+                        toolCallId = toolCall.id,
+                        approved = preference.autoApprove,
+                        denialReason = denialReason
+                    )
+                )
+            }
+
+            is LocalMCPToolDefinition -> {
+                val preference = findApprovalPreference(toolDefinition.id) ?: return
+                val denialReason = if (preference.autoApprove) {
+                    null
+                } else {
+                    preference.denialReason ?: "Auto-denied by user preference"
+                }
+
+                emitLocalMcpApprovalEvent(
+                    toolCall = toolCall,
+                    toolDefinition = toolDefinition,
+                    approved = preference.autoApprove,
+                    denialReason = denialReason
+                )
+            }
+
+            // Unknown or unresolved definitions cannot be auto-approved safely.
+            else -> return
+        }
     }
 
     /**

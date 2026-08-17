@@ -122,8 +122,8 @@ class SendMessageUseCaseOperatorApprovalTest {
         every { toolRepository.toolApprovalPreferences } returns MutableStateFlow(
             DataState.Success(if (preference == null) emptyList() else listOf(preference))
         )
-        // The built-in lookup path consults getToolById before the operator branch; resolving it to
-        // the operator instance keeps the (non-built-in) cast a no-op.
+        // Keep repository resolution available for cache-miss cases; this harness exercises the
+        // cache-first path for the operator definition.
         coEvery { toolRepository.getToolById(operatorTool.id) } returns operatorTool.right()
 
         val outbound = CompletableDeferred<Flow<ChatClientEvent>>()
