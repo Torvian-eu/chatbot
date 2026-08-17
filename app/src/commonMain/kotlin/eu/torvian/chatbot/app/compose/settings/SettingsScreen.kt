@@ -142,6 +142,13 @@ fun SettingsScreen(
                         breadcrumbSegments = breadcrumbs
                     }
 
+                    SettingsCategory.OperatorTools -> OperatorToolsTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+
                     SettingsCategory.E2EASecurity -> E2EASecurityTabRoute(
                         categoryResetSignal = categoryResetSignal
                     ) { breadcrumbs ->

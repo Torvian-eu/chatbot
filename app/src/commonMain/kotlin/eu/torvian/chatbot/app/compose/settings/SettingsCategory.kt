@@ -11,6 +11,7 @@ enum class SettingsCategory {
     McpServers,
     Workers,
     BuiltInTools,
+    OperatorTools,
     E2EASecurity,
     Appearance,
     About
@@ -28,6 +29,7 @@ val SettingsCategory.displayLabel: String
         SettingsCategory.McpServers -> "MCP Servers"
         SettingsCategory.Workers -> "Workers"
         SettingsCategory.BuiltInTools -> "Built-in Tools"
+        SettingsCategory.OperatorTools -> "Operator Tools"
         SettingsCategory.E2EASecurity -> "E2EA Security"
         SettingsCategory.Appearance -> "Appearance"
         SettingsCategory.About -> "About"

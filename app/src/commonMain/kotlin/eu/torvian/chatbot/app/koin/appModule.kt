@@ -33,6 +33,7 @@ import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.app.viewmodel.settings.AboutViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.AgentRolesViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.BuiltInToolsViewModel
+import eu.torvian.chatbot.app.viewmodel.settings.OperatorToolsViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.E2EASecurityViewModel
 import io.ktor.client.*
 import io.ktor.client.plugins.logging.*
@@ -232,6 +233,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<BuiltInToolApi> {
         KtorBuiltInToolApiClient(get())
     }
+    single<OperatorToolApi> {
+        KtorOperatorToolApiClient(get())
+    }
     single<WorkerApi> {
         KtorWorkerApiClient(get())
     }
@@ -305,6 +309,12 @@ fun appModule(config: AppConfiguration): Module = module {
     single<BuiltInToolRepository> {
         DefaultBuiltInToolRepository(
             builtInToolApi = get(),
+            toolRepository = get()
+        )
+    }
+    single<OperatorToolRepository> {
+        DefaultOperatorToolRepository(
+            operatorToolApi = get(),
             toolRepository = get()
         )
     }
@@ -543,6 +553,13 @@ fun appModule(config: AppConfiguration): Module = module {
         BuiltInToolsViewModel(
             workerRepository = get(),
             builtInToolRepository = get(),
+            toolRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
+        OperatorToolsViewModel(
+            operatorToolRepository = get(),
             toolRepository = get(),
             notificationService = get()
         )
