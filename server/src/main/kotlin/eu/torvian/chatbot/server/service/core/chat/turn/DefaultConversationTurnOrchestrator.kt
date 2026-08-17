@@ -51,7 +51,7 @@ class DefaultConversationTurnOrchestrator(
         const val MAX_ASSISTANT_MESSAGE_CHARS: Int = 64_000
 
         /** Maximum characters allowed for a single tool call argument payload. */
-        const val MAX_TOOL_CALL_ARGUMENT_CHARS: Int = 32_000
+        const val MAX_TOOL_CALL_ARGUMENT_CHARS: Int = 100_000
 
         /** Maximum number of tool calls allowed in a single assistant step. */
         const val MAX_TOOL_CALLS_PER_STEP: Int = 20
