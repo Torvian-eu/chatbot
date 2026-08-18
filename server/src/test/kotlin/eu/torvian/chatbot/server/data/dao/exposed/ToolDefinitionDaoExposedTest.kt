@@ -31,7 +31,6 @@ import kotlin.time.Clock
  *
  * This test suite verifies the core functionality of the Exposed-based implementation of [ToolDefinitionDao]:
  * - Getting tool definitions by ID
- * - Getting tool definitions by name
  * - Getting all tool definitions
  * - Getting only enabled tool definitions
  * - Inserting new tool definitions
@@ -203,33 +202,6 @@ class ToolDefinitionDaoExposedTest {
         result.onLeft { error ->
             assertIs<ToolDefinitionError.NotFound>(error, "Expected NotFound error")
             assertEquals(999L, error.id)
-        }
-    }
-
-    @Test
-    fun `getToolDefinitionByName returns tool when exists`() = runTest {
-        // Setup
-        val created = createTestTool(name = "web_search")
-
-        // Execute
-        val result = toolDefinitionDao.getToolDefinitionByName("web_search")
-
-        // Verify
-        val tool = result.getOrElse { throw AssertionError("Expected Right but got Left: $it") }
-        assertEquals(created.id, tool.id)
-        assertEquals("web_search", tool.name)
-    }
-
-    @Test
-    fun `getToolDefinitionByName returns NameNotFound when not exists`() = runTest {
-        // Execute
-        val result = toolDefinitionDao.getToolDefinitionByName("nonexistent")
-
-        // Verify
-        assertTrue(result.isLeft(), "Expected Left (error)")
-        result.onLeft { error ->
-            assertIs<ToolDefinitionError.NameNotFound>(error, "Expected NameNotFound error")
-            assertEquals("nonexistent", error.name)
         }
     }
 

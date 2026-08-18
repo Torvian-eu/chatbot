@@ -91,16 +91,6 @@ class ToolDefinitionDaoExposed(
                 .map { it.toToolDefinition() }
         }
 
-    override suspend fun getToolDefinitionByName(name: String): Either<ToolDefinitionError.NameNotFound, ToolDefinition> =
-        transactionScope.transaction {
-            joinedToolDefinitions()
-                .selectAll().where { ToolDefinitionTable.name eq name }
-                .singleOrNull()
-                ?.toToolDefinition()
-                ?.right()
-                ?: ToolDefinitionError.NameNotFound(name).left()
-        }
-
     override suspend fun getEnabledToolDefinitions(): List<ToolDefinition> =
         transactionScope.transaction {
             joinedToolDefinitions()
