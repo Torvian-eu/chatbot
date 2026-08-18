@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
+import eu.torvian.chatbot.server.service.core.agent.AgentRole
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.DeleteAgentRoleError
@@ -52,13 +53,13 @@ interface AgentRoleService {
      *
      * Intended for server-internal flows (e.g. turn preparation) where the role reference came from an
      * already-authorized session, so re-checking ownership is unnecessary. The returned role carries
-     * domain [AgentInstruction] objects whose messages are resolved lazily via
+     * domain `AgentInstruction` objects whose messages are resolved lazily via
      * `AgentInstruction.loadMessage()`.
      *
      * @param roleId The ID of the role to load.
      * @return Either [AgentRoleError.NotFound] if the role does not exist, or the domain [AgentRole].
      */
-    suspend fun getAgentRoleById(roleId: Long): Either<AgentRoleError.NotFound, eu.torvian.chatbot.server.service.core.agent.AgentRole>
+    suspend fun getAgentRoleById(roleId: Long): Either<AgentRoleError.NotFound, AgentRole>
 
     /**
      * Creates a new agent role owned by the user.

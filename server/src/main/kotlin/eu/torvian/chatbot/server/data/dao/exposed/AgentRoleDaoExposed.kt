@@ -7,6 +7,7 @@ import arrow.core.raise.ensure
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleToolDao
 import eu.torvian.chatbot.server.data.dao.error.AgentRoleError
 import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
 import eu.torvian.chatbot.server.data.tables.AgentRoleOwnersTable
@@ -15,6 +16,7 @@ import eu.torvian.chatbot.server.data.tables.mappers.toAgentRoleEntity
 import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -78,6 +80,25 @@ class AgentRoleDaoExposed(
                 ?.toAgentRoleEntity()
                 ?.right()
                 ?: AgentRoleError.NotFoundByName(name).left()
+        }
+
+    override suspend fun getRolesByIdsForUser(userId: Long, roleIds: List<Long>): List<AgentRoleEntity> =
+        transactionScope.transaction {
+            if (roleIds.isEmpty()) return@transaction emptyList()
+            val entitiesById = AgentRoleTable
+                .join(
+                    AgentRoleOwnersTable,
+                    JoinType.INNER,
+                    additionalConstraint = { AgentRoleTable.id eq AgentRoleOwnersTable.roleId }
+                )
+                .selectAll()
+                .where {
+                    (AgentRoleOwnersTable.userId eq userId) and (AgentRoleTable.id inList roleIds)
+                }
+                .map { it.toAgentRoleEntity() }
+                .associateBy { it.id }
+            // SQL does not guarantee IN-list order; restore the user-supplied order for prompt stability.
+            roleIds.mapNotNull { entitiesById[it] }
         }
 
     override suspend fun roleNameExistsForUser(userId: Long, name: String): Boolean =

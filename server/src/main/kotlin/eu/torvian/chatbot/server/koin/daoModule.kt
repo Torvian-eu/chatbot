@@ -53,6 +53,7 @@ fun daoModule() = module {
     single<RolePermissionDao> { RolePermissionDaoExposed(get()) }
     single<AgentRoleDao> { AgentRoleDaoExposed(get()) }
     single<AgentRoleToolDao> { AgentRoleToolDaoExposed(get()) }
+    single<AgentRoleSpawnableRoleDao> { AgentRoleSpawnableRoleDaoExposed(get()) }
 
     // Tool-related DAOs
     single<ToolDefinitionDao> { ToolDefinitionDaoExposed(get()) }

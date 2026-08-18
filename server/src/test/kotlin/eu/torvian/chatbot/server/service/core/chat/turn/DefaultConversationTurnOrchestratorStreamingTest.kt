@@ -70,6 +70,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
                 userMessage.id,
                 testModel,
                 streamingSettings,
+                agentRoleId = testRoleId,
                 reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantStartedMessage, userMessage)
@@ -164,7 +165,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
-                testSession.id, "", userMessage.id, reasoningModel, reasoningSettings, reasoningItems = null
+                testSession.id, "", userMessage.id, reasoningModel, reasoningSettings, agentRoleId = testRoleId, reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantStarted, userMessage)
         coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
@@ -282,12 +283,12 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
-                testSession.id, "", userMessage.id, testModel, testSettings, reasoningItems = null
+                testSession.id, "", userMessage.id, testModel, testSettings, agentRoleId = testRoleId, reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantStarted, userMessage)
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
-                testSession.id, "", assistantStarted.id, testModel, testSettings, reasoningItems = null
+                testSession.id, "", assistantStarted.id, testModel, testSettings, agentRoleId = testRoleId, reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantFinal, assistantStarted)
         // First iteration: a malformed delta is streamed for live UI, then the authoritative ToolCallDone
@@ -324,6 +325,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
         every {
             toolCallOrchestrator.executeAndUpdateToolCalls(
                 1L,
+                testRoleId,
                 listOf(pendingToolCall),
                 listOf(toolDefinition),
                 any(),
@@ -440,12 +442,12 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
-                testSession.id, "", userMessage.id, reasoningModel, reasoningSettings, reasoningItems = null
+                testSession.id, "", userMessage.id, reasoningModel, reasoningSettings, agentRoleId = testRoleId, reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantToolStarted, userMessage)
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
-                testSession.id, "", assistantToolStarted.id, reasoningModel, reasoningSettings, reasoningItems = null
+                testSession.id, "", assistantToolStarted.id, reasoningModel, reasoningSettings, agentRoleId = testRoleId, reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantFinal, assistantToolStarted)
         // First iteration streams reasoning + a tool call; second iteration ends the loop.
@@ -484,7 +486,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
         } returns listOf(pendingToolCall)
         every {
             toolCallOrchestrator.executeAndUpdateToolCalls(
-                1L, listOf(pendingToolCall), listOf(toolDefinition), any(), any(), any()
+                1L, testRoleId, listOf(pendingToolCall), listOf(toolDefinition), any(), any(), any()
             )
         } returns flowOf(ToolCallExecutionEvent.ToolCallCompleted(pendingToolCall.copy(
             output = "{\"results\":[]}",

@@ -90,6 +90,9 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             // agent_role_tools references both agent_roles (core block above) and tool_definitions,
             // so it must be created after both.
             Table.AGENT_ROLE_TOOLS to AgentRoleToolsTable,
+            // agent_role_spawnable_roles self-references agent_roles (source and target), so it must
+            // be created after agent_roles.
+            Table.AGENT_ROLE_SPAWNABLE_ROLES to AgentRoleSpawnableRolesTable,
             Table.TOOL_CALLS to ToolCallTable,
             Table.SESSION_TOOL_CONFIG to SessionToolConfigTable,
 
@@ -757,6 +760,9 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         // every role read loads the tool set from it — so the join table must exist whenever roles
         // are set up.
         if (data.agentRoles.isNotEmpty()) required += Table.AGENT_ROLE_TOOLS
+        // Every role read also loads the spawn allow-list from `agent_role_spawnable_roles`, so that
+        // table must exist whenever roles are set up as well.
+        if (data.agentRoles.isNotEmpty()) required += Table.AGENT_ROLE_SPAWNABLE_ROLES
         if (data.sessionCurrentLeaves.isNotEmpty()) required += Table.SESSION_CURRENT_LEAF
 
         return required

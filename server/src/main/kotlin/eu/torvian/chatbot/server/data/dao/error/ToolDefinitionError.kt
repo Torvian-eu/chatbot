@@ -11,10 +11,4 @@ sealed class ToolDefinitionError {
      */
     data class NotFound(val id: Long) : ToolDefinitionError()
 
-    /**
-     * Indicates that a tool definition with the specified name was not found.
-     *
-     * @property name The name that was not found
-     */
-    data class NameNotFound(val name: String) : ToolDefinitionError()
 }

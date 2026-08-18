@@ -137,6 +137,7 @@ fun serviceModule() = module {
         AgentRoleServiceImpl(
             agentRoleDao = get(),
             agentRoleToolDao = get(),
+            agentRoleSpawnableRoleDao = get(),
             agentRoleOwnershipDao = get(),
             modelDao = get(),
             settingsDao = get(),

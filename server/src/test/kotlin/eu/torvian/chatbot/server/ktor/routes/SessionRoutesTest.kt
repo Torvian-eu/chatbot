@@ -567,6 +567,11 @@ class SessionRoutesTest {
             // Arrange
             testDataManager.insertChatSession(testNonStreamingSession)
             testDataManager.insertSessionOwnership(testNonStreamingSession.id, authHelper.defaultTestUser.id)
+            // Turn preparation resolves the agent role owner; the role must have an ownership row.
+            testDataManager.insertAgentRoleOwnership(
+                testNonStreamingAgentRole.id,
+                authHelper.defaultTestUser.id
+            )
             val messageContent = "Test message content"
             val processRequest = ProcessNewMessageRequest(content = messageContent, isStreaming = false)
 
@@ -636,6 +641,11 @@ class SessionRoutesTest {
         // Arrange
         testDataManager.insertChatSession(testNonStreamingSession)
         testDataManager.insertSessionOwnership(testNonStreamingSession.id, authHelper.defaultTestUser.id)
+        // Turn preparation resolves the agent role owner; the role must have an ownership row.
+        testDataManager.insertAgentRoleOwnership(
+            testNonStreamingAgentRole.id,
+            authHelper.defaultTestUser.id
+        )
         val processRequest = ProcessNewMessageRequest(content = "Subprotocol auth message", isStreaming = false)
 
         // Act

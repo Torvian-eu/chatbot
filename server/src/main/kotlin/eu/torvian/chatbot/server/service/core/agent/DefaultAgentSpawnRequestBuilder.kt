@@ -19,11 +19,13 @@ import kotlinx.serialization.json.*
  *
  * Parses the tool-call input JSON for the `subject`, `agent_role_name`, and `prompt` parameters
  * (see [OperatorToolCatalog]), resolves the role by name through the user-scoped
- * [AgentRoleService.getRoleByName], and assembles the [AgentSpawnRequest] with a single
+ * [AgentRoleService.getRoleByName], enforces the source role's spawn allow-list through
+ * [AgentRoleService.getRoleById], and assembles the [AgentSpawnRequest] with a single
  * [AgentSpawnMessage.User] carrying the prompt. The persisted [ToolCall.id] is used as the
  * correlation key echoed back in the operator's `ToolExecutionResult`.
  *
- * @property agentRoleService User-scoped agent-role lookup used to resolve the spawn target.
+ * @property agentRoleService User-scoped agent-role lookup used to resolve the spawn target and the
+ *            source role's allow-list.
  * @property json JSON codec used to decode the tool-call arguments.
  */
 class DefaultAgentSpawnRequestBuilder(
@@ -31,8 +33,26 @@ class DefaultAgentSpawnRequestBuilder(
     private val json: Json
 ) : AgentSpawnRequestBuilder {
 
-    override suspend fun build(userId: Long, toolCall: ToolCall): Either<SpawnRequestBuildError, AgentSpawnRequest> =
-        either {
+    override suspend fun build(
+        userId: Long,
+        requestingAgentRoleId: Long,
+        toolCall: ToolCall
+    ): Either<SpawnRequestBuildError, AgentSpawnRequest> =
+        buildInternal(userId, requestingAgentRoleId, toolCall)
+
+    /**
+     * Parses and resolves a spawn call and applies source-role authorization.
+     *
+     * @param userId Ownership scope for role lookup.
+     * @param requestingAgentRoleId Source role id from the validated session.
+     * @param toolCall Persisted call to parse.
+     * @return Validated spawn payload or a logical build failure.
+     */
+    private suspend fun buildInternal(
+        userId: Long,
+        requestingAgentRoleId: Long,
+        toolCall: ToolCall
+    ): Either<SpawnRequestBuildError, AgentSpawnRequest> = either {
             val arguments = parseArguments(toolCall.input).bind()
 
             // Tool arguments are untrusted JSON; safe casts keep arrays and objects in the typed error path.
@@ -73,6 +93,18 @@ class DefaultAgentSpawnRequestBuilder(
                 SpawnRequestBuildError.RoleNotFound(roleName)
             }) {
                 agentRoleService.getRoleByName(userId, roleName).bind()
+            }
+
+            // The source role comes from the validated session, never from model-controlled arguments.
+            // A missing/unauthorized source is reported like a missing target so the builder never
+            // leaks whether the role exists.
+            val sourceRole = withError({ _: AgentRoleError.NotFound ->
+                SpawnRequestBuildError.RoleNotAllowed(roleName)
+            }) {
+                agentRoleService.getRoleById(userId, requestingAgentRoleId).bind()
+            }
+            ensure(role.id in sourceRole.spawnableAgentRoleIds) {
+                SpawnRequestBuildError.RoleNotAllowed(roleName)
             }
 
             AgentSpawnRequest(

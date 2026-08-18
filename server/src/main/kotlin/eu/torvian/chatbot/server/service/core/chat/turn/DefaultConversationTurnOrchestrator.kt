@@ -405,14 +405,23 @@ class DefaultConversationTurnOrchestrator(
         emit: suspend (ConversationTurnEvent) -> Unit
     ): List<ToolCall> {
         val completedToolCalls = mutableListOf<ToolCall>()
-        toolCallOrchestrator.executeAndUpdateToolCalls(
+        // Prepared production turns always carry a role: turn preparation rejects role-less sessions,
+        // so a missing role here is an integration error. A zero fallback would silently fail every
+        // operator allow-list lookup in the spawn builder, so fail loudly instead.
+        val requestingAgentRoleId = request.session.agentRoleId
+            ?: throw IllegalStateException(
+                "Cannot execute tool calls for session ${request.session.id}: no agent role selected"
+            )
+        val executionEvents = toolCallOrchestrator.executeAndUpdateToolCalls(
             request.userId,
+            requestingAgentRoleId,
             pendingToolCalls,
             request.llmConfig.tools,
             request.toolApprovalFlow,
             request.operatorToolResultFlow,
             request.turnControlSignal
-        ).collect { event ->
+        )
+        executionEvents.collect { event ->
             when (event) {
                 is ToolCallExecutionEvent.ToolCallExecuting -> {
                     emit(ConversationTurnEvent.ToolCallExecuting(event.toolCall))

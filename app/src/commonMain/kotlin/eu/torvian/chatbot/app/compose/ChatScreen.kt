@@ -120,6 +120,7 @@ fun ChatScreen(
     val agentRoleModelsState by agentRoleManagementViewModel.modelsState.collectAsState()
     val agentRoleSettingsForForm by agentRoleManagementViewModel.settingsForFormModel.collectAsState()
     val agentRoleToolsState by agentRoleManagementViewModel.toolsState.collectAsState()
+    val agentRoleCatalogState by agentRoleManagementViewModel.rolesState.collectAsState()
 
     // --- Collect states for cross-session search ---
     val crossSessionSearchState by crossSessionSearchViewModel.uiState.collectAsState()
@@ -410,6 +411,7 @@ fun ChatScreen(
         actions = agentRoleManagementActions,
         models = agentRoleModelsState.dataOrNull.orEmpty(),
         settingsForModel = agentRoleSettingsForForm,
-        tools = agentRoleToolsState.dataOrNull.orEmpty()
+        tools = agentRoleToolsState.dataOrNull.orEmpty(),
+        roles = agentRoleCatalogState.dataOrNull.orEmpty()
     )
 }

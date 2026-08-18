@@ -40,15 +40,6 @@ interface ToolDefinitionDao {
     suspend fun getToolDefinitionsByIds(ids: Collection<Long>): List<ToolDefinition>
 
     /**
-     * Retrieves a tool definition by its unique name.
-     * Use this when you have the tool name from LLM API responses.
-     *
-     * @param name The unique name of the tool
-     * @return Either [ToolDefinitionError.NameNotFound] if not found, or the [ToolDefinition]
-     */
-    suspend fun getToolDefinitionByName(name: String): Either<ToolDefinitionError.NameNotFound, ToolDefinition>
-
-    /**
      * Retrieves only globally enabled tool definitions.
      * Note: Session-specific enablement is handled separately in SessionToolConfigDao.
      *

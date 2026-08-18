@@ -17,6 +17,8 @@ interface ToolCallOrchestrator {
      * Executes [pendingToolCalls] sequentially, emitting lifecycle events as they transition.
      *
      * @param userId User whose non-Local-MCP approval preferences may be consulted.
+     * @param requestingAgentRoleId Source role attached to the validated session; used for operator
+     *            authorization (e.g. the spawn allow-list) and never taken from model input.
      * @param pendingToolCalls Pending tool calls to process.
      * @param toolDefinitions Enabled tool definitions available to the current LLM turn.
      * @param toolApprovalFlow Normalized client approval submissions emitted by the chat WebSocket.
@@ -27,6 +29,7 @@ interface ToolCallOrchestrator {
      */
     fun executeAndUpdateToolCalls(
         userId: Long,
+        requestingAgentRoleId: Long,
         pendingToolCalls: List<ToolCall>,
         toolDefinitions: List<ToolDefinition>?,
         toolApprovalFlow: Flow<ToolCallApprovalSubmission>,

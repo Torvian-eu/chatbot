@@ -19,6 +19,7 @@ import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.app.domain.contracts.defaultInstructionName
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
+import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -36,7 +37,8 @@ private val EDITABLE_INSTRUCTION_TYPES = listOf(
     AgentInstructionTypes.ROLE,
     AgentInstructionTypes.MAIN,
     AgentInstructionTypes.CUSTOM,
-    AgentInstructionTypes.MODEL_SETTINGS
+    AgentInstructionTypes.MODEL_SETTINGS,
+    AgentInstructionTypes.SPAWNABLE_AGENTS
 )
 
 /**
@@ -52,6 +54,8 @@ private val EDITABLE_INSTRUCTION_TYPES = listOf(
  * @param models Chat-capable models available for selection.
  * @param settingsForModel Chat-capable settings profiles for the model currently chosen in the form.
  * @param tools Enabled tool definitions available for the multi-select.
+ * @param roles Same-user roles available as spawn targets, including the edited role (self-spawn is
+ *            allowed).
  * @param onFormUpdate Applies an update function to the form draft.
  * @param onSave Saves the form.
  * @param onCancel Cancels the dialog.
@@ -63,6 +67,7 @@ fun AgentRoleFormDialog(
     models: List<LLMModel>,
     settingsForModel: List<ModelSettings>,
     tools: List<ToolDefinition>,
+    roles: List<AgentRoleDto>,
     onFormUpdate: ((AgentRoleFormState) -> AgentRoleFormState) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit
@@ -165,6 +170,44 @@ fun AgentRoleFormDialog(
                             }
                         }
 
+                        // Spawn permissions are an unordered set: toggling a chip simply adds or
+                        // removes the target, and self-spawn is allowed (the edited role is included).
+                        Text("Spawnable agent roles", style = MaterialTheme.typography.titleSmall)
+                        if (roles.isEmpty()) {
+                            Text(
+                                text = "No agent roles are available.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                roles.forEach { target ->
+                                    val selected = target.id in formState.spawnableAgentRoleIds
+                                    FilterChip(
+                                        selected = selected,
+                                        onClick = {
+                                            onFormUpdate { current ->
+                                                current.copy(
+                                                    spawnableAgentRoleIds = if (selected) {
+                                                        current.spawnableAgentRoleIds - target.id
+                                                    } else {
+                                                        current.spawnableAgentRoleIds + target.id
+                                                    }
+                                                )
+                                            }
+                                        },
+                                        label = {
+                                            val display = target.displayName?.takeIf { it.isNotBlank() }
+                                            Text(if (display == null) target.name else "${target.name} — $display")
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
                         // Instruction list editor.
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -198,6 +241,7 @@ fun AgentRoleFormDialog(
                         } else {
                             formState.instructions.forEachIndexed { index, instruction ->
                                 val isModelSettings = instruction.type == AgentInstructionTypes.MODEL_SETTINGS
+                                val isSpawnableAgents = instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS
                                 // Unknown/future instruction kinds stay fully read-only as a defensive
                                 // fallback until the client learns their semantics.
                                 val isUnknownType = instruction.type !in EDITABLE_INSTRUCTION_TYPES
@@ -210,7 +254,7 @@ fun AgentRoleFormDialog(
                                 InstructionEditorRow(
                                     index = index,
                                     instruction = instruction,
-                                    isMessageReadOnly = isModelSettings,
+                                    isMessageReadOnly = isModelSettings || isSpawnableAgents,
                                     isFullyReadOnly = isUnknownType,
                                     unavailableTypes = unavailableTypes,
                                     canMoveUp = index > 0,
@@ -273,14 +317,14 @@ fun AgentRoleFormDialog(
 /**
  * Editor row for a single instruction entry.
  *
- * `ROLE`/`MAIN`/`CUSTOM` instructions are fully editable. A `MODEL_SETTINGS` instruction keeps only
- * its message read-only (the server resolves it from the role's settings profile); its type, name,
- * position and removal remain user-controlled. Unknown/future instruction kinds are rendered fully
+ * `ROLE`/`MAIN`/`CUSTOM` instructions are fully editable. `MODEL_SETTINGS` and `SPAWNABLE_AGENTS`
+ * entries keep their generated messages read-only; their type, name, position and removal remain
+ * user-controlled. Unknown/future instruction kinds are rendered fully
  * read-only as a defensive fallback until the client learns their semantics.
  *
  * @param index Position in the instruction list.
  * @param instruction The instruction being edited.
- * @param isMessageReadOnly Whether the message is bound server-side (`MODEL_SETTINGS`) and must not be edited.
+ * @param isMessageReadOnly Whether the message is generated server-side and must not be edited.
  * @param isFullyReadOnly Whether the whole row is read-only (unknown instruction kinds).
  * @param unavailableTypes Types already used by other rows. The single-instance kinds
  *            (`ROLE`/`MAIN`/`MODEL_SETTINGS`) are offered only while not in this set; `CUSTOM` is
@@ -347,7 +391,11 @@ private fun InstructionEditorRow(
                                     // Switching to MODEL_SETTINGS clears the draft message: the server
                                     // resolves the real text from the role's settings profile, so any
                                     // typed content would be misleading (and is ignored on read).
-                                    message = if (typeChanged && type == AgentInstructionTypes.MODEL_SETTINGS) {
+                                    message = if (typeChanged && type in setOf(
+                                            AgentInstructionTypes.MODEL_SETTINGS,
+                                            AgentInstructionTypes.SPAWNABLE_AGENTS
+                                        )
+                                    ) {
                                         ""
                                     } else {
                                         instruction.message
@@ -399,7 +447,11 @@ private fun InstructionEditorRow(
                 maxLines = if (messageExpanded) 12 else 3,
                 enabled = !isMessageReadOnly && !isFullyReadOnly,
                 placeholder = if (isMessageReadOnly) {
-                    "Auto-resolved from the role's settings profile"
+                    if (instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS) {
+                        "Generated from the selected spawnable roles"
+                    } else {
+                        "Auto-resolved from the role's settings profile"
+                    }
                 } else {
                     ""
                 }
@@ -466,6 +518,9 @@ private fun instructionHint(type: String): String = when (type) {
 
     AgentInstructionTypes.CUSTOM ->
         "Free-form instruction — add anything you want the model to follow."
+
+    AgentInstructionTypes.SPAWNABLE_AGENTS ->
+        "Auto — advertises the roles selected above to the spawn_agent tool."
 
     else -> "Unknown instruction type — read-only."
 }

@@ -15,8 +15,9 @@ import kotlinx.serialization.Serializable
  *            `"custom"`). Unknown strings are tolerated and rendered generically by clients.
  * @property name Human-readable label of the instruction.
  * @property message Resolved instruction text. For [AgentInstructionTypes.MODEL_SETTINGS] the server
- *            sends the referenced settings' system text; for static instruction kinds the text is the
- *            stored value itself.
+ *            sends the referenced settings' system text; for [AgentInstructionTypes.SPAWNABLE_AGENTS]
+ *            it generates current role guidance; for static instruction kinds the text is the stored
+ *            value itself.
  */
 @Serializable
 data class AgentInstructionDto(

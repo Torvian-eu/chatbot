@@ -23,4 +23,11 @@ sealed class SpawnRequestBuildError {
      * @property roleName The role name that was requested.
      */
     data class RoleNotFound(val roleName: String) : SpawnRequestBuildError()
+
+    /**
+     * The source role is not allowed to spawn the requested target role.
+     *
+     * @property roleName The target role name supplied by the model.
+     */
+    data class RoleNotAllowed(val roleName: String) : SpawnRequestBuildError()
 }

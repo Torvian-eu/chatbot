@@ -55,6 +55,16 @@ interface AgentRoleDao {
     suspend fun getRoleByNameForUser(userId: Long, name: String): Either<AgentRoleError.NotFoundByName, AgentRoleEntity>
 
     /**
+     * Loads the requested roles that are owned by [userId], preserving the order of [roleIds].
+     * Missing or foreign roles are omitted so callers can use the result as an ownership check.
+     *
+     * @param userId User whose ownership is required.
+     * @param roleIds Role ids to resolve.
+     * @return Owned role entities in requested order.
+     */
+    suspend fun getRolesByIdsForUser(userId: Long, roleIds: List<Long>): List<AgentRoleEntity>
+
+    /**
      * Whether the user already owns an agent role with the given name.
      *
      * Used by the service layer to enforce per-user name uniqueness.
