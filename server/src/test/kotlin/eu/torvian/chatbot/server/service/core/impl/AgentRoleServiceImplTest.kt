@@ -38,6 +38,7 @@ class AgentRoleServiceImplTest {
     private lateinit var agentRoleDao: AgentRoleDao
     private lateinit var agentRoleToolDao: AgentRoleToolDao
     private lateinit var agentRoleOwnershipDao: AgentRoleOwnershipDao
+    private lateinit var agentRoleSpawnableRoleDao: AgentRoleSpawnableRoleDao
     private lateinit var modelDao: ModelDao
     private lateinit var settingsDao: SettingsDao
     private lateinit var toolDefinitionDao: ToolDefinitionDao
@@ -71,6 +72,7 @@ class AgentRoleServiceImplTest {
         agentRoleDao = mockk()
         agentRoleToolDao = mockk()
         agentRoleOwnershipDao = mockk()
+        agentRoleSpawnableRoleDao = mockk()
         modelDao = mockk()
         settingsDao = mockk()
         toolDefinitionDao = mockk()
@@ -79,6 +81,7 @@ class AgentRoleServiceImplTest {
         service = AgentRoleServiceImpl(
             agentRoleDao = agentRoleDao,
             agentRoleToolDao = agentRoleToolDao,
+            agentRoleSpawnableRoleDao = agentRoleSpawnableRoleDao,
             agentRoleOwnershipDao = agentRoleOwnershipDao,
             modelDao = modelDao,
             settingsDao = settingsDao,
@@ -86,6 +89,12 @@ class AgentRoleServiceImplTest {
             json = json,
             transactionScope = transactionScope
         )
+
+        // The spawn allow-list DAO is always consulted (non-nullable dependency); default its reads
+        // to empty and its writes to no-ops so tests focus on the behavior under test.
+        coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(any()) } returns emptySet()
+        coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(any()) } returns emptyMap()
+        coEvery { agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(any(), any()) } returns Unit
 
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
@@ -99,6 +108,7 @@ class AgentRoleServiceImplTest {
             agentRoleDao,
             agentRoleToolDao,
             agentRoleOwnershipDao,
+            agentRoleSpawnableRoleDao,
             modelDao,
             settingsDao,
             toolDefinitionDao,
@@ -291,6 +301,21 @@ class AgentRoleServiceImplTest {
 
         assertTrue(result.isLeft())
         assertIs<eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError.NotFound>(result.leftOrNull())
+    }
+
+    @Test
+    fun `getAgentRoleById should return NotFound when the ownership row is missing`() = runTest {
+        // A role row without an ownership row is a database inconsistency; the unscoped domain load
+        // must surface it as not-found instead of degrading the owner id to 0 (which would silently
+        // produce empty spawn allow-list prompts).
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns GetOwnerError.ResourceNotFound("1").left()
+
+        val result = service.getAgentRoleById(1L)
+
+        assertTrue(result.isLeft())
+        assertIs<eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError.NotFound>(result.leftOrNull())
+        coVerify(exactly = 0) { agentRoleToolDao.getToolsForRole(any()) }
     }
 
     @Test

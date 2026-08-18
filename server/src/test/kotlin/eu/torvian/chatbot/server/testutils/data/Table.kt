@@ -50,6 +50,11 @@ enum class Table {
     AGENT_ROLE_TOOLS,
 
     /**
+     * Table for linking agent roles to the roles they may spawn.
+     */
+    AGENT_ROLE_SPAWNABLE_ROLES,
+
+    /**
      * Table for storing API secrets.
      */
     API_SECRETS,

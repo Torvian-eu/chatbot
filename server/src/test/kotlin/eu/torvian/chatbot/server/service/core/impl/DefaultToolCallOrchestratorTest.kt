@@ -260,6 +260,7 @@ class DefaultToolCallOrchestratorTest {
 
         val events = orchestrator.executeAndUpdateToolCalls(
             userId = 1L,
+            requestingAgentRoleId = 0L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -295,6 +296,7 @@ class DefaultToolCallOrchestratorTest {
 
         val events = orchestrator.executeAndUpdateToolCalls(
             userId = 1L,
+            requestingAgentRoleId = 0L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -348,6 +350,7 @@ class DefaultToolCallOrchestratorTest {
 
             val events = orchestrator.executeAndUpdateToolCalls(
                 userId = 1L,
+                requestingAgentRoleId = 0L,
                 pendingToolCalls = listOf(pending),
                 toolDefinitions = listOf(toolDef),
                 toolApprovalFlow = flowOf(approval),
@@ -407,6 +410,7 @@ class DefaultToolCallOrchestratorTest {
 
             val events = orchestrator.executeAndUpdateToolCalls(
                 userId = 1L,
+                requestingAgentRoleId = 0L,
                 pendingToolCalls = listOf(pending),
                 toolDefinitions = listOf(toolDef),
                 toolApprovalFlow = flowOf(approval),
@@ -463,6 +467,7 @@ class DefaultToolCallOrchestratorTest {
 
         val events = orchestrator.executeAndUpdateToolCalls(
             userId = 1L,
+            requestingAgentRoleId = 0L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -515,6 +520,7 @@ class DefaultToolCallOrchestratorTest {
 
         val events = orchestrator.executeAndUpdateToolCalls(
             userId = 1L,
+            requestingAgentRoleId = 0L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -553,6 +559,7 @@ class DefaultToolCallOrchestratorTest {
 
         val events = orchestrator.executeAndUpdateToolCalls(
             userId = 1L,
+            requestingAgentRoleId = 0L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -594,6 +601,7 @@ class DefaultToolCallOrchestratorTest {
 
         val events = orchestrator.executeAndUpdateToolCalls(
             userId = 1L,
+            requestingAgentRoleId = 0L,
             pendingToolCalls = listOf(alreadyExecuted),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(
@@ -667,11 +675,11 @@ class DefaultToolCallOrchestratorTest {
         val updates = trackToolCallUpdates()
 
         coEvery {
-            operatorToolExecutor.executeTool(1L, pending, any(), any())
+            operatorToolExecutor.executeTool(1L, 0L, pending, any(), any())
         } coAnswers {
             // Emulate the real executor: emit the relay event through the emitEvent sink, then return
             // a terminal success call carrying the spawned agent's summary.
-            val emit = arg<suspend (ToolCallExecutionEvent) -> Unit>(2)
+            val emit = arg<suspend (ToolCallExecutionEvent) -> Unit>(3)
             emit(
                 ToolCallExecutionEvent.OperatorToolExecutionRequested(
                     toolCallId = pending.id,
@@ -684,6 +692,7 @@ class DefaultToolCallOrchestratorTest {
 
         val events = orchestrator.executeAndUpdateToolCalls(
             userId = 1L,
+            requestingAgentRoleId = 0L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -706,7 +715,7 @@ class DefaultToolCallOrchestratorTest {
             listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.SUCCESS),
             updates.map { it.status }
         )
-        coVerify(exactly = 1) { operatorToolExecutor.executeTool(1L, pending, any(), any()) }
+        coVerify(exactly = 1) { operatorToolExecutor.executeTool(1L, 0L, pending, any(), any()) }
     }
 
     @Test
@@ -718,6 +727,7 @@ class DefaultToolCallOrchestratorTest {
 
         val events = orchestrator.executeAndUpdateToolCalls(
             userId = 1L,
+            requestingAgentRoleId = 0L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -736,7 +746,7 @@ class DefaultToolCallOrchestratorTest {
             listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.USER_DENIED),
             updates.map { it.status }
         )
-        coVerify(exactly = 0) { operatorToolExecutor.executeTool(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { operatorToolExecutor.executeTool(any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -749,7 +759,7 @@ class DefaultToolCallOrchestratorTest {
         // The executor maps a payload-build failure (e.g. role not found) into a terminal ERROR call
         // without emitting a relay event; the orchestrator must persist and relay that as-is.
         coEvery {
-            operatorToolExecutor.executeTool(1L, pending, any(), any())
+            operatorToolExecutor.executeTool(1L, 0L, pending, any(), any())
         } returns pending.copy(
             status = ToolCallStatus.ERROR,
             errorMessage = "Role 'ghost' not found.",
@@ -758,6 +768,7 @@ class DefaultToolCallOrchestratorTest {
 
         val events = orchestrator.executeAndUpdateToolCalls(
             userId = 1L,
+            requestingAgentRoleId = 0L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),

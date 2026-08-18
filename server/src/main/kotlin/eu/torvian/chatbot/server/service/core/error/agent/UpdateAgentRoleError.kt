@@ -74,6 +74,13 @@ sealed interface UpdateAgentRoleError {
     data class ToolNotFound(val toolId: Long) : UpdateAgentRoleError
 
     /**
+     * A requested spawn target is missing or owned by another user.
+     *
+     * @property roleId The inaccessible target role identifier.
+     */
+    data class SpawnableRoleNotFound(val roleId: Long) : UpdateAgentRoleError
+
+    /**
      * The instruction list violates the agent-role instruction rules (e.g. duplicate singleton kinds).
      *
      * @property reason Human-readable explanation of the validation failure.
@@ -119,6 +126,9 @@ fun UpdateAgentRoleError.toApiError(): ApiError = when (this) {
 
     is UpdateAgentRoleError.ToolNotFound ->
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Tool definition not found", "toolId" to toolId.toString())
+
+    is UpdateAgentRoleError.SpawnableRoleNotFound ->
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Spawnable agent role not found", "roleId" to roleId.toString())
 
     is UpdateAgentRoleError.InstructionValidationFailed ->
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid agent role instructions: $reason")

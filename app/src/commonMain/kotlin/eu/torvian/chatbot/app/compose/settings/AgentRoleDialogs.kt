@@ -8,6 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleDialogState
+import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -23,6 +24,7 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  * @param models Chat-capable models available for the form.
  * @param settingsForModel Chat-capable settings for the model currently chosen in the form.
  * @param tools Enabled tools available for the form's multi-select.
+ * @param roles Same-user roles available as spawn targets.
  */
 @Composable
 fun AgentRoleDialogs(
@@ -30,7 +32,8 @@ fun AgentRoleDialogs(
     actions: AgentRolesTabActions,
     models: List<LLMModel>,
     settingsForModel: List<ModelSettings>?,
-    tools: List<ToolDefinition>
+    tools: List<ToolDefinition>,
+    roles: List<AgentRoleDto>
 ) {
     when (dialogState) {
         is AgentRoleDialogState.AddRole -> {
@@ -40,6 +43,7 @@ fun AgentRoleDialogs(
                 models = models,
                 settingsForModel = settingsForModel.orEmpty(),
                 tools = tools,
+                roles = roles,
                 onFormUpdate = actions::onUpdateRoleForm,
                 onSave = actions::onSaveRole,
                 onCancel = actions::onCancelDialog
@@ -53,6 +57,7 @@ fun AgentRoleDialogs(
                 models = models,
                 settingsForModel = settingsForModel.orEmpty(),
                 tools = tools,
+                roles = roles,
                 onFormUpdate = actions::onUpdateRoleForm,
                 onSave = actions::onSaveRole,
                 onCancel = actions::onCancelDialog

@@ -65,6 +65,7 @@ class DefaultOperatorToolExecutorTest {
         var relayed: ToolCallExecutionEvent.OperatorToolExecutionRequested? = null
         val result = executor.executeTool(
             userId = 1L,
+            requestingAgentRoleId = 1L,
             toolCall = unsupported,
             emitEvent = { event ->
                 if (event is ToolCallExecutionEvent.OperatorToolExecutionRequested) relayed = event
@@ -79,7 +80,7 @@ class DefaultOperatorToolExecutorTest {
         assertTrue(message.contains("future_tool"))
         assertTrue(message.contains(OperatorToolCatalog.SPAWN_AGENT_NAME))
         // No payload was built and no relay event was emitted for the unsupported name.
-        coVerify(exactly = 0) { builder.build(any(), any()) }
+        coVerify(exactly = 0) { builder.build(any(), any(), any()) }
         assertEquals(null, relayed)
     }
 
@@ -95,7 +96,7 @@ class DefaultOperatorToolExecutorTest {
             toolCallId = 1L
         )
         val builder = mockk<AgentSpawnRequestBuilder>()
-        coEvery { builder.build(1L, any()) } returns request.right()
+        coEvery { builder.build(1L, any(), any()) } returns request.right()
 
         val executor = DefaultOperatorToolExecutor(builder, json)
         val supported = toolCall()
@@ -103,6 +104,7 @@ class DefaultOperatorToolExecutorTest {
         var relayed: ToolCallExecutionEvent.OperatorToolExecutionRequested? = null
         val result = executor.executeTool(
             userId = 1L,
+            requestingAgentRoleId = 5L,
             toolCall = supported,
             emitEvent = { event ->
                 if (event is ToolCallExecutionEvent.OperatorToolExecutionRequested) relayed = event
@@ -132,11 +134,12 @@ class DefaultOperatorToolExecutorTest {
     @Test
     fun `payload build failure maps to a readable tool error`() = runTest {
         val builder = mockk<AgentSpawnRequestBuilder>()
-        coEvery { builder.build(1L, any()) } returns SpawnRequestBuildError.RoleNotFound("writer").left()
+        coEvery { builder.build(1L, any(), any()) } returns SpawnRequestBuildError.RoleNotFound("writer").left()
 
         val executor = DefaultOperatorToolExecutor(builder, json)
         val result = executor.executeTool(
             userId = 1L,
+            requestingAgentRoleId = 5L,
             toolCall = toolCall(),
             emitEvent = {},
             operatorToolResultFlow = flowOf()

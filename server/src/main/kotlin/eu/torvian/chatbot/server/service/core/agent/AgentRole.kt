@@ -18,6 +18,8 @@ package eu.torvian.chatbot.server.service.core.agent
  *            after the settings are deleted.
  * @property tools Set of tool-definition identifiers attached to the role. Unordered; duplicates are
  *            impossible (the `agent_role_tools` primary key and the wire `Set` both reject them).
+ * @property spawnableAgentRoleIds Unordered same-user role identifiers this role may spawn; may
+ *            include the role's own id (self-spawn).
  * @property instructions Domain instruction objects composing the role's system prompt.
  */
 data class AgentRole(
@@ -28,5 +30,6 @@ data class AgentRole(
     val modelId: Long?,
     val modelSettingsId: Long?,
     val tools: Set<Long> = emptySet(),
+    val spawnableAgentRoleIds: Set<Long> = emptySet(),
     val instructions: List<AgentInstruction> = emptyList()
 )

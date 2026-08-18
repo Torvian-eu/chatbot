@@ -19,13 +19,14 @@ interface OperatorToolExecutor {
     /**
      * Executes one operator tool call and returns the terminal [ToolCall] (SUCCESS or ERROR).
      *
-     * The implementation is responsible for building the tool-specific payload server-side (role
-     * resolution, input parsing), emitting the relay event, awaiting the operator's result
-     * correlated by [ToolCall.id], and mapping any failure into a tool-level error result the LLM
-     * can read.
+     * The implementation is responsible for building the tool-specific payload server-side (input
+     * parsing, user-scoped role resolution, and the source role's spawn allow-list), emitting the
+     * relay event, awaiting the operator's result correlated by [ToolCall.id], and mapping any
+     * failure into a tool-level error result the LLM can read.
      *
      * @param userId The user whose operator tool instance is being executed (ownership scope for
      *            payload building).
+     * @param requestingAgentRoleId Source role id from the validated session, never model input.
      * @param toolCall The persisted tool call being executed.
      * @param emitEvent Sink used to emit [ToolCallExecutionEvent] instances (in particular the
      *            [ToolCallExecutionEvent.OperatorToolExecutionRequested] relay event).
@@ -35,6 +36,7 @@ interface OperatorToolExecutor {
      */
     suspend fun executeTool(
         userId: Long,
+        requestingAgentRoleId: Long,
         toolCall: ToolCall,
         emitEvent: suspend (ToolCallExecutionEvent) -> Unit,
         operatorToolResultFlow: Flow<OperatorToolExecutionResult>

@@ -71,6 +71,9 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
         stream = false
     )
 
+    /** Agent role id assigned to the default [testSession]; tool execution requires a role. */
+    protected val testRoleId = 7L
+
     /** Default session receiving the turns under test. */
     protected val testSession = ChatSession(
         id = 1L,
@@ -78,7 +81,7 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
         createdAt = baseInstant,
         updatedAt = baseInstant,
         groupId = null,
-        agentRoleId = null,
+        agentRoleId = testRoleId,
         currentLeafMessageId = null,
         messages = emptyList()
     )

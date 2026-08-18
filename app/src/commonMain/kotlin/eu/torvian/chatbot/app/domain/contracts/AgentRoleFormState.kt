@@ -15,12 +15,14 @@ import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
  * both are present (they are mandatory at creation and on a normal edit).
  *
  * @property mode Whether this draft creates a new role or edits an existing one.
+ * @property roleId Existing role id while editing, used to exclude self from the target selector.
  * @property name Unique (per user) machine-readable role name.
  * @property displayName Optional human-friendly display name.
  * @property description Free-form description of the role's purpose.
  * @property modelId Identifier of the LLM model the role uses, or null when not (yet) chosen.
  * @property modelSettingsId Identifier of the chat-capable settings profile the role uses, or null.
  * @property toolIds Set of tool-definition identifiers attached to the role.
+ * @property spawnableAgentRoleIds Unordered role ids this role may spawn; may include the role's own id.
  * @property instructions Ordered, type-tagged instruction list. A `model_settings` entry can be placed
  *            anywhere and reordered like any other instruction; only its `message` is read-only (the
  *            server binds it to the role's own settings id and re-resolves it on every read), so the
@@ -29,12 +31,14 @@ import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
  */
 data class AgentRoleFormState(
     val mode: FormMode = FormMode.NEW,
+    val roleId: Long? = null,
     val name: String = "",
     val displayName: String = "",
     val description: String = "",
     val modelId: Long? = null,
     val modelSettingsId: Long? = null,
     val toolIds: Set<Long> = emptySet(),
+    val spawnableAgentRoleIds: Set<Long> = emptySet(),
     val instructions: List<AgentInstructionDto> = emptyList(),
     val errorMessage: String? = null
 ) {
@@ -74,6 +78,7 @@ data class AgentRoleFormState(
             modelId = modelId,
             modelSettingsId = modelSettingsId,
             toolIds = toolIds,
+            spawnableAgentRoleIds = spawnableAgentRoleIds,
             instructions = instructions
         )
     }
@@ -95,6 +100,7 @@ data class AgentRoleFormState(
             modelId = modelId,
             modelSettingsId = modelSettingsId,
             toolIds = toolIds,
+            spawnableAgentRoleIds = spawnableAgentRoleIds,
             instructions = instructions
         )
     }
@@ -114,6 +120,7 @@ fun defaultInstructionName(type: String): String = when (type) {
     AgentInstructionTypes.MAIN -> "Main instruction"
     AgentInstructionTypes.MODEL_SETTINGS -> "Model instruction"
     AgentInstructionTypes.CUSTOM -> "Custom instruction"
+    AgentInstructionTypes.SPAWNABLE_AGENTS -> "Available agents"
     else -> type
 }
 
@@ -160,12 +167,14 @@ fun createEmptyAgentRoleForm(): AgentRoleFormState = AgentRoleFormState(
  */
 fun AgentRoleDto.toEditFormState(): AgentRoleFormState = AgentRoleFormState(
     mode = FormMode.EDIT,
+    roleId = id,
     name = name,
     displayName = displayName ?: "",
     description = description,
     modelId = modelId,
     modelSettingsId = modelSettingsId,
     toolIds = tools,
+    spawnableAgentRoleIds = spawnableAgentRoleIds,
     instructions = instructions
 )
 

@@ -22,6 +22,8 @@ import kotlinx.serialization.Serializable
  * @property tools Set of tool-definition identifiers attached to the role. Referential integrity is
  *            enforced at the database level (the server stores the ids in the `agent_role_tools` join
  *            table); the wire shape is a plain set of ids, so duplicates are impossible.
+ * @property spawnableAgentRoleIds Unordered identifiers of roles this role may spawn. The server validates
+ *            that targets belong to the same user; self-spawn (the role granting itself) is allowed.
  * @property instructions Flat, type-tagged instruction list (see [AgentInstructionDto]) that is
  *            composed into the role's system prompt at turn time.
  */
@@ -34,5 +36,6 @@ data class AgentRoleDto(
     val modelId: Long?,
     val modelSettingsId: Long?,
     val tools: Set<Long> = emptySet(),
+    val spawnableAgentRoleIds: Set<Long> = emptySet(),
     val instructions: List<AgentInstructionDto> = emptyList()
 )

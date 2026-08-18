@@ -80,6 +80,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 userMessage.id,
                 testModel,
                 testSettings,
+                agentRoleId = testRoleId,
                 reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
@@ -219,6 +220,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 userMessage.id,
                 testModel,
                 testSettings,
+                agentRoleId = testRoleId,
                 reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
@@ -229,6 +231,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 assistantToolMessage.id,
                 testModel,
                 testSettings,
+                agentRoleId = testRoleId,
                 reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantFinalMessage, assistantToolMessage)
@@ -242,6 +245,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
         every {
             toolCallOrchestrator.executeAndUpdateToolCalls(
                 1L,
+                testRoleId,
                 listOf(pendingToolCall),
                 listOf(toolDefinition),
                 any(),
@@ -393,6 +397,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 userMessage.id,
                 reasoningModel,
                 reasoningSettings,
+                agentRoleId = testRoleId,
                 reasoningItems = reasoningItems
             )
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
@@ -418,6 +423,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 userMessage.id,
                 reasoningModel,
                 reasoningSettings,
+                agentRoleId = testRoleId,
                 reasoningItems = reasoningItems
             )
         }
@@ -553,6 +559,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 userMessage.id,
                 reasoningModel,
                 reasoningSettings,
+                agentRoleId = testRoleId,
                 reasoningItems = reasoningItems
             )
         } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
@@ -563,6 +570,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
                 assistantToolMessage.id,
                 reasoningModel,
                 reasoningSettings,
+                agentRoleId = testRoleId,
                 reasoningItems = null
             )
         } returns PersistedAssistantMessage(assistantFinalMessage, assistantToolMessage)
@@ -576,6 +584,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
         every {
             toolCallOrchestrator.executeAndUpdateToolCalls(
                 1L,
+                testRoleId,
                 listOf(pendingToolCall),
                 listOf(toolDefinition),
                 any(),

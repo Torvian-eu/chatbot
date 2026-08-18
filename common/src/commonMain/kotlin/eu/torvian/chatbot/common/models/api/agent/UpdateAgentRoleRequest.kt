@@ -17,6 +17,8 @@ import kotlinx.serialization.Serializable
  *            must belong to [modelId] and be chat-capable.
  * @property toolIds Set of tool-definition identifiers to attach to the role. Duplicates are
  *            impossible at the wire level (a set), so no service-side de-duplication is needed.
+ * @property spawnableAgentRoleIds Same-user role identifiers that this role may spawn. Duplicates are
+ *            impossible at the wire level (a set); self-referencing identifiers are allowed.
  * @property instructions Flat instruction list. A `model_settings` instruction is bound by the server
  *            to the role's own [modelSettingsId]; its `message` is ignored on input and re-resolved.
  */
@@ -28,5 +30,6 @@ data class UpdateAgentRoleRequest(
     val modelId: Long,
     val modelSettingsId: Long,
     val toolIds: Set<Long> = emptySet(),
+    val spawnableAgentRoleIds: Set<Long> = emptySet(),
     val instructions: List<AgentInstructionDto> = emptyList()
 )

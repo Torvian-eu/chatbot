@@ -49,6 +49,7 @@ class DefaultToolCallOrchestrator(
 
     override fun executeAndUpdateToolCalls(
         userId: Long,
+        requestingAgentRoleId: Long,
         pendingToolCalls: List<ToolCall>,
         toolDefinitions: List<ToolDefinition>?,
         toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
@@ -130,6 +131,7 @@ class DefaultToolCallOrchestrator(
                     is OperatorToolDefinition -> {
                         executeOperatorTool(
                             userId = userId,
+                            requestingAgentRoleId = requestingAgentRoleId,
                             toolCall = pendingToolCall,
                             operatorToolResultFlow = operatorToolResultFlow
                         )
@@ -408,16 +410,16 @@ class DefaultToolCallOrchestrator(
      */
     private suspend fun ProducerScope<ToolCallExecutionEvent>.executeOperatorTool(
         userId: Long,
+        requestingAgentRoleId: Long,
         toolCall: ToolCall,
         operatorToolResultFlow: Flow<OperatorToolExecutionResult>
-    ): ToolCall {
-        return operatorToolExecutor.executeTool(
-            userId = userId,
-            toolCall = toolCall,
-            emitEvent = { event -> send(event) },
-            operatorToolResultFlow = operatorToolResultFlow
-        )
-    }
+    ): ToolCall = operatorToolExecutor.executeTool(
+        userId = userId,
+        requestingAgentRoleId = requestingAgentRoleId,
+        toolCall = toolCall,
+        emitEvent = { event -> send(event) },
+        operatorToolResultFlow = operatorToolResultFlow
+    )
 
     /**
      * Internal sealed type representing the outcome of approval resolution.

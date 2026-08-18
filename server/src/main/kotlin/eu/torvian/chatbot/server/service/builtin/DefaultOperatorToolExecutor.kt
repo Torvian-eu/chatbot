@@ -23,9 +23,9 @@ import kotlin.time.Instant
  *
  * For a `spawn_agent` call the executor:
  *
- * 1. Builds the typed [AgentSpawnRequest] via [AgentSpawnRequestBuilder] (input parsing + user-scoped
- *    role lookup). A build failure is mapped to a tool-level ERROR result, so the LLM hears a clear
- *    message instead of the turn crashing.
+ * 1. Builds the typed [AgentSpawnRequest] via [AgentSpawnRequestBuilder] (input parsing, user-scoped
+ *    role lookup, and the source role's spawn allow-list). A build failure is mapped to a tool-level
+ *    ERROR result, so the LLM hears a clear message instead of the turn crashing.
  * 2. Serializes the typed payload into the generic relay envelope (`toolName` = the tool call's
  *    [ToolCall.toolName], which for operator tools is unique per user) and emits
  *    [ToolCallExecutionEvent.OperatorToolExecutionRequested].
@@ -36,7 +36,8 @@ import kotlin.time.Instant
  * The wait is cooperative: when the surrounding coroutine is cancelled (socket close, turn stop) the
  * suspension simply unwinds and the orchestrator's cleanup finalizes the call as CANCELLED.
  *
- * @property agentSpawnRequestBuilder Builds the typed spawn payload (role-by-name + ownership).
+ * @property agentSpawnRequestBuilder Builds the typed spawn payload (role-by-name + ownership +
+ *            source-role allow-list).
  * @property json JSON codec used to serialize the typed payload into the envelope.
  */
 class DefaultOperatorToolExecutor(
@@ -51,6 +52,7 @@ class DefaultOperatorToolExecutor(
 
     override suspend fun executeTool(
         userId: Long,
+        requestingAgentRoleId: Long,
         toolCall: ToolCall,
         emitEvent: suspend (ToolCallExecutionEvent) -> Unit,
         operatorToolResultFlow: Flow<OperatorToolExecutionResult>
@@ -72,13 +74,14 @@ class DefaultOperatorToolExecutor(
             )
         }
 
-        val payload = agentSpawnRequestBuilder.build(userId, toolCall).getOrElse { buildError ->
-            logger.warn("spawn_agent payload build failed for tool call ${toolCall.id}: $buildError")
-            return toolCall.toErrorResult(
-                errorMessage = buildError.toUserMessage(),
-                startTime = startTime
-            )
-        }
+        val payload = agentSpawnRequestBuilder.build(userId, requestingAgentRoleId, toolCall)
+            .getOrElse { buildError ->
+                logger.warn("spawn_agent payload build failed for tool call ${toolCall.id}: $buildError")
+                return toolCall.toErrorResult(
+                    errorMessage = buildError.toUserMessage(),
+                    startTime = startTime
+                )
+            }
 
         val payloadJson = runCatching {
             json.encodeToString(AgentSpawnRequest.serializer(), payload)
@@ -144,6 +147,8 @@ class DefaultOperatorToolExecutor(
         is SpawnRequestBuildError.InvalidInput -> reason
         is SpawnRequestBuildError.RoleNotFound ->
             "Role '$roleName' not found. You may only spawn agent roles owned by the current user."
+        is SpawnRequestBuildError.RoleNotAllowed ->
+            "The current agent role is not permitted to spawn role '$roleName'."
     }
 
     /**
