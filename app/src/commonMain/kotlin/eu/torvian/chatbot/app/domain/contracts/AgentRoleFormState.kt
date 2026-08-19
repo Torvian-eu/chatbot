@@ -126,9 +126,10 @@ fun defaultInstructionName(type: String): String = when (type) {
 
 /**
  * Creates an empty draft for a new role, pre-seeding one row per well-known instruction type so the
- * user sees the full expected starting shape: `role`, `main`, `model_settings` and `custom`, in that
- * order. The labels are the conventional defaults; the `model_settings` row's message stays read-only
- * (server-resolved) and the others are ready for the user to fill in.
+ * user sees the full expected starting shape: `role`, `main`, `model_settings`, `spawnable_agents`
+ * and `custom`, in that order. The labels are the conventional defaults; the `model_settings` and
+ * `spawnable_agents` rows' messages stay read-only (server-resolved) and the others are ready for the
+ * user to fill in.
  *
  * @return A new [AgentRoleFormState] in NEW mode.
  */
@@ -148,6 +149,11 @@ fun createEmptyAgentRoleForm(): AgentRoleFormState = AgentRoleFormState(
         AgentInstructionDto(
             type = AgentInstructionTypes.MODEL_SETTINGS,
             name = defaultInstructionName(AgentInstructionTypes.MODEL_SETTINGS),
+            message = ""
+        ),
+        AgentInstructionDto(
+            type = AgentInstructionTypes.SPAWNABLE_AGENTS,
+            name = defaultInstructionName(AgentInstructionTypes.SPAWNABLE_AGENTS),
             message = ""
         ),
         AgentInstructionDto(

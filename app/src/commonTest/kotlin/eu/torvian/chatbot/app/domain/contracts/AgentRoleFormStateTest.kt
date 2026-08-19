@@ -15,6 +15,7 @@ class AgentRoleFormStateTest {
         assertEquals("Role", defaultInstructionName(AgentInstructionTypes.ROLE))
         assertEquals("Main instruction", defaultInstructionName(AgentInstructionTypes.MAIN))
         assertEquals("Model instruction", defaultInstructionName(AgentInstructionTypes.MODEL_SETTINGS))
+        assertEquals("Available agents", defaultInstructionName(AgentInstructionTypes.SPAWNABLE_AGENTS))
         assertEquals("Custom instruction", defaultInstructionName(AgentInstructionTypes.CUSTOM))
     }
 
@@ -31,6 +32,7 @@ class AgentRoleFormStateTest {
             AgentInstructionTypes.ROLE,
             AgentInstructionTypes.MAIN,
             AgentInstructionTypes.MODEL_SETTINGS,
+            AgentInstructionTypes.SPAWNABLE_AGENTS,
             AgentInstructionTypes.CUSTOM
         )
         assertEquals(expectedTypes, form.instructions.map { it.type })
