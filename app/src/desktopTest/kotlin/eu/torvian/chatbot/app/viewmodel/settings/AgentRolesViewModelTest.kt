@@ -48,7 +48,7 @@ class AgentRolesViewModelTest {
         modelSettingsId = 2L,
         tools = emptySet(),
         instructions = listOf(
-            AgentInstructionDto(type = AgentInstructionTypes.ROLE, name = "Role", message = "You are a writer")
+            AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a writer")
         )
     )
 
@@ -96,8 +96,8 @@ class AgentRolesViewModelTest {
                 modelSettingsId = 2L,
                 toolIds = setOf(10L, 20L),
                 instructions = listOf(
-                    AgentInstructionDto(type = AgentInstructionTypes.ROLE, name = "Role", message = "You are a writer"),
-                    AgentInstructionDto(type = AgentInstructionTypes.CUSTOM, name = "Tone", message = "Be concise")
+                    AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a writer"),
+                    AgentInstructionDto(AgentInstructionTypes.CUSTOM, "Tone", "Be concise")
                 )
             )
         }

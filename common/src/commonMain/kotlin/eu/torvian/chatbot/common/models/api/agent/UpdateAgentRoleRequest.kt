@@ -19,8 +19,10 @@ import kotlinx.serialization.Serializable
  *            impossible at the wire level (a set), so no service-side de-duplication is needed.
  * @property spawnableAgentRoleIds Same-user role identifiers that this role may spawn. Duplicates are
  *            impossible at the wire level (a set); self-referencing identifiers are allowed.
- * @property instructions Flat instruction list. A `model_settings` instruction is bound by the server
- *            to the role's own [modelSettingsId]; its `message` is ignored on input and re-resolved.
+ * @property instructions Instruction list (polymorphic [AgentInstructionDto] subtypes). A
+ *            `model_settings` instruction is bound by the server to the role's own [modelSettingsId];
+ *            its `message` is ignored on input and re-resolved. `model_specific` entries are
+ *            multi-instance and each must reference a distinct model.
  */
 @Serializable
 data class UpdateAgentRoleRequest(

@@ -23,10 +23,11 @@ import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
  * @property modelSettingsId Identifier of the chat-capable settings profile the role uses, or null.
  * @property toolIds Set of tool-definition identifiers attached to the role.
  * @property spawnableAgentRoleIds Unordered role ids this role may spawn; may include the role's own id.
- * @property instructions Ordered, type-tagged instruction list. A `model_settings` entry can be placed
- *            anywhere and reordered like any other instruction; only its `message` is read-only (the
- *            server binds it to the role's own settings id and re-resolves it on every read), so the
- *            client never edits its content.
+ * @property instructions Ordered instruction list ([AgentInstructionDto] flat entries). A
+ *            `model_settings` entry can be placed anywhere and reordered like any other instruction;
+ *            only its `message` is read-only (the server binds it to the role's own settings id and
+ *            re-resolves it on every read), so the client never edits its content. `model_specific`
+ *            entries are multi-instance (one per target model) and carry their own `modelId`.
  * @property errorMessage Optional validation error surfaced to the form.
  */
 data class AgentRoleFormState(
@@ -121,6 +122,7 @@ fun defaultInstructionName(type: String): String = when (type) {
     AgentInstructionTypes.MODEL_SETTINGS -> "Model instruction"
     AgentInstructionTypes.CUSTOM -> "Custom instruction"
     AgentInstructionTypes.SPAWNABLE_AGENTS -> "Available agents"
+    AgentInstructionTypes.MODEL_SPECIFIC -> "Model-specific instruction"
     else -> type
 }
 
@@ -129,7 +131,8 @@ fun defaultInstructionName(type: String): String = when (type) {
  * user sees the full expected starting shape: `role`, `main`, `model_settings`, `spawnable_agents`
  * and `custom`, in that order. The labels are the conventional defaults; the `model_settings` and
  * `spawnable_agents` rows' messages stay read-only (server-resolved) and the others are ready for the
- * user to fill in.
+ * user to fill in. `model_specific` is intentionally not pre-seeded: it is a multi-instance,
+ * opt-in kind added by switching a row's type in the form.
  *
  * @return A new [AgentRoleFormState] in NEW mode.
  */
@@ -168,8 +171,8 @@ fun createEmptyAgentRoleForm(): AgentRoleFormState = AgentRoleFormState(
  * Creates an edit draft from an existing role, preserving its resolved instructions (including any
  * read-only `model_settings` entry returned by the server).
  *
- * @param role The role to edit.
- * @return An [AgentRoleFormState] in EDIT mode pre-filled from [role].
+ * @receiver The role to edit.
+ * @return An [AgentRoleFormState] in EDIT mode pre-filled from the role.
  */
 fun AgentRoleDto.toEditFormState(): AgentRoleFormState = AgentRoleFormState(
     mode = FormMode.EDIT,
