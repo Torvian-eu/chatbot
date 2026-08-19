@@ -95,7 +95,6 @@ class DefaultConversationTurnPreparationServiceTest {
         id = 1L,
         name = "Default",
         modelId = 1L,
-        systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
         customParams = null,

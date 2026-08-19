@@ -108,13 +108,6 @@ private fun ChatFormContent(
     formState: ModelSettingsFormState.Chat,
     onFormUpdate: ((ModelSettingsFormState) -> ModelSettingsFormState) -> Unit
 ) {
-    ConfigTextField(
-        value = formState.systemMessage,
-        onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Chat).copy(systemMessage = value) } },
-        label = "System Message",
-        singleLine = false,
-        modifier = Modifier.height(120.dp)
-    )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ConfigTextField(
             value = formState.temperature,
@@ -174,13 +167,6 @@ private fun ResponsesFormContent(
     formState: ModelSettingsFormState.Responses,
     onFormUpdate: ((ModelSettingsFormState) -> ModelSettingsFormState) -> Unit
 ) {
-    ConfigTextField(
-        value = formState.instructions,
-        onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Responses).copy(instructions = value) } },
-        label = "Instructions (System Prompt)",
-        singleLine = false,
-        modifier = Modifier.height(120.dp)
-    )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ConfigTextField(
             value = formState.temperature,

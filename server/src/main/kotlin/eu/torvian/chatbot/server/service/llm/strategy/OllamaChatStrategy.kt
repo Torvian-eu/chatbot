@@ -51,9 +51,9 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
 
         // 1. Build the messages list with system message if present
         val apiMessages = buildList {
-            // Add the composed system message (single source of truth) if present.
-            // The settings' own systemMessage is deliberately NOT injected here: it is only ever included
-            // deliberately, as a ModelSettingsInstruction inside an agent role.
+            // Add the composed system message (single source of truth) if present. The system
+            // prompt is composed server-side from agent-role instructions (ROLE, MAIN, CUSTOM,
+            // MODEL_SPECIFIC, SPAWNABLE_AGENTS) and passed in as a single [systemMessage].
             if (!systemMessage.isNullOrBlank()) {
                 add(buildJsonObject {
                     put("role", JsonPrimitive("system"))

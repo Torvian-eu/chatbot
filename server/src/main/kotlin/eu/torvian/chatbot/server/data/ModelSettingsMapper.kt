@@ -35,7 +35,6 @@ fun ModelSettings.toEntity(): ModelSettingsEntity {
     val variableParamsMap = buildJsonObject {
         when (this@toEntity) {
             is ChatModelSettings -> {
-                systemMessage?.let { put("systemMessage", it) }
                 temperature?.let { put("temperature", it) }
                 maxTokens?.let { put("maxTokens", it) }
                 topP?.let { put("topP", it) }
@@ -44,7 +43,6 @@ fun ModelSettings.toEntity(): ModelSettingsEntity {
             }
 
             is ResponsesModelSettings -> {
-                instructions?.let { put("instructions", it) }
                 temperature?.let { put("temperature", it) }
                 maxOutputTokens?.let { put("maxOutputTokens", it) }
                 topP?.let { put("topP", it) }
@@ -126,7 +124,6 @@ fun ModelSettingsEntity.toDomain(): ModelSettings {
             id = id,
             modelId = modelId,
             name = name,
-            systemMessage = parsedVariableParams["systemMessage"]?.jsonPrimitive?.contentOrNull,
             temperature = parsedVariableParams["temperature"]?.jsonPrimitive?.floatOrNull,
             maxTokens = parsedVariableParams["maxTokens"]?.jsonPrimitive?.intOrNull,
             topP = parsedVariableParams["topP"]?.jsonPrimitive?.floatOrNull,
@@ -139,7 +136,6 @@ fun ModelSettingsEntity.toDomain(): ModelSettings {
             id = id,
             modelId = modelId,
             name = name,
-            instructions = parsedVariableParams["instructions"]?.jsonPrimitive?.contentOrNull,
             temperature = parsedVariableParams["temperature"]?.jsonPrimitive?.floatOrNull,
             maxOutputTokens = parsedVariableParams["maxOutputTokens"]?.jsonPrimitive?.intOrNull,
             topP = parsedVariableParams["topP"]?.jsonPrimitive?.floatOrNull,

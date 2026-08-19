@@ -57,7 +57,6 @@ class SettingsRoutesTest {
         id = 1L,
         modelId = 1L,
         name = "Test Settings 1",
-        systemMessage = "Test system message",
         temperature = 0.7f,
         maxTokens = 1000,
         customParams = Json.decodeFromString("""{"key": "value"}""")
@@ -161,7 +160,6 @@ class SettingsRoutesTest {
             id = 0L,
             modelId = TestDefaults.llmModel1.id,
             name = "New Settings",
-            systemMessage = "Hello",
             temperature = 0.6f,
             maxTokens = 512,
             customParams = Json.decodeFromString("""{"foo":"bar"}""")
@@ -191,7 +189,6 @@ class SettingsRoutesTest {
             id = 0L,
             modelId = nonExistentModelId,
             name = "New Settings",
-            systemMessage = "Hello",
             temperature = 0.6f,
             maxTokens = 512,
             customParams = Json.decodeFromString("""{"foo":"bar"}""")
@@ -256,7 +253,6 @@ class SettingsRoutesTest {
         testDataManager.insertSettingsOwnership(testSettings1.id, testUser1.id)
         val updatedSettings = testSettings1.copy(
             name = "Updated Settings",
-            systemMessage = "Updated system message",
             temperature = 0.8f,
             maxTokens = 1500
         )
@@ -276,7 +272,6 @@ class SettingsRoutesTest {
         val retrievedSettings = testDataManager.getModelSettings(testSettings1.id)
         assertTrue(retrievedSettings is ChatModelSettings, "Expected ChatModelSettings type")
         assertEquals(updatedSettings.name, retrievedSettings.name)
-        assertEquals(updatedSettings.systemMessage, retrievedSettings.systemMessage)
         assertEquals(updatedSettings.temperature, retrievedSettings.temperature)
         assertEquals(updatedSettings.maxTokens, retrievedSettings.maxTokens)
     }

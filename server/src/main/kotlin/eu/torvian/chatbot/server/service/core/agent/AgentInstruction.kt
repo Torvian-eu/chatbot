@@ -8,7 +8,7 @@ import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
  * This interface is deliberately NOT `@Serializable` / `@Polymorphic`: the only shape that crosses the
  * wire or is persisted is the flat [eu.torvian.chatbot.common.models.agent.AgentInstructionDto]. This
  * interface exists purely for behavior — namely [loadMessage], which resolves the instruction's message
- * from its source (the database for DB-backed variants like [ModelSettingsInstruction]).
+ * from its source (the database for DB-backed variants like [SpawnableAgentsInstruction]).
  *
  * @property type Well-known [AgentInstructionTypes] key that drives DTO mapping.
  * @property name Human-readable label of the instruction.
@@ -28,8 +28,8 @@ interface AgentInstruction {
      * Loads the instruction's message from its source into [message].
      *
      * Static instruction kinds ([RoleInstruction], [MainInstruction], [CustomInstruction]) already
-     * carry their message, so this is a no-op for them. [ModelSettingsInstruction] resolves the
-     * referenced settings' system text from the database.
+     * carry their message, so this is a no-op for them. [SpawnableAgentsInstruction] generates its
+     * message from ownership-scoped metadata on first load.
      */
     suspend fun loadMessage()
 }

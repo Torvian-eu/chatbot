@@ -38,11 +38,10 @@ class KtorSettingsApiClientTest {
         id: Long,
         modelId: Long,
         name: String,
-        systemMessage: String? = null,
         temperature: Float? = null,
         maxTokens: Int? = null,
         customParams: JsonObject? = null
-    ) = ChatModelSettings(id, modelId, name, systemMessage, temperature, maxTokens, customParams = customParams)
+    ) = ChatModelSettings(id, modelId, name, temperature, maxTokens, customParams = customParams)
 
     // --- Tests for getSettingsByModelId ---
     @Test
@@ -287,7 +286,7 @@ class KtorSettingsApiClientTest {
     @Test
     fun `getSettingsById - success`() = runTest {
         val settingsId = 123L
-        val mockSettings = mockModelSettings(settingsId, 10, "My Settings", systemMessage = "Be helpful.")
+        val mockSettings = mockModelSettings(settingsId, 10, "My Settings")
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Get, request.method)
             assertEquals(
@@ -308,7 +307,6 @@ class KtorSettingsApiClientTest {
                 assertTrue(settings is ChatModelSettings, "Expected ChatModelSettings type")
                 assertEquals(settingsId, settings.id)
                 assertEquals("My Settings", settings.name)
-                assertEquals("Be helpful.", settings.systemMessage)
             }
 
             is Either.Left -> fail("Expected success, but got error: ${result.value}")

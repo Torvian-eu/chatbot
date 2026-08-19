@@ -23,14 +23,6 @@ object AgentInstructionTypes {
     const val MAIN: String = "main"
 
     /**
-     * References the role's `ModelSettings`; the message text is resolved server-side from the
-     * settings profile (`ChatModelSettings.systemMessage` / `ResponsesModelSettings.instructions`).
-     * This entry is not directly editable by the client: the server binds it to the role's own
-     * `modelSettingsId` and re-resolves its `message` on every read.
-     */
-    const val MODEL_SETTINGS: String = "model_settings"
-
-    /**
      * User-editable free text.
      */
     const val CUSTOM: String = "custom"

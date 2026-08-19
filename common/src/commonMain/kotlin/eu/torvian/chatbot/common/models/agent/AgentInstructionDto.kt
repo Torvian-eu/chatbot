@@ -18,10 +18,9 @@ import kotlinx.serialization.json.longOrNull
  *
  * @property type The [AgentInstructionTypes] key of this instruction kind.
  * @property name Human-readable label of the instruction.
- * @property message Resolved instruction text. For [AgentInstructionTypes.MODEL_SETTINGS] the server
- *            sends the referenced settings' system text, for
- *            [AgentInstructionTypes.SPAWNABLE_AGENTS] generated role guidance, and for static kinds
- *            the stored value itself.
+ * @property message Resolved instruction text. For
+ *            [AgentInstructionTypes.SPAWNABLE_AGENTS] the server generates role guidance from the
+ *            current spawn allow-list, and for static kinds the stored value itself.
  * @property custom Type-specific extra fields (e.g. `{"modelId": 5}` for `model_specific`); null for
  *            kinds that carry no extra data.
  */

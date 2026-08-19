@@ -16,7 +16,6 @@ class AgentRoleFormStateTest {
     fun `defaultInstructionName maps every well-known type to its conventional label`() {
         assertEquals("Role", defaultInstructionName(AgentInstructionTypes.ROLE))
         assertEquals("Main instruction", defaultInstructionName(AgentInstructionTypes.MAIN))
-        assertEquals("Model instruction", defaultInstructionName(AgentInstructionTypes.MODEL_SETTINGS))
         assertEquals("Available agents", defaultInstructionName(AgentInstructionTypes.SPAWNABLE_AGENTS))
         assertEquals("Custom instruction", defaultInstructionName(AgentInstructionTypes.CUSTOM))
         assertEquals("Model-specific instruction", defaultInstructionName(AgentInstructionTypes.MODEL_SPECIFIC))
@@ -34,7 +33,6 @@ class AgentRoleFormStateTest {
         val expectedTypes = listOf(
             AgentInstructionTypes.ROLE,
             AgentInstructionTypes.MAIN,
-            AgentInstructionTypes.MODEL_SETTINGS,
             AgentInstructionTypes.SPAWNABLE_AGENTS,
             AgentInstructionTypes.CUSTOM
         )

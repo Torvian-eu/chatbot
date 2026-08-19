@@ -40,7 +40,7 @@ interface AgentRoleRepository {
     /**
      * Loads the resolved detail of a single agent role and upserts it into [roles].
      *
-     * The server resolves instruction text (notably the `model_settings` instruction) on every read,
+     * The server resolves instruction text (notably the `spawnable_agents` instruction) on every read,
      * so this is used to refresh a role after edits made elsewhere.
      *
      * @param roleId The unique identifier of the role to load.

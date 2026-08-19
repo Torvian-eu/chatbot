@@ -36,7 +36,6 @@ import eu.torvian.chatbot.server.service.core.agent.AgentInstruction
 import eu.torvian.chatbot.server.service.core.agent.AgentRole
 import eu.torvian.chatbot.server.service.core.agent.CustomInstruction
 import eu.torvian.chatbot.server.service.core.agent.MainInstruction
-import eu.torvian.chatbot.server.service.core.agent.ModelSettingsInstruction
 import eu.torvian.chatbot.server.service.core.agent.ModelSpecificInstruction
 import eu.torvian.chatbot.server.service.core.agent.RoleInstruction
 import eu.torvian.chatbot.server.service.core.agent.AgentRoleSummary
@@ -67,8 +66,7 @@ import org.apache.logging.log4j.Logger
  * @property agentRoleSpawnableRoleDao DAO for the role-to-role spawn allow-list.
  * @property agentRoleOwnershipDao DAO for the `agent_role_owners` table (per-user ownership).
  * @property modelDao DAO used to validate model references.
- * @property settingsDao DAO used to validate settings references and resolve settings-bound
- *            instruction messages.
+ * @property settingsDao DAO used to validate settings references (existence, chat-capability, and model match).
  * @property toolDefinitionDao DAO used to validate tool references.
  * @property json Shared JSON codec used to (de)serialize the `instructions_json` column.
  * @property transactionScope Transaction wrapper that keeps validation + persistence atomic.
@@ -394,16 +392,12 @@ class AgentRoleServiceImpl(
 
         val roleCount = instructions.count { it.type == AgentInstructionTypes.ROLE }
         val mainCount = instructions.count { it.type == AgentInstructionTypes.MAIN }
-        val settingsCount = instructions.count { it.type == AgentInstructionTypes.MODEL_SETTINGS }
         val spawnableInstructionCount = instructions.count { it.type == AgentInstructionTypes.SPAWNABLE_AGENTS }
         ensure(roleCount <= 1) {
             errors.instructionValidationFailed("At most one 'role' instruction is allowed")
         }
         ensure(mainCount <= 1) {
             errors.instructionValidationFailed("At most one 'main' instruction is allowed")
-        }
-        ensure(settingsCount <= 1) {
-            errors.instructionValidationFailed("At most one 'model_settings' instruction is allowed")
         }
         ensure(spawnableInstructionCount <= 1) {
             errors.instructionValidationFailed("At most one 'spawnable_agents' instruction is allowed")
@@ -535,7 +529,6 @@ class AgentRoleServiceImpl(
         spawnableAgentRoleIds = spawnableRoleIds,
         instructions = decodeInstructions(instructionsJson).mapNotNull {
             it.toDomain(
-                roleSettingsId = modelSettingsId,
                 ownerId = ownerId,
                 spawnableRoleIds = spawnableRoleIds,
                 roleToolIds = tools
@@ -570,7 +563,6 @@ class AgentRoleServiceImpl(
      * so forward-compatible payloads don't silently apply unrecognized semantics.
      *
      * @receiver The DTO to map.
-     * @param roleSettingsId The role's current `modelSettingsId`, bound to `model_settings` instructions.
      * @param ownerId Owner scope for dynamic target-summary resolution.
      * @param spawnableRoleIds Unordered target ids used by the dynamic marker.
      * @param roleToolIds Tool ids used to determine whether `spawn_agent` is enabled.
@@ -579,18 +571,10 @@ class AgentRoleServiceImpl(
      *         warnings — they indicate a database inconsistency).
      */
     private fun AgentInstructionDto.toDomain(
-        roleSettingsId: Long?,
         ownerId: Long,
         spawnableRoleIds: Set<Long>,
         roleToolIds: Set<Long>
     ): AgentInstruction? = when (type) {
-        AgentInstructionTypes.MODEL_SETTINGS ->
-            ModelSettingsInstruction(
-                name = name,
-                modelSettingsId = roleSettingsId ?: 0L,
-                messageLoader = ::resolveSettingsMessage
-            )
-
         AgentInstructionTypes.SPAWNABLE_AGENTS -> SpawnableAgentsInstruction(
             name = name,
             roleSummaryLoader = {
@@ -661,8 +645,6 @@ class AgentRoleServiceImpl(
     private suspend fun AgentInstruction.toDto(): AgentInstructionDto {
         loadMessage()
         return when (this) {
-            is ModelSettingsInstruction ->
-                AgentInstructionDto(AgentInstructionTypes.MODEL_SETTINGS, name, message)
             is SpawnableAgentsInstruction ->
                 AgentInstructionDto(AgentInstructionTypes.SPAWNABLE_AGENTS, name, message)
             is RoleInstruction ->
@@ -680,26 +662,6 @@ class AgentRoleServiceImpl(
                 )
 
             else -> error("Unknown AgentInstruction subtype: ${this::class.simpleName}")
-        }
-    }
-
-    /**
-     * Resolves the system text of a settings profile by id: `ChatModelSettings.systemMessage` or
-     * `ResponsesModelSettings.instructions`. Non-chat settings or missing settings yield an empty string.
-     *
-     * @param settingsId The settings identifier.
-     * @return The resolved system text (possibly empty).
-     */
-    private suspend fun resolveSettingsMessage(settingsId: Long): String {
-        if (settingsId <= 0L) return ""
-        return when (val result = settingsDao.getSettingsById(settingsId)) {
-            is Either.Right -> when (val settings = result.value) {
-                is ChatModelSettings -> settings.systemMessage ?: ""
-                is ResponsesModelSettings -> settings.instructions ?: ""
-                else -> ""
-            }
-
-            is Either.Left -> ""
         }
     }
 

@@ -65,7 +65,6 @@ class ModelSettingsServiceImplTest {
         id = 1L,
         name = "Default",
         modelId = 1L,
-        systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
         customParams = null
@@ -75,7 +74,6 @@ class ModelSettingsServiceImplTest {
         id = 2L,
         name = "Creative",
         modelId = 1L,
-        systemMessage = "You are a creative writing assistant.",
         temperature = 1.2f,
         maxTokens = 2000,
         customParams = Json.decodeFromString("""{"top_p": 0.9}""")
@@ -255,7 +253,6 @@ class ModelSettingsServiceImplTest {
             id = 0L,
             modelId = modelId,
             name = "Test Settings",
-            systemMessage = null,
             temperature = null,
             maxTokens = null,
             customParams = null

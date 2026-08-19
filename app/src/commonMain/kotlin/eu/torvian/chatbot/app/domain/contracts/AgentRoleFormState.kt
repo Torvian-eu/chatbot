@@ -24,10 +24,10 @@ import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
  * @property toolIds Set of tool-definition identifiers attached to the role.
  * @property spawnableAgentRoleIds Unordered role ids this role may spawn; may include the role's own id.
  * @property instructions Ordered instruction list ([AgentInstructionDto] flat entries). A
- *            `model_settings` entry can be placed anywhere and reordered like any other instruction;
- *            only its `message` is read-only (the server binds it to the role's own settings id and
- *            re-resolves it on every read), so the client never edits its content. `model_specific`
- *            entries are multi-instance (one per target model) and carry their own `modelId`.
+ *            `spawnable_agents` entry can be placed anywhere and reordered like any other instruction;
+ *            only its `message` is read-only (the server generates it from the selected spawn targets).
+ *            `model_specific` entries are multi-instance (one per target model) and carry their own
+ *            `modelId`.
  * @property errorMessage Optional validation error surfaced to the form.
  */
 data class AgentRoleFormState(
@@ -119,7 +119,6 @@ data class AgentRoleFormState(
 fun defaultInstructionName(type: String): String = when (type) {
     AgentInstructionTypes.ROLE -> "Role"
     AgentInstructionTypes.MAIN -> "Main instruction"
-    AgentInstructionTypes.MODEL_SETTINGS -> "Model instruction"
     AgentInstructionTypes.CUSTOM -> "Custom instruction"
     AgentInstructionTypes.SPAWNABLE_AGENTS -> "Available agents"
     AgentInstructionTypes.MODEL_SPECIFIC -> "Model-specific instruction"
@@ -128,11 +127,10 @@ fun defaultInstructionName(type: String): String = when (type) {
 
 /**
  * Creates an empty draft for a new role, pre-seeding one row per well-known instruction type so the
- * user sees the full expected starting shape: `role`, `main`, `model_settings`, `spawnable_agents`
- * and `custom`, in that order. The labels are the conventional defaults; the `model_settings` and
- * `spawnable_agents` rows' messages stay read-only (server-resolved) and the others are ready for the
- * user to fill in. `model_specific` is intentionally not pre-seeded: it is a multi-instance,
- * opt-in kind added by switching a row's type in the form.
+ * user sees the full expected starting shape: `role`, `main`, `spawnable_agents` and `custom`, in
+ * that order. The label for `spawnable_agents` rows' message stays read-only (server-resolved) and
+ * the others are ready for the user to fill in. `model_specific` is intentionally not pre-seeded:
+ * it is a multi-instance, opt-in kind added by switching a row's type in the form.
  *
  * @return A new [AgentRoleFormState] in NEW mode.
  */
@@ -150,11 +148,6 @@ fun createEmptyAgentRoleForm(): AgentRoleFormState = AgentRoleFormState(
             message = ""
         ),
         AgentInstructionDto(
-            type = AgentInstructionTypes.MODEL_SETTINGS,
-            name = defaultInstructionName(AgentInstructionTypes.MODEL_SETTINGS),
-            message = ""
-        ),
-        AgentInstructionDto(
             type = AgentInstructionTypes.SPAWNABLE_AGENTS,
             name = defaultInstructionName(AgentInstructionTypes.SPAWNABLE_AGENTS),
             message = ""
@@ -169,7 +162,7 @@ fun createEmptyAgentRoleForm(): AgentRoleFormState = AgentRoleFormState(
 
 /**
  * Creates an edit draft from an existing role, preserving its resolved instructions (including any
- * read-only `model_settings` entry returned by the server).
+ * read-only `spawnable_agents` entry returned by the server).
  *
  * @receiver The role to edit.
  * @return An [AgentRoleFormState] in EDIT mode pre-filled from the role.

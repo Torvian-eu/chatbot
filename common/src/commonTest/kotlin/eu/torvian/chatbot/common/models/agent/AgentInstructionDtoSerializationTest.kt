@@ -24,7 +24,6 @@ class AgentInstructionDtoSerializationTest {
             AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are an architect."),
             AgentInstructionDto(AgentInstructionTypes.MAIN, "Main instruction", "Project context"),
             AgentInstructionDto(AgentInstructionTypes.CUSTOM, "Tone", "Be concise"),
-            AgentInstructionDto(AgentInstructionTypes.MODEL_SETTINGS, "Model instruction", ""),
             AgentInstructionDto(AgentInstructionTypes.MODEL_SPECIFIC, "Swift mode", "Write idiomatic Swift",
                 custom = buildJsonObject { put("modelId", 5L) }),
             AgentInstructionDto(AgentInstructionTypes.SPAWNABLE_AGENTS, "Available agents", "")
@@ -52,7 +51,6 @@ class AgentInstructionDtoSerializationTest {
                 {"type":"role","name":"Role","message":"You are a senior architect."},
                 {"type":"main","name":"Main instruction","message":"AGENTS.md context"},
                 {"type":"custom","name":"Tone","message":"Be concise"},
-                {"type":"model_settings","name":"Model instruction","message":""},
                 {"type":"spawnable_agents","name":"Available agents","message":""}
             ]
         """.trimIndent()
@@ -64,7 +62,6 @@ class AgentInstructionDtoSerializationTest {
                 AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect."),
                 AgentInstructionDto(AgentInstructionTypes.MAIN, "Main instruction", "AGENTS.md context"),
                 AgentInstructionDto(AgentInstructionTypes.CUSTOM, "Tone", "Be concise"),
-                AgentInstructionDto(AgentInstructionTypes.MODEL_SETTINGS, "Model instruction", ""),
                 AgentInstructionDto(AgentInstructionTypes.SPAWNABLE_AGENTS, "Available agents", "")
             ),
             decoded

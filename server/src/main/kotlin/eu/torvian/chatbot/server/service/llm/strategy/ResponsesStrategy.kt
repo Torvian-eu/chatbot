@@ -89,9 +89,9 @@ class ResponsesStrategy(
             put("input", JsonArray(inputItems))
             put("stream", JsonPrimitive(settings.stream))
 
-            // The composed system prompt is the single source of truth. The settings' own `instructions`
-            // are deliberately NOT injected here: they are only ever included deliberately, as a
-            // ModelSettingsInstruction inside an agent role.
+            // The composed system prompt is the single source of truth. The system prompt is
+            // composed server-side from agent-role instructions (ROLE, MAIN, CUSTOM, MODEL_SPECIFIC,
+            // SPAWNABLE_AGENTS) and passed in as [systemMessage].
             if (!systemMessage.isNullOrBlank()) {
                 put("instructions", JsonPrimitive(systemMessage))
             }

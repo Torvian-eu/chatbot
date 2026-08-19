@@ -48,7 +48,6 @@ class RetryLLMApiClientTest {
         id = 1L,
         modelId = 1L,
         name = "test-settings",
-        systemMessage = null,
         temperature = 0.7f,
         maxTokens = 500,
         topP = 0.9f,

@@ -30,18 +30,15 @@ import kotlinx.serialization.json.put
 /**
  * The instruction types offered in the role form's type selector.
  *
- * `MODEL_SETTINGS` is included so the user can place it anywhere in the ordered instruction list:
- * its `message` is resolved server-side from the role's settings profile, so only that field stays
- * read-only — the type, label, position and removal remain user-controlled. `ROLE`, `MAIN`,
- * `MODEL_SETTINGS` and `SPAWNABLE_AGENTS` are single-instance (mirroring the server's validation);
- * `CUSTOM` and `MODEL_SPECIFIC` may appear more than once (each `MODEL_SPECIFIC` row must target a
- * distinct model, enforced by the per-row model picker).
+ * Every well-known, client-editable kind is included here. `ROLE`, `MAIN` and `SPAWNABLE_AGENTS`
+ * are single-instance (mirroring the server's validation); `CUSTOM` and `MODEL_SPECIFIC` may
+ * appear more than once (each `MODEL_SPECIFIC` row must target a distinct model, enforced by
+ * the per-row model picker).
  */
 private val EDITABLE_INSTRUCTION_TYPES = listOf(
     AgentInstructionTypes.ROLE,
     AgentInstructionTypes.MAIN,
     AgentInstructionTypes.CUSTOM,
-    AgentInstructionTypes.MODEL_SETTINGS,
     AgentInstructionTypes.SPAWNABLE_AGENTS,
     AgentInstructionTypes.MODEL_SPECIFIC
 )
@@ -50,9 +47,9 @@ private val EDITABLE_INSTRUCTION_TYPES = listOf(
  * Form dialog for creating or editing an agent role.
  *
  * The dialog binds the role's model, settings profile, tools and ordered instruction list. Switching
- * the model clears the settings selection because profiles belong to a specific model. A
- * `MODEL_SETTINGS` instruction can be placed anywhere in the list and reordered; only its message is
- * read-only (the server resolves it from the role's settings profile).
+ * the model clears the settings selection because profiles belong to a specific model. Each
+ * instruction row can be reordered, and `SPAWNABLE_AGENTS` rows keep their generated messages
+ * read-only (the server resolves them from the selected spawn targets).
  *
  * @param title Dialog title ("Add Agent Role" / "Edit Agent Role").
  * @param formState The current form draft.
@@ -245,11 +242,10 @@ fun AgentRoleFormDialog(
                             )
                         } else {
                             formState.instructions.forEachIndexed { index, instruction ->
-                                val isModelSettings = instruction.type == AgentInstructionTypes.MODEL_SETTINGS
                                 val isSpawnableAgents = instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS
                                 // Types not in EDITABLE_INSTRUCTION_TYPES render as fully read-only.
                                 val isUnknownType = instruction.type !in EDITABLE_INSTRUCTION_TYPES
-                                // Types already used by OTHER rows. ROLE/MAIN/MODEL_SETTINGS/SPAWNABLE_AGENTS
+                                // Types already used by OTHER rows. ROLE/MAIN/SPAWNABLE_AGENTS
                                 // are single-instance (the server rejects duplicates); CUSTOM and
                                 // MODEL_SPECIFIC are multi-instance.
                                 val unavailableTypes = formState.instructions
@@ -269,7 +265,7 @@ fun AgentRoleFormDialog(
                                     models = models,
                                     usedModelIds = usedModelIds,
                                     roleModelId = formState.modelId,
-                                    isMessageReadOnly = isModelSettings || isSpawnableAgents,
+                                    isMessageReadOnly = isSpawnableAgents,
                                     isFullyReadOnly = isUnknownType,
                                     unavailableTypes = unavailableTypes,
                                     canMoveUp = index > 0,
@@ -332,7 +328,7 @@ fun AgentRoleFormDialog(
 /**
  * Editor row for a single instruction entry.
  *
- * `ROLE`/`MAIN`/`CUSTOM` instructions are fully editable. `MODEL_SETTINGS` and `SPAWNABLE_AGENTS`
+ * `ROLE`/`MAIN`/`CUSTOM` instructions are fully editable. `SPAWNABLE_AGENTS`
  * entries keep their generated messages read-only; their type, name, position and removal remain
  * user-controlled. `MODEL_SPECIFIC` rows additionally expose a per-row model picker (each row must
  * target a distinct model). Future instruction kinds are rendered fully
@@ -348,7 +344,7 @@ fun AgentRoleFormDialog(
  * @param isMessageReadOnly Whether the message is generated server-side and must not be edited.
  * @param isFullyReadOnly Whether the whole row is read-only (unknown instruction kinds).
  * @param unavailableTypes Types already used by other rows. The single-instance kinds
- *            (`ROLE`/`MAIN`/`MODEL_SETTINGS`/`SPAWNABLE_AGENTS`) are offered only while not in this
+ *            (`ROLE`/`MAIN`/`SPAWNABLE_AGENTS`) are offered only while not in this
  *            set; `CUSTOM` and `MODEL_SPECIFIC` are always selectable because they are multi-instance.
  * @param canMoveUp Whether the up-move button is enabled.
  * @param canMoveDown Whether the down-move button is enabled.
@@ -423,7 +419,7 @@ private fun InstructionEditorRow(
                         modifier = Modifier.weight(1f),
                         itemText = { it },
                         // CUSTOM and MODEL_SPECIFIC are multi-instance; the single-instance kinds
-                        // (ROLE/MAIN/MODEL_SETTINGS/SPAWNABLE_AGENTS) are offered only while no other
+                        // (ROLE/MAIN/SPAWNABLE_AGENTS) are offered only while no other
                         // row already uses them, so the user cannot build a role the server would
                         // reject. MODEL_SPECIFIC additionally needs at least one unused target model.
                         itemEnabled = { type ->
@@ -468,7 +464,7 @@ private fun InstructionEditorRow(
             }
             // The message starts at three lines; the footer toggle expands it to reveal long content
             // (or collapses it back). Kept available for read-only rows too, so long server-resolved
-            // text (e.g. model settings) can be inspected.
+            // text (e.g. spawnable agents) can be inspected.
             ConfigTextField(
                 value = instruction.message,
                 onValueChange = { value ->
@@ -485,7 +481,7 @@ private fun InstructionEditorRow(
                     if (instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS) {
                         "Generated from the selected spawnable roles"
                     } else {
-                        "Auto-resolved from the role's settings profile"
+                        "Auto-generated"
                     }
                 } else {
                     ""
@@ -546,8 +542,6 @@ private fun instructionHint(instruction: AgentInstructionDto): String = when (in
         "Defines the assistant's role — e.g. 'You are a senior software architect'."
     AgentInstructionTypes.MAIN ->
         "Main instruction — sets the primary behavior or project context."
-    AgentInstructionTypes.MODEL_SETTINGS ->
-        "Auto — uses the system prompt from the role's settings profile."
     AgentInstructionTypes.CUSTOM ->
         "Free-form instruction — add anything you want the model to follow."
     AgentInstructionTypes.SPAWNABLE_AGENTS ->
