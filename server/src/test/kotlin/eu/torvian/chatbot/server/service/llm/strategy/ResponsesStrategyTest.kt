@@ -418,13 +418,26 @@ class ResponsesStrategyTest {
     }
 
     @Test
-    @DisplayName("prepareRequest should inject persisted reasoning items before their assistant message when replay is enabled")
+    @DisplayName("prepareRequest should inject sanitized reasoning items before their assistant message when replay is enabled")
     fun prepareRequest_injectsReasoningBeforeAssistant() {
         val reasoningItem = buildJsonObject {
             put("type", JsonPrimitive("reasoning"))
             put("id", JsonPrimitive("rs_1"))
-            put("encrypted_content", JsonPrimitive("opaque-encrypted"))
             put("status", JsonPrimitive("completed"))
+            put("format", JsonPrimitive("unknown"))
+            put("encrypted_content", JsonPrimitive("opaque-encrypted"))
+            put("summary", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", JsonPrimitive("summary_text"))
+                    put("text", JsonPrimitive("Thinking summary."))
+                })
+            })
+            put("content", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", JsonPrimitive("reasoning_text"))
+                    put("text", JsonPrimitive("Chain of thought."))
+                })
+            })
         }
         val messages = listOf(
             RawChatMessage.User("First question"),
@@ -447,9 +460,16 @@ class ResponsesStrategyTest {
 
         // user, reasoning, assistant, user
         assertEquals(4, input.size)
-        assertEquals("reasoning", input[1].jsonObject["type"]?.jsonPrimitive?.content)
-        assertEquals("rs_1", input[1].jsonObject["id"]?.jsonPrimitive?.content)
-        assertEquals("opaque-encrypted", input[1].jsonObject["encrypted_content"]?.jsonPrimitive?.content)
+        val replayedReasoning = input[1].jsonObject
+        assertEquals("reasoning", replayedReasoning["type"]?.jsonPrimitive?.content)
+        assertEquals("rs_1", replayedReasoning["id"]?.jsonPrimitive?.content)
+        // Output-only/provider-specific fields must be stripped so OpenAI does not reject the item.
+        assertNull(replayedReasoning["status"])
+        assertNull(replayedReasoning["format"])
+        // Replay-safe fields are preserved, including the opaque stateless-mode reasoning payload.
+        assertEquals("opaque-encrypted", replayedReasoning["encrypted_content"]?.jsonPrimitive?.content)
+        assertEquals("summary_text", replayedReasoning["summary"]?.jsonArray?.get(0)?.jsonObject?.get("type")?.jsonPrimitive?.content)
+        assertEquals("Chain of thought.", replayedReasoning["content"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content)
         assertEquals("assistant", input[2].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("Let me think.", input[2].jsonObject["content"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content)
     }

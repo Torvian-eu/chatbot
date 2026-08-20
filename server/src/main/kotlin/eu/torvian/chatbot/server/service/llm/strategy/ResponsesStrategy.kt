@@ -18,6 +18,7 @@ import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
 import eu.torvian.chatbot.server.service.llm.OpenRouterClientInfo
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
+import eu.torvian.chatbot.server.service.llm.sanitizeReasoningItem
 import io.ktor.http.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -152,8 +153,9 @@ class ResponsesStrategy(
         logger.debug("Processing Responses success response body: ${responseBody.take(500)}...")
         return try {
             // Decode the response body once as a raw object and pull out the pieces we care about into
-            // named locals for readability. Reasoning items are kept as raw JsonObjects so no field (e.g.
-            // `summary[].type` or `encrypted_content`) is lost during round-trip.
+            // named locals for readability. Reasoning items are kept as raw JsonObjects so the strategy
+            // boundary preserves all fields; sanitization to the replay-safe `input` shape happens later,
+            // when items are persisted or replayed.
             val response = json.decodeFromJsonElement(JsonObject.serializer(), Json.parseToJsonElement(responseBody))
             val outputItems = response["output"]?.jsonArray?.filterIsInstance<JsonObject>().orEmpty()
 
@@ -170,8 +172,8 @@ class ResponsesStrategy(
 
             val reasoningEffort = response["reasoning"]?.jsonObject?.get("effort")?.jsonPrimitive?.contentOrNull
 
-            // Reasoning items are emitted verbatim so higher layers can persist and replay them across turns.
-            // They are opaque (may include OpenAI-encrypted content) and never rendered.
+            // Reasoning items are emitted verbatim so higher layers can persist (sanitized) and replay them
+            // across turns. They are opaque (may include OpenAI-encrypted content) and never rendered.
             val reasoningItems = outputItems
                 .filter { it["type"]?.jsonPrimitive?.contentOrNull == "reasoning" }
 
@@ -306,8 +308,9 @@ class ResponsesStrategy(
                 if (dataContent == "[DONE]") return@collect
 
                 // Decode the streamed event once as a raw object and pull out the fields we care about into
-                // named locals. Reasoning items are kept as raw JsonObjects so no field (e.g. `summary[].type`
-                // or `encrypted_content`) is lost during round-trip.
+                // named locals. Reasoning items are kept as raw JsonObjects so the strategy boundary preserves
+                // all fields; sanitization to the replay-safe `input` shape happens later, when items are
+                // persisted or replayed.
                 val event = json.decodeFromJsonElement(JsonObject.serializer(), Json.parseToJsonElement(dataContent))
                 val eventType = event["type"]?.jsonPrimitive?.contentOrNull
                 val delta = event["delta"]?.jsonPrimitive?.contentOrNull
@@ -368,9 +371,9 @@ class ResponsesStrategy(
 
                     "response.output_item.done" -> {
                         // The full output item is delivered on this event. For reasoning items, capture the
-                        // raw item object verbatim (preserving e.g. `summary[].type` and `encrypted_content`)
-                        // so higher layers can accumulate and persist it faithfully for replay. The payload is
-                        // opaque and never rendered.
+                        // raw item object (preserving e.g. `summary[].type`) so higher layers can persist and
+                        // replay it. The payload is opaque and never rendered; it is sanitized to the
+                        // replay-safe `input` shape at persistence/replay time.
                         when (item?.get("type")?.jsonPrimitive?.contentOrNull) {
                             "reasoning" -> emit(
                                 LLMStreamChunk.ReasoningDone(
@@ -466,11 +469,12 @@ class ResponsesStrategy(
 
         is RawChatMessage.Assistant -> buildList {
             // Reasoning items must precede the assistant content they belong to in the Responses `input`.
-            // They are emitted verbatim (preserving e.g. `encrypted_content`) so the model picks up prior
-            // chain-of-thought. Gated by the `replayReasoning` setting.
+            // They are emitted sanitized to the Responses `input` schema: provider output-only fields (e.g.
+            // `status`, `format`) that OpenAI rejects as unknown parameters are stripped, so both freshly
+            // captured and legacy persisted items replay safely. Gated by the `replayReasoning` setting.
             if (replayReasoning) {
                 reasoningItems?.forEach { reasoningItem ->
-                    add(reasoningItem)
+                    add(sanitizeReasoningItem(reasoningItem))
                 }
             }
 
