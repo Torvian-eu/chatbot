@@ -313,11 +313,22 @@ class DefaultConversationTurnPersistenceTest {
     }
 
     /**
-     * Verifies assistant-message persistence forwards reasoning items to the DAO when present.
+     * Verifies assistant-message persistence forwards sanitized reasoning items to the DAO when present.
      */
     @Test
-    fun `saveAssistantMessage forwards reasoning items to the DAO`() = runTest {
+    fun `saveAssistantMessage forwards sanitized reasoning items to the DAO`() = runTest {
         val reasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_1")
+                put("status", "completed")
+                put("encrypted_content", "opaque")
+            }
+        )
+        // The persistence layer strips provider output-only fields (e.g. `status`) before storing, so
+        // the DAO must receive the sanitized item rather than the raw payload. The opaque
+        // `encrypted_content` payload is replay-safe and must be preserved.
+        val sanitizedReasoningItems = listOf(
             buildJsonObject {
                 put("type", "reasoning")
                 put("id", "rs_1")
@@ -334,7 +345,7 @@ class DefaultConversationTurnPersistenceTest {
             childrenMessageIds = emptyList(),
             modelId = testModel.id,
             settingsId = testSettings.id,
-            reasoningItems = reasoningItems
+            reasoningItems = sanitizedReasoningItems
         )
 
         coEvery {
@@ -348,7 +359,7 @@ class DefaultConversationTurnPersistenceTest {
                 testSettings.id,
                 any(),
                 any(),
-                reasoningItems
+                sanitizedReasoningItems
             )
         } returns savedAssistantMessage.right()
         coEvery { sessionDao.updateSessionLeafMessageId(1L, savedAssistantMessage.id) } returns Unit.right()
@@ -368,11 +379,19 @@ class DefaultConversationTurnPersistenceTest {
     }
 
     /**
-     * Verifies reasoning can be attached to an already-persisted assistant message (streaming completion).
+     * Verifies reasoning can be attached to an already-persisted assistant message (streaming completion),
+     * sanitized before it reaches the DAO.
      */
     @Test
-    fun `updateAssistantMessageReasoning delegates to the DAO`() = runTest {
+    fun `updateAssistantMessageReasoning delegates sanitized reasoning to the DAO`() = runTest {
         val reasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_2")
+                put("status", "completed")
+            }
+        )
+        val sanitizedReasoningItems = listOf(
             buildJsonObject {
                 put("type", "reasoning")
                 put("id", "rs_2")
@@ -388,14 +407,14 @@ class DefaultConversationTurnPersistenceTest {
             childrenMessageIds = emptyList(),
             modelId = testModel.id,
             settingsId = testSettings.id,
-            reasoningItems = reasoningItems
+            reasoningItems = sanitizedReasoningItems
         )
 
-        coEvery { messageDao.updateAssistantMessageReasoning(12L, reasoningItems) } returns updated.right()
+        coEvery { messageDao.updateAssistantMessageReasoning(12L, sanitizedReasoningItems) } returns updated.right()
 
         val result = persistence.updateAssistantMessageReasoning(12L, reasoningItems)
 
         assertEquals(updated, result)
-        coVerify(exactly = 1) { messageDao.updateAssistantMessageReasoning(12L, reasoningItems) }
+        coVerify(exactly = 1) { messageDao.updateAssistantMessageReasoning(12L, sanitizedReasoningItems) }
     }
 }

@@ -59,7 +59,8 @@ sealed class RawChatMessage {
      * @property toolCalls List of tool calls made by the assistant (null if none)
      * @property reasoningItems For Responses-capable models, the raw reasoning output items that preceded this
      *            assistant message, captured so the strategy can interleave them into a future request's `input`.
-     *            These are opaque payloads and must not be logged or rendered. `null` when absent.
+     *            These are opaque payloads and must not be logged or rendered; they are sanitized to the
+     *            Responses `input` schema before being persisted or replayed. `null` when absent.
      */
     @Serializable
     data class Assistant(

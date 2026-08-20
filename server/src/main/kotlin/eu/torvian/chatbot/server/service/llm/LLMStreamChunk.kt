@@ -58,9 +58,10 @@ sealed class LLMStreamChunk {
      * Represents a completed, opaque reasoning output item for a reasoning-capable model during streaming.
      *
      * Reasoning items carry the chain-of-thought produced by the model; the raw items (including any
-     * `encrypted_content`) are opaque and must be persisted verbatim so they can be replayed into a future
+     * `encrypted_content`) are opaque and must be persisted so they can be replayed into a future
      * request's `input`. The item is emitted as the provider completes each reasoning output item and is
-     * never rendered to the user.
+     * never rendered to the user. When persisted or replayed, the item is sanitized to the Responses
+     * `input` schema (output-only fields such as `status` are stripped).
      *
      * @property reasoningItem Raw reasoning output item (e.g. `{"type":"reasoning",...}`) completed.
      */
