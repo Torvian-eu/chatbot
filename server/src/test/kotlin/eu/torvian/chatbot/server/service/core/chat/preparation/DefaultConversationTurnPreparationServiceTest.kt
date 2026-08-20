@@ -95,7 +95,6 @@ class DefaultConversationTurnPreparationServiceTest {
         id = 1L,
         name = "Default",
         modelId = 1L,
-        systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
         customParams = null,
@@ -302,7 +301,7 @@ class DefaultConversationTurnPreparationServiceTest {
         )
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery { agentRoleService.getAgentRoleById(testSession.agentRoleId!!) } returns roleWithInstructions.right()
-        coEvery { systemPromptComposer.compose(roleWithInstructions.instructions) } returns "composed system"
+        coEvery { systemPromptComposer.compose(roleWithInstructions) } returns "composed system"
         coEvery { llmModelService.getModelById(testModel.id) } returns testModel.right()
         coEvery { modelSettingsService.getSettingsById(streamingSettings.id) } returns streamingSettings.right()
         coEvery { llmProviderService.getProviderById(testModel.providerId) } returns testProvider.right()
@@ -320,7 +319,7 @@ class DefaultConversationTurnPreparationServiceTest {
         assertEquals("test-api-key", preparedTurn.llmConfig.apiKey)
         assertEquals("composed system", preparedTurn.llmConfig.systemMessage)
         assertEquals(null, preparedTurn.llmConfig.tools)
-        coVerify(exactly = 1) { systemPromptComposer.compose(roleWithInstructions.instructions) }
+        coVerify(exactly = 1) { systemPromptComposer.compose(roleWithInstructions) }
         coVerify(exactly = 1) { llmProviderService.getProviderById(testModel.providerId) }
         coVerify(exactly = 1) { credentialManager.getCredential(testProvider.apiKeyId!!) }
         coVerify(exactly = 0) { toolService.getToolsByIds(any()) }
@@ -353,7 +352,7 @@ class DefaultConversationTurnPreparationServiceTest {
         )
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery { agentRoleService.getAgentRoleById(testSession.agentRoleId!!) } returns roleWithTools.right()
-        coEvery { systemPromptComposer.compose(roleWithTools.instructions) } returns ""
+        coEvery { systemPromptComposer.compose(roleWithTools) } returns ""
         coEvery { llmModelService.getModelById(toolCallingModel.id) } returns toolCallingModel.right()
         coEvery { modelSettingsService.getSettingsById(testSettings.id) } returns testSettings.right()
         coEvery { llmProviderService.getProviderById(toolCallingModel.providerId) } returns testProvider.right()

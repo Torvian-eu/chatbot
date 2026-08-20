@@ -20,34 +20,36 @@ import eu.torvian.chatbot.app.domain.contracts.defaultInstructionName
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.common.models.agent.modelSpecificId
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * The instruction types offered in the role form's type selector.
  *
- * `MODEL_SETTINGS` is included so the user can place it anywhere in the ordered instruction list:
- * its `message` is resolved server-side from the role's settings profile, so only that field stays
- * read-only — the type, label, position and removal remain user-controlled. `ROLE`, `MAIN` and
- * `MODEL_SETTINGS` are single-instance (mirroring the server's validation); only `CUSTOM` may appear
- * more than once.
+ * Every well-known, client-editable kind is included here. `ROLE`, `MAIN` and `SPAWNABLE_AGENTS`
+ * are single-instance (mirroring the server's validation); `CUSTOM` and `MODEL_SPECIFIC` may
+ * appear more than once (each `MODEL_SPECIFIC` row must target a distinct model, enforced by
+ * the per-row model picker).
  */
 private val EDITABLE_INSTRUCTION_TYPES = listOf(
     AgentInstructionTypes.ROLE,
     AgentInstructionTypes.MAIN,
     AgentInstructionTypes.CUSTOM,
-    AgentInstructionTypes.MODEL_SETTINGS,
-    AgentInstructionTypes.SPAWNABLE_AGENTS
+    AgentInstructionTypes.SPAWNABLE_AGENTS,
+    AgentInstructionTypes.MODEL_SPECIFIC
 )
 
 /**
  * Form dialog for creating or editing an agent role.
  *
  * The dialog binds the role's model, settings profile, tools and ordered instruction list. Switching
- * the model clears the settings selection because profiles belong to a specific model. A
- * `MODEL_SETTINGS` instruction can be placed anywhere in the list and reordered; only its message is
- * read-only (the server resolves it from the role's settings profile).
+ * the model clears the settings selection because profiles belong to a specific model. Each
+ * instruction row can be reordered, and `SPAWNABLE_AGENTS` rows keep their generated messages
+ * read-only (the server resolves them from the selected spawn targets).
  *
  * @param title Dialog title ("Add Agent Role" / "Edit Agent Role").
  * @param formState The current form draft.
@@ -240,21 +242,30 @@ fun AgentRoleFormDialog(
                             )
                         } else {
                             formState.instructions.forEachIndexed { index, instruction ->
-                                val isModelSettings = instruction.type == AgentInstructionTypes.MODEL_SETTINGS
                                 val isSpawnableAgents = instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS
-                                // Unknown/future instruction kinds stay fully read-only as a defensive
-                                // fallback until the client learns their semantics.
+                                // Types not in EDITABLE_INSTRUCTION_TYPES render as fully read-only.
                                 val isUnknownType = instruction.type !in EDITABLE_INSTRUCTION_TYPES
-                                // Types already used by OTHER rows. ROLE/MAIN/MODEL_SETTINGS are
-                                // single-instance (the server rejects duplicates); CUSTOM is multi-instance.
+                                // Types already used by OTHER rows. ROLE/MAIN/SPAWNABLE_AGENTS
+                                // are single-instance (the server rejects duplicates); CUSTOM and
+                                // MODEL_SPECIFIC are multi-instance.
                                 val unavailableTypes = formState.instructions
                                     .filterIndexed { i, _ -> i != index }
                                     .map { it.type }
                                     .toSet()
+                                // Model ids already targeted by OTHER model_specific rows; the per-row
+                                // model picker disables them so each target model stays unique.
+                                val usedModelIds = formState.instructions
+                                    .filterIndexed { i, _ -> i != index }
+                                    .filter { it.type == AgentInstructionTypes.MODEL_SPECIFIC }
+                                    .mapNotNull { it.modelSpecificId() }
+                                    .toSet()
                                 InstructionEditorRow(
                                     index = index,
                                     instruction = instruction,
-                                    isMessageReadOnly = isModelSettings || isSpawnableAgents,
+                                    models = models,
+                                    usedModelIds = usedModelIds,
+                                    roleModelId = formState.modelId,
+                                    isMessageReadOnly = isSpawnableAgents,
                                     isFullyReadOnly = isUnknownType,
                                     unavailableTypes = unavailableTypes,
                                     canMoveUp = index > 0,
@@ -317,18 +328,24 @@ fun AgentRoleFormDialog(
 /**
  * Editor row for a single instruction entry.
  *
- * `ROLE`/`MAIN`/`CUSTOM` instructions are fully editable. `MODEL_SETTINGS` and `SPAWNABLE_AGENTS`
+ * `ROLE`/`MAIN`/`CUSTOM` instructions are fully editable. `SPAWNABLE_AGENTS`
  * entries keep their generated messages read-only; their type, name, position and removal remain
- * user-controlled. Unknown/future instruction kinds are rendered fully
- * read-only as a defensive fallback until the client learns their semantics.
+ * user-controlled. `MODEL_SPECIFIC` rows additionally expose a per-row model picker (each row must
+ * target a distinct model). Future instruction kinds are rendered fully
+ * read-only until the client learns their semantics.
  *
  * @param index Position in the instruction list.
  * @param instruction The instruction being edited.
+ * @param models Chat-capable models available for a `model_specific` row's target picker.
+ * @param usedModelIds Model ids already targeted by OTHER `model_specific` rows; those options are
+ *            disabled in the picker so each target model stays unique.
+ * @param roleModelId The role's current model id, used as the default target when adding a new
+ *            `model_specific` row (falls back to an unused model or the first available).
  * @param isMessageReadOnly Whether the message is generated server-side and must not be edited.
  * @param isFullyReadOnly Whether the whole row is read-only (unknown instruction kinds).
  * @param unavailableTypes Types already used by other rows. The single-instance kinds
- *            (`ROLE`/`MAIN`/`MODEL_SETTINGS`) are offered only while not in this set; `CUSTOM` is
- *            always selectable because it is multi-instance.
+ *            (`ROLE`/`MAIN`/`SPAWNABLE_AGENTS`) are offered only while not in this
+ *            set; `CUSTOM` and `MODEL_SPECIFIC` are always selectable because they are multi-instance.
  * @param canMoveUp Whether the up-move button is enabled.
  * @param canMoveDown Whether the down-move button is enabled.
  * @param onUpdate Callback with the updated instruction.
@@ -340,6 +357,9 @@ fun AgentRoleFormDialog(
 private fun InstructionEditorRow(
     index: Int,
     instruction: AgentInstructionDto,
+    models: List<LLMModel>,
+    usedModelIds: Set<Long>,
+    roleModelId: Long?,
     isMessageReadOnly: Boolean,
     isFullyReadOnly: Boolean,
     unavailableTypes: Set<String>,
@@ -381,37 +401,33 @@ private fun InstructionEditorRow(
                     ConfigDropdown(
                         selectedItem = instruction.type,
                         onItemSelected = { type ->
-                            val typeChanged = type != instruction.type
-                            onUpdate(
-                                instruction.copy(
-                                    type = type,
-                                    // Selecting a type re-labels the row with the type's conventional
-                                    // default name so the row stays recognizably named.
-                                    name = if (typeChanged) defaultInstructionName(type) else instruction.name,
-                                    // Switching to MODEL_SETTINGS clears the draft message: the server
-                                    // resolves the real text from the role's settings profile, so any
-                                    // typed content would be misleading (and is ignored on read).
-                                    message = if (typeChanged && type in setOf(
-                                            AgentInstructionTypes.MODEL_SETTINGS,
-                                            AgentInstructionTypes.SPAWNABLE_AGENTS
-                                        )
-                                    ) {
-                                        ""
-                                    } else {
-                                        instruction.message
-                                    }
+                            // Only rebuild the subtype when the kind actually changes; re-selecting the
+                            // current kind leaves the row (and its message) untouched.
+                            if (type != instruction.type) {
+                                onUpdate(
+                                    buildInstructionForType(
+                                        type = type,
+                                        models = models,
+                                        usedModelIds = usedModelIds,
+                                        roleModelId = roleModelId
+                                    )
                                 )
-                            )
+                            }
                         },
                         items = EDITABLE_INSTRUCTION_TYPES,
                         label = "Type",
                         modifier = Modifier.weight(1f),
                         itemText = { it },
-                        // CUSTOM is multi-instance; the single-instance kinds (ROLE/MAIN/MODEL_SETTINGS)
-                        // are offered only while no other row already uses them, so the user cannot
-                        // build a role the server would reject.
+                        // CUSTOM and MODEL_SPECIFIC are multi-instance; the single-instance kinds
+                        // (ROLE/MAIN/SPAWNABLE_AGENTS) are offered only while no other
+                        // row already uses them, so the user cannot build a role the server would
+                        // reject. MODEL_SPECIFIC additionally needs at least one unused target model.
                         itemEnabled = { type ->
-                            type == AgentInstructionTypes.CUSTOM || type !in unavailableTypes
+                            when (type) {
+                                AgentInstructionTypes.CUSTOM -> true
+                                AgentInstructionTypes.MODEL_SPECIFIC -> models.any { it.id !in usedModelIds }
+                                else -> type !in unavailableTypes
+                            }
                         }
                     )
                 }
@@ -427,18 +443,33 @@ private fun InstructionEditorRow(
             if (!isFullyReadOnly) {
                 ConfigTextField(
                     value = instruction.name,
-                    onValueChange = { value -> onUpdate(instruction.copy(name = value)) },
+                    onValueChange = { value -> onUpdate(instruction.withName(value)) },
                     label = "Name"
+                )
+            }
+            // A model_specific row carries its own target model; the picker disables models already
+            // targeted by another row (the server rejects duplicate targets).
+            if (instruction.type == AgentInstructionTypes.MODEL_SPECIFIC) {
+                val currentModelId = instruction.modelSpecificId()
+                ConfigDropdown(
+                    selectedItem = models.find { it.id == currentModelId },
+                    onItemSelected = { model ->
+                        onUpdate(instruction.copy(custom = buildJsonObject { put("modelId", model.id) }))
+                    },
+                    items = models,
+                    label = "Applies to model",
+                    itemText = { it.displayName ?: it.name },
+                    itemEnabled = { model -> model.id !in usedModelIds || model.id == currentModelId }
                 )
             }
             // The message starts at three lines; the footer toggle expands it to reveal long content
             // (or collapses it back). Kept available for read-only rows too, so long server-resolved
-            // text (e.g. model settings) can be inspected.
+            // text (e.g. spawnable agents) can be inspected.
             ConfigTextField(
                 value = instruction.message,
                 onValueChange = { value ->
                     if (!isMessageReadOnly && !isFullyReadOnly) {
-                        onUpdate(instruction.copy(message = value))
+                        onUpdate(instruction.withMessage(value))
                     }
                 },
                 label = "Message",
@@ -450,7 +481,7 @@ private fun InstructionEditorRow(
                     if (instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS) {
                         "Generated from the selected spawnable roles"
                     } else {
-                        "Auto-resolved from the role's settings profile"
+                        "Auto-generated"
                     }
                 } else {
                     ""
@@ -470,7 +501,7 @@ private fun InstructionEditorRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = instructionHint(instruction.type),
+                    text = instructionHint(instruction),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -501,29 +532,79 @@ private fun InstructionEditorRow(
 }
 
 /**
- * Short user-facing hint describing what an instruction type does, shown in the row's footer.
+ * Short user-facing hint describing what an instruction does, shown in the row's footer.
  *
- * @param type The [AgentInstructionTypes] key.
- * @return A one- to two-line hint; unknown keys get a generic read-only note.
+ * @param instruction The instruction DTO to describe.
+ * @return A one- to two-line hint; unknown kinds get a generic read-only note.
  */
-private fun instructionHint(type: String): String = when (type) {
+private fun instructionHint(instruction: AgentInstructionDto): String = when (instruction.type) {
     AgentInstructionTypes.ROLE ->
         "Defines the assistant's role — e.g. 'You are a senior software architect'."
-
     AgentInstructionTypes.MAIN ->
         "Main instruction — sets the primary behavior or project context."
-
-    AgentInstructionTypes.MODEL_SETTINGS ->
-        "Auto — uses the system prompt from the role's settings profile."
-
     AgentInstructionTypes.CUSTOM ->
         "Free-form instruction — add anything you want the model to follow."
-
     AgentInstructionTypes.SPAWNABLE_AGENTS ->
         "Auto — advertises the roles selected above to the spawn_agent tool."
-
+    AgentInstructionTypes.MODEL_SPECIFIC ->
+        "Applies only when the role runs on the selected model."
     else -> "Unknown instruction type — read-only."
 }
+
+/**
+ * Copies this instruction with a new [AgentInstructionDto.name], preserving all other fields.
+ *
+ * @receiver The instruction to copy.
+ * @param name The new label.
+ * @return A copy of the same DTO with the updated name.
+ */
+private fun AgentInstructionDto.withName(name: String): AgentInstructionDto = copy(name = name)
+
+/**
+ * Copies this instruction with a new [AgentInstructionDto.message], preserving all other fields.
+ *
+ * @receiver The instruction to copy.
+ * @param message The new message text.
+ * @return A copy of the same DTO with the updated message.
+ */
+private fun AgentInstructionDto.withMessage(message: String): AgentInstructionDto = copy(message = message)
+
+/**
+ * Builds a fresh [AgentInstructionDto] with default values for the given [type].
+ *
+ * Unlike [withName] / [withMessage] (which preserve all other fields), this always starts with an
+ * empty message and type-specific defaults — switching a row's kind should not carry over stale
+ * text or custom data from the previous type.
+ *
+ * @param type The target [AgentInstructionTypes] key.
+ * @param models Chat-capable models available for `model_specific` target selection.
+ * @param usedModelIds Model ids already targeted by other `model_specific` rows.
+ * @param roleModelId The role's current model id, used as a fallback target when the type is
+ *            `MODEL_SPECIFIC` and no unused model is available.
+ * @return A new [AgentInstructionDto] with defaults for the given [type].
+ */
+private fun buildInstructionForType(
+    type: String,
+    models: List<LLMModel>,
+    usedModelIds: Set<Long>,
+    roleModelId: Long?
+): AgentInstructionDto = AgentInstructionDto(
+    type = type,
+    name = defaultInstructionName(type),
+    message = "",
+    custom = if (type == AgentInstructionTypes.MODEL_SPECIFIC) {
+        // The role's own model (if not already targeted by another row) is preferred,
+        // then the first unused model, then the first available. The picker's itemEnabled
+        // guard already prevents selecting MODEL_SPECIFIC when no models are available,
+        // so targetId is effectively guaranteed to be non-null here.
+        val targetId = roleModelId?.takeIf { it !in usedModelIds }
+            ?: models.firstOrNull { it.id !in usedModelIds }?.id
+            ?: models.firstOrNull()?.id
+        targetId?.let { buildJsonObject { put("modelId", it) } }
+    } else {
+        null
+    }
+)
 
 /**
  * Swaps two elements in a list. Used by the instruction reorder buttons.

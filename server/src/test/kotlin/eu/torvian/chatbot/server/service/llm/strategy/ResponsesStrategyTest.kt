@@ -38,7 +38,6 @@ class ResponsesStrategyTest {
         id = 1L,
         modelId = responsesModel.id,
         name = "Default Responses Settings",
-        instructions = "You are a helpful assistant.",
         temperature = 0.8f,
         maxOutputTokens = 200,
         reasoningEffort = "high",
@@ -56,7 +55,7 @@ class ResponsesStrategyTest {
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
         val apiKey = "sk-test"
 
-        val result = strategy.prepareRequest(messages, responsesModel, provider, responsesSettings, apiKey, systemMessage = responsesSettings.instructions)
+        val result = strategy.prepareRequest(messages, responsesModel, provider, responsesSettings, apiKey, systemMessage = "You are a helpful assistant.")
 
         assertTrue(result.isRight(), "Expected success result")
         val config = result.getOrNull()
@@ -106,7 +105,7 @@ class ResponsesStrategyTest {
         )
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
 
-        val result = strategy.prepareRequest(messages, responsesModel, provider, responsesSettings, "sk-test", systemMessage = responsesSettings.instructions)
+        val result = strategy.prepareRequest(messages, responsesModel, provider, responsesSettings, "sk-test", systemMessage = "You are a helpful assistant.")
 
         assertTrue(result.isRight())
         val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)
@@ -418,7 +417,7 @@ class ResponsesStrategyTest {
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
         val replaySettings = responsesSettings.copy(replayReasoning = true)
 
-        val result = strategy.prepareRequest(messages, responsesModel, provider, replaySettings, "sk-test", systemMessage = replaySettings.instructions)
+        val result = strategy.prepareRequest(messages, responsesModel, provider, replaySettings, "sk-test", systemMessage = "You are a helpful assistant.")
 
         assertTrue(result.isRight())
         val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)
@@ -451,7 +450,7 @@ class ResponsesStrategyTest {
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
         val noReplaySettings = responsesSettings.copy(replayReasoning = false)
 
-        val result = strategy.prepareRequest(messages, responsesModel, provider, noReplaySettings, "sk-test", systemMessage = noReplaySettings.instructions)
+        val result = strategy.prepareRequest(messages, responsesModel, provider, noReplaySettings, "sk-test", systemMessage = "You are a helpful assistant.")
 
         assertTrue(result.isRight())
         val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)

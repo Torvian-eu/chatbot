@@ -135,7 +135,6 @@ object TestDefaults {
         id = 1L,
         modelId = llmModel1.id,
         name = "Default GPT-4 Settings",
-        systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
         customParams = Json.decodeFromString("""{"frequency_penalty": 0.1}""")
@@ -145,7 +144,6 @@ object TestDefaults {
         id = 2L,
         modelId = llmModel2.id,
         name = "Default Claude-3 Settings",
-        systemMessage = "You are Claude, a helpful AI assistant.",
         temperature = 0.8f,
         maxTokens = 2000,
         customParams = null

@@ -189,7 +189,6 @@ fun ModelSettingsDetailsBody(
  */
 @Composable
 private fun ChatSettingsDetails(settings: ChatModelSettings) {
-    DetailRow("System Message", settings.systemMessage ?: "Not set")
     DetailRow("Temperature", settings.temperature?.toString() ?: "Default")
     DetailRow("Max Tokens", settings.maxTokens?.toString() ?: "Default")
     DetailRow("Top P", settings.topP?.toString() ?: "Default")
@@ -216,7 +215,6 @@ private fun EmbeddingSettingsDetails(settings: EmbeddingModelSettings) {
  */
 @Composable
 private fun ResponsesSettingsDetails(settings: ResponsesModelSettings) {
-    DetailRow("Instructions", settings.instructions ?: "Not set")
     DetailRow("Temperature", settings.temperature?.toString() ?: "Default")
     DetailRow("Max Output Tokens", settings.maxOutputTokens?.toString() ?: "Default")
     DetailRow("Top P", settings.topP?.toString() ?: "Default")

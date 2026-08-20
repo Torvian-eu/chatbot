@@ -8,6 +8,7 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
+import eu.torvian.chatbot.common.models.agent.modelSpecificId
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
@@ -35,7 +36,7 @@ import eu.torvian.chatbot.server.service.core.agent.AgentInstruction
 import eu.torvian.chatbot.server.service.core.agent.AgentRole
 import eu.torvian.chatbot.server.service.core.agent.CustomInstruction
 import eu.torvian.chatbot.server.service.core.agent.MainInstruction
-import eu.torvian.chatbot.server.service.core.agent.ModelSettingsInstruction
+import eu.torvian.chatbot.server.service.core.agent.ModelSpecificInstruction
 import eu.torvian.chatbot.server.service.core.agent.RoleInstruction
 import eu.torvian.chatbot.server.service.core.agent.AgentRoleSummary
 import eu.torvian.chatbot.server.service.core.agent.SpawnableAgentsInstruction
@@ -44,6 +45,8 @@ import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.DeleteAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.UpdateAgentRoleError
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
@@ -53,7 +56,7 @@ import org.apache.logging.log4j.Logger
  * Uses Arrow's `either { }`/`ensure`/`withError` pattern for typed logical errors and wraps all
  * operations in the shared [TransactionScope]. Instructions are persisted as a raw JSON string
  * (`instructions_json`) so serialization stays at this service boundary: the stored shape equals the
- * wire shape (flat [AgentInstructionDto] list), and the server domain [AgentInstruction] hierarchy is
+ * wire shape (polymorphic [AgentInstructionDto] list), and the server domain [AgentInstruction] hierarchy is
  * reconstructed per read. The role's tool set is stored in the normalized `agent_role_tools` join
  * table through [agentRoleToolDao] (full replacement on create/update, cascade-deleted with the role
  * or a tool definition).
@@ -63,8 +66,7 @@ import org.apache.logging.log4j.Logger
  * @property agentRoleSpawnableRoleDao DAO for the role-to-role spawn allow-list.
  * @property agentRoleOwnershipDao DAO for the `agent_role_owners` table (per-user ownership).
  * @property modelDao DAO used to validate model references.
- * @property settingsDao DAO used to validate settings references and resolve settings-bound
- *            instruction messages.
+ * @property settingsDao DAO used to validate settings references (existence, chat-capability, and model match).
  * @property toolDefinitionDao DAO used to validate tool references.
  * @property json Shared JSON codec used to (de)serialize the `instructions_json` column.
  * @property transactionScope Transaction wrapper that keeps validation + persistence atomic.
@@ -390,7 +392,6 @@ class AgentRoleServiceImpl(
 
         val roleCount = instructions.count { it.type == AgentInstructionTypes.ROLE }
         val mainCount = instructions.count { it.type == AgentInstructionTypes.MAIN }
-        val settingsCount = instructions.count { it.type == AgentInstructionTypes.MODEL_SETTINGS }
         val spawnableInstructionCount = instructions.count { it.type == AgentInstructionTypes.SPAWNABLE_AGENTS }
         ensure(roleCount <= 1) {
             errors.instructionValidationFailed("At most one 'role' instruction is allowed")
@@ -398,11 +399,20 @@ class AgentRoleServiceImpl(
         ensure(mainCount <= 1) {
             errors.instructionValidationFailed("At most one 'main' instruction is allowed")
         }
-        ensure(settingsCount <= 1) {
-            errors.instructionValidationFailed("At most one 'model_settings' instruction is allowed")
-        }
         ensure(spawnableInstructionCount <= 1) {
             errors.instructionValidationFailed("At most one 'spawnable_agents' instruction is allowed")
+        }
+
+        // `model_specific` is multi-instance (one per target model) but each instance must reference a
+        // distinct model: two entries for the same model would be redundant and ambiguous at compose
+        // time, where the composer keeps only the matching instance.
+        val modelSpecificModelIds = instructions
+            .filter { it.type == AgentInstructionTypes.MODEL_SPECIFIC }
+            .mapNotNull { it.modelSpecificId() }
+        ensure(modelSpecificModelIds.distinct().size == modelSpecificModelIds.size) {
+            errors.instructionValidationFailed(
+                "Each 'model_specific' instruction must reference a distinct model"
+            )
         }
     }
 
@@ -517,9 +527,8 @@ class AgentRoleServiceImpl(
         modelSettingsId = modelSettingsId,
         tools = tools,
         spawnableAgentRoleIds = spawnableRoleIds,
-        instructions = decodeInstructions(instructionsJson).map {
+        instructions = decodeInstructions(instructionsJson).mapNotNull {
             it.toDomain(
-                roleSettingsId = modelSettingsId,
                 ownerId = ownerId,
                 spawnableRoleIds = spawnableRoleIds,
                 roleToolIds = tools
@@ -547,28 +556,25 @@ class AgentRoleServiceImpl(
     )
 
     /**
-     * Maps a flat [AgentInstructionDto] to its server domain subtype.
+     * Maps an [AgentInstructionDto] to its server domain subtype.
+     *
+     * Dispatches on the DTO's [AgentInstructionDto.type] string (a flat, non-polymorphic DTO).
+     * The `else` branch logs a warning and returns null for unknown or unrecognized kinds,
+     * so forward-compatible payloads don't silently apply unrecognized semantics.
      *
      * @receiver The DTO to map.
-     * @param roleSettingsId The role's current `modelSettingsId`, bound to `model_settings` instructions.
      * @param ownerId Owner scope for dynamic target-summary resolution.
      * @param spawnableRoleIds Unordered target ids used by the dynamic marker.
      * @param roleToolIds Tool ids used to determine whether `spawn_agent` is enabled.
-     * @return The corresponding [AgentInstruction].
+     * @return The corresponding [AgentInstruction], or null when the kind is unrecognized or a
+     *         `model_specific` instruction is missing its `modelId` in `custom` (both logged as
+     *         warnings — they indicate a database inconsistency).
      */
     private fun AgentInstructionDto.toDomain(
-        roleSettingsId: Long?,
         ownerId: Long,
         spawnableRoleIds: Set<Long>,
         roleToolIds: Set<Long>
-    ): AgentInstruction = when (type) {
-        AgentInstructionTypes.MODEL_SETTINGS ->
-            ModelSettingsInstruction(
-                name = name,
-                modelSettingsId = roleSettingsId ?: 0L,
-                messageLoader = ::resolveSettingsMessage
-            )
-
+    ): AgentInstruction? = when (type) {
         AgentInstructionTypes.SPAWNABLE_AGENTS -> SpawnableAgentsInstruction(
             name = name,
             roleSummaryLoader = {
@@ -593,37 +599,69 @@ class AgentRoleServiceImpl(
 
         AgentInstructionTypes.ROLE -> RoleInstruction(name, message)
         AgentInstructionTypes.MAIN -> MainInstruction(name, message)
-        else -> CustomInstruction(name, message)
+        AgentInstructionTypes.CUSTOM -> CustomInstruction(name, message)
+        AgentInstructionTypes.MODEL_SPECIFIC -> {
+            val targetModelId = modelSpecificId()
+            if (targetModelId == null) {
+                // A model_specific instruction without a modelId is a data integrity issue: the
+                // stored JSON was malformed or partially migrated. Log it and drop the instruction
+                // rather than crashing role retrieval.
+                logger.warn(
+                    "Dropping model_specific instruction '{}' for role retrieval: missing 'modelId' in custom",
+                    name
+                )
+                null
+            } else {
+                ModelSpecificInstruction(
+                    name = name,
+                    message = message,
+                    modelId = targetModelId
+                )
+            }
+        }
+        // Unknown/unrecognized kinds: log and drop rather than silently applying them as generic
+        // text, so data integrity issues surface instead of being hidden.
+        else -> {
+            logger.warn(
+                "Dropping unrecognized instruction '{}' (type '{}') for role retrieval:"
+                + " unrecognized kind",
+                name,
+                type
+            )
+            null
+        }
     }
 
     /**
      * Converts a domain [AgentInstruction] into a wire [AgentInstructionDto], resolving its message.
+     *
+     * The `when` covers all known domain subtypes; the `else` throws an `IllegalStateException`
+     * for unknown subtypes, since encountering one indicates a programming error (a new subtype
+     * was added without updating this mapping).
      *
      * @receiver The domain instruction to convert.
      * @return The corresponding [AgentInstructionDto] with a resolved [AgentInstructionDto.message].
      */
     private suspend fun AgentInstruction.toDto(): AgentInstructionDto {
         loadMessage()
-        return AgentInstructionDto(type = type, name = name, message = message)
-    }
+        return when (this) {
+            is SpawnableAgentsInstruction ->
+                AgentInstructionDto(AgentInstructionTypes.SPAWNABLE_AGENTS, name, message)
+            is RoleInstruction ->
+                AgentInstructionDto(AgentInstructionTypes.ROLE, name, message)
+            is MainInstruction ->
+                AgentInstructionDto(AgentInstructionTypes.MAIN, name, message)
+            is CustomInstruction ->
+                AgentInstructionDto(AgentInstructionTypes.CUSTOM, name, message)
+            is ModelSpecificInstruction ->
+                AgentInstructionDto(
+                    type = AgentInstructionTypes.MODEL_SPECIFIC,
+                    name = name,
+                    message = message,
+                    custom = buildJsonObject { put("modelId", modelId) }
+                )
 
-    /**
-     * Resolves the system text of a settings profile by id: `ChatModelSettings.systemMessage` or
-     * `ResponsesModelSettings.instructions`. Non-chat settings or missing settings yield an empty string.
-     *
-     * @param settingsId The settings identifier.
-     * @return The resolved system text (possibly empty).
-     */
-    private suspend fun resolveSettingsMessage(settingsId: Long): String {
-        if (settingsId <= 0L) return ""
-        return when (val result = settingsDao.getSettingsById(settingsId)) {
-            is Either.Right -> when (val settings = result.value) {
-                is ChatModelSettings -> settings.systemMessage ?: ""
-                is ResponsesModelSettings -> settings.instructions ?: ""
-                else -> ""
-            }
-
-            is Either.Left -> ""
+            else -> error("Unknown AgentInstruction subtype: ${this::class.simpleName}")
         }
     }
 
@@ -636,7 +674,7 @@ class AgentRoleServiceImpl(
     private fun encodeInstructions(instructions: List<AgentInstructionDto>): String = json.encodeToString(instructions)
 
     /**
-     * Deserializes the `instructions_json` column into the flat instruction DTO list (the wire shape).
+     * Deserializes the `instructions_json` column into the instruction DTO list (the wire shape).
      *
      * @param instructionsJson The JSON array string.
      * @return The instruction DTOs; an empty list when the stored value is unparseable.

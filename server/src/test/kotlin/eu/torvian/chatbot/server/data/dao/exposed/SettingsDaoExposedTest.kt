@@ -95,7 +95,6 @@ class SettingsDaoExposedTest {
         assertEquals(testSettings1.id, settings.id, "Expected matching ID")
         assertEquals(testSettings1.modelId, settings.modelId, "Expected matching modelId")
         assertEquals(testSettings1.name, settings.name, "Expected matching name")
-        assertEquals(testSettings1.systemMessage, settings.systemMessage, "Expected matching systemMessage")
         assertEquals(testSettings1.temperature, settings.temperature, "Expected matching temperature")
         assertEquals(testSettings1.maxTokens, settings.maxTokens, "Expected matching maxTokens")
         assertEquals(testSettings1.customParams, settings.customParams, "Expected matching customParams")
@@ -146,7 +145,6 @@ class SettingsDaoExposedTest {
         assertTrue(settings1 is ChatModelSettings, "Expected ChatModelSettings type")
         assertEquals(testSettings1.modelId, settings1.modelId)
         assertEquals(testSettings1.name, settings1.name)
-        assertEquals(testSettings1.systemMessage, settings1.systemMessage)
         assertEquals(testSettings1.temperature, settings1.temperature)
         assertEquals(testSettings1.maxTokens, settings1.maxTokens)
         assertEquals(testSettings1.customParams, settings1.customParams)
@@ -210,7 +208,6 @@ class SettingsDaoExposedTest {
             id = 0L, // Will be set by database
             modelId = testModel1.id,
             name = "Test Settings",
-            systemMessage = "Test system message",
             temperature = 0.5f,
             maxTokens = 500,
             customParams = Json.decodeFromString("""{"test": "value"}""")
@@ -222,7 +219,6 @@ class SettingsDaoExposedTest {
         assertTrue(settings is ChatModelSettings, "Expected ChatModelSettings type")
         assertEquals("Test Settings", settings.name)
         assertEquals(testModel1.id, settings.modelId)
-        assertEquals("Test system message", settings.systemMessage)
         assertEquals(0.5f, settings.temperature)
         assertEquals(500, settings.maxTokens)
         assertEquals(Json.decodeFromString("""{"test": "value"}"""), settings.customParams)
@@ -240,7 +236,6 @@ class SettingsDaoExposedTest {
             id = 0L,
             modelId = 999L,
             name = "Test Settings",
-            systemMessage = "Test system message",
             temperature = 0.5f,
             maxTokens = 500,
             customParams = Json.decodeFromString("""{"test": "value"}""")
@@ -268,7 +263,6 @@ class SettingsDaoExposedTest {
         // Update the settings
         val updatedSettings = testSettings1.copy(
             name = "Updated Settings",
-            systemMessage = "Updated system message",
             temperature = 0.9f,
             maxTokens = 1500,
             customParams = Json.decodeFromString("""{"updated": "value"}""")
@@ -285,7 +279,6 @@ class SettingsDaoExposedTest {
         assertTrue(retrievedSettings is ChatModelSettings, "Expected ChatModelSettings type")
         assertNotNull(retrievedSettings, "Expected non-null settings")
         assertEquals(updatedSettings.name, retrievedSettings.name, "Expected updated name")
-        assertEquals(updatedSettings.systemMessage, retrievedSettings.systemMessage, "Expected updated systemMessage")
         assertEquals(updatedSettings.temperature, retrievedSettings.temperature, "Expected updated temperature")
         assertEquals(updatedSettings.maxTokens, retrievedSettings.maxTokens, "Expected updated maxTokens")
         assertEquals(
@@ -310,7 +303,6 @@ class SettingsDaoExposedTest {
             id = 999L,
             modelId = testModel1.id,
             name = "Non-existent Settings",
-            systemMessage = "Test system message",
             temperature = 0.5f,
             maxTokens = 500,
             customParams = null

@@ -9,8 +9,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.common.models.agent.modelSpecificId
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -108,10 +110,9 @@ fun AgentRoleDetailPage(
                 role.instructions.forEachIndexed { index, instruction ->
                     InstructionCard(
                         index = index + 1,
-                        type = instruction.type,
-                        name = instruction.name,
-                        message = instruction.message,
-                        isReadOnly = instruction.type == AgentInstructionTypes.MODEL_SETTINGS
+                        instruction = instruction,
+                        modelsById = modelsById,
+                        currentModelId = role.modelId
                     )
                 }
             }
@@ -120,24 +121,43 @@ fun AgentRoleDetailPage(
 }
 
 /**
- * Card rendering a single instruction entry with its type tag and resolved message.
+ * Card rendering a single instruction entry with its kind tag and resolved message.
+ *
+ * `SPAWNABLE_AGENTS` entries are tagged as server-resolved (`auto`). A
+ * `MODEL_SPECIFIC` entry shows its target model name and an "active"/"inactive" badge depending on
+ * whether the role is currently running on that model; unknown kinds are rendered generically.
  *
  * @param index One-based position in the instruction list.
- * @param type Well-known or custom instruction type key.
- * @param name Human-readable instruction label.
- * @param message Resolved instruction text.
- * @param isReadOnly Whether the entry is bound server-side (model settings) and thus not editable.
+ * @param instruction The instruction DTO to display.
+ * @param modelsById Model lookup used to render a `model_specific` entry's target model name.
+ * @param currentModelId The role's current model id, used for the active/inactive badge.
  * @param modifier Modifier applied to the card.
  */
 @Composable
 private fun InstructionCard(
     index: Int,
-    type: String,
-    name: String,
-    message: String,
-    isReadOnly: Boolean,
+    instruction: AgentInstructionDto,
+    modelsById: Map<Long, LLMModel>,
+    currentModelId: Long?,
     modifier: Modifier = Modifier
 ) {
+    // Server-resolved kinds are not user-editable (their text is generated on every read).
+    val isReadOnly = instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS
+    val statusTag = when (instruction.type) {
+        AgentInstructionTypes.SPAWNABLE_AGENTS -> "auto (spawnable agents)"
+        AgentInstructionTypes.MODEL_SPECIFIC -> {
+            val modelId = instruction.modelSpecificId()
+            val modelName = modelsById[modelId]?.displayName
+                ?: modelsById[modelId]?.name
+                ?: "model #$modelId"
+            if (modelId == currentModelId) {
+                "active · $modelName"
+            } else {
+                "inactive · $modelName"
+            }
+        }
+        else -> instruction.type
+    }
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -158,25 +178,21 @@ private fun InstructionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "$index. $name",
+                    text = "$index. ${instruction.name}",
                     style = MaterialTheme.typography.titleSmall
                 )
-                if (isReadOnly) {
-                    Text(
-                        text = "auto (model settings)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Text(
-                        text = type,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                Text(
+                    text = statusTag,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isReadOnly) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
+                )
             }
             Text(
-                text = message.ifBlank { "(empty)" },
+                text = instruction.message.ifBlank { "(empty)" },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

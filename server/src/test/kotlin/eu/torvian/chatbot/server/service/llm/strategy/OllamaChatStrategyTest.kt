@@ -39,7 +39,6 @@ class OllamaChatStrategyTest {
         id = 1L,
         modelId = testModel.id,
         name = "Default",
-        systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
         stream = false, // Configure for non-streaming mode
@@ -61,7 +60,7 @@ class OllamaChatStrategyTest {
             provider = testProvider,
             settings = testSettings,
             apiKey = null,
-            systemMessage = testSettings.systemMessage
+            systemMessage = "You are a helpful assistant."
         )
 
         // Assert
@@ -98,7 +97,7 @@ class OllamaChatStrategyTest {
     @Test
     fun `prepareRequest should work without system message`() {
         // Arrange
-        val settingsWithoutSystem = testSettings.copy(systemMessage = null)
+        val settingsWithoutSystem = testSettings
 
         // Act
         val result = strategy.prepareRequest(

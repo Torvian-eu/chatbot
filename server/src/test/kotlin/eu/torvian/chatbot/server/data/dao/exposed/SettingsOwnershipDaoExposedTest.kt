@@ -83,7 +83,6 @@ class SettingsOwnershipDaoExposedTest {
         id = 1L,
         modelId = 1L,
         name = "Default Settings",
-        systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
         customParams = null
@@ -93,7 +92,6 @@ class SettingsOwnershipDaoExposedTest {
         id = 2L,
         modelId = 1L,
         name = "Creative Settings",
-        systemMessage = "Be creative and imaginative.",
         temperature = 0.9f,
         maxTokens = 2000,
         customParams = null
@@ -103,7 +101,6 @@ class SettingsOwnershipDaoExposedTest {
         id = 3L,
         modelId = 1L,
         name = "Precise Settings",
-        systemMessage = "Be precise and accurate.",
         temperature = 0.3f,
         maxTokens = 500,
         customParams = null

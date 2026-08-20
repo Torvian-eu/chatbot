@@ -30,7 +30,6 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val modelConfig = TestDefaults.llmModel1.copy(name = "gpt-4o") // Use a specific model name
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "test-key-id", baseUrl = "https://api.openai.com/v1")
         val settings = TestDefaults.modelSettings1.copy(
-            systemMessage = "You are a helpful assistant.", // Add system message
             temperature = 0.9f,
             maxTokens = 500,
             customParams = Json.decodeFromString("""{"top_p": 0.8, "frequency_penalty": 0.2, "stop": ["\nUser:", "<|end_of_text|>"]}""")
@@ -38,7 +37,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-api-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = "You are a helpful assistant.")
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -102,7 +101,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
             provider = provider,
             settings = TestDefaults.modelSettings1,
             apiKey = apiKey,
-            systemMessage = TestDefaults.modelSettings1.systemMessage
+            systemMessage = "You are a helpful assistant."
         )
 
         assertTrue(result.isRight(), "Expected success result")
@@ -132,7 +131,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = null // API key is null
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = "You are a helpful assistant.")
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -180,7 +179,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = null // API key is null
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = "You are a helpful assistant.")
 
         // Then
         assertTrue(result.isLeft(), "Expected error result")
@@ -218,7 +217,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = "You are a helpful assistant.")
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -270,7 +269,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = "You are a helpful assistant.")
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -317,7 +316,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = "You are a helpful assistant.")
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -374,7 +373,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = null)
 
         // Then
         assertTrue(result.isRight(), "Expected success result")
@@ -426,7 +425,7 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
         val apiKey = "sk-test-key"
 
         // When
-        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = settings.systemMessage)
+        val result = strategy.prepareRequest(messages, modelConfig, provider, settings, apiKey, systemMessage = null)
 
         // Then
         assertTrue(result.isRight(), "Expected success result")

@@ -37,8 +37,6 @@ sealed class ModelSettings {
  * @property id Unique identifier for the settings profile (Database PK).
  * @property modelId Foreign key to the associated [LLMModel].
  * @property name The display name of the settings profile (e.g., "Default", "Creative").
- * @property systemMessage The system message/prompt to include in the conversation context,
- *                         guiding the model's behavior and persona.
  * @property temperature Sampling temperature for text generation. Controls randomness: higher values
  *                          mean more random outputs, lower values mean more deterministic outputs.
  *                          Typically between 0.0 and 2.0.
@@ -58,7 +56,6 @@ data class ChatModelSettings(
     override val id: Long,
     override val modelId: Long,
     override val name: String,
-    val systemMessage: String? = null,
     val temperature: Float? = null,
     val maxTokens: Int? = null,
     val topP: Float? = null,
@@ -93,8 +90,6 @@ data class ChatModelSettings(
  * @property id Unique identifier for the settings profile (Database PK).
  * @property modelId Foreign key to the associated [LLMModel].
  * @property name The display name of the settings profile (e.g., "Default", "Creative").
- * @property instructions The system-level prompt/instructions sent via the Responses `instructions` field,
- *                        guiding the model's overall behavior. Equivalent to a system message.
  * @property temperature Sampling temperature for text generation. Controls randomness: higher values
  *                          mean more random outputs, lower values mean more deterministic outputs.
  *                          Typically between 0.0 and 2.0.
@@ -121,7 +116,6 @@ data class ResponsesModelSettings(
     override val id: Long,
     override val modelId: Long,
     override val name: String,
-    val instructions: String? = null,
     val temperature: Float? = null,
     val maxOutputTokens: Int? = null,
     val topP: Float? = null,

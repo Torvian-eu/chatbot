@@ -182,8 +182,8 @@ class DefaultConversationTurnPreparationService(
 
             // The composed system prompt is the single source of truth for the system message. When the
             // role has no instructions (or all are blank) this is empty, and strategies omit the system
-            // message entirely — the settings' own system text is never injected.
-            val systemMessage = systemPromptComposer.compose(role.instructions)
+            // message entirely.
+            val systemMessage = systemPromptComposer.compose(role)
 
             PreparedConversationTurn(
                 session = session,
