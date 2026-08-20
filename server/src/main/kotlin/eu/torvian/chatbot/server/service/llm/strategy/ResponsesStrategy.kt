@@ -108,11 +108,12 @@ class ResponsesStrategy(
                 })
             }
 
-            // Reasoning context is replayed statelessly via the persisted `input` items (see
-            // `replayReasoning`), so responses are never stored server-side and no `previous_response_id`
-            // is threaded. This is required for OpenRouter (which rejects `store:true`) and keeps OpenAI
-            // retries idempotent. The settings `store` knob is deliberately overridden here.
-            put("store", JsonPrimitive(false))
+            // OpenRouter rejects `store:true` on its Responses-compatible endpoint, so requests routed
+            // through it always disable server-side storage regardless of the settings knob. All other
+            // providers honor `settings.store`; when enabled, the response is stored server-side and can
+            // be referenced via `previous_response_id` in later turns.
+            val store = provider.type != LLMProviderType.OPENROUTER && settings.store
+            put("store", JsonPrimitive(store))
 
             if (!tools.isNullOrEmpty()) {
                 val apiTools = tools.map { mapToolDefinition(it) }

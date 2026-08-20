@@ -73,9 +73,9 @@ class ResponsesStrategyTest {
         val body = Json.decodeFromString<JsonObject>(config.body as String)
         assertEquals("gpt-5.4", body["model"]?.jsonPrimitive?.content)
         assertEquals("You are a helpful assistant.", body["instructions"]?.jsonPrimitive?.content)
-        // Reasoning is replayed statelessly, so responses are never stored server-side; the settings `store`
-        // knob is deliberately overridden to `false` (required for OpenRouter and keeps retries idempotent).
-        assertEquals(false, body["store"]?.jsonPrimitive?.boolean)
+        // The `store` knob is honored for OpenAI: `responsesSettings.store` is true, so the response
+        // is stored server-side and may be referenced via `previous_response_id` in later turns.
+        assertEquals(true, body["store"]?.jsonPrimitive?.boolean)
         assertEquals("high", body["reasoning"]?.jsonObject?.get("effort")?.jsonPrimitive?.content)
 
         val input = body["input"]?.jsonArray
@@ -92,6 +92,25 @@ class ResponsesStrategyTest {
         // Function call output item
         assertEquals("function_call_output", input[2].jsonObject["type"]?.jsonPrimitive?.content)
         assertEquals("call_1", input[2].jsonObject["call_id"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    @DisplayName("prepareRequest should honor the store setting for OpenAI providers")
+    fun prepareRequest_openAiHonorsStoreSetting() {
+        val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
+        val noStoreSettings = responsesSettings.copy(store = false)
+
+        val result = strategy.prepareRequest(
+            messages = listOf(RawChatMessage.User("Hello")),
+            modelConfig = responsesModel,
+            provider = provider,
+            settings = noStoreSettings,
+            apiKey = "sk-test"
+        )
+
+        assertTrue(result.isRight())
+        val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)
+        assertEquals(false, body["store"]?.jsonPrimitive?.boolean)
     }
 
     @Test
@@ -146,6 +165,8 @@ class ResponsesStrategyTest {
         val body = Json.decodeFromString<JsonObject>(config.body as String)
         assertEquals("openai/gpt-5.4", body["model"]?.jsonPrimitive?.content)
         assertEquals(1, body["input"]?.jsonArray?.size)
+        // OpenRouter rejects `store:true`, so it is forced off even though `responsesSettings.store` is true.
+        assertEquals(false, body["store"]?.jsonPrimitive?.boolean)
     }
 
     @Test
