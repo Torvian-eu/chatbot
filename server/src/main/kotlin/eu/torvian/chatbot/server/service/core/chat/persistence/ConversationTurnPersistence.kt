@@ -39,8 +39,9 @@ interface ConversationTurnPersistence {
      * @param settings Settings metadata associated with the assistant message.
      * @param agentRoleId Optional agent role associated with the assistant message (provenance); null
      *                    when the message was not produced through an agent role.
-     * @param reasoningItems Optional raw reasoning items emitted with the assistant message. Must be `null` for
-     *                       non-reasoning models; opaque, never logged or rendered.
+     * @param reasoningItems Optional replay-safe reasoning items emitted with the assistant message. Must be
+     *                       `null` for non-reasoning models; callers must sanitize them before persistence.
+     *                       Opaque, never logged or rendered.
      * @return Saved assistant message and the refreshed parent message.
      */
     suspend fun saveAssistantMessage(
@@ -69,8 +70,8 @@ interface ConversationTurnPersistence {
      * Persists the reasoning items attached to an existing assistant message.
      *
      * @param messageId Assistant message to update.
-     * @param reasoningItems Raw reasoning items to persist. `null` clears any stored reasoning. Opaque payload;
-     *                       never logged or rendered.
+     * @param reasoningItems Replay-safe reasoning items to persist. `null` clears any stored reasoning.
+     *                       Opaque payload; never logged or rendered.
      * @return Updated assistant message.
      */
     suspend fun updateAssistantMessageReasoning(
