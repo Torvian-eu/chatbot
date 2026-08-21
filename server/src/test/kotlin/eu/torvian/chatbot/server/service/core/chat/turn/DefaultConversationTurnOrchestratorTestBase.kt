@@ -11,7 +11,9 @@ import eu.torvian.chatbot.server.service.core.chat.context.DefaultChatContextBui
 import eu.torvian.chatbot.server.service.core.chat.persistence.ConversationTurnPersistence
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
+import eu.torvian.chatbot.server.service.llm.ReasoningCapabilityRecorder
 import io.mockk.clearMocks
+import io.mockk.coEvery
 import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -33,6 +35,9 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
 
     /** Mocked persistence collaborator owning message and tool-call persistence. */
     protected lateinit var conversationTurnPersistence: ConversationTurnPersistence
+
+    /** Mocked reasoning-capability recorder invoked after each assistant response. */
+    protected lateinit var reasoningCapabilityRecorder: ReasoningCapabilityRecorder
 
     /** Orchestrator under test, recreated before each test. */
     protected lateinit var orchestrator: DefaultConversationTurnOrchestrator
@@ -93,6 +98,10 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
         llmApiClient = mockk()
         toolCallOrchestrator = mockk()
         conversationTurnPersistence = mockk()
+        reasoningCapabilityRecorder = mockk()
+        // Recording is a no-op by default so tests not focused on reasoning do not need explicit stubs;
+        // dedicated tests verify the recorder is invoked with the expected model and reasoning items.
+        coEvery { reasoningCapabilityRecorder.record(any(), any()) } returns Unit
 
         orchestrator = DefaultConversationTurnOrchestrator(
             llmApiClient = llmApiClient,
@@ -102,7 +111,8 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
                 fileReferenceContentBuilder = DefaultFileReferenceContentBuilder(),
                 toolResultContentBuilder = DefaultToolResultContentBuilder()
             ),
-            conversationTurnPersistence = conversationTurnPersistence
+            conversationTurnPersistence = conversationTurnPersistence,
+            reasoningCapabilityRecorder = reasoningCapabilityRecorder
         )
     }
 
@@ -111,6 +121,6 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
      */
     @AfterEach
     fun tearDown() {
-        clearMocks(llmApiClient, toolCallOrchestrator, conversationTurnPersistence)
+        clearMocks(llmApiClient, toolCallOrchestrator, conversationTurnPersistence, reasoningCapabilityRecorder)
     }
 }

@@ -221,5 +221,7 @@ class DefaultChatContextBuilderTest {
         assertNotNull(reconstructedAssistant.reasoningItems)
         assertEquals(1, reconstructedAssistant.reasoningItems.size)
         assertEquals("opaque", reconstructedAssistant.reasoningItems[0]["encrypted_content"]?.jsonPrimitive?.content)
+        // The source model id is carried onto the raw message so replay can gate encrypted payloads.
+        assertEquals(5L, reconstructedAssistant.reasoningModelId)
     }
 }

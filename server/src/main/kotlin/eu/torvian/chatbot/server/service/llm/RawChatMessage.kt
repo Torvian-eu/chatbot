@@ -61,12 +61,17 @@ sealed class RawChatMessage {
      *            assistant message, captured so the strategy can interleave them into a future request's `input`.
      *            These are opaque payloads and must not be logged or rendered; they are sanitized to the
      *            Responses `input` schema before being persisted or replayed. `null` when absent.
+     * @property reasoningModelId ID of the model that produced [reasoningItems], used at replay time to decide
+     *            whether an encrypted reasoning payload may be sent back to the current model (encrypted
+     *            payloads are only replayable to the exact model that produced them). `null` when the source
+     *            is unknown (e.g. the model was deleted) or when there are no reasoning items.
      */
     @Serializable
     data class Assistant(
         override val content: String?,
         val toolCalls: List<ToolCall>? = null,
-        val reasoningItems: List<JsonObject>? = null
+        val reasoningItems: List<JsonObject>? = null,
+        val reasoningModelId: Long? = null
     ) : RawChatMessage() {
         override val role: String = "assistant"
 

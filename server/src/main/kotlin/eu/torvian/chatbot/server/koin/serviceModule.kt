@@ -32,6 +32,8 @@ import eu.torvian.chatbot.server.service.core.chat.turn.DefaultConversationTurnO
 import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
+import eu.torvian.chatbot.server.service.llm.DefaultReasoningCapabilityRecorder
+import eu.torvian.chatbot.server.service.llm.ReasoningCapabilityRecorder
 import eu.torvian.chatbot.server.service.email.LoggingMailService
 import eu.torvian.chatbot.server.service.email.MailService
 import eu.torvian.chatbot.server.service.email.SmtpMailService
@@ -76,6 +78,7 @@ fun serviceModule() = module {
     single<ToolResultContentBuilder> { DefaultToolResultContentBuilder() }
     single<ChatContextBuilder> { DefaultChatContextBuilder(get(), get()) }
     single<ConversationTurnPersistence> { DefaultConversationTurnPersistence(get(), get(), get(), get()) }
+    single<ReasoningCapabilityRecorder> { DefaultReasoningCapabilityRecorder(get()) }
     single<ConversationTurnPreparationService> {
         DefaultConversationTurnPreparationService(
             messageDao = get(),
@@ -91,7 +94,7 @@ fun serviceModule() = module {
         )
     }
     single<ConversationTurnOrchestrator> {
-        DefaultConversationTurnOrchestrator(get(), get(), get(), get(), get())
+        DefaultConversationTurnOrchestrator(get(), get(), get(), get(), get(), get())
     }
     single<ChatService> { ChatServiceImpl(get(), get()) }
     single<ToolService> { ToolServiceImpl(get(), get(), get(), get(), get(), get()) }

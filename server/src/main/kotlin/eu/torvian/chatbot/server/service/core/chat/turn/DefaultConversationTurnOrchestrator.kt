@@ -31,6 +31,8 @@ import java.util.concurrent.CancellationException
  * @property toolResultContentBuilder Serializer for completed tool results appended back into context.
  * @property chatContextBuilder Builder that reconstructs the threaded LLM context.
  * @property conversationTurnPersistence Collaborator that owns message and tool-call persistence workflow.
+ * @property reasoningCapabilityRecorder Collaborator that records a model's reasoning mode (encrypted vs
+ *            plaintext) from observed reasoning items, used to adapt reasoning replay across model switches.
  */
 class DefaultConversationTurnOrchestrator(
     private val llmApiClient: LLMApiClient,
@@ -38,6 +40,7 @@ class DefaultConversationTurnOrchestrator(
     private val toolResultContentBuilder: ToolResultContentBuilder,
     private val chatContextBuilder: ChatContextBuilder,
     private val conversationTurnPersistence: ConversationTurnPersistence,
+    private val reasoningCapabilityRecorder: ReasoningCapabilityRecorder,
 ) : ConversationTurnOrchestrator {
 
     companion object {
@@ -135,7 +138,10 @@ class DefaultConversationTurnOrchestrator(
                 currentContext = currentContext,
                 assistantContent = assistantStep.assistantContent,
                 completedToolCalls = completedToolCalls,
-                reasoningItems = assistantStep.reasoningItems
+                reasoningItems = assistantStep.reasoningItems,
+                // Within one turn the model never changes, so in-turn reasoning is always same-model; this
+                // lets encrypted reasoning replay to the current model on the follow-up LLM call.
+                reasoningModelId = request.llmConfig.model.id
             )
         }
     }
@@ -219,6 +225,10 @@ class DefaultConversationTurnOrchestrator(
         }
 
         logger.info("LLM API call successful for session ${request.session.id}")
+
+        // Record the model's reasoning mode (encrypted vs plaintext) from the observed reasoning items so
+        // later replays can adapt what is sent to this model. Detection is a cheap, one-time write.
+        reasoningCapabilityRecorder.record(request.llmConfig.model, llmCompletionResult.reasoningItems)
 
         val choice = llmCompletionResult.choices.firstOrNull() ?: run {
             logger.error("LLM API returned successful response with no choices for session ${request.session.id}")
@@ -348,6 +358,12 @@ class DefaultConversationTurnOrchestrator(
                         accumulatedReasoningItems
                     )
                 }
+                // Record the model's reasoning mode from the accumulated reasoning items (if any) so later
+                // replays can adapt what is sent to this model. Detection is a cheap, one-time write.
+                reasoningCapabilityRecorder.record(
+                    request.llmConfig.model,
+                    accumulatedReasoningItems.takeIf { it.isNotEmpty() }
+                )
                 val updatedAssistantMessage = conversationTurnPersistence.updateAssistantMessageContent(
                     messageId = assistantMessage.id,
                     content = finalContent
@@ -458,13 +474,16 @@ class DefaultConversationTurnOrchestrator(
      * @param completedToolCalls Completed tool calls whose calls and results should be appended.
      * @param reasoningItems Raw reasoning items emitted with the assistant step, forwarded so the next
      *            follow-up LLM request can replay chain-of-thought. Opaque payload; never logged or rendered.
+     * @param reasoningModelId ID of the model that produced [reasoningItems] (the current turn's model),
+     *            used to gate encrypted reasoning replay on the follow-up LLM request.
      * @return Updated raw context used for the next assistant iteration.
      */
     private fun appendAssistantAndToolResults(
         currentContext: List<RawChatMessage>,
         assistantContent: String?,
         completedToolCalls: List<ToolCall>,
-        reasoningItems: List<JsonObject>?
+        reasoningItems: List<JsonObject>?,
+        reasoningModelId: Long?
     ): List<RawChatMessage> {
         // Derive both provider messages from the same ordered collection so a result can never
         // be emitted without its matching assistant tool call. Every recorded call is replayed,
@@ -478,7 +497,8 @@ class DefaultConversationTurnOrchestrator(
                     arguments = toolCall.input
                 )
             },
-            reasoningItems = reasoningItems
+            reasoningItems = reasoningItems,
+            reasoningModelId = reasoningModelId
         )
         // A provider transcript must not contain a result without its replayed assistant call.
         val toolResultMessages = completedToolCalls.map { toolCall ->

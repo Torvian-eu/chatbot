@@ -29,6 +29,18 @@ fun LLMModel.getCapabilityDetails(capabilityKey: String): JsonElement? {
 }
 
 /**
+ * Reads the [LLMModelCapabilities.REASONING_ENCRYPTED] capability of the [LLMModel], which records
+ * whether the model delivers its reasoning items as opaque `encrypted_content` payloads rather than
+ * plaintext `content`.
+ *
+ * @return `true` when the capability is set to encrypted, `false` when it is set to plaintext, or
+ *         `null` when the capability is absent (unknown). An unknown mode must be treated as
+ *         unencrypted (`false`) by replay logic.
+ */
+fun LLMModel.isReasoningEncrypted(): Boolean? =
+    getCapabilityDetails(LLMModelCapabilities.REASONING_ENCRYPTED)?.jsonPrimitive?.booleanOrNull
+
+/**
  * Retrieves a specific String value from an [LLMModel]'s capability details.
  * Useful for extracting parameters from a capability object (e.g., version, format).
  *

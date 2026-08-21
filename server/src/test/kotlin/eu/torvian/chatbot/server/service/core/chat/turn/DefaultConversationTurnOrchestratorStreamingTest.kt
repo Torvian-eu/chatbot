@@ -202,6 +202,11 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
         coVerify(exactly = 1) {
             conversationTurnPersistence.updateAssistantMessageReasoning(assistantStarted.id, reasoningItems)
         }
+        // The capability recorder must observe the model and its accumulated reasoning items so later
+        // replays can adapt what is sent to this model.
+        coVerify(exactly = 1) {
+            reasoningCapabilityRecorder.record(reasoningModel, reasoningItems)
+        }
     }
 
     /**
