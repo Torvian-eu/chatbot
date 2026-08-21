@@ -373,6 +373,15 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
             buildJsonObject {
                 put("type", "reasoning")
                 put("id", "rs_loop_stream")
+                put("status", "completed")
+                put("format", "unknown")
+                put("encrypted_content", "opaque-stream-loop")
+            }
+        )
+        val sanitizedReasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_loop_stream")
                 put("encrypted_content", "opaque-stream-loop")
             }
         )
@@ -474,7 +483,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
             )
         )
         coEvery {
-            conversationTurnPersistence.updateAssistantMessageReasoning(assistantToolStarted.id, reasoningItems)
+            conversationTurnPersistence.updateAssistantMessageReasoning(assistantToolStarted.id, sanitizedReasoningItems)
         } returns assistantToolFinished
         coEvery {
             conversationTurnPersistence.updateAssistantMessageContent(assistantToolStarted.id, "")
@@ -519,7 +528,7 @@ class DefaultConversationTurnOrchestratorStreamingTest : DefaultConversationTurn
         // reasoning items replayed so the next streaming LLM call sees the prior chain-of-thought.
         assertEquals(2, capturedContexts.size)
         val followUpAssistant = capturedContexts[1].filterIsInstance<RawChatMessage.Assistant>()
-            .first { it.toolCalls != null && it.toolCalls.isNotEmpty() }
-        assertEquals(reasoningItems, followUpAssistant.reasoningItems)
+            .first { !it.toolCalls.isNullOrEmpty() }
+        assertEquals(sanitizedReasoningItems, followUpAssistant.reasoningItems)
     }
 }

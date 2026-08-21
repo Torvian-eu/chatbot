@@ -18,15 +18,15 @@ import kotlinx.serialization.json.*
  * used, so it must survive the round-trip. `status` and `format` are output-only/provider-specific
  * and are never accepted in `input`.
  *
- * The sanitizer is applied both when reasoning items are persisted (so the database only ever stores
- * replay-safe items) and again when they are replayed (so previously stored, unsanitized rows cannot
- * break future requests).
+ * The sanitizer is applied when reasoning items cross into persistence or an in-turn follow-up context,
+ * so replay receives items in the Responses API `input` shape. Replay adaptation then only changes the
+ * payload according to the target model's reasoning mode and source-model provenance.
  *
- * @param reasoningItems The raw reasoning output items, or `null`/empty when there are none.
- * @return The sanitized items, mirroring a `null`/empty input, or `null` when there are none.
+ * @param reasoningItems The raw reasoning output items; empty when there are none.
+ * @return The sanitized reasoning items, or an empty list when [reasoningItems] is empty.
  */
-internal fun sanitizeReasoningItems(reasoningItems: List<JsonObject>?): List<JsonObject>? =
-    reasoningItems?.map(::sanitizeReasoningItem)
+internal fun sanitizeReasoningItems(reasoningItems: List<JsonObject>): List<JsonObject> =
+    reasoningItems.map(::sanitizeReasoningItem)
 
 /**
  * Sanitizes a single raw reasoning output item into the Responses API `input` shape.
@@ -35,7 +35,7 @@ internal fun sanitizeReasoningItems(reasoningItems: List<JsonObject>?): List<Jso
  * all other (output-only or provider-specific) fields are dropped. `content` and `encrypted_content`
  * are mutually exclusive on a reasoning item (an item carries exactly one of the two), so no payload
  * stripping is needed here; whether the item may be replayed to a given target is decided by
- * [sanitizeReasoningItemForReplay].
+ * [adaptReasoningItemForReplay].
  *
  * @param reasoningItem The raw reasoning output item (e.g. `{"type":"reasoning",...}`).
  * @return A new [JsonObject] containing only the `input`-accepted fields of [reasoningItem].
@@ -50,8 +50,9 @@ internal fun sanitizeReasoningItem(reasoningItem: JsonObject): JsonObject = buil
 }
 
 /**
- * Decides whether a stored reasoning item may be replayed to the current model's reasoning mode and
- * provenance, and returns it in the Responses `input` shape when it can.
+ * Adapts a previously sanitized reasoning item for the current model's reasoning mode and provenance.
+ * The caller must provide an item already reduced to the Responses `input` shape by
+ * [sanitizeReasoningItem] or [sanitizeReasoningItems].
  *
  * A reasoning item is only replayed **in full** — a partial shell (e.g. summary-only, or an
  * encrypted-origin item with empty plaintext `content`) is generally not sent, because providers
@@ -71,17 +72,17 @@ internal fun sanitizeReasoningItem(reasoningItem: JsonObject): JsonObject = buil
  *   source or a missing encrypted payload is not replayed (`null`).
  * - **Unknown capability** (`null`): replay as-is; we don't know the target's mode.
  *
- * @param reasoningItem The stored reasoning item to adapt.
+ * @param reasoningItem A previously sanitized reasoning item to adapt.
  * @param reasoningEncrypted The target model's [eu.torvian.chatbot.common.models.llm.LLMModelCapabilities.REASONING_ENCRYPTED]
  *            value, or `null` when unknown (unknown defaults to unencrypted).
  * @param sourceModelId The ID of the model that produced the reasoning item, or `null` when unknown
  *            (e.g. the source model was deleted).
  * @param targetModelId The ID of the model now being called, which will receive the replayed item.
- * @return A new [JsonObject] containing the full replayable reasoning payload, or `null` when the item
- *         must not be replayed at all (partial payload with no encrypted_content for plaintext targets,
+ * @return The sanitized item, possibly copied to adjust plaintext-target content, or `null` when the
+ *         item must not be replayed at all (partial payload with no encrypted_content for plaintext targets,
  *         or encrypted target with a foreign/unknown source).
  */
-internal fun sanitizeReasoningItemForReplay(
+internal fun adaptReasoningItemForReplay(
     reasoningItem: JsonObject,
     reasoningEncrypted: Boolean?,
     sourceModelId: Long?,
@@ -94,19 +95,18 @@ internal fun sanitizeReasoningItemForReplay(
         if (!sameModel) return null
         val hasEncryptedContent = reasoningItem["encrypted_content"]?.let { it != JsonNull } == true
         if (!hasEncryptedContent) return null
-        return sanitizeReasoningItem(reasoningItem)
+        return reasoningItem
     }
     // Explicitly plaintext target: always replay so the provider sees a reasoning item.
     // If the item has no content or is an encrypted-origin shell, ensure a space-text
     // content item is present (DeepSeek fix). The encrypted_content is dropped.
     if (reasoningEncrypted == false) {
         val hasContent = reasoningItem["content"]?.jsonArray?.isNotEmpty() == true
-        val sanitized = sanitizeReasoningItem(reasoningItem)
         // If we have an encrypted-origin shell (empty content + has encrypted_content),
         // or no content at all, add a space-text content item so the provider sees a reasoning item.
         // DeepSeek requires a space character, not an empty string.
         if (!hasContent) {
-            return sanitized
+            return reasoningItem
                 .withoutField("encrypted_content")
                 .putField(
                     "content", JsonArray(
@@ -117,10 +117,10 @@ internal fun sanitizeReasoningItemForReplay(
                     }
                 )))
         }
-        return sanitized
+        return reasoningItem
     }
     // Capability unknown (null): replay as-is; we don't know the target's mode.
-    return sanitizeReasoningItem(reasoningItem)
+    return reasoningItem
 }
 
 /**

@@ -19,7 +19,7 @@ import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
 import eu.torvian.chatbot.server.service.llm.OpenRouterClientInfo
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
-import eu.torvian.chatbot.server.service.llm.sanitizeReasoningItemForReplay
+import eu.torvian.chatbot.server.service.llm.adaptReasoningItemForReplay
 import io.ktor.http.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -489,17 +489,12 @@ class ResponsesStrategy(
         )
 
         is RawChatMessage.Assistant -> buildList {
-            // Reasoning items must precede the assistant content they belong to in the Responses `input`.
-            // They are emitted adapted to the current model's reasoning mode and provenance: provider
-            // output-only fields (e.g. `status`, `format`) are stripped, plaintext `content` is kept only
-            // for plaintext-mode targets, and `encrypted_content` is kept only when the target is
-            // encrypted-mode and the item was produced by that same model. An item is only replayed in
-            // full for the target's mode — a partial item (no non-empty `content` for plaintext targets,
-            // or no `encrypted_content` / a foreign source for encrypted targets) is skipped entirely.
-            // Gated by the `replayReasoning` setting.
+            // Reasoning items precede their assistant content in Responses input. They are already sanitized;
+            // adapt them only for the target's reasoning mode and provenance, skipping non-replayable items.
+            // Gated by `replayReasoning`.
             if (replayReasoning) {
                 reasoningItems?.forEach { reasoningItem ->
-                    sanitizeReasoningItemForReplay(
+                    adaptReasoningItemForReplay(
                         reasoningItem = reasoningItem,
                         reasoningEncrypted = reasoningEncrypted,
                         sourceModelId = reasoningModelId,

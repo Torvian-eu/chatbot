@@ -111,9 +111,8 @@ class ReasoningItemSanitizerTest {
     }
 
     @Test
-    fun `null and empty input lists are passed through unchanged`() {
-        assertNull(sanitizeReasoningItems(null))
-        assertTrue(sanitizeReasoningItems(emptyList()).isNullOrEmpty())
+    fun `empty input lists produce an empty sanitized list`() {
+        assertTrue(sanitizeReasoningItems(emptyList()).isEmpty())
     }
 
     @Test
@@ -128,7 +127,7 @@ class ReasoningItemSanitizerTest {
             put("encrypted_content", "opaque")
         }
 
-        val replayed = sanitizeReasoningItemForReplay(
+        val replayed = adaptReasoningItemForReplay(
             reasoningItem = item,
             reasoningEncrypted = true,
             sourceModelId = 1L,
@@ -157,7 +156,7 @@ class ReasoningItemSanitizerTest {
             put("encrypted_content", "opaque")
         }
 
-        val replayed = sanitizeReasoningItemForReplay(
+        val replayed = adaptReasoningItemForReplay(
             reasoningItem = item,
             reasoningEncrypted = true,
             sourceModelId = 2L,
@@ -176,7 +175,7 @@ class ReasoningItemSanitizerTest {
             put("encrypted_content", "opaque")
         }
 
-        val replayed = sanitizeReasoningItemForReplay(
+        val replayed = adaptReasoningItemForReplay(
             reasoningItem = item,
             reasoningEncrypted = true,
             sourceModelId = null,
@@ -206,7 +205,7 @@ class ReasoningItemSanitizerTest {
             put("encrypted_content", "opaque")
         }
 
-        val replayed = sanitizeReasoningItemForReplay(
+        val replayed = adaptReasoningItemForReplay(
             reasoningItem = item,
             reasoningEncrypted = true,
             sourceModelId = 2L,
@@ -232,7 +231,7 @@ class ReasoningItemSanitizerTest {
             put("encrypted_content", "opaque")
         }
 
-        val replayed = sanitizeReasoningItemForReplay(
+        val replayed = adaptReasoningItemForReplay(
             reasoningItem = item,
             reasoningEncrypted = true,
             sourceModelId = null,
@@ -262,7 +261,7 @@ class ReasoningItemSanitizerTest {
             put("encrypted_content", null)
         }
 
-        val replayed = sanitizeReasoningItemForReplay(
+        val replayed = adaptReasoningItemForReplay(
             reasoningItem = item,
             reasoningEncrypted = true,
             sourceModelId = 1L,
@@ -287,7 +286,7 @@ class ReasoningItemSanitizerTest {
             })
         }
 
-        val replayed = sanitizeReasoningItemForReplay(
+        val replayed = adaptReasoningItemForReplay(
             reasoningItem = item,
             reasoningEncrypted = false,
             sourceModelId = 1L,
@@ -312,7 +311,7 @@ class ReasoningItemSanitizerTest {
             put("encrypted_content", "opaque")
         }
 
-        val replayed = sanitizeReasoningItemForReplay(
+        val replayed = adaptReasoningItemForReplay(
             reasoningItem = item,
             reasoningEncrypted = false,
             sourceModelId = 1L,
@@ -336,7 +335,7 @@ class ReasoningItemSanitizerTest {
             put("summary", buildJsonArray { })
         }
 
-        val replayed = sanitizeReasoningItemForReplay(
+        val replayed = adaptReasoningItemForReplay(
             reasoningItem = item,
             reasoningEncrypted = false,
             sourceModelId = 1L,
@@ -361,7 +360,7 @@ class ReasoningItemSanitizerTest {
             put("encrypted_content", "opaque")
         }
 
-        val replayed = sanitizeReasoningItemForReplay(
+        val replayed = adaptReasoningItemForReplay(
             reasoningItem = item,
             reasoningEncrypted = null,
             sourceModelId = 1L,
@@ -387,7 +386,7 @@ class ReasoningItemSanitizerTest {
             })
         }
 
-        val replayed = sanitizeReasoningItemForReplay(
+        val replayed = adaptReasoningItemForReplay(
             reasoningItem = item,
             reasoningEncrypted = null,
             sourceModelId = 1L,

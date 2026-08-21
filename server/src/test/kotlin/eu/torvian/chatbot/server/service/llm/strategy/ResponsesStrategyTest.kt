@@ -8,6 +8,7 @@ import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
 import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
+import eu.torvian.chatbot.server.service.llm.sanitizeReasoningItem
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import io.ktor.http.*
 import kotlinx.coroutines.flow.flowOf
@@ -439,12 +440,14 @@ class ResponsesStrategyTest {
                 })
             })
         }
+        // RawChatMessage is an internal replay context, so reasoning is normalized before it reaches
+        // the strategy. The strategy is responsible only for target-mode adaptation from this point on.
         val messages = listOf(
             RawChatMessage.User("First question"),
             RawChatMessage.Assistant(
                 content = "Let me think.",
                 toolCalls = null,
-                reasoningItems = listOf(reasoningItem)
+                reasoningItems = listOf(sanitizeReasoningItem(reasoningItem))
             ),
             RawChatMessage.User("Follow-up")
         )

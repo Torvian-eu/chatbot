@@ -57,10 +57,10 @@ sealed class RawChatMessage {
      *
      * @property content The assistant's response text (null if only tool calls)
      * @property toolCalls List of tool calls made by the assistant (null if none)
-     * @property reasoningItems For Responses-capable models, the raw reasoning output items that preceded this
-     *            assistant message, captured so the strategy can interleave them into a future request's `input`.
-     *            These are opaque payloads and must not be logged or rendered; they are sanitized to the
-     *            Responses `input` schema before being persisted or replayed. `null` when absent.
+     * @property reasoningItems For Responses-capable models, the replay-safe reasoning items associated with
+     *            this assistant message, allowing the strategy to interleave them into a future request's
+     *            `input`. These opaque payloads are already sanitized to the Responses `input` schema and must
+     *            not be logged or rendered. `null` when absent.
      * @property reasoningModelId ID of the model that produced [reasoningItems], used at replay time to decide
      *            whether an encrypted reasoning payload may be sent back to the current model (encrypted
      *            payloads are only replayable to the exact model that produced them). `null` when the source

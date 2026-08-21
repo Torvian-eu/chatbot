@@ -14,7 +14,6 @@ import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
-import eu.torvian.chatbot.server.service.llm.sanitizeReasoningItems
 import kotlinx.serialization.json.JsonObject
 import kotlin.time.Clock
 
@@ -91,8 +90,7 @@ class DefaultConversationTurnPersistence(
             modelId = model.id,
             settingsId = settings.id,
             agentRoleId = agentRoleId,
-            // Strip provider output-only fields (e.g. `status`) so the stored items are replay-safe.
-            reasoningItems = sanitizeReasoningItems(reasoningItems)
+            reasoningItems = reasoningItems
         ).getOrElse { daoError ->
             throw IllegalStateException(
                 "Failed to insert assistant message. Session id: $sessionId. " +
@@ -132,8 +130,7 @@ class DefaultConversationTurnPersistence(
         messageId: Long,
         reasoningItems: List<JsonObject>?
     ): ChatMessage.AssistantMessage = transactionScope.transaction {
-        // Strip provider output-only fields (e.g. `status`) so the stored items are replay-safe.
-        messageDao.updateAssistantMessageReasoning(messageId, sanitizeReasoningItems(reasoningItems)).getOrElse { error ->
+        messageDao.updateAssistantMessageReasoning(messageId, reasoningItems).getOrElse { error ->
             throw IllegalStateException("Failed to update assistant message reasoning: $error")
         }
     }

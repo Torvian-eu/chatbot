@@ -802,11 +802,11 @@ class MessageDaoExposed(
     }
 
     /**
-     * Serializes raw reasoning items into their JSON-array form for the database column, or `null` when absent.
+     * Serializes replay-safe reasoning items into their JSON-array form for the database column, or `null` when absent.
      *
      * The payload is opaque (may include OpenAI-encrypted content) and must not be logged or rendered.
      *
-     * @param reasoningItems Raw reasoning items, or `null`/empty when there are none to persist.
+     * @param reasoningItems Replay-safe reasoning items, or `null`/empty when there are none to persist.
      * @return The JSON-array string, or `null` when there are no items.
      */
     private fun serializeReasoning(reasoningItems: List<JsonObject>?): String? =

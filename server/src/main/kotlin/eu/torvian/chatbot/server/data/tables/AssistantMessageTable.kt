@@ -13,7 +13,7 @@ import org.jetbrains.exposed.v1.core.Table
  * @property agentRoleId Optional reference to the agent role used for the message. Null when the
  *            message was not produced through an agent role; `SET NULL` when the role is deleted so
  *            provenance survives role deletion.
- * @property reasoningItemsJson JSON array of raw reasoning output items emitted with the message, for
+ * @property reasoningItemsJson JSON array of replay-safe reasoning output items emitted with the message, for
  *            Responses-capable models. Opaque and nullable; must not be logged or rendered.
  */
 object AssistantMessageTable : Table("assistant_messages") {

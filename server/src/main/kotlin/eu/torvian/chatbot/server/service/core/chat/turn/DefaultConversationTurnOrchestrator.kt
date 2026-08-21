@@ -249,6 +249,8 @@ class DefaultConversationTurnOrchestrator(
         } else {
             originalContent
         }
+        // Sanitize once before the items enter persistence or the follow-up tool-loop context.
+        val sanitizedReasoningItems = llmCompletionResult.reasoningItems?.let(::sanitizeReasoningItems)
         val persistedAssistantMessage = conversationTurnPersistence.saveAssistantMessage(
             sessionId = request.session.id,
             content = content,
@@ -256,7 +258,7 @@ class DefaultConversationTurnOrchestrator(
             model = request.llmConfig.model,
             settings = request.llmConfig.settings,
             agentRoleId = request.session.agentRoleId,
-            reasoningItems = llmCompletionResult.reasoningItems
+            reasoningItems = sanitizedReasoningItems
         )
         emit(
             ConversationTurnEvent.AssistantMessageSaved(
@@ -281,7 +283,7 @@ class DefaultConversationTurnOrchestrator(
             assistantMessage = assistantMessage,
             assistantContent = content,
             toolCallRequests = boundedToolCalls,
-            reasoningItems = llmCompletionResult.reasoningItems
+            reasoningItems = sanitizedReasoningItems
         )
     }
 
@@ -351,11 +353,13 @@ class DefaultConversationTurnOrchestrator(
                 accumulatedReasoningItems.add(reasoningDone.reasoningItem)
             },
             onStreamComplete = { finalContent, toolCallRequests, finishReason ->
+                // Sanitize once before the accumulated items enter persistence or the follow-up context.
+                val sanitizedReasoningItems = sanitizeReasoningItems(accumulatedReasoningItems)
                 // Persist accumulated reasoning (if any) alongside the finalized message content.
-                if (accumulatedReasoningItems.isNotEmpty()) {
+                if (sanitizedReasoningItems.isNotEmpty()) {
                     conversationTurnPersistence.updateAssistantMessageReasoning(
                         assistantMessage.id,
-                        accumulatedReasoningItems
+                        sanitizedReasoningItems
                     )
                 }
                 // Record the model's reasoning mode from the accumulated reasoning items (if any) so later
@@ -374,11 +378,13 @@ class DefaultConversationTurnOrchestrator(
                     emit(ConversationTurnEvent.TurnCompleted)
                     assistantStepOutcome = null
                 } else {
+                    // The outcome is forwarded directly into the next iteration's raw context, so do not
+                    // expose provider output-only fields such as `status` or `format` here.
                     assistantStepOutcome = AssistantStepOutcome(
                         assistantMessage = updatedAssistantMessage,
                         assistantContent = updatedAssistantMessage.content,
                         toolCallRequests = toolCallRequests,
-                        reasoningItems = accumulatedReasoningItems.takeIf { it.isNotEmpty() }
+                        reasoningItems = sanitizedReasoningItems.takeIf { it.isNotEmpty() }
                     )
                 }
             },
@@ -472,7 +478,7 @@ class DefaultConversationTurnOrchestrator(
      * @param currentContext Context accumulated so far for the turn.
      * @param assistantContent Assistant content associated with the tool-call request.
      * @param completedToolCalls Completed tool calls whose calls and results should be appended.
-     * @param reasoningItems Raw reasoning items emitted with the assistant step, forwarded so the next
+     * @param reasoningItems Replay-safe reasoning items emitted with the assistant step, forwarded so the next
      *            follow-up LLM request can replay chain-of-thought. Opaque payload; never logged or rendered.
      * @param reasoningModelId ID of the model that produced [reasoningItems] (the current turn's model),
      *            used to gate encrypted reasoning replay on the follow-up LLM request.
@@ -723,8 +729,8 @@ class DefaultConversationTurnOrchestrator(
      * @property assistantMessage Persisted assistant message for the current iteration.
      * @property assistantContent Assistant content that should be appended back into LLM context.
      * @property toolCallRequests Tool calls requested by the assistant.
-     * @property reasoningItems Raw reasoning items emitted with the assistant step, forwarded so the next
-     *            follow-up LLM request can replay chain-of-thought. Opaque payload; never logged or rendered.
+     * @property reasoningItems Replay-safe reasoning items emitted with the assistant step, forwarded so the
+     *            next follow-up LLM request can replay chain-of-thought. Opaque payload; never logged or rendered.
      */
     private data class AssistantStepOutcome(
         val assistantMessage: ChatMessage.AssistantMessage,

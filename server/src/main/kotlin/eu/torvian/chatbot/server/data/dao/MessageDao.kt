@@ -64,7 +64,8 @@ interface MessageDao {
      * @param modelId Optional model ID (for assistant messages).
      * @param settingsId Optional settings ID (for assistant messages).
      * @param agentRoleId Optional agent role ID (for assistant messages, provenance).
-     * @param reasoningItems Optional raw reasoning items emitted with an assistant message. Opaque; never rendered.
+     * @param reasoningItems Optional replay-safe reasoning items emitted with an assistant message. Opaque;
+     *                       never rendered.
      * @param fileReferences Optional list of file references.
      * @param createdAt Optional creation timestamp. If null, uses current time.
      * @param updatedAt Optional update timestamp. If null, uses current time.
@@ -120,7 +121,8 @@ interface MessageDao {
      * Updates the reasoning items attached to an assistant message.
      *
      * @param messageId The ID of the assistant message whose reasoning items to update.
-     * @param reasoningItems The new raw reasoning items, or `null` to clear them. Opaque; never rendered.
+     * @param reasoningItems The new replay-safe reasoning items, or `null` to clear them. Opaque; never
+     *                       rendered.
      * @return Either a [MessageError.MessageNotFound] if the message is not an assistant message or not found,
      *         or the updated [ChatMessage.AssistantMessage] on success.
      */
