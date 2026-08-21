@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.service.llm.strategy
 
+import eu.torvian.chatbot.common.models.llm.LLMModelCapabilities
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.server.service.llm.GenericContentType
@@ -425,7 +426,6 @@ class ResponsesStrategyTest {
             put("id", JsonPrimitive("rs_1"))
             put("status", JsonPrimitive("completed"))
             put("format", JsonPrimitive("unknown"))
-            put("encrypted_content", JsonPrimitive("opaque-encrypted"))
             put("summary", buildJsonArray {
                 add(buildJsonObject {
                     put("type", JsonPrimitive("summary_text"))
@@ -466,12 +466,276 @@ class ResponsesStrategyTest {
         // Output-only/provider-specific fields must be stripped so OpenAI does not reject the item.
         assertNull(replayedReasoning["status"])
         assertNull(replayedReasoning["format"])
-        // Replay-safe fields are preserved, including the opaque stateless-mode reasoning payload.
-        assertEquals("opaque-encrypted", replayedReasoning["encrypted_content"]?.jsonPrimitive?.content)
+        // `responsesModel` has no REASONING_ENCRYPTED capability, so the capability is unknown
+        // and we replay the item as-is (unknown capability defaults to replay).
+        assertNull(replayedReasoning["encrypted_content"], "plaintext items carry no encrypted_content")
         assertEquals("summary_text", replayedReasoning["summary"]?.jsonArray?.get(0)?.jsonObject?.get("type")?.jsonPrimitive?.content)
         assertEquals("Chain of thought.", replayedReasoning["content"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content)
         assertEquals("assistant", input[2].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("Let me think.", input[2].jsonObject["content"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    @DisplayName("prepareRequest should replay an encrypted item to the same encrypted model")
+    fun prepareRequest_encryptedSameModel_keepsEncryptedContent() {
+        val reasoningItem = buildJsonObject {
+            put("type", JsonPrimitive("reasoning"))
+            put("id", JsonPrimitive("rs_1"))
+            put("summary", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", JsonPrimitive("summary_text"))
+                    put("text", JsonPrimitive("Thinking summary."))
+                })
+            })
+            // `content` and `encrypted_content` are mutually exclusive: encrypted items carry an
+            // (empty) `content` array plus the opaque payload.
+            put("content", buildJsonArray { })
+            put("encrypted_content", JsonPrimitive("opaque-encrypted"))
+        }
+        val encryptedModel = responsesModel.copy(
+            capabilities = buildJsonObject {
+                put(LLMModelCapabilities.REASONING_ENCRYPTED, JsonPrimitive(true))
+            }
+        )
+        val messages = listOf(
+            RawChatMessage.User("First question"),
+            RawChatMessage.Assistant(
+                content = "Let me think.",
+                reasoningItems = listOf(reasoningItem),
+                // Same model as the target: the encrypted payload is replayable.
+                reasoningModelId = encryptedModel.id
+            )
+        )
+        val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
+        val replaySettings = responsesSettings.copy(replayReasoning = true)
+
+        val result = strategy.prepareRequest(
+            messages,
+            encryptedModel,
+            provider,
+            replaySettings,
+            "sk-test",
+            systemMessage = "You are a helpful assistant."
+        )
+
+        assertTrue(result.isRight())
+        val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)
+        val replayed = body["input"]?.jsonArray?.get(1)?.jsonObject
+        assertNotNull(replayed)
+        assertEquals("reasoning", replayed["type"]?.jsonPrimitive?.content)
+        // Same-model encrypted payloads survive the round-trip for stateless replay.
+        assertEquals("opaque-encrypted", replayed["encrypted_content"]?.jsonPrimitive?.content)
+        assertEquals("Thinking summary.", replayed["summary"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content)
+        // The (empty) content array is harmless for encrypted-mode targets; it carries no plaintext.
+        assertTrue(replayed["content"] == null || replayed["content"]?.jsonArray?.isEmpty() == true)
+    }
+
+    @Test
+    @DisplayName("prepareRequest should not replay reasoning at all for an encrypted different-model target")
+    fun prepareRequest_encryptedDifferentModel_dropsEncryptedContent() {
+        val reasoningItem = buildJsonObject {
+            put("type", JsonPrimitive("reasoning"))
+            put("id", JsonPrimitive("rs_1"))
+            put("summary", buildJsonArray { })
+            put("content", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", JsonPrimitive("reasoning_text"))
+                    put("text", JsonPrimitive("Chain of thought."))
+                })
+            })
+            put("encrypted_content", JsonPrimitive("foreign-opaque"))
+        }
+        val encryptedModel = responsesModel.copy(
+            capabilities = buildJsonObject {
+                put(LLMModelCapabilities.REASONING_ENCRYPTED, JsonPrimitive(true))
+            }
+        )
+        val messages = listOf(
+            RawChatMessage.User("First question"),
+            RawChatMessage.Assistant(
+                content = "Let me think.",
+                reasoningItems = listOf(reasoningItem),
+                // Produced by a different model: the encrypted payload is NOT replayable.
+                reasoningModelId = encryptedModel.id + 1
+            )
+        )
+        val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
+
+        val result = strategy.prepareRequest(
+            messages,
+            encryptedModel,
+            provider,
+            responsesSettings.copy(replayReasoning = true),
+            "sk-test",
+            systemMessage = "You are a helpful assistant."
+        )
+
+        assertTrue(result.isRight())
+        val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)
+        // The foreign reasoning item must not be replayed at all: only user + assistant remain.
+        val input = body["input"]?.jsonArray
+        assertEquals(2, input?.size, "the foreign reasoning item must not be replayed to an encrypted-mode target")
+        assertEquals(
+            true,
+            input?.none { it.jsonObject["type"]?.jsonPrimitive?.content == "reasoning" },
+            "no reasoning item may be present in the input"
+        )
+        assertEquals("user", input?.get(0)?.jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("assistant", input?.get(1)?.jsonObject["role"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    @DisplayName("prepareRequest should not replay reasoning at all for an encrypted different-model target, even with a summary")
+    fun prepareRequest_encryptedDifferentModel_skipsReasoning() {
+        val reasoningItem = buildJsonObject {
+            put("type", JsonPrimitive("reasoning"))
+            put("id", JsonPrimitive("rs_1"))
+            put("summary", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", JsonPrimitive("summary_text"))
+                    put("text", JsonPrimitive("Foreign reasoning summary."))
+                })
+            })
+            put("content", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", JsonPrimitive("reasoning_text"))
+                    put("text", JsonPrimitive("Chain of thought."))
+                })
+            })
+            put("encrypted_content", JsonPrimitive("foreign-opaque"))
+        }
+        val encryptedModel = responsesModel.copy(
+            capabilities = buildJsonObject {
+                put(LLMModelCapabilities.REASONING_ENCRYPTED, JsonPrimitive(true))
+            }
+        )
+        val messages = listOf(
+            RawChatMessage.User("First question"),
+            RawChatMessage.Assistant(
+                content = "Let me think.",
+                reasoningItems = listOf(reasoningItem),
+                // Produced by a different model: only the exact producing model may receive an
+                // encrypted payload, so the item is partial for this target and must be skipped.
+                reasoningModelId = encryptedModel.id + 1
+            )
+        )
+        val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
+
+        val result = strategy.prepareRequest(
+            messages,
+            encryptedModel,
+            provider,
+            responsesSettings.copy(replayReasoning = true),
+            "sk-test",
+            systemMessage = "You are a helpful assistant."
+        )
+
+        assertTrue(result.isRight())
+        val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)
+        // The foreign reasoning item must not be replayed at all, even with a summary: user + assistant only.
+        val input = body["input"]?.jsonArray
+        assertEquals(2, input?.size, "a foreign reasoning item must never be replayed to an encrypted-mode target")
+        assertEquals(
+            true,
+            input?.none { it.jsonObject["type"]?.jsonPrimitive?.content == "reasoning" },
+            "no reasoning item may be present in the input"
+        )
+        assertEquals("user", input?.get(0)?.jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("assistant", input?.get(1)?.jsonObject["role"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    @DisplayName("prepareRequest replays reasoning items when model capability is unknown")
+    fun prepareRequest_plaintextTarget_keepsContent() {
+        val reasoningItem = buildJsonObject {
+            put("type", JsonPrimitive("reasoning"))
+            put("id", JsonPrimitive("rs_1"))
+            put("summary", buildJsonArray { })
+            put("content", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", JsonPrimitive("reasoning_text"))
+                    put("text", JsonPrimitive("Chain of thought."))
+                })
+            })
+        }
+        val messages = listOf(
+            RawChatMessage.User("First question"),
+            RawChatMessage.Assistant(
+                content = "Let me think.",
+                reasoningItems = listOf(reasoningItem),
+                reasoningModelId = responsesModel.id
+            )
+        )
+        val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
+
+        // `responsesModel` has no REASONING_ENCRYPTED capability: unknown mode defaults to plaintext.
+        val result = strategy.prepareRequest(
+            messages,
+            responsesModel,
+            provider,
+            responsesSettings.copy(replayReasoning = true),
+            "sk-test",
+            systemMessage = "You are a helpful assistant."
+        )
+
+        assertTrue(result.isRight())
+        val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)
+        val replayed = body["input"]?.jsonArray?.get(1)?.jsonObject
+        assertNotNull(replayed)
+        assertEquals("Chain of thought.", replayed["content"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content)
+        assertNull(replayed["encrypted_content"], "plaintext items carry no encrypted_content")
+    }
+
+    @Test
+    @DisplayName("prepareRequest replays an encrypted-origin shell to a plaintext target (DeepSeek fix)")
+    fun prepareRequest_plaintextTarget_skipsEncryptedOriginItemWithoutContent() {
+        // An item produced by an encrypted-mode model has empty `content` and only the opaque payload.
+        // Replayed to a plaintext target (explicit REASONING_ENCRYPTED = false, e.g. DeepSeek thinking
+        // mode) it must still be sent with empty content so the provider sees a reasoning item.
+        val reasoningItem = buildJsonObject {
+            put("type", JsonPrimitive("reasoning"))
+            put("id", JsonPrimitive("rs_1"))
+            put("summary", buildJsonArray { })
+            put("encrypted_content", JsonPrimitive("opaque-encrypted"))
+        }
+        // A model with explicitly plaintext reasoning mode.
+        val plaintextModel = responsesModel.copy(
+            capabilities = buildJsonObject {
+                put(LLMModelCapabilities.REASONING_ENCRYPTED, JsonPrimitive(false))
+            }
+        )
+        val messages = listOf(
+            RawChatMessage.User("First question"),
+            RawChatMessage.Assistant(
+                content = "Let me think.",
+                reasoningItems = listOf(reasoningItem),
+                reasoningModelId = plaintextModel.id
+            )
+        )
+        val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
+
+        val result = strategy.prepareRequest(
+            messages,
+            plaintextModel,
+            provider,
+            responsesSettings.copy(replayReasoning = true),
+            "sk-test",
+            systemMessage = "You are a helpful assistant."
+        )
+
+        assertTrue(result.isRight())
+        val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)
+        val input = body["input"]?.jsonArray
+        // user, reasoning(shell), assistant
+        assertEquals(3, input?.size)
+        val replayed = input?.get(1)?.jsonObject
+        assertNotNull(replayed)
+        assertEquals("reasoning", replayed["type"]?.jsonPrimitive?.content)
+        val contentArray = replayed["content"]?.jsonArray
+        assertNotNull(contentArray)
+        assertEquals(1, contentArray.size)
+        assertEquals(" ", contentArray[0].jsonObject["text"]?.jsonPrimitive?.content)
+        assertNull(replayed["encrypted_content"], "encrypted_content is dropped for plaintext targets")
     }
 
     @Test

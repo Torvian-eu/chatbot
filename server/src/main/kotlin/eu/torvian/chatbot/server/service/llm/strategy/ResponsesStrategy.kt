@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
+import eu.torvian.chatbot.common.models.llm.isReasoningEncrypted
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.service.llm.ApiRequestConfig
 import eu.torvian.chatbot.server.service.llm.ChatCompletionStrategy
@@ -18,7 +19,7 @@ import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
 import eu.torvian.chatbot.server.service.llm.OpenRouterClientInfo
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
-import eu.torvian.chatbot.server.service.llm.sanitizeReasoningItem
+import eu.torvian.chatbot.server.service.llm.sanitizeReasoningItemForReplay
 import io.ktor.http.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -78,7 +79,18 @@ class ResponsesStrategy(
             ).left()
         }
 
-        val inputItems = messages.flatMap { it.toResponsesInput(replayReasoning = settings.replayReasoning) }
+        // The target model's reasoning mode drives what may be replayed: encrypted-mode models reject
+        // non-empty plaintext `content`, while encrypted payloads are only replayable to the exact model
+        // that produced them (checked per item against `targetModelId`). Unknown (null) defaults to
+        // unencrypted, which keeps the historical plaintext `content` replay behavior.
+        val reasoningEncrypted = modelConfig.isReasoningEncrypted()
+        val inputItems = messages.flatMap {
+            it.toResponsesInput(
+                replayReasoning = settings.replayReasoning,
+                reasoningEncrypted = reasoningEncrypted,
+                targetModelId = modelConfig.id,
+            )
+        }
 
         val requestBodyJson = buildJsonObject {
             // Start with custom parameters from settings, allowing forwards-compatible overrides.
@@ -451,10 +463,19 @@ class ResponsesStrategy(
      * Responses item-based input format used for manual context management.
      *
      * @receiver The raw message to convert.
+     * @param replayReasoning Whether stored reasoning items should be replayed into the `input`.
+     * @param reasoningEncrypted The current model's [eu.torvian.chatbot.common.models.llm.LLMModelCapabilities.REASONING_ENCRYPTED]
+     *            value, or `null` when unknown (unknown defaults to unencrypted).
+     * @param targetModelId The ID of the model now being called; encrypted reasoning payloads are only
+     *            replayed when they were produced by this exact model.
      * @return A list of Responses API input item JsonObjects. Assistant messages with tool calls and
      *         their matching outputs produce multiple items.
      */
-    private fun RawChatMessage.toResponsesInput(replayReasoning: Boolean): List<JsonObject> = when (this) {
+    private fun RawChatMessage.toResponsesInput(
+        replayReasoning: Boolean,
+        reasoningEncrypted: Boolean?,
+        targetModelId: Long,
+    ): List<JsonObject> = when (this) {
         is RawChatMessage.User -> listOf(
             buildJsonObject {
                 put("role", JsonPrimitive("user"))
@@ -469,12 +490,21 @@ class ResponsesStrategy(
 
         is RawChatMessage.Assistant -> buildList {
             // Reasoning items must precede the assistant content they belong to in the Responses `input`.
-            // They are emitted sanitized to the Responses `input` schema: provider output-only fields (e.g.
-            // `status`, `format`) that OpenAI rejects as unknown parameters are stripped, so both freshly
-            // captured and legacy persisted items replay safely. Gated by the `replayReasoning` setting.
+            // They are emitted adapted to the current model's reasoning mode and provenance: provider
+            // output-only fields (e.g. `status`, `format`) are stripped, plaintext `content` is kept only
+            // for plaintext-mode targets, and `encrypted_content` is kept only when the target is
+            // encrypted-mode and the item was produced by that same model. An item is only replayed in
+            // full for the target's mode — a partial item (no non-empty `content` for plaintext targets,
+            // or no `encrypted_content` / a foreign source for encrypted targets) is skipped entirely.
+            // Gated by the `replayReasoning` setting.
             if (replayReasoning) {
                 reasoningItems?.forEach { reasoningItem ->
-                    add(sanitizeReasoningItem(reasoningItem))
+                    sanitizeReasoningItemForReplay(
+                        reasoningItem = reasoningItem,
+                        reasoningEncrypted = reasoningEncrypted,
+                        sourceModelId = reasoningModelId,
+                        targetModelId = targetModelId,
+                    )?.let { add(it) }
                 }
             }
 

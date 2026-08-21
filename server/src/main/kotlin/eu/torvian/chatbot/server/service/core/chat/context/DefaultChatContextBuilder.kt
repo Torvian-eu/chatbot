@@ -62,7 +62,8 @@ class DefaultChatContextBuilder(
                         RawChatMessage.Assistant(
                             content = message.content,
                             toolCalls = assistantToolCalls,
-                            reasoningItems = message.reasoningItems
+                            reasoningItems = message.reasoningItems,
+                            reasoningModelId = message.modelId
                         )
                     )
 

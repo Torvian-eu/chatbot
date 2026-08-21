@@ -1,9 +1,6 @@
 package eu.torvian.chatbot.server.service.llm
 
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.*
 
 /**
  * Sanitizes raw reasoning output items so they can be safely replayed into a future Responses API
@@ -35,7 +32,10 @@ internal fun sanitizeReasoningItems(reasoningItems: List<JsonObject>?): List<Jso
  * Sanitizes a single raw reasoning output item into the Responses API `input` shape.
  *
  * Keeps the `input`-accepted fields `type`, `id`, `summary`, `content` and `encrypted_content`;
- * all other (output-only or provider-specific) fields are dropped.
+ * all other (output-only or provider-specific) fields are dropped. `content` and `encrypted_content`
+ * are mutually exclusive on a reasoning item (an item carries exactly one of the two), so no payload
+ * stripping is needed here; whether the item may be replayed to a given target is decided by
+ * [sanitizeReasoningItemForReplay].
  *
  * @param reasoningItem The raw reasoning output item (e.g. `{"type":"reasoning",...}`).
  * @return A new [JsonObject] containing only the `input`-accepted fields of [reasoningItem].
@@ -47,6 +47,131 @@ internal fun sanitizeReasoningItem(reasoningItem: JsonObject): JsonObject = buil
     reasoningItem["content"]?.let { put("content", sanitizeReasoningParts(it)) }
     // Encrypted (opaque) reasoning is replayed as-is in stateless mode; never strip it.
     reasoningItem["encrypted_content"]?.let { put("encrypted_content", it) }
+}
+
+/**
+ * Decides whether a stored reasoning item may be replayed to the current model's reasoning mode and
+ * provenance, and returns it in the Responses `input` shape when it can.
+ *
+ * A reasoning item is only replayed **in full** — a partial shell (e.g. summary-only, or an
+ * encrypted-origin item with empty plaintext `content`) is generally not sent, because providers
+ * (e.g. DeepSeek thinking mode) reject reasoning items that lack the actual reasoning payload.
+ * However, for plaintext targets, an encrypted-origin shell is still replayed with a space-text
+ * content item so the provider sees a reasoning item (DeepSeek requires one per assistant message
+ * in thinking mode). The `encrypted_content` is dropped.
+ *
+ * `content` and `encrypted_content` are mutually exclusive on a reasoning item, so the sanitized
+ * item already holds only the payload matching its origin:
+ *
+ * - **Plaintext target** (`false`): replay when `content` is non-empty **or** when `encrypted_content`
+ *   is present (encrypted-origin shell). In the latter case the item is replayed with a space-text
+ *   `content` item and `encrypted_content` dropped so the provider sees a reasoning item (DeepSeek fix).
+ * - **Encrypted target** (`true`): replay **only when the item came from the same model**
+ *   (`sourceModelId == targetModelId`) **and carries a non-null `encrypted_content`**; any other
+ *   source or a missing encrypted payload is not replayed (`null`).
+ * - **Unknown capability** (`null`): replay as-is; we don't know the target's mode.
+ *
+ * @param reasoningItem The stored reasoning item to adapt.
+ * @param reasoningEncrypted The target model's [eu.torvian.chatbot.common.models.llm.LLMModelCapabilities.REASONING_ENCRYPTED]
+ *            value, or `null` when unknown (unknown defaults to unencrypted).
+ * @param sourceModelId The ID of the model that produced the reasoning item, or `null` when unknown
+ *            (e.g. the source model was deleted).
+ * @param targetModelId The ID of the model now being called, which will receive the replayed item.
+ * @return A new [JsonObject] containing the full replayable reasoning payload, or `null` when the item
+ *         must not be replayed at all (partial payload with no encrypted_content for plaintext targets,
+ *         or encrypted target with a foreign/unknown source).
+ */
+internal fun sanitizeReasoningItemForReplay(
+    reasoningItem: JsonObject,
+    reasoningEncrypted: Boolean?,
+    sourceModelId: Long?,
+    targetModelId: Long,
+): JsonObject? {
+    // Explicitly encrypted target: only replay when the item came from the same model
+    // and carries the opaque payload. Anything else is partial and must be skipped.
+    if (reasoningEncrypted == true) {
+        val sameModel = sourceModelId == targetModelId
+        if (!sameModel) return null
+        val hasEncryptedContent = reasoningItem["encrypted_content"]?.let { it != JsonNull } == true
+        if (!hasEncryptedContent) return null
+        return sanitizeReasoningItem(reasoningItem)
+    }
+    // Explicitly plaintext target: always replay so the provider sees a reasoning item.
+    // If the item has no content or is an encrypted-origin shell, ensure a space-text
+    // content item is present (DeepSeek fix). The encrypted_content is dropped.
+    if (reasoningEncrypted == false) {
+        val hasContent = reasoningItem["content"]?.jsonArray?.isNotEmpty() == true
+        val sanitized = sanitizeReasoningItem(reasoningItem)
+        // If we have an encrypted-origin shell (empty content + has encrypted_content),
+        // or no content at all, add a space-text content item so the provider sees a reasoning item.
+        // DeepSeek requires a space character, not an empty string.
+        if (!hasContent) {
+            return sanitized
+                .withoutField("encrypted_content")
+                .putField(
+                    "content", JsonArray(
+                        listOf(
+                    buildJsonObject {
+                        put("type", JsonPrimitive("reasoning_text"))
+                        put("text", JsonPrimitive(" "))
+                    }
+                )))
+        }
+        return sanitized
+    }
+    // Capability unknown (null): replay as-is; we don't know the target's mode.
+    return sanitizeReasoningItem(reasoningItem)
+}
+
+/**
+ * Returns a copy of this [JsonObject] with the given [field] replaced or added.
+ *
+ * @param field The key to set in the copy.
+ * @param value The value to set.
+ * @return A new [JsonObject] with [field] set to [value].
+ */
+private fun JsonObject.putField(field: String, value: JsonElement): JsonObject {
+    val mutable = mutableMapOf<String, JsonElement>()
+    this.entries.forEach { mutable[it.key] = it.value }
+    mutable[field] = value
+    return JsonObject(mutable)
+}
+
+/**
+ * Returns a copy of this [JsonObject] with the given [field] removed.
+ *
+ * @param field The key to drop from the copy.
+ * @return A new [JsonObject] containing all entries of this object except [field].
+ */
+private fun JsonObject.withoutField(field: String): JsonObject =
+    JsonObject(filterKeys { it != field })
+
+/**
+ * Detects, from actually observed reasoning items, whether the producing model delivers its reasoning
+ * as opaque `encrypted_content` payloads (encrypted-mode) or as plaintext `content` (plaintext-mode).
+ *
+ * The value is only ever derived from observed items and is never seeded from provider/model metadata.
+ * A non-null result is only returned when the items are decisive: any non-null `encrypted_content`
+ * wins immediately, otherwise non-empty plaintext `content` indicates plaintext mode. Items that carry
+ * neither (e.g. only `type`/`id`/`summary`) cannot tell the mode apart and yield `null`, which means
+ * "not certain — do not persist".
+ *
+ * @param reasoningItems The raw reasoning output items, or `null`/empty when there are none.
+ * @return `true` for encrypted mode, `false` for plaintext mode, or `null` when the items are
+ *         inconclusive (including an absent/empty input).
+ */
+internal fun detectReasoningEncryption(reasoningItems: List<JsonObject>?): Boolean? {
+    if (reasoningItems.isNullOrEmpty()) return null
+    val encrypted = reasoningItems.any { item ->
+        val value = item["encrypted_content"]
+        value != null && value != JsonNull
+    }
+    if (encrypted) return true
+    val plaintext = reasoningItems.any { item ->
+        item["content"]?.jsonArray?.isNotEmpty() == true
+    }
+    if (plaintext) return false
+    return null // only type/id/summary items — cannot tell
 }
 
 /**
