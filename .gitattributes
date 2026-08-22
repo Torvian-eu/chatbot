@@ -1,2 +1,6 @@
+# Normalize text files in the repository and check them out as LF everywhere
+* text=auto eol=lf
+
+# Explicitly guarantee that important Unix scripts are treated as text with LF
 *.sh text eol=lf
 gradlew text eol=lf
