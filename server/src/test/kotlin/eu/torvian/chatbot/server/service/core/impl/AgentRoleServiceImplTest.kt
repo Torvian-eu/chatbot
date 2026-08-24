@@ -9,7 +9,9 @@ import eu.torvian.chatbot.common.models.agent.modelSpecificId
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import eu.torvian.chatbot.common.models.llm.CompletionModelSettings
+import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
@@ -237,15 +239,181 @@ class AgentRoleServiceImplTest {
     }
 
     @Test
-    fun `createRole should reject a missing tool reference`() = runTest {
+    fun `createRole should succeed with null modelId and modelSettingsId`() = runTest {
+        // A model-less role is intentionally allowed (completed later via update). No model/settings
+        // DAO lookups may run when both references are null.
+        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+        } returns TestDefaults.agentRole1.copy(modelId = null, modelSettingsId = null)
+        coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val request = validRequest().copy(modelId = null, modelSettingsId = null)
+        val result = service.createRole(userId, request)
+
+        assertTrue(result.isRight())
+        coVerify(exactly = 0) { modelDao.getModelById(any()) }
+        coVerify(exactly = 0) { settingsDao.getSettingsById(any()) }
+    }
+
+    @Test
+    fun `createRole should validate a provided settings reference even without a model`() = runTest {
+        // Settings may be provided while the model is still unset; the settings must exist and be
+        // chat-capable, but no model↔settings consistency check runs (there is no model to match).
+        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        coEvery {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+        } returns TestDefaults.agentRole1.copy(modelId = null, modelSettingsId = 1L)
+        coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val request = validRequest().copy(modelId = null, modelSettingsId = 1L)
+        val result = service.createRole(userId, request)
+
+        assertTrue(result.isRight())
+        coVerify(exactly = 1) { settingsDao.getSettingsById(1L) }
+        coVerify(exactly = 0) { modelDao.getModelById(any()) }
+    }
+
+    @Test
+    fun `createRole should reject a missing settings reference when provided`() = runTest {
+        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { settingsDao.getSettingsById(99L) } returns
+            eu.torvian.chatbot.server.data.dao.error.SettingsError.SettingsNotFound(99L).left()
+
+        val request = validRequest().copy(modelId = null, modelSettingsId = 99L)
+        val result = service.createRole(userId, request)
+
+        assertTrue(result.isLeft())
+        assertIs<CreateAgentRoleError.SettingsNotFound>(result.leftOrNull())
+    }
+
+    @Test
+    fun `updateRole should succeed with null modelId and modelSettingsId`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.updateRole(any()) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val request = UpdateAgentRoleRequest(
+            name = "Renamed",
+            displayName = "Architect",
+            description = "Designs systems",
+            modelId = null,
+            modelSettingsId = null,
+            toolIds = emptySet(),
+            instructions = listOf(
+                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect.")
+            )
+        )
+        val result = service.updateRole(userId, 1L, request)
+
+        assertTrue(result.isRight())
+        coVerify(exactly = 0) { modelDao.getModelById(any()) }
+        coVerify(exactly = 0) { settingsDao.getSettingsById(any()) }
+    }
+
+    @Test
+    fun `createRole should reject a tool id that does not exist`() = runTest {
         coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
-        coEvery {
-            toolDefinitionDao.getToolDefinitionById(99L)
-        } returns eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError.NotFound(99L).left()
+        // The caller owns no tools at all, so any attached id is missing/foreign.
+        coEvery { toolDefinitionDao.getToolsForUser(userId) } returns emptyList()
 
         val request = validRequest().copy(toolIds = setOf(99L))
+        val result = service.createRole(userId, request)
+
+        assertTrue(result.isLeft())
+        assertIs<CreateAgentRoleError.ToolNotFound>(result.leftOrNull())
+    }
+
+    @Test
+    fun `createRole should reject a server built-in tool owned by another user`() = runTest {
+        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The caller owns their own server built-in row (54L) but not the foreign 55L.
+        coEvery { toolDefinitionDao.getToolsForUser(userId) } returns listOf(
+            ServerBuiltInToolDefinition(
+                id = 54L,
+                name = "list_agent_roles",
+                description = "Lists agent roles",
+                config = buildJsonObject { },
+                inputSchema = buildJsonObject { put("type", "object") },
+                outputSchema = null,
+                isEnabled = true,
+                createdAt = Clock.System.now(),
+                updatedAt = Clock.System.now(),
+                userId = userId
+            )
+        )
+
+        val request = validRequest().copy(toolIds = setOf(55L))
+        val result = service.createRole(userId, request)
+
+        assertTrue(result.isLeft())
+        assertIs<CreateAgentRoleError.ToolNotFound>(result.leftOrNull())
+    }
+
+    @Test
+    fun `createRole should reject an MCP tool of another user's server`() = runTest {
+        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The caller owns MCP tool 1L (their own server); 2L belongs to another user's server.
+        coEvery { toolDefinitionDao.getToolsForUser(userId) } returns listOf(
+            LocalMCPToolDefinition(
+                id = 1L,
+                name = "tool",
+                description = "A tool",
+                config = buildJsonObject { },
+                inputSchema = buildJsonObject { },
+                outputSchema = null,
+                isEnabled = true,
+                createdAt = Clock.System.now(),
+                updatedAt = Clock.System.now(),
+                serverId = 1L,
+                mcpToolName = "tool"
+            )
+        )
+
+        val request = validRequest().copy(toolIds = setOf(2L))
+        val result = service.createRole(userId, request)
+
+        assertTrue(result.isLeft())
+        assertIs<CreateAgentRoleError.ToolNotFound>(result.leftOrNull())
+    }
+
+    @Test
+    fun `createRole should reject a built-in tool of another user's worker`() = runTest {
+        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The caller owns worker built-in 3L (their own worker); 4L belongs to another user's worker.
+        coEvery { toolDefinitionDao.getToolsForUser(userId) } returns listOf(
+            BuiltInWorkerToolDefinition(
+                id = 3L,
+                name = "read_text_file",
+                description = "Reads a file",
+                config = buildJsonObject { },
+                inputSchema = buildJsonObject { put("type", "object") },
+                outputSchema = null,
+                isEnabled = true,
+                createdAt = Clock.System.now(),
+                updatedAt = Clock.System.now(),
+                workerId = 1L,
+                builtInToolName = "read_text_file"
+            )
+        )
+
+        val request = validRequest().copy(toolIds = setOf(4L))
         val result = service.createRole(userId, request)
 
         assertTrue(result.isLeft())
@@ -271,8 +439,7 @@ class AgentRoleServiceImplTest {
             serverId = 1L,
             mcpToolName = "tool"
         )
-        coEvery { toolDefinitionDao.getToolDefinitionById(1L) } returns tool.right()
-        coEvery { toolDefinitionDao.getToolDefinitionById(2L) } returns tool.copy(id = 2L).right()
+        coEvery { toolDefinitionDao.getToolsForUser(userId) } returns listOf(tool, tool.copy(id = 2L))
         coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
         coEvery { agentRoleDao.updateRole(any()) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()

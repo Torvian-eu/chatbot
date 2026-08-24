@@ -61,6 +61,7 @@ fun daoModule() = module {
     single<SessionToolConfigDao> { SessionToolConfigDaoExposed(get()) }
     single<UserToolApprovalPreferenceDao> { UserToolApprovalPreferenceDaoExposed(get()) }
     single<OperatorToolDefinitionDao> { OperatorToolDefinitionDaoExposed(get()) }
+    single<ServerBuiltInToolDefinitionDao> { ServerBuiltInToolDefinitionDaoExposed(get()) }
 
     // MCP server DAOs
     single<LocalMCPServerDao> { LocalMCPServerDaoExposed(get()) }

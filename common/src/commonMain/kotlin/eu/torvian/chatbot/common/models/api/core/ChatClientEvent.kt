@@ -110,4 +110,24 @@ sealed interface ChatClientEvent {
         val isError: Boolean = false,
         val errorMessage: String? = null
     ) : ChatClientEvent
+
+    /**
+     * An event sent by the client to approve or reject one server built-in tool call.
+     *
+     * Server built-in tools are executed entirely in-process on the server inside the chat turn, so
+     * no signed request is needed — there is no worker dispatch and no operator relay. The event is
+     * normalized by the server into `ToolCallApprovalSubmission.ServerBuiltInApproval` and consumed
+     * by the approval gate of the matching tool call.
+     *
+     * @property toolCallId Persisted tool-call identifier this decision refers to.
+     * @property approved Whether execution was approved.
+     * @property denialReason Optional denial reason supplied by the user or an auto-deny preference.
+     */
+    @Serializable
+    @SerialName("server_builtin_tool_call_approval")
+    data class ServerBuiltInToolCallApproval(
+        val toolCallId: Long,
+        val approved: Boolean,
+        val denialReason: String? = null
+    ) : ChatClientEvent
 }

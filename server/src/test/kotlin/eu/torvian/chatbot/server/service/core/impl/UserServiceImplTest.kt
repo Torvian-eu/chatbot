@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserGroup
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.models.tool.OperatorToolDefinition
+import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition
 import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import eu.torvian.chatbot.common.security.PasswordValidationConfig
 import eu.torvian.chatbot.common.security.UsernameValidationConfig
@@ -38,6 +39,7 @@ class UserServiceImplTest {
     private val userGroupService = mockk<UserGroupService>()
     private val transactionScope = mockk<TransactionScope>()
     private val operatorToolDefinitionSeeder = mockk<OperatorToolDefinitionSeeder>()
+    private val serverBuiltInToolDefinitionSeeder = mockk<ServerBuiltInToolDefinitionSeeder>()
 
     private val defaultPolicy = AccountValidationPolicy(
         passwordConfig = PasswordValidationConfig(),
@@ -45,7 +47,10 @@ class UserServiceImplTest {
     )
 
     private val userService =
-        UserServiceImpl(userDao, passwordService, roleDao, userRoleAssignmentDao, userGroupService, transactionScope, defaultPolicy, operatorToolDefinitionSeeder)
+        UserServiceImpl(
+            userDao, passwordService, roleDao, userRoleAssignmentDao, userGroupService, transactionScope,
+            defaultPolicy, operatorToolDefinitionSeeder, serverBuiltInToolDefinitionSeeder
+        )
 
     private val testUserEntity = UserEntity(
         id = 1L,
@@ -69,13 +74,14 @@ class UserServiceImplTest {
 
     @BeforeEach
     fun setUp() {
-        clearMocks(userDao, passwordService, transactionScope, roleDao, userRoleAssignmentDao, userGroupService, operatorToolDefinitionSeeder)
+        clearMocks(userDao, passwordService, transactionScope, roleDao, userRoleAssignmentDao, userGroupService, operatorToolDefinitionSeeder, serverBuiltInToolDefinitionSeeder)
 
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
             block()
         }
         coEvery { operatorToolDefinitionSeeder.ensureForUser(any()) } returns emptyList<OperatorToolDefinition>().right()
+        coEvery { serverBuiltInToolDefinitionSeeder.ensureForUser(any()) } returns emptyList<ServerBuiltInToolDefinition>().right()
     }
 
     @Test
@@ -369,5 +375,43 @@ class UserServiceImplTest {
         assertTrue(result.isRight())
         coVerify { userGroupService.getAllUsersGroup() }
         coVerify { userGroupService.addUserToGroup(2L, 1L) }
+    }
+
+    @Test
+    fun `registerUser should seed the new user's server built-in tools`() = runTest {
+        // Given
+        val username = "newuser"
+        val password = "ValidPass123!"
+        val email = "new@example.com"
+        val hashedPassword = "hashedValidPass123!"
+        val allUsersGroup = UserGroup(
+            id = 1L,
+            name = CommonUserGroups.ALL_USERS,
+            description = "All users group"
+        )
+
+        every { passwordService.validatePasswordStrength(password) } returns Unit.right()
+        every { passwordService.hashPassword(password) } returns hashedPassword
+
+        coEvery {
+            userDao.insertUser(username, hashedPassword, email, UserStatus.DISABLED)
+        } returns testUserEntity.copy(
+            id = 2L,
+            username = username,
+            passwordHash = hashedPassword,
+            email = email,
+            status = UserStatus.DISABLED
+        ).right()
+        coEvery { userGroupService.getAllUsersGroup() } returns allUsersGroup.right()
+        coEvery { userGroupService.addUserToGroup(2L, 1L) } returns Unit.right()
+
+        // When
+        val result = userService.registerUser(username, password, email)
+
+        // Then
+        assertTrue(result.isRight())
+        // Registration seeds both the operator-tool instances and the server built-in instances.
+        coVerify(exactly = 1) { operatorToolDefinitionSeeder.ensureForUser(2L) }
+        coVerify(exactly = 1) { serverBuiltInToolDefinitionSeeder.ensureForUser(2L) }
     }
 }

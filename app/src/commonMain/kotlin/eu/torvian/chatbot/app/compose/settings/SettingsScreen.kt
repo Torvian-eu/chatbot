@@ -149,6 +149,13 @@ fun SettingsScreen(
                         breadcrumbSegments = breadcrumbs
                     }
 
+                    SettingsCategory.ServerBuiltInTools -> ServerBuiltInToolsTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+
                     SettingsCategory.E2EASecurity -> E2EASecurityTabRoute(
                         categoryResetSignal = categoryResetSignal
                     ) { breadcrumbs ->

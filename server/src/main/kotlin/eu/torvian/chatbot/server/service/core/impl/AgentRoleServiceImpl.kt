@@ -16,7 +16,6 @@ import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
-import eu.torvian.chatbot.common.models.tool.OperatorToolDefinition
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleOwnershipDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleToolDao
@@ -29,7 +28,6 @@ import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.ModelError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
-import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
 import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
 import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.agent.AgentInstruction
@@ -320,16 +318,22 @@ class AgentRoleServiceImpl(
 
     /**
      * Validates all shared role configuration invariants: name shape, model existence, settings
-     * existence + chat-capability + model consistency, tool existence, and instruction-list rules.
+     * existence + chat-capability + model consistency, tool ownership, and instruction-list rules.
      *
      * The exact error subtype raised is decoupled through [errors], letting this single helper serve
      * both the create and update flows (which use different error surfaces).
      *
      * @param errors Factories that map each validation failure to the caller's error type.
      * @param name The role name to validate.
-     * @param modelId The model identifier to validate.
-     * @param modelSettingsId The settings identifier to validate.
-     * @param toolIds The tool identifiers to validate.
+     * @param modelId The model identifier to validate; null is allowed (a role without a model is
+     *            non-sendable until a model is set via update).
+     * @param modelSettingsId The settings identifier to validate; null is allowed (a role without
+     *            settings is non-sendable until settings are set via update).
+     * @param toolIds The tool identifiers to validate; every id must belong to [userId]'s owned
+     *            tool set (MCP tools of the user's servers, built-in tools of the user's workers,
+     *            and the user's operator/server built-in rows). A missing or foreign id raises the
+     *            same not-found error, so an attach attempt cannot be told apart from a plain
+     *            non-existent id.
      * @param spawnableAgentRoleIds Target role identifiers to validate; duplicates are impossible at
      *            the wire level (a set) and self-referencing is allowed.
      * @param instructions The instruction DTOs to validate.
@@ -339,8 +343,8 @@ class AgentRoleServiceImpl(
     private suspend fun <E> Raise<E>.validateRoleRequest(
         errors: RoleValidationErrors<E>,
         name: String,
-        modelId: Long,
-        modelSettingsId: Long,
+        modelId: Long?,
+        modelSettingsId: Long?,
         toolIds: Set<Long>,
         spawnableAgentRoleIds: Set<Long>,
         instructions: List<AgentInstructionDto>,
@@ -353,28 +357,40 @@ class AgentRoleServiceImpl(
             errors.invalidName(name, "Role name cannot exceed $MAX_NAME_LENGTH characters")
         }
 
-        withError({ _: ModelError.ModelNotFound -> errors.modelNotFound(modelId) }) {
-            modelDao.getModelById(modelId).bind()
-        }
-
-        val settings = withError({ _: SettingsError.SettingsNotFound -> errors.settingsNotFound(modelSettingsId) }) {
-            settingsDao.getSettingsById(modelSettingsId).bind()
-        }
-        ensure(isChatLikeSettings(settings)) {
-            errors.settingsNotChatLike(modelSettingsId, settings::class.simpleName ?: "Unknown")
-        }
-        ensure(settings.modelId == modelId) {
-            errors.settingsModelMismatch(modelSettingsId, settings.modelId, modelId)
-        }
-
-        for (toolId in toolIds) {
-            val tool = withError({ _: ToolDefinitionError.NotFound -> errors.toolNotFound(toolId) }) {
-                toolDefinitionDao.getToolDefinitionById(toolId).bind()
+        // Model and settings references are validated individually and only when provided: a role
+        // may be created or updated without a model/settings (it is non-sendable until repaired),
+        // so the checks must not run for null references.
+        if (modelId != null) {
+            withError({ _: ModelError.ModelNotFound -> errors.modelNotFound(modelId) }) {
+                modelDao.getModelById(modelId).bind()
             }
-            // Operator tools are user-owned rows; this prevents guessed ids from attaching another
-            // user's spawn_agent definition.
-            if (tool is OperatorToolDefinition) {
-                ensure(tool.userId == userId) { errors.toolNotFound(toolId) }
+        }
+
+        if (modelSettingsId != null) {
+            val settings = withError({ _: SettingsError.SettingsNotFound -> errors.settingsNotFound(modelSettingsId) }) {
+                settingsDao.getSettingsById(modelSettingsId).bind()
+            }
+            ensure(isChatLikeSettings(settings)) {
+                errors.settingsNotChatLike(modelSettingsId, settings::class.simpleName ?: "Unknown")
+            }
+            // The model↔settings consistency check only makes sense when both references are
+            // provided; a model-less role has nothing to match its settings against.
+            if (modelId != null) {
+                ensure(settings.modelId == modelId) {
+                    errors.settingsModelMismatch(modelSettingsId, settings.modelId, modelId)
+                }
+            }
+        }
+
+        // Every tool is user-owned: MCP tools via their server's owner, worker built-ins via the
+        // worker's owner, and operator/server built-in tools via the per-user linkage row. Rather
+        // than checking each type separately, the whole id set is validated against the user's owned
+        // tool set (the same four owner-scoped joins the tool listing uses), so a guessed or foreign
+        // id — of any type — collapses to the same not-found error as a plain non-existent id.
+        if (toolIds.isNotEmpty()) {
+            val userToolIds = toolDefinitionDao.getToolsForUser(userId).map { it.id }.toSet()
+            toolIds.firstOrNull { it !in userToolIds }?.let { missingId ->
+                raise(errors.toolNotFound(missingId))
             }
         }
 

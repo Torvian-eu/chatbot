@@ -224,7 +224,8 @@ class SessionMessagesWebSocketHandler(
      * Normalizes WebSocket approval variants into the server-facing approval submission model.
      *
      * @receiver Decoded client-event stream for one live chat socket.
-     * @return Flow containing Local MCP, built-in worker, and operator tool approval submissions.
+     * @return Flow containing Local MCP, built-in worker, operator, and server built-in tool
+     *         approval submissions.
      */
     private fun Flow<ChatClientEvent>.toApprovalSubmissionFlow(): Flow<ToolCallApprovalSubmission> {
         return merge(
@@ -243,6 +244,14 @@ class SessionMessagesWebSocketHandler(
             filterIsInstance<ChatClientEvent.OperatorToolCallApproval>()
                 .map { event ->
                     ToolCallApprovalSubmission.OperatorToolApproval(
+                        toolCallId = event.toolCallId,
+                        approved = event.approved,
+                        denialReason = event.denialReason
+                    )
+                },
+            filterIsInstance<ChatClientEvent.ServerBuiltInToolCallApproval>()
+                .map { event ->
+                    ToolCallApprovalSubmission.ServerBuiltInApproval(
                         toolCallId = event.toolCallId,
                         approved = event.approved,
                         denialReason = event.denialReason

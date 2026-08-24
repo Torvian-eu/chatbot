@@ -12,6 +12,7 @@ enum class SettingsCategory {
     Workers,
     BuiltInTools,
     OperatorTools,
+    ServerBuiltInTools,
     E2EASecurity,
     Appearance,
     About
@@ -30,6 +31,7 @@ val SettingsCategory.displayLabel: String
         SettingsCategory.Workers -> "Workers"
         SettingsCategory.BuiltInTools -> "Built-in Tools"
         SettingsCategory.OperatorTools -> "Operator Tools"
+        SettingsCategory.ServerBuiltInTools -> "Server Built-In Tools"
         SettingsCategory.E2EASecurity -> "E2EA Security"
         SettingsCategory.Appearance -> "Appearance"
         SettingsCategory.About -> "About"

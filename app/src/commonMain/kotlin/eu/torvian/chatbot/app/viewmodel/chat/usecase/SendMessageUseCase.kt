@@ -106,7 +106,9 @@ class SendMessageUseCase(
      *
      * Built-in worker and Local MCP tools are authorized with an on-device signed request; operator
      * tools are authorized with a plain [ChatClientEvent.OperatorToolCallApproval] because they are
-     * executed by the operator over the chat socket, not dispatched to a worker.
+     * executed by the operator over the chat socket, not dispatched to a worker; server built-in
+     * tools are authorized with a plain [ChatClientEvent.ServerBuiltInToolCallApproval] because they
+     * are executed in-process on the server.
      *
      * @param toolCall Tool call the user approved or denied.
      * @param approved Whether execution should proceed.
@@ -132,6 +134,18 @@ class SendMessageUseCase(
                 // Operator tools run over the chat socket, so the operator approval needs no signature.
                 clientEventFlow.emit(
                     ChatClientEvent.OperatorToolCallApproval(
+                        toolCallId = toolCall.id,
+                        approved = approved,
+                        denialReason = denialReason
+                    )
+                )
+            }
+
+            is ServerBuiltInToolDefinition -> {
+                // Server built-in tools are executed in-process on the server, so the approval is
+                // plain (no signature, no operator relay), mirroring the operator-tool UX.
+                clientEventFlow.emit(
+                    ChatClientEvent.ServerBuiltInToolCallApproval(
                         toolCallId = toolCall.id,
                         approved = approved,
                         denialReason = denialReason
@@ -369,6 +383,25 @@ class SendMessageUseCase(
 
                 clientEventFlow.emit(
                     ChatClientEvent.OperatorToolCallApproval(
+                        toolCallId = toolCall.id,
+                        approved = preference.autoApprove,
+                        denialReason = denialReason
+                    )
+                )
+            }
+
+            is ServerBuiltInToolDefinition -> {
+                // Server built-in tools are executed in-process on the server; the approval is plain
+                // and driven by the same per-user preference store as operator tools.
+                val preference = findApprovalPreference(toolDefinition.id) ?: return
+                val denialReason = if (preference.autoApprove) {
+                    null
+                } else {
+                    preference.denialReason ?: "Auto-denied by user preference"
+                }
+
+                clientEventFlow.emit(
+                    ChatClientEvent.ServerBuiltInToolCallApproval(
                         toolCallId = toolCall.id,
                         approved = preference.autoApprove,
                         denialReason = denialReason
