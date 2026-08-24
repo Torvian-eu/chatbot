@@ -189,6 +189,14 @@ fun serviceModule() = module {
             transactionScope = get()
         )
     }
+    single<ServerBuiltInToolNamePrefixService> {
+        ServerBuiltInToolNamePrefixServiceImpl(
+            userPreferenceDao = get(),
+            serverBuiltInToolDefinitionSeeder = get(),
+            prefixResolver = get(),
+            transactionScope = get()
+        )
+    }
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<AgentRoleService> {
