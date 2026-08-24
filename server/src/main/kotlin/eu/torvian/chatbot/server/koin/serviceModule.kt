@@ -135,6 +135,7 @@ fun serviceModule() = module {
         )
     }
 
+    single<ServerBuiltInToolDefinitionSeeder> { ServerBuiltInToolDefinitionSeeder(get(), get(), get()) }
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<AgentRoleService> {
         AgentRoleServiceImpl(
@@ -264,7 +265,8 @@ fun serviceModule() = module {
         InitializationCoordinator(
             listOf(
                 get<UserAccountInitializer>(),
-                get<OperatorToolDefinitionSeeder>()
+                get<OperatorToolDefinitionSeeder>(),
+                get<ServerBuiltInToolDefinitionSeeder>()
             )
         )
     }
