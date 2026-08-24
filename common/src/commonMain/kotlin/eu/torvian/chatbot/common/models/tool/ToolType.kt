@@ -34,5 +34,16 @@ enum class ToolType {
      * tool is a per-user instance (see [OperatorToolDefinition]), so approval preferences and
      * enable/disable stay user-scoped.
      */
-    OPERATOR
+    OPERATOR,
+
+    /**
+     * Server built-in tools: cataloged, per-user instances that are executed entirely in-process on
+     * the server inside the chat turn, with no worker dispatch and no operator relay.
+     *
+     * Each tool is a per-user instance (see [ServerBuiltInToolDefinition]) seeded from
+     * [ServerBuiltInToolCatalog]. After a plain (non-signed) approval the server executes the
+     * matching handler directly against its user-scoped services, so approval preferences and
+     * enable/disable stay user-scoped like operator tools.
+     */
+    BUILTIN_SERVER
 }
