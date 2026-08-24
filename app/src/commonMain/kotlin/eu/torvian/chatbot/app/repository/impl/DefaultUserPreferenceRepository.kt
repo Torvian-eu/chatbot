@@ -9,6 +9,7 @@ import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.UserPreferenceApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.me.PreferenceDetailDTO
+import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
 import eu.torvian.chatbot.common.models.api.me.UserPreferenceDTO
 import eu.torvian.chatbot.common.models.user.PreferenceScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,9 +19,9 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * Default implementation of [UserPreferenceRepository].
  *
- * Keeps the current theme preference in an in-memory [StateFlow] so the UI
- * can observe changes reactively. Server failures are handled gracefully:
- * on sync failure the flow falls back to `null` (system theme).
+ * Keeps the current theme preference and the server built-in tool name prefix in in-memory
+ * [StateFlow]s so the UI can observe changes reactively. Server failures are handled gracefully:
+ * on sync failure the theme flow falls back to `null` (system theme).
  *
  * @property api The low-level API client for /api/v1/me preferences.
  */
@@ -35,6 +36,9 @@ class DefaultUserPreferenceRepository(
     private val _theme = MutableStateFlow<String?>(null)
     override val theme: StateFlow<String?> = _theme.asStateFlow()
 
+    private val _serverBuiltInToolNamePrefix = MutableStateFlow<String?>(null)
+    override val serverBuiltInToolNamePrefix: StateFlow<String?> = _serverBuiltInToolNamePrefix.asStateFlow()
+
     private val _detailedPreferences = MutableStateFlow<Map<String, PreferenceDetailDTO>>(emptyMap())
     override val detailedPreferences: StateFlow<Map<String, PreferenceDetailDTO>> = _detailedPreferences.asStateFlow()
 
@@ -46,6 +50,9 @@ class DefaultUserPreferenceRepository(
         }
 
         _theme.value = preferences["current_theme"]
+        // The prefix key is only present once the user has stored a value; absent means the server
+        // default applies, which the settings UI surfaces as a placeholder hint.
+        _serverBuiltInToolNamePrefix.value = preferences[PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX]
 
         logger.info("Synced theme preference: ${_theme.value}")
     }.onLeft { error ->
@@ -91,5 +98,33 @@ class DefaultUserPreferenceRepository(
         syncPreferences().bind()
         syncDetailedPreferences().bind()
         logger.info("Updated theme preference to: $theme")
+    }
+
+    override suspend fun setServerBuiltInToolNamePrefix(prefix: String): Either<RepositoryError, Unit> = either {
+        val dto = UserPreferenceDTO(
+            key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX,
+            value = prefix,
+            // The prefix governs server-side execution, so it is always stored globally.
+            scope = PreferenceScope.GLOBAL
+        )
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to update tool name prefix")
+        }) {
+            api.updatePreference(PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX, dto).bind()
+        }
+        syncPreferences().bind()
+        syncDetailedPreferences().bind()
+        logger.info("Updated server built-in tool name prefix to: $prefix")
+    }
+
+    override suspend fun resetServerBuiltInToolNamePrefix(): Either<RepositoryError, Unit> = either {
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to reset tool name prefix")
+        }) {
+            api.deletePreference(PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX, PreferenceScope.GLOBAL).bind()
+        }
+        syncPreferences().bind()
+        syncDetailedPreferences().bind()
+        logger.info("Reset server built-in tool name prefix")
     }
 }

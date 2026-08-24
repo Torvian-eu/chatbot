@@ -113,6 +113,9 @@ class AuthRoutesTest {
                 Table.WORKERS,
                 Table.WORKER_AUTH_CHALLENGES,
                 Table.USER_DEVICES,
+                // Registration seeds server built-in tools, which resolves the per-user prefix
+                // preference, so the preferences table (and its device FK) must exist.
+                Table.USER_PREFERENCES,
                 Table.FAILED_LOGIN_ATTEMPTS,
                 Table.TOOL_DEFINITIONS,
                 Table.BUILT_IN_TOOL_DEFINITIONS,

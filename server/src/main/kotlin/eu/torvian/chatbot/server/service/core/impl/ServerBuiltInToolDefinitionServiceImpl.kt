@@ -57,10 +57,12 @@ class ServerBuiltInToolDefinitionServiceImpl(
             // a probing user must not be able to confirm the tool exists or learn who owns it.
             ensure(existing.userId == userId) { UpdateServerBuiltInToolError.Forbidden(tool.id) }
 
-            // Step 3: Reconstruct the definition. The public name is intentionally NOT taken from
-            // the request: it is the catalog identity plus the executor dispatch key, so a rename
-            // would silently break LLM tool dispatch. Only the user-editable fields (description,
-            // config, schema, enabled) are applied, matching the operator-tool pattern otherwise.
+            // Step 3: Reconstruct the definition. The public name and the canonical
+            // builtInToolName are intentionally NOT taken from the request: the canonical name is
+            // the stable dispatch key, and the public name is prefix-derived and seeder-owned (it
+            // changes only through the prefix preference). Only the user-editable fields
+            // (description, config, schema, enabled) are applied, matching the operator-tool
+            // pattern otherwise.
             val updatedDefinition = existing.copy(
                 description = tool.description,
                 config = tool.config,

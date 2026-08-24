@@ -27,8 +27,9 @@ interface ServerBuiltInToolDefinitionService {
      *
      * Ownership is enforced before any field is persisted: the server built-in tool must belong to
      * [userId], otherwise an [UpdateServerBuiltInToolError.Forbidden] is returned. The public name
-     * is immutable — it is the catalog identity and the executor dispatch key — so only the
-     * description, input schema, config, and enabled flag are user-editable.
+     * is prefix-derived and seeder-owned, and the canonical `builtInToolName` is the immutable
+     * dispatch key — neither is taken from the request; only the description, input schema,
+     * config, and enabled flag are user-editable.
      *
      * @param userId The authenticated user performing the update.
      * @param tool The updated [ServerBuiltInToolDefinition] (id must be set).

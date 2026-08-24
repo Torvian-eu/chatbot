@@ -66,6 +66,10 @@ class ServerBuiltInToolRoutesTest {
             setOf(
                 Table.USERS,
                 Table.USER_SESSIONS,
+                // The seeder resolves the per-user prefix preference, so the preferences table
+                // (and its device FK) must exist.
+                Table.USER_DEVICES,
+                Table.USER_PREFERENCES,
                 Table.TOOL_DEFINITIONS,
                 Table.SERVER_BUILTIN_TOOL_DEFINITIONS
             )
@@ -177,9 +181,11 @@ class ServerBuiltInToolRoutesTest {
         val updated = response.body<ServerBuiltInToolDefinition>()
         assertEquals(false, updated.isEnabled)
         assertEquals("edited description", updated.description)
-        // The server returns the authoritative row: same id, catalog name preserved.
+        // The server returns the authoritative row: same id, catalog name and canonical dispatch
+        // name preserved.
         assertEquals(tool.id, updated.id)
         assertEquals(tool.name, updated.name)
+        assertEquals(tool.builtInToolName, updated.builtInToolName)
         assertEquals(user1.id, updated.userId)
     }
 
@@ -205,7 +211,7 @@ class ServerBuiltInToolRoutesTest {
         assertEquals(ServerBuiltInToolCatalog.allTools.size, tools.size)
         val after = tools.first { it.id == tool.id }
         // Catalog-derived fields are repaired...
-        assertEquals(ServerBuiltInToolCatalog.specFor(tool.name)!!.description, after.description)
+        assertEquals(ServerBuiltInToolCatalog.specFor(tool.builtInToolName)!!.description, after.description)
         // ...but the user's enabled/disabled choice survives the reset.
         assertTrue(!after.isEnabled)
     }

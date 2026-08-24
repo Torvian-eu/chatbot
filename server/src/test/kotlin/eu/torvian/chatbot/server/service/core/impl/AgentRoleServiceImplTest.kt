@@ -351,7 +351,8 @@ class AgentRoleServiceImplTest {
                 isEnabled = true,
                 createdAt = Clock.System.now(),
                 updatedAt = Clock.System.now(),
-                userId = userId
+                userId = userId,
+                builtInToolName = "list_agent_roles"
             )
         )
 

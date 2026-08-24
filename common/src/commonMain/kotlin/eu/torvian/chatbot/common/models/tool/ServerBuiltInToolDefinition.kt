@@ -16,13 +16,16 @@ import kotlin.time.Instant
  * enable/disable flag naturally scoped, and lets `ToolDefinitionDao` ownership filtering treat
  * server built-in tools like any other user-owned tool.
  *
- * There is exactly one server, so the public [name] is the canonical catalog name — unlike
- * worker built-ins there is no `builtInToolName` property, and the name doubles as the executor
- * dispatch key (unique within a user's tool set).
+ * The public [name] is prefix-derived and seeder-owned: it is the canonical catalog name with the
+ * user's configured tool-name prefix prepended (e.g. `chatbot-list_agent_roles`), so it may differ
+ * per user and can change when the user changes their prefix. The immutable [builtInToolName] is
+ * the canonical, unprefixed catalog name and is the value used for deduplication, reconciliation,
+ * and in-process execution dispatch — never the public [name].
  *
  * @property id Unique identifier for this tool definition.
- * @property name Machine-readable tool name (used in LLM API calls). NOT globally unique; unique per
- *            user, equals the canonical [ServerBuiltInToolCatalog] name.
+ * @property name Machine-readable public tool name (used in LLM API calls). NOT globally unique;
+ *            unique per user; equals the user's prefix (if any) plus the canonical
+ *            [ServerBuiltInToolCatalog] name.
  * @property description Human-readable explanation of the tool's purpose.
  * @property config Tool-specific configuration (JSON object).
  * @property inputSchema JSON Schema defining expected input parameters.
@@ -31,6 +34,8 @@ import kotlin.time.Instant
  * @property createdAt Timestamp when the tool was created.
  * @property updatedAt Timestamp when the tool was last modified.
  * @property userId Owning user; each user has their own instance of this server built-in tool.
+ * @property builtInToolName Canonical, unprefixed catalog name (e.g. `list_agent_roles`); immutable
+ *            and used as the executor dispatch key.
  */
 @Serializable
 data class ServerBuiltInToolDefinition(
@@ -43,7 +48,8 @@ data class ServerBuiltInToolDefinition(
     override val isEnabled: Boolean,
     override val createdAt: Instant,
     override val updatedAt: Instant,
-    val userId: Long
+    val userId: Long,
+    val builtInToolName: String,
 ) : ToolDefinition() {
     @SerialName("tool_type") // 'type' is a reserved property used by serialization
     override val type: ToolType = ToolType.BUILTIN_SERVER

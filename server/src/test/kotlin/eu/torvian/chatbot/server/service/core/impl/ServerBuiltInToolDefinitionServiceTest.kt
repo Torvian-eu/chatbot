@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core.impl
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
+import eu.torvian.chatbot.server.service.core.ServerBuiltInToolNamePrefixResolver
 import eu.torvian.chatbot.server.service.core.ServerBuiltInToolDefinitionService
 import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.error.serverbuiltin.UpdateServerBuiltInToolError
@@ -41,6 +42,10 @@ class ServerBuiltInToolDefinitionServiceTest {
         testDataManager.createTables(
             setOf(
                 Table.USERS,
+                // The seeder resolves the per-user prefix preference, so the preferences table
+                // (and its device FK) must exist.
+                Table.USER_DEVICES,
+                Table.USER_PREFERENCES,
                 Table.TOOL_DEFINITIONS,
                 Table.SERVER_BUILTIN_TOOL_DEFINITIONS
             )
@@ -74,6 +79,13 @@ class ServerBuiltInToolDefinitionServiceTest {
         assertTrue(user1Tools.all { it.userId == TestDefaults.user1.id })
         assertTrue(user2Tools.all { it.userId == TestDefaults.user2.id })
         assertTrue(user1Tools.map { it.id }.none { it in user2Tools.map { other -> other.id } })
+        // Public names carry the default prefix; the canonical name is persisted separately.
+        user1Tools.forEach { tool ->
+            assertEquals(
+                ServerBuiltInToolNamePrefixResolver.DEFAULT_SERVER_BUILTIN_TOOL_NAME_PREFIX + tool.builtInToolName,
+                tool.name
+            )
+        }
     }
 
     @Test
@@ -93,8 +105,33 @@ class ServerBuiltInToolDefinitionServiceTest {
         assertTrue(!updated.isEnabled)
         assertEquals(original.id, updated.id)
         assertEquals(TestDefaults.user1.id, updated.userId)
-        // The catalog name is immutable and survives the update unchanged.
+        // The catalog name is immutable and survives the update unchanged, and the canonical
+        // dispatch name is preserved even if the request attempted to change it.
         assertEquals(original.name, updated.name)
+        assertEquals(original.builtInToolName, updated.builtInToolName)
+    }
+
+    @Test
+    fun `updateServerBuiltInTool preserves builtInToolName even when the request carries a foreign one`() = runTest {
+        val seeder = container.get<ServerBuiltInToolDefinitionSeeder>()
+        val seeded = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
+        val original = seeded.first()
+
+        // A client attempting to smuggle a different canonical name must be ignored: the persisted
+        // row's builtInToolName is the dispatch identity.
+        val result = service.updateServerBuiltInTool(
+            userId = TestDefaults.user1.id,
+            tool = original.copy(
+                builtInToolName = "list_models",
+                description = "edited"
+            )
+        )
+
+        assertTrue(result.isRight(), "update failed: ${result.leftOrNull()}")
+        val updated = result.getOrNull()!!
+        assertEquals(original.builtInToolName, updated.builtInToolName)
+        assertEquals(original.name, updated.name)
+        assertEquals("edited", updated.description)
     }
 
     @Test
@@ -129,7 +166,7 @@ class ServerBuiltInToolDefinitionServiceTest {
 
         assertTrue(result.isRight(), "reset failed: ${result.leftOrNull()}")
         val after = result.getOrNull()!!.first { it.id == edited.id }
-        val catalogSpec = ServerBuiltInToolCatalog.specFor(edited.name)!!
+        val catalogSpec = ServerBuiltInToolCatalog.specFor(edited.builtInToolName)!!
         assertEquals(catalogSpec.description, after.description)
         // Enabled choice is preserved across a reset.
         assertTrue(!after.isEnabled)

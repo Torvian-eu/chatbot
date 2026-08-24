@@ -65,7 +65,8 @@ fun miscModule() = module {
             workerService = get(),
             json = get(),
             appConfig = get(),
-            userPreferenceService = get()
+            userPreferenceService = get(),
+            serverBuiltInToolNamePrefixService = get()
         )
     }
 }

@@ -153,6 +153,7 @@ class DefaultToolCallOrchestrator(
                     is ServerBuiltInToolDefinition -> {
                         executeServerBuiltInTool(
                             userId = userId,
+                            toolDefinition = toolDef,
                             toolCall = pendingToolCall
                         )
                     }
@@ -473,12 +474,19 @@ class DefaultToolCallOrchestrator(
 
     /**
      * Executes a server built-in tool in-process and returns the updated tool call with results.
+     *
+     * The already-resolved [ServerBuiltInToolDefinition] is passed through so the executor can
+     * dispatch on the canonical [ServerBuiltInToolDefinition.builtInToolName] without any further
+     * lookup; the orchestrator resolved the definition for approval, so no extra query is
+     * introduced.
      */
     private suspend fun executeServerBuiltInTool(
         userId: Long,
+        toolDefinition: ServerBuiltInToolDefinition,
         toolCall: ToolCall
     ): ToolCall = serverBuiltInToolExecutor.executeTool(
         userId = userId,
+        toolDefinition = toolDefinition,
         toolCall = toolCall
     )
 

@@ -65,13 +65,13 @@ class ServerBuiltInToolSerializationTest {
 
     /**
      * Verifies that a [ServerBuiltInToolDefinition] round-trips with the `tool_type` discriminator
-     * and carries no `builtInToolName`.
+     * and carries the required `builtInToolName` wire property.
      */
     @Test
     fun `ServerBuiltInToolDefinition round-trips with tool_type discriminator`() {
         val definition = ServerBuiltInToolDefinition(
             id = 21L,
-            name = ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME,
+            name = "chatbot-" + ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME,
             description = "Lists agent roles",
             config = buildJsonObject { },
             inputSchema = ServerBuiltInToolCatalog.allTools.first().inputSchema,
@@ -79,7 +79,8 @@ class ServerBuiltInToolSerializationTest {
             isEnabled = true,
             createdAt = now,
             updatedAt = now,
-            userId = 9L
+            userId = 9L,
+            builtInToolName = ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME
         )
 
         val encoded = json.encodeToString(ServerBuiltInToolDefinition.serializer(), definition)
@@ -87,8 +88,9 @@ class ServerBuiltInToolSerializationTest {
 
         assertEquals(definition, decoded)
         assertEquals(ToolType.BUILTIN_SERVER, decoded.type)
-        // The serialized wire shape must not carry a builtInToolName property.
-        assertTrue(!encoded.contains("builtInToolName"))
+        // The wire shape must carry the canonical, unprefixed built-in name next to the public name.
+        assertTrue(encoded.contains("\"builtInToolName\":\"${ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME}\""))
+        assertEquals(ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME, decoded.builtInToolName)
     }
 
     /**
@@ -98,7 +100,7 @@ class ServerBuiltInToolSerializationTest {
     fun `ServerBuiltInToolDefinition round-trips through the sealed ToolDefinition surface`() {
         val definition: ToolDefinition = ServerBuiltInToolDefinition(
             id = 22L,
-            name = ServerBuiltInToolCatalog.READ_AGENT_ROLE_NAME,
+            name = "chatbot-" + ServerBuiltInToolCatalog.READ_AGENT_ROLE_NAME,
             description = "Reads one agent role",
             config = buildJsonObject { },
             inputSchema = ServerBuiltInToolCatalog.allTools[1].inputSchema,
@@ -106,7 +108,8 @@ class ServerBuiltInToolSerializationTest {
             isEnabled = true,
             createdAt = now,
             updatedAt = now,
-            userId = 9L
+            userId = 9L,
+            builtInToolName = ServerBuiltInToolCatalog.READ_AGENT_ROLE_NAME
         )
 
         val encoded = json.encodeToString(ToolDefinition.serializer(), definition)

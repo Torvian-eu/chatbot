@@ -18,11 +18,13 @@ interface ServerBuiltInToolDefinitionDao {
      *
      * @param toolDefinitionId The ID of the base tool definition row.
      * @param userId The ID of the owning user.
+     * @param builtInToolName Canonical, unprefixed catalog name of the tool (e.g. `list_agent_roles`).
      * @return Either [ServerBuiltInToolDefinitionError] or Unit on success.
      */
     suspend fun insertTool(
         toolDefinitionId: Long,
-        userId: Long
+        userId: Long,
+        builtInToolName: String
     ): Either<ServerBuiltInToolDefinitionError, Unit>
 
     /**
@@ -42,4 +44,20 @@ interface ServerBuiltInToolDefinitionDao {
      * @return List of [ServerBuiltInToolDefinition] (empty if none).
      */
     suspend fun getToolsByUserId(userId: Long): List<ServerBuiltInToolDefinition>
+
+    /**
+     * Updates the public name of a server built-in tool definition.
+     *
+     * Only the public [eu.torvian.chatbot.server.data.tables.ToolDefinitionTable.name] is changed;
+     * the canonical [builtInToolName] is preserved. This is used when a user's tool-name prefix
+     * changes, so dispatch keeps working via the untouched canonical name.
+     *
+     * @param toolDefinitionId The ID of the base tool definition.
+     * @param publicName New public (possibly prefixed) tool name.
+     * @return Either [ServerBuiltInToolDefinitionError.NotFound] or Unit on success.
+     */
+    suspend fun updatePublicName(
+        toolDefinitionId: Long,
+        publicName: String
+    ): Either<ServerBuiltInToolDefinitionError.NotFound, Unit>
 }

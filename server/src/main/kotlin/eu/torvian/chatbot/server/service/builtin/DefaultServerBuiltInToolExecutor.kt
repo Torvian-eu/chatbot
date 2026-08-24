@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.service.builtin
 
-import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
+import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import kotlinx.serialization.json.Json
@@ -15,18 +15,22 @@ import kotlin.time.Instant
 /**
  * Default implementation of [ServerBuiltInToolExecutor].
  *
- * A thin, stateless dispatcher over the Koin-provided [tools] map: it resolves [ToolCall.toolName]
- * (unique within a user's tool set; equals the canonical [ServerBuiltInToolCatalog] name) to the
- * matching [ServerBuiltInTool] implementation and delegates the call. Each tool owns its user-scoped
- * handler and its own injected dependencies, so adding a new server built-in tool never requires
- * modifying this dispatcher — mirroring the worker-side
+ * A thin, stateless dispatcher over the Koin-provided [tools] map keyed by canonical catalog name.
+ * It resolves [ServerBuiltInToolDefinition.builtInToolName] (the canonical, unprefixed name; the
+ * registry key) to the matching [ServerBuiltInTool] implementation and delegates the call. The
+ * public name the LLM emitted ([ToolCall.toolName]) is intentionally ignored for dispatch: it may
+ * carry the user's prefix, and dispatch must stay stable across prefix changes. Each tool owns its
+ * user-scoped handler and its own injected dependencies, so adding a new server built-in tool never
+ * requires modifying this dispatcher — mirroring the worker-side
  * [eu.torvian.chatbot.worker.builtin.DefaultBuiltInToolCallExecutor] registry pattern.
  *
- * Unknown tool names and malformed inputs produce a terminal ERROR [ToolCall] carrying an
- * LLM-readable JSON error object — never thrown.
+ * Unknown canonical names (a persisted `builtInToolName` absent from the registry, i.e. a
+ * catalog/DB inconsistency such as a stale row before the startup reconcile pruned it) and
+ * malformed inputs produce a terminal ERROR [ToolCall] carrying an LLM-readable JSON error
+ * object — never thrown.
  *
  * @property json Shared JSON codec used to parse tool inputs.
- * @property tools Registry mapping the catalog tool name to its implementation.
+ * @property tools Registry mapping the canonical catalog name to its implementation.
  */
 class DefaultServerBuiltInToolExecutor(
     private val json: Json,
@@ -38,37 +42,41 @@ class DefaultServerBuiltInToolExecutor(
         private val logger: Logger = LogManager.getLogger(DefaultServerBuiltInToolExecutor::class.java)
     }
 
-    override suspend fun executeTool(userId: Long, toolCall: ToolCall): ToolCall {
+    override suspend fun executeTool(
+        userId: Long,
+        toolDefinition: ServerBuiltInToolDefinition,
+        toolCall: ToolCall
+    ): ToolCall {
         val startTime = Clock.System.now()
 
-        val tool = tools[toolCall.toolName]
+        // Dispatch on the canonical name carried by the resolved definition, never on the public
+        // LLM-emitted name: the public name may carry the user's prefix, and no preference lookup
+        // should happen at execution time.
+        val tool = tools[toolDefinition.builtInToolName]
         if (tool == null) {
             logger.warn(
-                "Unsupported server built-in tool '${toolCall.toolName}' for tool call ${toolCall.id}"
+                "Unsupported server built-in tool '${toolDefinition.builtInToolName}' for tool call ${toolCall.id}"
             )
             return toolCall.toErrorResult(
                 error = ServerBuiltInToolHandlerError.InvalidInput(
-                    "Unsupported server built-in tool '${toolCall.toolName}'. Supported tools: " +
+                    "Unsupported server built-in tool '${toolDefinition.builtInToolName}'. Supported tools: " +
                         tools.keys.sorted().joinToString(", ") + "."
                 ),
                 startTime = startTime
             )
         }
 
-        val input = parseInput(toolCall.input)
-        if (input == null) {
-            return toolCall.toErrorResult(
-                error = ServerBuiltInToolHandlerError.InvalidInput(
-                    "Tool input must be a JSON object, got: ${toolCall.input ?: "null"}"
-                ),
-                startTime = startTime
-            )
-        }
+        val input = parseInput(toolCall.input) ?: return toolCall.toErrorResult(
+            error = ServerBuiltInToolHandlerError.InvalidInput(
+                "Tool input must be a JSON object, got: ${toolCall.input ?: "null"}"
+            ),
+            startTime = startTime
+        )
 
         return tool.execute(userId, input).fold(
             ifLeft = { error ->
                 logger.warn(
-                    "Server built-in tool '${toolCall.toolName}' failed for tool call ${toolCall.id}: $error"
+                    "Server built-in tool '${toolDefinition.builtInToolName}' failed for tool call ${toolCall.id}: $error"
                 )
                 toolCall.toErrorResult(error = error, startTime = startTime)
             },
