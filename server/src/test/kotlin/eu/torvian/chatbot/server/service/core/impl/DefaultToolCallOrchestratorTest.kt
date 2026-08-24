@@ -839,7 +839,7 @@ class DefaultToolCallOrchestratorTest {
         val approval = serverBuiltInApproval(pending.id, approved = true)
         val updates = trackToolCallUpdates()
 
-        coEvery { serverBuiltInToolExecutor.executeTool(1L, pending) } returns pending.copy(
+        coEvery { serverBuiltInToolExecutor.executeTool(1L, any(), pending) } returns pending.copy(
             status = ToolCallStatus.SUCCESS,
             output = "[{\"id\":1,\"name\":\"writer\"}]",
             durationMs = 3L
@@ -867,7 +867,7 @@ class DefaultToolCallOrchestratorTest {
             listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.SUCCESS),
             updates.map { it.status }
         )
-        coVerify(exactly = 1) { serverBuiltInToolExecutor.executeTool(1L, pending) }
+        coVerify(exactly = 1) { serverBuiltInToolExecutor.executeTool(1L, any(), pending) }
     }
 
     @Test
@@ -898,7 +898,7 @@ class DefaultToolCallOrchestratorTest {
             listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.USER_DENIED),
             updates.map { it.status }
         )
-        coVerify(exactly = 0) { serverBuiltInToolExecutor.executeTool(any(), any()) }
+        coVerify(exactly = 0) { serverBuiltInToolExecutor.executeTool(any(), any(), any()) }
     }
 
     @Test
@@ -910,7 +910,7 @@ class DefaultToolCallOrchestratorTest {
 
         // The executor maps an expected failure (e.g. role not found) into a terminal ERROR call
         // carrying the LLM-readable JSON error; the orchestrator persists and relays it as-is.
-        coEvery { serverBuiltInToolExecutor.executeTool(1L, pending) } returns pending.copy(
+        coEvery { serverBuiltInToolExecutor.executeTool(1L, any(), pending) } returns pending.copy(
             status = ToolCallStatus.ERROR,
             errorMessage = "{\"error\":\"not_found_or_not_accessible\",\"message\":\"Agent role 99 not found or not accessible by the current user.\"}",
             durationMs = 2L
@@ -969,6 +969,6 @@ class DefaultToolCallOrchestratorTest {
         assertEquals(1, events.size)
         val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[0])
         assertEquals(ToolCallStatus.CANCELLED, completed.toolCall.status)
-        coVerify(exactly = 0) { serverBuiltInToolExecutor.executeTool(any(), any()) }
+        coVerify(exactly = 0) { serverBuiltInToolExecutor.executeTool(any(), any(), any()) }
     }
 }

@@ -8,22 +8,24 @@ import kotlinx.serialization.json.JsonObject
  * Common contract implemented by every server built-in tool.
  *
  * Server built-in tools run in-process on the server inside a chat turn (no worker, no MCP). Each
- * implementation owns exactly one [ServerBuiltInToolCatalog] spec: [name] is the catalog name that
- * doubles as the executor dispatch key, and [description]/[inputSchema] are the catalog values
- * surfaced to the LLM (and persisted per user at seed time).
+ * implementation owns exactly one [ServerBuiltInToolCatalog] spec: [name] is the **canonical**
+ * catalog name (the registry key the executor dispatches on), and [description]/[inputSchema] are
+ * the catalog values surfaced to the LLM (and persisted per user at seed time). The public,
+ * LLM-facing name of a user's instance may carry the user's configured prefix (e.g.
+ * `chatbot-list_agent_roles`); that prefixed name is never used for dispatch.
  *
  * Implementations are stateless and receive their user-scoped service dependencies through
  * constructor injection (wired in the Koin module), so [execute] only needs the caller identity and
  * the parsed arguments. Expected failures are returned as typed [ServerBuiltInToolHandlerError]s,
  * never thrown.
  *
- * @property name Public tool name (catalog name, unique within a user's tool set).
+ * @property name Canonical catalog name (the executor dispatch key).
  * @property description Human-readable description surfaced to the LLM.
  * @property inputSchema JSON Schema describing the tool's expected input arguments.
  */
 interface ServerBuiltInTool {
 
-    /** Public tool name; also the executor dispatch key. */
+    /** Canonical catalog name; the executor dispatch key. */
     val name: String
 
     /** Human-readable description surfaced to the LLM. */
