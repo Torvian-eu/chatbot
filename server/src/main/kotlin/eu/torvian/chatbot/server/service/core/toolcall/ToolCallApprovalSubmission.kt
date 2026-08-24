@@ -181,4 +181,22 @@ sealed interface ToolCallApprovalSubmission {
         override val approved: Boolean,
         override val denialReason: String?,
     ) : ToolCallApprovalSubmission
+
+    /**
+     * Server built-in tool approval that carries no signed request.
+     *
+     * Server built-in tools (e.g. `list_agent_roles`) are executed entirely in-process on the server
+     * inside the chat turn, so there is nothing for a worker to verify and no operator relay — no
+     * on-device signature is produced. The approval gate only needs the plain decision and an
+     * optional denial reason, mirroring [OperatorToolApproval].
+     *
+     * @property toolCallId Persisted tool-call identifier this approval refers to.
+     * @property approved Whether execution was approved.
+     * @property denialReason Optional denial reason supplied by the user or an auto-deny preference.
+     */
+    data class ServerBuiltInApproval(
+        override val toolCallId: Long,
+        override val approved: Boolean,
+        override val denialReason: String?,
+    ) : ToolCallApprovalSubmission
 }

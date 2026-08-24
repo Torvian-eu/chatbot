@@ -7,6 +7,7 @@ import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
+import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
 import kotlinx.coroutines.NonCancellable
@@ -25,24 +26,30 @@ import kotlin.time.Clock
 /**
  * Default implementation of [ToolCallOrchestrator].
  *
- * Handles approval resolution and execution for Local MCP, Built-in Worker, and Operator tool calls.
- * Local MCP and built-in tools always require an app-signed authorization, mirroring Local MCP;
- * operator tools are approved with a plain [ToolCallApprovalSubmission.OperatorToolApproval] (no
- * worker dispatch) and executed by the operator over the chat WebSocket.
+ * Handles approval resolution and execution for Local MCP, Built-in Worker, Operator, and Server
+ * Built-In tool calls. Local MCP and built-in tools always require an app-signed authorization,
+ * mirroring Local MCP; operator tools are approved with a plain
+ * [ToolCallApprovalSubmission.OperatorToolApproval] (no worker dispatch) and executed by the
+ * operator over the chat WebSocket; server built-in tools are approved with a plain
+ * [ToolCallApprovalSubmission.ServerBuiltInApproval] and executed in-process by
+ * [ServerBuiltInToolExecutor].
  *
- * Any tool definition that is neither a [LocalMCPToolDefinition], a [BuiltInWorkerToolDefinition]
- * nor an [OperatorToolDefinition] is a configuration error and causes an [IllegalStateException].
+ * Any tool definition that is neither a [LocalMCPToolDefinition], a [BuiltInWorkerToolDefinition],
+ * an [OperatorToolDefinition] nor a [ServerBuiltInToolDefinition] is a configuration error and
+ * causes an [IllegalStateException].
  *
  * @property toolCallDao DAO for persisting tool-call status transitions and results.
  * @property localMcpExecutor Executor for Local MCP tools that dispatches to the worker.
  * @property builtInWorkerToolExecutor Executor for built-in worker tools that dispatches to the worker.
  * @property operatorToolExecutor Executor for operator tools that relays execution to the operator.
+ * @property serverBuiltInToolExecutor Executor for server built-in tools that runs handlers in-process.
  */
 class DefaultToolCallOrchestrator(
     private val toolCallDao: ToolCallDao,
     private val localMcpExecutor: LocalMCPExecutor,
     private val builtInWorkerToolExecutor: BuiltInWorkerToolExecutor,
     private val operatorToolExecutor: OperatorToolExecutor,
+    private val serverBuiltInToolExecutor: ServerBuiltInToolExecutor,
 ) : ToolCallOrchestrator {
 
     private val logger: Logger = LogManager.getLogger(DefaultToolCallOrchestrator::class.java)
@@ -85,6 +92,12 @@ class DefaultToolCallOrchestrator(
                     )
 
                     is OperatorToolDefinition -> resolveOperatorToolApproval(
+                        pendingToolCall,
+                        toolApprovalFlow,
+                        controlSignal
+                    )
+
+                    is ServerBuiltInToolDefinition -> resolveServerBuiltInToolApproval(
                         pendingToolCall,
                         toolApprovalFlow,
                         controlSignal
@@ -134,6 +147,13 @@ class DefaultToolCallOrchestrator(
                             requestingAgentRoleId = requestingAgentRoleId,
                             toolCall = pendingToolCall,
                             operatorToolResultFlow = operatorToolResultFlow
+                        )
+                    }
+
+                    is ServerBuiltInToolDefinition -> {
+                        executeServerBuiltInTool(
+                            userId = userId,
+                            toolCall = pendingToolCall
                         )
                     }
                 }
@@ -264,6 +284,36 @@ class DefaultToolCallOrchestrator(
             matches = { submission ->
                 submission.toolCallId == pendingToolCall.id &&
                         submission is ToolCallApprovalSubmission.OperatorToolApproval
+            }
+        )
+        if (submission == null || controlSignal.isCancelled) return ApprovalOutcome.Cancelled
+        return if (submission.approved) {
+            ApprovalOutcome.Approved(submission)
+        } else {
+            ApprovalOutcome.Denied(submission.denialReason)
+        }
+    }
+
+    /**
+     * Resolves the user's approval decision for a server built-in tool call.
+     */
+    private suspend fun ProducerScope<ToolCallExecutionEvent>.resolveServerBuiltInToolApproval(
+        pendingToolCall: ToolCall,
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
+        controlSignal: TurnControlSignal
+    ): ApprovalOutcome {
+        val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
+        toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
+            throw IllegalStateException("Failed to update tool call to AWAITING_APPROVAL: $error")
+        }
+        send(ToolCallExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
+
+        val submission = awaitApprovalOrCancellation(
+            toolApprovalFlow = toolApprovalFlow,
+            controlSignal = controlSignal,
+            matches = { submission ->
+                submission.toolCallId == pendingToolCall.id &&
+                        submission is ToolCallApprovalSubmission.ServerBuiltInApproval
             }
         )
         if (submission == null || controlSignal.isCancelled) return ApprovalOutcome.Cancelled
@@ -419,6 +469,17 @@ class DefaultToolCallOrchestrator(
         toolCall = toolCall,
         emitEvent = { event -> send(event) },
         operatorToolResultFlow = operatorToolResultFlow
+    )
+
+    /**
+     * Executes a server built-in tool in-process and returns the updated tool call with results.
+     */
+    private suspend fun executeServerBuiltInTool(
+        userId: Long,
+        toolCall: ToolCall
+    ): ToolCall = serverBuiltInToolExecutor.executeTool(
+        userId = userId,
+        toolCall = toolCall
     )
 
     /**

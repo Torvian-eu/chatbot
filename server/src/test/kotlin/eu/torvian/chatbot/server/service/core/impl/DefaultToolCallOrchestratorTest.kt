@@ -16,6 +16,7 @@ import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorError
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
+import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolExecutor
 import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallExecutionEvent
@@ -61,6 +62,7 @@ class DefaultToolCallOrchestratorTest {
     private lateinit var localMcpExecutor: LocalMCPExecutor
     private lateinit var builtInWorkerToolExecutor: BuiltInWorkerToolExecutor
     private lateinit var operatorToolExecutor: OperatorToolExecutor
+    private lateinit var serverBuiltInToolExecutor: ServerBuiltInToolExecutor
     private lateinit var orchestrator: DefaultToolCallOrchestrator
 
     @BeforeEach
@@ -69,18 +71,20 @@ class DefaultToolCallOrchestratorTest {
         localMcpExecutor = mockk()
         builtInWorkerToolExecutor = mockk()
         operatorToolExecutor = mockk()
+        serverBuiltInToolExecutor = mockk()
 
         orchestrator = DefaultToolCallOrchestrator(
             toolCallDao = toolCallDao,
             localMcpExecutor = localMcpExecutor,
             builtInWorkerToolExecutor = builtInWorkerToolExecutor,
             operatorToolExecutor = operatorToolExecutor,
+            serverBuiltInToolExecutor = serverBuiltInToolExecutor,
         )
     }
 
     @AfterEach
     fun tearDown() {
-        clearMocks(toolCallDao, localMcpExecutor, builtInWorkerToolExecutor, operatorToolExecutor)
+        clearMocks(toolCallDao, localMcpExecutor, builtInWorkerToolExecutor, operatorToolExecutor, serverBuiltInToolExecutor)
     }
 
     // --- executeAndUpdateToolCalls tests (approval/execution orchestration) ---
@@ -787,5 +791,182 @@ class DefaultToolCallOrchestratorTest {
             listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.ERROR),
             updates.map { it.status }
         )
+    }
+
+    // --- Server Built-In tool-call tests ---
+
+    /**
+     * Fixture builder for a Server Built-In tool definition.
+     */
+    private fun serverBuiltInToolDefinition(
+        id: Long = 4L,
+        name: String = eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME,
+        userId: Long = 1L
+    ): eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition =
+        eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition(
+            id = id,
+            name = name,
+            description = "Lists the current user's agent roles",
+            config = buildJsonObject { },
+            inputSchema = buildJsonObject { },
+            outputSchema = null,
+            isEnabled = true,
+            createdAt = testToolCallInstant,
+            updatedAt = testToolCallInstant,
+            userId = userId
+        )
+
+    /**
+     * Fixture builder for a Server Built-In tool approval submission (plain, non-signed).
+     */
+    private fun serverBuiltInApproval(
+        toolCallId: Long,
+        approved: Boolean,
+        denialReason: String? = null
+    ): ToolCallApprovalSubmission.ServerBuiltInApproval =
+        ToolCallApprovalSubmission.ServerBuiltInApproval(
+            toolCallId = toolCallId,
+            approved = approved,
+            denialReason = denialReason
+        )
+
+    @Test
+    fun `executeAndUpdateToolCalls should approve and execute a server built-in tool call in-process`() = runTest {
+        val toolDef = serverBuiltInToolDefinition()
+        val pending = pendingToolCall(id = 30L, toolDefinitionId = toolDef.id, toolName = toolDef.name)
+        val approval = serverBuiltInApproval(pending.id, approved = true)
+        val updates = trackToolCallUpdates()
+
+        coEvery { serverBuiltInToolExecutor.executeTool(1L, pending) } returns pending.copy(
+            status = ToolCallStatus.SUCCESS,
+            output = "[{\"id\":1,\"name\":\"writer\"}]",
+            durationMs = 3L
+        )
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            requestingAgentRoleId = 0L,
+            pendingToolCalls = listOf(pending),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = flowOf(approval),
+            operatorToolResultFlow = emptyFlow(),
+            controlSignal = TurnControlSignal()
+        ).toList()
+
+        assertEquals(3, events.size)
+        val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
+        assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
+        assertIs<ToolCallExecutionEvent.ToolCallExecuting>(events[1])
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[2])
+        assertEquals(ToolCallStatus.SUCCESS, completed.toolCall.status)
+        assertEquals("[{\"id\":1,\"name\":\"writer\"}]", completed.toolCall.output)
+
+        assertEquals(
+            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.SUCCESS),
+            updates.map { it.status }
+        )
+        coVerify(exactly = 1) { serverBuiltInToolExecutor.executeTool(1L, pending) }
+    }
+
+    @Test
+    fun `executeAndUpdateToolCalls should deny a rejected server built-in tool call and skip execution`() = runTest {
+        val toolDef = serverBuiltInToolDefinition()
+        val pending = pendingToolCall(id = 31L, toolDefinitionId = toolDef.id, toolName = toolDef.name)
+        val approval = serverBuiltInApproval(pending.id, approved = false, denialReason = "No config changes")
+        val updates = trackToolCallUpdates()
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            requestingAgentRoleId = 0L,
+            pendingToolCalls = listOf(pending),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = flowOf(approval),
+            operatorToolResultFlow = emptyFlow(),
+            controlSignal = TurnControlSignal()
+        ).toList()
+
+        assertEquals(2, events.size)
+        val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
+        assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[1])
+        assertEquals(ToolCallStatus.USER_DENIED, completed.toolCall.status)
+        assertEquals("No config changes", completed.toolCall.denialReason)
+
+        assertEquals(
+            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.USER_DENIED),
+            updates.map { it.status }
+        )
+        coVerify(exactly = 0) { serverBuiltInToolExecutor.executeTool(any(), any()) }
+    }
+
+    @Test
+    fun `executeAndUpdateToolCalls should surface the server built-in executor's error result`() = runTest {
+        val toolDef = serverBuiltInToolDefinition()
+        val pending = pendingToolCall(id = 32L, toolDefinitionId = toolDef.id, toolName = toolDef.name)
+        val approval = serverBuiltInApproval(pending.id, approved = true)
+        val updates = trackToolCallUpdates()
+
+        // The executor maps an expected failure (e.g. role not found) into a terminal ERROR call
+        // carrying the LLM-readable JSON error; the orchestrator persists and relays it as-is.
+        coEvery { serverBuiltInToolExecutor.executeTool(1L, pending) } returns pending.copy(
+            status = ToolCallStatus.ERROR,
+            errorMessage = "{\"error\":\"not_found_or_not_accessible\",\"message\":\"Agent role 99 not found or not accessible by the current user.\"}",
+            durationMs = 2L
+        )
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            requestingAgentRoleId = 0L,
+            pendingToolCalls = listOf(pending),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = flowOf(approval),
+            operatorToolResultFlow = emptyFlow(),
+            controlSignal = TurnControlSignal()
+        ).toList()
+
+        assertEquals(3, events.size)
+        assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
+        assertIs<ToolCallExecutionEvent.ToolCallExecuting>(events[1])
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[2])
+        assertEquals(ToolCallStatus.ERROR, completed.toolCall.status)
+        assertEquals(
+            "{\"error\":\"not_found_or_not_accessible\",\"message\":\"Agent role 99 not found or not accessible by the current user.\"}",
+            completed.toolCall.errorMessage
+        )
+
+        assertEquals(
+            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.ERROR),
+            updates.map { it.status }
+        )
+    }
+
+    @Test
+    fun `executeAndUpdateToolCalls should finalize a server built-in tool call as CANCELLED on turn cancellation`() = runTest {
+        val toolDef = serverBuiltInToolDefinition()
+        val pending = pendingToolCall(id = 33L, toolDefinitionId = toolDef.id, toolName = toolDef.name)
+        trackToolCallUpdates()
+        // The cleanup path uses the compare-and-update DAO operation; a successful cleanup returns 1
+        // row so the finalizer emits the terminal CANCELLED event.
+        coEvery { toolCallDao.updateToolCallIfStatusIn(any(), any()) } returns 1
+
+        val controlSignal = TurnControlSignal()
+        // Cancel before execution begins: the orchestrator must finalize the unfinished call via its
+        // finally-block cleanup instead of running the executor.
+        controlSignal.cancel()
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            requestingAgentRoleId = 0L,
+            pendingToolCalls = listOf(pending),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = emptyFlow(),
+            operatorToolResultFlow = emptyFlow(),
+            controlSignal = controlSignal
+        ).toList()
+
+        assertEquals(1, events.size)
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[0])
+        assertEquals(ToolCallStatus.CANCELLED, completed.toolCall.status)
+        coVerify(exactly = 0) { serverBuiltInToolExecutor.executeTool(any(), any()) }
     }
 }
