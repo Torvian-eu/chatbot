@@ -39,6 +39,8 @@ import kotlin.time.Clock
  * @param policy The account validation policy containing username and password rules
  * @param operatorToolDefinitionSeeder Seeder that grants each new user their own operator-tool
  *            instances (e.g. `spawn_agent`) immediately after registration.
+ * @param serverBuiltInToolDefinitionSeeder Seeder that grants each new user their own server
+ *            built-in tool instances (e.g. `list_agent_roles`) immediately after registration.
  */
 class UserServiceImpl(
     private val userDao: UserDao,
@@ -48,7 +50,8 @@ class UserServiceImpl(
     private val userGroupService: UserGroupService,
     private val transactionScope: TransactionScope,
     private val policy: AccountValidationPolicy,
-    private val operatorToolDefinitionSeeder: OperatorToolDefinitionSeeder
+    private val operatorToolDefinitionSeeder: OperatorToolDefinitionSeeder,
+    private val serverBuiltInToolDefinitionSeeder: ServerBuiltInToolDefinitionSeeder
 ) : UserService {
 
     companion object {
@@ -148,6 +151,15 @@ class UserServiceImpl(
                 RegisterUserError.InvalidInput("Failed to initialize user tool configuration")
             }) {
                 operatorToolDefinitionSeeder.ensureForUser(newUser.id).bind()
+            }
+
+            // Seed the new user's server built-in tool instances (e.g. list_agent_roles) in the same
+            // registration transaction, mirroring the operator-tool hook above.
+            withError({ error ->
+                logger.error("Failed to seed server built-in tools for new user $username: $error")
+                RegisterUserError.InvalidInput("Failed to initialize user tool configuration")
+            }) {
+                serverBuiltInToolDefinitionSeeder.ensureForUser(newUser.id).bind()
             }
 
             logger.info("Successfully registered user: $username (ID: ${newUser.id})")

@@ -192,7 +192,11 @@ fun serviceModule() = module {
     single<PasswordService> {
         BCryptPasswordService(PasswordValidator(get<AppConfiguration>().authPolicy.passwordConfig))
     }
-    single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<UserService> {
+        UserServiceImpl(
+            get(), get(), get(), get(), get(), get(), get(), get(), get()
+        )
+    }
     single<TokenService> {
         TokenServiceImpl(
             userService = get(),

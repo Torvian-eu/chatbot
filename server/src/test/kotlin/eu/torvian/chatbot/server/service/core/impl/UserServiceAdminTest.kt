@@ -39,6 +39,7 @@ class UserServiceAdminTest {
     private lateinit var userGroupService: UserGroupService
     private lateinit var transactionScope: TransactionScope
     private lateinit var operatorToolDefinitionSeeder: OperatorToolDefinitionSeeder
+    private lateinit var serverBuiltInToolDefinitionSeeder: ServerBuiltInToolDefinitionSeeder
     private lateinit var userService: UserService
 
     @BeforeEach
@@ -50,6 +51,7 @@ class UserServiceAdminTest {
         userGroupService = mockk()
         transactionScope = mockk()
         operatorToolDefinitionSeeder = mockk()
+        serverBuiltInToolDefinitionSeeder = mockk()
 
         // Mock transaction scope to execute block directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
@@ -70,7 +72,8 @@ class UserServiceAdminTest {
             userGroupService,
             transactionScope,
             defaultPolicy,
-            operatorToolDefinitionSeeder
+            operatorToolDefinitionSeeder,
+            serverBuiltInToolDefinitionSeeder
         )
     }
 
