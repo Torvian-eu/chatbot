@@ -22,6 +22,15 @@ interface UserPreferenceRepository {
     val theme: StateFlow<String?>
 
     /**
+     * Reactive stream of the user's server built-in tool name prefix as a string.
+     *
+     * - a non-blank value -> the custom prefix (e.g. `"acme-"`);
+     * - `""`             -> no prefix (canonical tool names);
+     * - `null`            -> no stored preference; the server default (`"chatbot-"`) applies.
+     */
+    val serverBuiltInToolNamePrefix: StateFlow<String?>
+
+    /**
      * Reactive stream of detailed preferences showing both global and device-specific values.
      *
      * This map is used by the Settings UI to display the inheritance chain,
@@ -31,7 +40,7 @@ interface UserPreferenceRepository {
 
     /**
      * Fetches the current user's resolved preferences from the server
-     * and updates [theme] based on the `"current_theme"` key.
+     * and updates [theme] and [serverBuiltInToolNamePrefix] from their well-known keys.
      *
      * On failure, [theme] is reset to `null` so the app falls back
      * to the system theme.
@@ -66,4 +75,27 @@ interface UserPreferenceRepository {
         theme: String?,
         scope: PreferenceScope
     ): Either<RepositoryError, Unit>
+
+    /**
+     * Stores the user's server built-in tool name prefix on the server (GLOBAL scope).
+     *
+     * A blank [prefix] means "no prefix" (canonical tool names). The local
+     * [serverBuiltInToolNamePrefix] state is refreshed from the server afterwards so the UI shows
+     * the authoritative value.
+     *
+     * @param prefix The requested prefix (blank is valid and means no prefix).
+     * @return [Either.Right] with [Unit] on success, or [Either.Left] with a [RepositoryError] on failure.
+     */
+    suspend fun setServerBuiltInToolNamePrefix(prefix: String): Either<RepositoryError, Unit>
+
+    /**
+     * Resets the user's server built-in tool name prefix to the server default (`"chatbot-"`).
+     *
+     * Deletes the global preference row via `DELETE /api/v1/me/preferences/{key}`; the server
+     * renames the user's tools back to the default prefix atomically. The local
+     * [serverBuiltInToolNamePrefix] state is refreshed from the server afterwards.
+     *
+     * @return [Either.Right] with [Unit] on success, or [Either.Left] with a [RepositoryError] on failure.
+     */
+    suspend fun resetServerBuiltInToolNamePrefix(): Either<RepositoryError, Unit>
 }

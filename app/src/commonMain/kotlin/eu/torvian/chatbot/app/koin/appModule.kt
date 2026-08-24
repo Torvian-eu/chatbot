@@ -609,6 +609,7 @@ fun appModule(config: AppConfiguration): Module = module {
         ServerBuiltInToolsViewModel(
             serverBuiltInToolRepository = get(),
             toolRepository = get(),
+            userPreferenceRepository = get(),
             notificationService = get()
         )
     }

@@ -13,11 +13,14 @@ import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
  *   used to render the auto-approval mode of each tool row.
  * @property resetInProgress Whether a reset-to-defaults operation is currently in flight, used
  *   to disable the reset control and show progress.
+ * @property toolNamePrefix The user's stored server built-in tool name prefix (`null` = no stored
+ *   preference, so the server default `"chatbot-"` applies; `""` = explicitly no prefix).
  */
 data class ServerBuiltInToolsTabState(
     val toolsState: DataState<RepositoryError, List<ServerBuiltInToolDefinition>>,
     val approvalPreferencesState: DataState<RepositoryError, List<UserToolApprovalPreference>>,
-    val resetInProgress: Boolean
+    val resetInProgress: Boolean,
+    val toolNamePrefix: String?
 )
 
 /**
@@ -62,4 +65,16 @@ interface ServerBuiltInToolsTabActions {
      * Resets the current user's server built-in tools to the catalog defaults.
      */
     fun onResetToDefaults()
+
+    /**
+     * Stores the user's server built-in tool name prefix (blank = no prefix).
+     *
+     * @param prefix The requested prefix; blank clears the prefix (canonical tool names).
+     */
+    fun onSaveToolNamePrefix(prefix: String)
+
+    /**
+     * Resets the user's server built-in tool name prefix to the server default (`"chatbot-"`).
+     */
+    fun onResetToolNamePrefix()
 }

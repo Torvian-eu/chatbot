@@ -35,8 +35,9 @@ private val PrettyJson = Json { prettyPrint = true }
  * lets the user edit each tool's description and input schema, toggle its enabled state, and
  * configure its auto-approval mode. The tab mirrors the Operator Tools tab: server built-in tools
  * are scoped to the current user and executed in-process on the server, so the list is always the
- * user's own instances. The header exposes a reset-to-defaults action that reconciles the user's
- * tools with the [eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog].
+ * user's own instances. The header exposes a tool-name-prefix configuration dialog and a
+ * reset-to-defaults action that reconciles the user's tools with the
+ * [eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog].
  *
  * @param state Reactive UI state for the tab.
  * @param actions Callbacks invoked by user interactions.
@@ -52,6 +53,8 @@ fun ServerBuiltInToolsTab(
     var editingTool by remember { mutableStateOf<ServerBuiltInToolDefinition?>(null) }
     // Tracks whether the reset-to-defaults confirmation dialog is open.
     var showResetConfirm by remember { mutableStateOf(false) }
+    // Tracks whether the tool-name-prefix configuration dialog is open.
+    var showPrefixDialog by remember { mutableStateOf(false) }
     // Whether a reset is currently in flight, used to disable the button and show progress.
     val resetInProgress = state.resetInProgress
 
@@ -59,6 +62,7 @@ fun ServerBuiltInToolsTab(
         ServerBuiltInToolsHeader(
             resetEnabled = !resetInProgress,
             onReset = { showResetConfirm = true },
+            onConfigurePrefix = { showPrefixDialog = true },
             resetInProgress = resetInProgress,
             modifier = Modifier
                 .fillMaxWidth()
@@ -141,17 +145,44 @@ fun ServerBuiltInToolsTab(
             onDismiss = { showResetConfirm = false }
         )
     }
+
+    // Tool-name-prefix configuration dialog. The draft text lives inside the dialog, so the field
+    // always reflects the stored value whenever the dialog is (re)opened. Like the other dialogs in
+    // this tab, it closes immediately on confirm; the save/reset runs in the ViewModel
+    // (fire-and-forget) and failures surface through the tab's notification path.
+    if (showPrefixDialog) {
+        ServerBuiltInToolsPrefixDialog(
+            initialPrefix = state.toolNamePrefix ?: "",
+            onSave = { prefix ->
+                actions.onSaveToolNamePrefix(prefix)
+                showPrefixDialog = false
+            },
+            onResetToDefault = {
+                actions.onResetToolNamePrefix()
+                showPrefixDialog = false
+            },
+            onDismiss = { showPrefixDialog = false }
+        )
+    }
 }
 
 /**
- * Header containing the reset-to-defaults action.
+ * Header containing the tool-name-prefix configuration and reset-to-defaults actions.
  *
- * The reset control is disabled while a reset is in flight.
+ * The tool-name-prefix button opens the prefix configuration dialog; the reset action reconciles
+ * the user's tools with the catalog and is disabled while a reset is in flight.
+ *
+ * @param resetEnabled Whether the reset-to-defaults button is enabled.
+ * @param onReset Callback invoked when the reset-to-defaults button is pressed.
+ * @param onConfigurePrefix Callback invoked when the tool-name-prefix button is pressed.
+ * @param resetInProgress Whether a reset is currently in flight, shown as inline progress.
+ * @param modifier Modifier applied to the header container.
  */
 @Composable
 private fun ServerBuiltInToolsHeader(
     resetEnabled: Boolean,
     onReset: () -> Unit,
+    onConfigurePrefix: () -> Unit,
     resetInProgress: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -172,21 +203,102 @@ private fun ServerBuiltInToolsHeader(
             )
         }
 
-        // Reset-to-defaults action.
-        OutlinedButton(
-            onClick = onReset,
-            enabled = resetEnabled
-        ) {
-            if (resetInProgress) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Opens the tool-name-prefix configuration dialog.
+            OutlinedButton(onClick = onConfigurePrefix) {
+                Text("Tool name prefix")
             }
-            Text("Reset")
+
+            // Reset-to-defaults action.
+            OutlinedButton(
+                onClick = onReset,
+                enabled = resetEnabled
+            ) {
+                if (resetInProgress) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Reset")
+            }
         }
     }
+}
+
+/**
+ * Dialog for configuring the per-user server built-in tool name prefix.
+ *
+ * The prefix is concatenated (without a separator) to the canonical tool name to form the public
+ * name the LLM sees, e.g. `acme-` + `list_agent_roles` → `acme-list_agent_roles`. Blank means no
+ * prefix (canonical names); when no preference is stored the server default `"chatbot-"` applies
+ * and is shown as the placeholder hint. The input is trimmed on save so accidental surrounding
+ * whitespace is not persisted. The dialog owns its draft text, so every open starts from the latest
+ * stored value; it closes immediately on confirm and the persistence runs in the ViewModel, like
+ * the edit and reset confirmation dialogs in this tab.
+ *
+ * @param initialPrefix Stored prefix to seed the input with (`null`/absent stored value maps to
+ *   `""`, with the server default shown only as the placeholder hint).
+ * @param onSave Callback invoked with the trimmed prefix when the user confirms.
+ * @param onResetToDefault Callback invoked when the user resets to the server default.
+ * @param onDismiss Callback invoked when the dialog is dismissed without saving.
+ */
+@Composable
+private fun ServerBuiltInToolsPrefixDialog(
+    initialPrefix: String,
+    onSave: (String) -> Unit,
+    onResetToDefault: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var prefixText by remember(initialPrefix) { mutableStateOf(initialPrefix) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Tool name prefix") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = prefixText,
+                    onValueChange = { prefixText = it },
+                    label = { Text("Tool name prefix") },
+                    placeholder = { Text("chatbot-") },
+                    singleLine = true,
+                    supportingText = {
+                        Text(
+                            "Prefix prepended to tool names (e.g. chatbot-list_agent_roles). " +
+                                "Blank = no prefix. When unset, the server default \"chatbot-\" " +
+                                "applies."
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // Inline reset so the server default can be restored without leaving the dialog.
+                OutlinedButton(
+                    onClick = onResetToDefault
+                ) {
+                    Text("Reset to default")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(prefixText.trim()) }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 /**

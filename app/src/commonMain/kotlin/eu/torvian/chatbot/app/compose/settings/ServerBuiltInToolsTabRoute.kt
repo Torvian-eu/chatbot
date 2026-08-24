@@ -42,6 +42,7 @@ fun ServerBuiltInToolsTabRoute(
     val toolsState by viewModel.toolsState.collectAsState()
     val approvalPreferencesState by viewModel.approvalPreferencesState.collectAsState()
     val resetInProgress by viewModel.resetInProgress.collectAsState()
+    val toolNamePrefix by viewModel.toolNamePrefix.collectAsState()
 
     // Update breadcrumbs.
     LaunchedEffect(Unit) {
@@ -52,7 +53,8 @@ fun ServerBuiltInToolsTabRoute(
     val state = ServerBuiltInToolsTabState(
         toolsState = toolsState,
         approvalPreferencesState = approvalPreferencesState,
-        resetInProgress = resetInProgress
+        resetInProgress = resetInProgress,
+        toolNamePrefix = toolNamePrefix
     )
 
     // Build actions forwarding to the ViewModel.
@@ -66,6 +68,8 @@ fun ServerBuiltInToolsTabRoute(
         override fun onClearApprovalPreference(toolDefinitionId: Long) =
             viewModel.clearApprovalPreference(toolDefinitionId)
         override fun onResetToDefaults() = viewModel.resetToDefaults()
+        override fun onSaveToolNamePrefix(prefix: String) = viewModel.saveToolNamePrefix(prefix)
+        override fun onResetToolNamePrefix() = viewModel.resetToolNamePrefix()
     }
 
     // Call the presentational ServerBuiltInToolsTab.
