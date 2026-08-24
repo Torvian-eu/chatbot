@@ -19,9 +19,12 @@ import kotlinx.serialization.json.putJsonObject
  *
  * The catalog describes the **kind** (e.g. `list_agent_roles`): name, description, and input
  * schema. It is deliberately not a row — the seeder instantiates per-user instances from a spec.
- * Because there is exactly one server, the public name of a server built-in tool equals its
- * canonical catalog name and is unique within a user's tool set; the name doubles as the executor
- * dispatch key used by the server-side `DefaultServerBuiltInToolExecutor`.
+ * The spec names are **canonical** (unprefixed). The public/LLM-facing name of an instance is the
+ * user's configured tool-name prefix concatenated to the canonical name (e.g.
+ * `chatbot-list_agent_roles` for the default prefix `"chatbot-"`), applied per user by the
+ * server-side seeder; blank prefix means the canonical name itself. The canonical name is what the
+ * executor dispatches on (persisted as `ServerBuiltInToolDefinition.builtInToolName`), never the
+ * prefixed public name.
  *
  * All v1 tools are read/manage operations on agent-role, model, model-settings, and tool objects,
  * each strictly user-scoped. Descriptions state that scoping explicitly so the LLM can self-correct
@@ -29,28 +32,28 @@ import kotlinx.serialization.json.putJsonObject
  */
 object ServerBuiltInToolCatalog {
 
-    /** Public, LLM-facing name of the `list_agent_roles` tool. */
+    /** Canonical, unprefixed catalog name of the `list_agent_roles` tool. */
     const val LIST_AGENT_ROLES_NAME = "list_agent_roles"
 
-    /** Public, LLM-facing name of the `read_agent_role` tool. */
+    /** Canonical, unprefixed catalog name of the `read_agent_role` tool. */
     const val READ_AGENT_ROLE_NAME = "read_agent_role"
 
-    /** Public, LLM-facing name of the `create_agent_role` tool. */
+    /** Canonical, unprefixed catalog name of the `create_agent_role` tool. */
     const val CREATE_AGENT_ROLE_NAME = "create_agent_role"
 
-    /** Public, LLM-facing name of the `update_agent_role` tool. */
+    /** Canonical, unprefixed catalog name of the `update_agent_role` tool. */
     const val UPDATE_AGENT_ROLE_NAME = "update_agent_role"
 
-    /** Public, LLM-facing name of the `list_models` tool. */
+    /** Canonical, unprefixed catalog name of the `list_models` tool. */
     const val LIST_MODELS_NAME = "list_models"
 
-    /** Public, LLM-facing name of the `list_model_settings` tool. */
+    /** Canonical, unprefixed catalog name of the `list_model_settings` tool. */
     const val LIST_MODEL_SETTINGS_NAME = "list_model_settings"
 
-    /** Public, LLM-facing name of the `list_tools` tool. */
+    /** Canonical, unprefixed catalog name of the `list_tools` tool. */
     const val LIST_TOOLS_NAME = "list_tools"
 
-    /** Public, LLM-facing name of the `read_tool` tool. */
+    /** Canonical, unprefixed catalog name of the `read_tool` tool. */
     const val READ_TOOL_NAME = "read_tool"
 
     /** JSON property holding the agent-role id for role read/update calls. */
@@ -86,7 +89,9 @@ object ServerBuiltInToolCatalog {
     /**
      * Immutable specification of a single server built-in tool.
      *
-     * @property name Public tool name exposed to the LLM; also the executor dispatch key.
+     * @property name Canonical, unprefixed catalog name (e.g. `list_agent_roles`). The public
+     *            LLM-facing name is the user's prefix concatenated to this name, applied per user
+     *            by the seeder; the canonical name is the executor dispatch key.
      * @property description Human-readable description surfaced to the LLM, stating user-scoping.
      * @property inputSchema JSON Schema describing the tool's expected input arguments.
      */
@@ -250,9 +255,9 @@ object ServerBuiltInToolCatalog {
     }
 
     /**
-     * Returns the catalog spec for the given public tool name.
+     * Returns the catalog spec for the given canonical tool name.
      *
-     * @param name The public tool name (e.g. [LIST_AGENT_ROLES_NAME]).
+     * @param name The canonical, unprefixed catalog name (e.g. [LIST_AGENT_ROLES_NAME]).
      * @return The matching [ServerBuiltInToolSpec], or null when the name is unknown.
      */
     fun specFor(name: String): ServerBuiltInToolSpec? = allTools.firstOrNull { it.name == name }

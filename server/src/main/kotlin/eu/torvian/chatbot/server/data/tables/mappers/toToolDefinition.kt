@@ -85,18 +85,28 @@ fun ResultRow.toToolDefinition(): ToolDefinition {
             userId = this[OperatorToolDefinitionTable.userId].value
         )
 
-        ToolType.BUILTIN_SERVER -> ServerBuiltInToolDefinition(
-            id = id,
-            name = name,
-            description = description,
-            config = config,
-            inputSchema = inputSchema,
-            outputSchema = outputSchema,
-            isEnabled = isEnabled,
-            createdAt = createdAt,
-            updatedAt = updatedAt,
-            userId = this[ServerBuiltInToolDefinitionTable.userId].value
-        )
+        ToolType.BUILTIN_SERVER -> {
+            val id = this[ToolDefinitionTable.id].value
+            // The canonical name is an application invariant (seeder always writes it; V25
+            // backfilled existing rows). A null here means data corruption, so fail loudly.
+            val builtInToolName = this[ServerBuiltInToolDefinitionTable.builtInToolName]
+                ?: throw IllegalStateException(
+                    "Server built-in tool definition $id has no built_in_tool_name"
+                )
+            ServerBuiltInToolDefinition(
+                id = id,
+                name = name,
+                description = description,
+                config = config,
+                inputSchema = inputSchema,
+                outputSchema = outputSchema,
+                isEnabled = isEnabled,
+                createdAt = createdAt,
+                updatedAt = updatedAt,
+                userId = this[ServerBuiltInToolDefinitionTable.userId].value,
+                builtInToolName = builtInToolName
+            )
+        }
 
         // MCP_REMOTE is declared but never persisted; no generic fallback type exists anymore.
         ToolType.MCP_REMOTE -> throw IllegalStateException("Unsupported tool type: $toolType")

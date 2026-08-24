@@ -801,6 +801,7 @@ class DefaultToolCallOrchestratorTest {
     private fun serverBuiltInToolDefinition(
         id: Long = 4L,
         name: String = eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME,
+        builtInToolName: String = eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME,
         userId: Long = 1L
     ): eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition =
         eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition(
@@ -813,7 +814,8 @@ class DefaultToolCallOrchestratorTest {
             isEnabled = true,
             createdAt = testToolCallInstant,
             updatedAt = testToolCallInstant,
-            userId = userId
+            userId = userId,
+            builtInToolName = builtInToolName
         )
 
     /**

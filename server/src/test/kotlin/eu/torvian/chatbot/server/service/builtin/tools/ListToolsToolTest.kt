@@ -52,7 +52,8 @@ class ListToolsToolTest {
         isEnabled = true,
         createdAt = now,
         updatedAt = now,
-        userId = userId
+        userId = userId,
+        builtInToolName = name
     )
 
     private fun assertSuccess(result: Either<ServerBuiltInToolHandlerError, String>): String {

@@ -594,7 +594,7 @@ class ToolDefinitionDaoExposedTest {
             outputSchema = null,
             isEnabled = true
         )
-        serverBuiltInToolDefinitionDao.insertTool(entity.id, userId)
+        serverBuiltInToolDefinitionDao.insertTool(entity.id, userId, name)
         return toolDefinitionDao.getToolDefinitionById(entity.id).getOrElse {
             throw AssertionError("Expected server built-in tool to be retrievable")
         } as eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition

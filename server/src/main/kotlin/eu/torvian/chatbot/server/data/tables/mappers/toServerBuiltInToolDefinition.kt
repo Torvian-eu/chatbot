@@ -19,17 +19,28 @@ import kotlin.time.Instant
  *            columns.
  * @return Mapped [ServerBuiltInToolDefinition].
  */
-fun ResultRow.toServerBuiltInToolDefinition(): ServerBuiltInToolDefinition = ServerBuiltInToolDefinition(
-    id = this[ToolDefinitionTable.id].value,
-    name = this[ToolDefinitionTable.name],
-    description = this[ToolDefinitionTable.description],
-    config = Json.parseToJsonElement(this[ToolDefinitionTable.configJson]).let { it as JsonObject },
-    inputSchema = Json.parseToJsonElement(this[ToolDefinitionTable.inputSchemaJson]).let { it as JsonObject },
-    outputSchema = this[ToolDefinitionTable.outputSchemaJson]?.let {
-        Json.parseToJsonElement(it) as JsonObject
-    },
-    isEnabled = this[ToolDefinitionTable.isEnabled],
-    createdAt = Instant.fromEpochMilliseconds(this[ToolDefinitionTable.createdAt]),
-    updatedAt = Instant.fromEpochMilliseconds(this[ToolDefinitionTable.updatedAt]),
-    userId = this[ServerBuiltInToolDefinitionTable.userId].value
-)
+fun ResultRow.toServerBuiltInToolDefinition(): ServerBuiltInToolDefinition {
+    val id = this[ToolDefinitionTable.id].value
+    // The canonical name is an application invariant (the seeder always writes it and V25
+    // backfilled existing rows); a null here means data corruption or a partially applied
+    // migration, so fail loudly instead of silently losing the dispatch key.
+    val builtInToolName = this[ServerBuiltInToolDefinitionTable.builtInToolName]
+        ?: throw IllegalStateException(
+            "Server built-in tool definition $id has no built_in_tool_name"
+        )
+    return ServerBuiltInToolDefinition(
+        id = id,
+        name = this[ToolDefinitionTable.name],
+        description = this[ToolDefinitionTable.description],
+        config = Json.parseToJsonElement(this[ToolDefinitionTable.configJson]).let { it as JsonObject },
+        inputSchema = Json.parseToJsonElement(this[ToolDefinitionTable.inputSchemaJson]).let { it as JsonObject },
+        outputSchema = this[ToolDefinitionTable.outputSchemaJson]?.let {
+            Json.parseToJsonElement(it) as JsonObject
+        },
+        isEnabled = this[ToolDefinitionTable.isEnabled],
+        createdAt = Instant.fromEpochMilliseconds(this[ToolDefinitionTable.createdAt]),
+        updatedAt = Instant.fromEpochMilliseconds(this[ToolDefinitionTable.updatedAt]),
+        userId = this[ServerBuiltInToolDefinitionTable.userId].value,
+        builtInToolName = builtInToolName
+    )
+}

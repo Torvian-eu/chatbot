@@ -66,7 +66,8 @@ class ReadToolToolTest {
             isEnabled = true,
             createdAt = now,
             updatedAt = now,
-            userId = userId
+            userId = userId,
+            builtInToolName = ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME
         )
         coEvery { toolService.getToolsForUser(userId) } returns listOf(owned)
         val tool = ReadToolTool(toolService, json)

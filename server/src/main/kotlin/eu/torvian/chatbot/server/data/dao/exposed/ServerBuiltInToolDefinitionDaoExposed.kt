@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.raise.catch
 import arrow.core.raise.either
+import arrow.core.raise.ensure
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition
@@ -16,8 +17,7 @@ import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.*
 
 /**
  * Exposed-based implementation of [ServerBuiltInToolDefinitionDao].
@@ -35,7 +35,8 @@ class ServerBuiltInToolDefinitionDaoExposed(
 
     override suspend fun insertTool(
         toolDefinitionId: Long,
-        userId: Long
+        userId: Long,
+        builtInToolName: String
     ): Either<ServerBuiltInToolDefinitionError, Unit> =
         transactionScope.transaction {
             either {
@@ -43,6 +44,7 @@ class ServerBuiltInToolDefinitionDaoExposed(
                     ServerBuiltInToolDefinitionTable.insert {
                         it[ServerBuiltInToolDefinitionTable.toolDefinitionId] = toolDefinitionId
                         it[ServerBuiltInToolDefinitionTable.userId] = userId
+                        it[ServerBuiltInToolDefinitionTable.builtInToolName] = builtInToolName
                     }
                 }) { e: ExposedSQLException ->
                     logger.error(
@@ -89,5 +91,25 @@ class ServerBuiltInToolDefinitionDaoExposed(
                 .selectAll()
                 .where { ServerBuiltInToolDefinitionTable.userId eq userId }
                 .map { it.toServerBuiltInToolDefinition() }
+        }
+
+    override suspend fun updatePublicName(
+        toolDefinitionId: Long,
+        publicName: String
+    ): Either<ServerBuiltInToolDefinitionError.NotFound, Unit> =
+        transactionScope.transaction {
+            either {
+                // Guard: the linkage must exist for this to be a server built-in tool rename.
+                val linkageExists = ServerBuiltInToolDefinitionTable
+                    .selectAll()
+                    .where { ServerBuiltInToolDefinitionTable.toolDefinitionId eq toolDefinitionId }
+                    .singleOrNull() != null
+                ensure(linkageExists) { ServerBuiltInToolDefinitionError.NotFound(toolDefinitionId) }
+
+                ToolDefinitionTable.update({ ToolDefinitionTable.id eq toolDefinitionId }) {
+                    it[name] = publicName
+                }
+                Unit.right()
+            }
         }
 }
