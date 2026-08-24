@@ -220,6 +220,11 @@ enum class Table {
     OPERATOR_TOOL_DEFINITIONS,
 
     /**
+     * Table for linking server built-in tools (e.g. list_agent_roles) to their owning user.
+     */
+    SERVER_BUILTIN_TOOL_DEFINITIONS,
+
+    /**
      * Table for storing signed Local MCP server configuration snapshots.
      */
     LOCAL_MCP_SERVER_SIGNATURES,

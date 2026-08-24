@@ -46,6 +46,7 @@ class ToolDefinitionDaoExposedTest {
     private lateinit var localMCPToolDefinitionDao: LocalMCPToolDefinitionDao
     private lateinit var localMCPServerDao: LocalMCPServerDao
     private lateinit var operatorToolDefinitionDao: OperatorToolDefinitionDao
+    private lateinit var serverBuiltInToolDefinitionDao: ServerBuiltInToolDefinitionDao
     private lateinit var builtInToolDefinitionDao: BuiltInToolDefinitionDao
     private lateinit var workerDao: WorkerDao
     private lateinit var transactionScope: TransactionScope
@@ -58,6 +59,7 @@ class ToolDefinitionDaoExposedTest {
         localMCPToolDefinitionDao = container.get()
         localMCPServerDao = container.get()
         operatorToolDefinitionDao = container.get()
+        serverBuiltInToolDefinitionDao = container.get()
         builtInToolDefinitionDao = container.get()
         workerDao = container.get()
         transactionScope = container.get()
@@ -569,5 +571,94 @@ class ToolDefinitionDaoExposedTest {
 
         assertTrue(user1Tools.any { it.id == builtInEntity.id }, "Owner should see their worker's built-in tool")
         assertTrue(user2Tools.none { it.id == builtInEntity.id }, "Other users must not see the built-in tool")
+    }
+
+    /**
+     * Creates a BUILTIN_SERVER tool definition linked to the given user.
+     *
+     * @param name Public tool name (defaults to the first catalog spec).
+     * @param userId Owning user.
+     * @return The persisted [eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition].
+     */
+    private suspend fun createServerBuiltInTool(
+        name: String = eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME,
+        userId: Long
+    ): eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition {
+        val spec = eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog.allTools.first { it.name == name }
+        val entity = toolDefinitionDao.insertToolDefinition(
+            name = name,
+            description = spec.description,
+            type = ToolType.BUILTIN_SERVER,
+            config = buildJsonObject { },
+            inputSchema = spec.inputSchema,
+            outputSchema = null,
+            isEnabled = true
+        )
+        serverBuiltInToolDefinitionDao.insertTool(entity.id, userId)
+        return toolDefinitionDao.getToolDefinitionById(entity.id).getOrElse {
+            throw AssertionError("Expected server built-in tool to be retrievable")
+        } as eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition
+    }
+
+    @Test
+    fun `BUILTIN_SERVER tool maps to ServerBuiltInToolDefinition reading userId from the side table`() = runTest {
+        // The linkage table enforces a user FK, so the owning user must exist first.
+        transactionScope.transaction {
+            UsersTable.insert {
+                it[id] = 77L
+                it[username] = "server_builtin_owner"
+                it[passwordHash] = "hash"
+                it[email] = "server_builtin_owner@example.com"
+                it[status] = UserStatus.ACTIVE
+                it[createdAt] = Clock.System.now().toEpochMilliseconds()
+                it[updatedAt] = Clock.System.now().toEpochMilliseconds()
+            }
+        }
+        val tool = createServerBuiltInTool(userId = 77L)
+
+        val retrieved = toolDefinitionDao.getToolDefinitionById(tool.id).getOrElse {
+            throw AssertionError("Expected tool to be retrievable")
+        }
+
+        assertIs<eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition>(retrieved)
+        assertEquals(ToolType.BUILTIN_SERVER, retrieved.type)
+        assertEquals(77L, retrieved.userId)
+        assertEquals(eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME, retrieved.name)
+    }
+
+    @Test
+    fun `getToolsForUser returns only the user's own server built-in tools`() = runTest {
+        val user1 = TestDefaults.user1
+        val user2 = TestDefaults.user2
+        transactionScope.transaction {
+            UsersTable.insert {
+                it[id] = user1.id
+                it[username] = user1.username
+                it[passwordHash] = "hash"
+                it[email] = user1.email
+                it[status] = UserStatus.ACTIVE
+                it[createdAt] = user1.createdAt.toEpochMilliseconds()
+                it[updatedAt] = user1.updatedAt.toEpochMilliseconds()
+            }
+            UsersTable.insert {
+                it[id] = user2.id
+                it[username] = user2.username
+                it[passwordHash] = "hash"
+                it[email] = user2.email
+                it[status] = UserStatus.ACTIVE
+                it[createdAt] = user2.createdAt.toEpochMilliseconds()
+                it[updatedAt] = user2.updatedAt.toEpochMilliseconds()
+            }
+        }
+
+        val user1Tool = createServerBuiltInTool(userId = user1.id)
+        createServerBuiltInTool(userId = user2.id)
+
+        val user1Tools = toolDefinitionDao.getToolsForUser(user1.id)
+        val user2Tools = toolDefinitionDao.getToolsForUser(user2.id)
+
+        // No cross-user leak: each user sees only their own server built-in instance.
+        assertTrue(user1Tools.any { it.id == user1Tool.id })
+        assertTrue(user2Tools.none { it.id == user1Tool.id })
     }
 }

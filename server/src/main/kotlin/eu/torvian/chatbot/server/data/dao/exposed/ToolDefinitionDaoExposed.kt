@@ -15,6 +15,7 @@ import eu.torvian.chatbot.server.data.tables.BuiltInToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.OperatorToolDefinitionTable
+import eu.torvian.chatbot.server.data.tables.ServerBuiltInToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.WorkersTable
 import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinition
@@ -43,9 +44,9 @@ class ToolDefinitionDaoExposed(
      * Builds the joined query over [ToolDefinitionTable] that carries the columns required to
      * reconstruct a fully typed [ToolDefinition] via [toToolDefinition].
      *
-     * LEFT JOINs the MCP, built-in and operator linkage tables so that every tool type (MCP_LOCAL,
-     * BUILTIN_WORKER, OPERATOR) can be mapped polymorphically without a separate generic fallback
-     * type.
+     * LEFT JOINs the MCP, built-in, operator and server built-in linkage tables so that every tool
+     * type (MCP_LOCAL, BUILTIN_WORKER, OPERATOR, BUILTIN_SERVER) can be mapped polymorphically
+     * without a separate generic fallback type.
      */
     private fun joinedToolDefinitions() =
         ToolDefinitionTable
@@ -63,6 +64,11 @@ class ToolDefinitionDaoExposed(
                 OperatorToolDefinitionTable,
                 { ToolDefinitionTable.id },
                 { OperatorToolDefinitionTable.toolDefinitionId }
+            )
+            .leftJoin(
+                ServerBuiltInToolDefinitionTable,
+                { ToolDefinitionTable.id },
+                { ServerBuiltInToolDefinitionTable.toolDefinitionId }
             )
 
     override suspend fun getAllToolDefinitions(): List<ToolDefinition> =
@@ -154,7 +160,7 @@ class ToolDefinitionDaoExposed(
     override suspend fun getToolsForUser(userId: Long): List<ToolDefinition> =
         transactionScope.transaction {
             // Every tool is owned by exactly one principal (an MCP server, a worker, or a user), so
-            // user access is resolved with three focused, owner-scoped INNER joins instead of one
+            // user access is resolved with four focused, owner-scoped INNER joins instead of one
             // big LEFT JOIN + OR filter. This also fixes the historical cross-user leak where a user
             // saw every non-MCP_LOCAL tool (including other users' built-in worker tools) because the
             // built-in ownership filter was missing entirely.
@@ -178,6 +184,12 @@ class ToolDefinitionDaoExposed(
                 .where { OperatorToolDefinitionTable.userId eq userId }
                 .map { it.toToolDefinition() }
 
-            mcpTools + builtInTools + operatorTools
+            val serverBuiltInTools = ToolDefinitionTable
+                .innerJoin(ServerBuiltInToolDefinitionTable)
+                .selectAll()
+                .where { ServerBuiltInToolDefinitionTable.userId eq userId }
+                .map { it.toToolDefinition() }
+
+            mcpTools + builtInTools + operatorTools + serverBuiltInTools
         }
 }
