@@ -136,6 +136,15 @@ fun serviceModule() = module {
     }
 
     single<ServerBuiltInToolDefinitionSeeder> { ServerBuiltInToolDefinitionSeeder(get(), get(), get()) }
+    single<ServerBuiltInToolDefinitionService> {
+        ServerBuiltInToolDefinitionServiceImpl(
+            serverBuiltInToolDefinitionDao = get(),
+            serverBuiltInToolDefinitionSeeder = get(),
+            toolService = get(),
+            transactionScope = get()
+        )
+    }
+
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<AgentRoleService> {
         AgentRoleServiceImpl(
