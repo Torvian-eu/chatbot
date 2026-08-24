@@ -11,7 +11,18 @@ import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.DefaultBuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.DefaultOperatorToolExecutor
+import eu.torvian.chatbot.server.service.builtin.DefaultServerBuiltInToolExecutor
 import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
+import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
+import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolExecutor
+import eu.torvian.chatbot.server.service.builtin.tools.CreateAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.ListAgentRolesTool
+import eu.torvian.chatbot.server.service.builtin.tools.ListModelSettingsTool
+import eu.torvian.chatbot.server.service.builtin.tools.ListModelsTool
+import eu.torvian.chatbot.server.service.builtin.tools.ListToolsTool
+import eu.torvian.chatbot.server.service.builtin.tools.ReadAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.ReadToolTool
+import eu.torvian.chatbot.server.service.builtin.tools.UpdateAgentRoleTool
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.agent.AgentSpawnRequestBuilder
 import eu.torvian.chatbot.server.service.core.agent.DefaultAgentSpawnRequestBuilder
@@ -135,6 +146,28 @@ fun serviceModule() = module {
         )
     }
 
+    // --- Server built-in tool services (executed in-process on the server) ---
+    single<Map<String, ServerBuiltInTool>> {
+        // Registry of server built-in tools, keyed by catalog name (the executor dispatch key).
+        // Keep this in sync with ServerBuiltInToolCatalog; each tool receives its own user-scoped
+        // services via constructor injection (mirrors workerModule's BuiltInTool registry).
+        listOf(
+            ListAgentRolesTool(agentRoleService = get(), json = get()),
+            ReadAgentRoleTool(agentRoleService = get(), json = get()),
+            CreateAgentRoleTool(agentRoleService = get(), json = get()),
+            UpdateAgentRoleTool(agentRoleService = get(), json = get()),
+            ListModelsTool(llmModelService = get(), json = get()),
+            ListModelSettingsTool(llmModelService = get(), modelSettingsService = get(), json = get()),
+            ListToolsTool(toolService = get(), json = get()),
+            ReadToolTool(toolService = get(), json = get()),
+        ).associateBy { it.name }
+    }
+    single<ServerBuiltInToolExecutor> {
+        DefaultServerBuiltInToolExecutor(
+            json = get(),
+            tools = get()
+        )
+    }
     single<ServerBuiltInToolDefinitionSeeder> { ServerBuiltInToolDefinitionSeeder(get(), get(), get()) }
     single<ServerBuiltInToolDefinitionService> {
         ServerBuiltInToolDefinitionServiceImpl(
