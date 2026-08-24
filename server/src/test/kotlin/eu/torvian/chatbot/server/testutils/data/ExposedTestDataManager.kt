@@ -87,6 +87,9 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
 
             // Tool tables (must come after chat messages for tool calls)
             Table.TOOL_DEFINITIONS to ToolDefinitionTable,
+            // user_tool_approval_preferences references both users and tool_definitions, so it must
+            // be created after both (and dropped before both via the reverse-order cleanup).
+            Table.USER_TOOL_APPROVAL_PREFERENCES to UserToolApprovalPreferencesTable,
             // agent_role_tools references both agent_roles (core block above) and tool_definitions,
             // so it must be created after both.
             Table.AGENT_ROLE_TOOLS to AgentRoleToolsTable,

@@ -190,6 +190,11 @@ enum class Table {
     TOOL_DEFINITIONS,
 
     /**
+     * Table for storing per-user auto-approval preferences for tool definitions.
+     */
+    USER_TOOL_APPROVAL_PREFERENCES,
+
+    /**
      * Table for storing tool call records.
      */
     TOOL_CALLS,

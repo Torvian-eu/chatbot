@@ -170,7 +170,17 @@ fun serviceModule() = module {
             tools = get()
         )
     }
-    single<ServerBuiltInToolDefinitionSeeder> { ServerBuiltInToolDefinitionSeeder(get(), get(), get()) }
+    // Resolves the effective per-user prefix (global preference, else the hardcoded default). The
+    // defaultPrefix constructor argument is intentionally omitted here: this binding is the single
+    // swap point when a configurable server default (tools.builtInToolNamePrefix) lands later.
+    single<ServerBuiltInToolNamePrefixResolver> {
+        ServerBuiltInToolNamePrefixResolverImpl(
+            userPreferenceDao = get()
+        )
+    }
+    single<ServerBuiltInToolDefinitionSeeder> {
+        ServerBuiltInToolDefinitionSeeder(get(), get(), get(), get())
+    }
     single<ServerBuiltInToolDefinitionService> {
         ServerBuiltInToolDefinitionServiceImpl(
             serverBuiltInToolDefinitionDao = get(),
