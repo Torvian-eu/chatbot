@@ -48,7 +48,7 @@ class DefaultConversationTurnOrchestrator(
         private val logger: Logger = LogManager.getLogger(DefaultConversationTurnOrchestrator::class.java)
 
         /** Upper bound that prevents an unbounded assistant/tool loop. */
-        private const val MAX_TOOL_CALLING_ITERATIONS: Int = 100
+        private const val MAX_TOOL_CALLING_ITERATIONS: Int = 200
 
         /** Maximum character length of persisted assistant text before the truncation notice. */
         const val MAX_ASSISTANT_MESSAGE_CHARS: Int = 64_000
