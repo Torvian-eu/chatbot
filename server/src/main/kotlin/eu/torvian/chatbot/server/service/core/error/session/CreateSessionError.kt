@@ -11,6 +11,12 @@ sealed interface CreateSessionError {
      */
     data class InvalidName(val reason: String) : CreateSessionError
     /**
+     * Indicates that the provided name exceeds the maximum allowed length.
+     *
+     * @property maxLength The maximum number of characters allowed for a session name.
+     */
+    data class NameTooLong(val maxLength: Int) : CreateSessionError
+    /**
      * Indicates that a foreign key constraint failed during insertion (e.g., groupId, modelId, settingsId not found).
      * Maps from SessionError.ForeignKeyViolation in the DAO layer.
      */
@@ -22,6 +28,12 @@ fun CreateSessionError.toApiError(): ApiError = when (this) {
         CommonApiErrorCodes.INVALID_ARGUMENT,
         "Invalid session name provided",
         "reason" to reason
+    )
+
+    is CreateSessionError.NameTooLong -> apiError(
+        CommonApiErrorCodes.INVALID_ARGUMENT,
+        "Session name is too long",
+        "maxLength" to maxLength.toString()
     )
 
     is CreateSessionError.InvalidRelatedEntity -> apiError(

@@ -175,6 +175,57 @@ class SessionServiceImplTest {
 
 
     @Test
+    fun `createSession should normalize line breaks in session name`() = runTest {
+        // Arrange
+        val userId = 1L
+        val rawName = "Hello\nWorld\r\nSession"
+        val normalizedName = "Hello World Session"
+        coEvery { sessionDao.insertSession(normalizedName) } returns testSession.right()
+        coEvery { sessionOwnershipDao.setOwner(testSession.id, userId) } returns Unit.right()
+
+        // Act
+        val result = sessionService.createSession(userId, rawName)
+
+        // Assert
+        assertTrue(result.isRight(), "Should return Right for successful creation")
+        coVerify(exactly = 1) { sessionDao.insertSession(normalizedName) }
+    }
+
+    @Test
+    fun `createSession should return NameTooLong error when name exceeds max length`() = runTest {
+        // Arrange
+        val userId = 1L
+        val tooLongName = "x".repeat(256)
+
+        // Act
+        val result = sessionService.createSession(userId, tooLongName)
+
+        // Assert
+        assertTrue(result.isLeft(), "Should return Left for too-long name")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Error should not be null")
+        assertIs<CreateSessionError.NameTooLong>(error, "Should be NameTooLong error")
+        assertEquals(255, error.maxLength)
+        coVerify(exactly = 0) { sessionDao.insertSession(any()) }
+    }
+
+    @Test
+    fun `createSession should accept name at exactly max length`() = runTest {
+        // Arrange
+        val userId = 1L
+        val maxLengthName = "x".repeat(255)
+        coEvery { sessionDao.insertSession(maxLengthName) } returns testSession.right()
+        coEvery { sessionOwnershipDao.setOwner(testSession.id, userId) } returns Unit.right()
+
+        // Act
+        val result = sessionService.createSession(userId, maxLengthName)
+
+        // Assert
+        assertTrue(result.isRight(), "Should return Right for name at exactly max length")
+        coVerify(exactly = 1) { sessionDao.insertSession(maxLengthName) }
+    }
+
+    @Test
     fun `createSession should return InvalidName error for blank name`() = runTest {
         // Arrange
         val userId = 1L
@@ -267,6 +318,55 @@ class SessionServiceImplTest {
         assertTrue(result.isRight(), "Should return Right for successful update")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.updateSessionName(sessionId, newName) }
+    }
+
+    @Test
+    fun `updateSessionName should normalize line breaks in session name`() = runTest {
+        // Arrange
+        val sessionId = 1L
+        val rawName = "Updated\nSession\rName"
+        val normalizedName = "Updated Session Name"
+        coEvery { sessionDao.updateSessionName(sessionId, normalizedName) } returns Unit.right()
+
+        // Act
+        val result = sessionService.updateSessionName(sessionId, rawName)
+
+        // Assert
+        assertTrue(result.isRight(), "Should return Right for successful update")
+        coVerify(exactly = 1) { sessionDao.updateSessionName(sessionId, normalizedName) }
+    }
+
+    @Test
+    fun `updateSessionName should return NameTooLong error when name exceeds max length`() = runTest {
+        // Arrange
+        val sessionId = 1L
+        val tooLongName = "x".repeat(256)
+
+        // Act
+        val result = sessionService.updateSessionName(sessionId, tooLongName)
+
+        // Assert
+        assertTrue(result.isLeft(), "Should return Left for too-long name")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Error should not be null")
+        assertIs<UpdateSessionNameError.NameTooLong>(error, "Should be NameTooLong error")
+        assertEquals(255, error.maxLength)
+        coVerify(exactly = 0) { sessionDao.updateSessionName(any(), any()) }
+    }
+
+    @Test
+    fun `updateSessionName should accept name at exactly max length`() = runTest {
+        // Arrange
+        val sessionId = 1L
+        val maxLengthName = "x".repeat(255)
+        coEvery { sessionDao.updateSessionName(sessionId, maxLengthName) } returns Unit.right()
+
+        // Act
+        val result = sessionService.updateSessionName(sessionId, maxLengthName)
+
+        // Assert
+        assertTrue(result.isRight(), "Should return Right for name at exactly max length")
+        coVerify(exactly = 1) { sessionDao.updateSessionName(sessionId, maxLengthName) }
     }
 
     @Test

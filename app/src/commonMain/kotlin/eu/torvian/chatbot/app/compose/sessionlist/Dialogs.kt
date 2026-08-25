@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.MAX_SESSION_NAME_LENGTH
 
 /**
  * Consolidated dialog management for the session list panel.
@@ -88,22 +89,29 @@ private fun NewSessionDialog(
     onCreateSession: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val isOverLimit = isSessionNameOverLimit(nameInput.length)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Create New Chat Session") },
         text = {
             OutlinedTextField(
                 value = nameInput,
+                // Full text is kept in state; oversized input is surfaced via the supporting text below.
                 onValueChange = onNameInputChange,
                 label = { Text("Session Name (optional)") },
                 singleLine = true,
+                isError = isOverLimit,
+                supportingText = if (isOverLimit) {
+                    { Text(sessionNameTooLongMessage(nameInput.length)) }
+                } else null,
                 modifier = Modifier.fillMaxWidth()
             )
         },
         confirmButton = {
-            Button(onClick = { onCreateSession(nameInput) }) {
-                Text("Create")
-            }
+            Button(
+                onClick = { onCreateSession(nameInput) },
+                enabled = !isOverLimit
+            ) { Text("Create") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
@@ -125,26 +133,30 @@ private fun RenameSessionDialog(
 ) {
     val isValid = nameInput.trim().isNotBlank()
     val hasInput = nameInput.isNotBlank()
+    val isOverLimit = isSessionNameOverLimit(nameInput.length)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Rename Session") },
         text = {
             OutlinedTextField(
                 value = nameInput,
+                // Full text is kept in state; oversized input is surfaced via the supporting text below.
                 onValueChange = onNameInputChange,
                 label = { Text("New Session Name") },
                 singleLine = true,
-                isError = hasInput && !isValid,
-                supportingText = if (hasInput && !isValid) {
-                    { Text("Session name cannot be empty") }
-                } else null,
+                isError = (hasInput && !isValid) || isOverLimit,
+                supportingText = when {
+                    isOverLimit -> { { Text(sessionNameTooLongMessage(nameInput.length)) } }
+                    hasInput && !isValid -> { { Text("Session name cannot be empty") } }
+                    else -> null
+                },
                 modifier = Modifier.fillMaxWidth()
             )
         },
         confirmButton = {
             Button(
                 onClick = { onRenameSession(nameInput) },
-                enabled = isValid
+                enabled = isValid && !isOverLimit
             ) { Text("Rename") }
         },
         dismissButton = {
@@ -194,6 +206,7 @@ private fun CloneSessionDialog(
 ) {
     val isValid = nameInput.trim().isNotBlank()
     val hasInput = nameInput.isNotBlank()
+    val isOverLimit = isSessionNameOverLimit(nameInput.length)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Clone Session") },
@@ -203,13 +216,16 @@ private fun CloneSessionDialog(
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = nameInput,
+                    // Full text is kept in state; oversized input is surfaced via the supporting text below.
                     onValueChange = onNameInputChange,
                     label = { Text("Session Name") },
                     singleLine = true,
-                    isError = hasInput && !isValid,
-                    supportingText = if (hasInput && !isValid) {
-                        { Text("Session name cannot be empty") }
-                    } else null,
+                    isError = (hasInput && !isValid) || isOverLimit,
+                    supportingText = when {
+                        isOverLimit -> { { Text(sessionNameTooLongMessage(nameInput.length)) } }
+                        hasInput && !isValid -> { { Text("Session name cannot be empty") } }
+                        else -> null
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -217,7 +233,7 @@ private fun CloneSessionDialog(
         confirmButton = {
             Button(
                 onClick = { onCloneConfirm(nameInput) },
-                enabled = isValid
+                enabled = isValid && !isOverLimit
             ) { Text("Clone") }
         },
         dismissButton = {
@@ -319,3 +335,22 @@ private fun DeleteGroupDialog(
         }
     )
 }
+
+/**
+ * Determines whether a session name exceeds [MAX_SESSION_NAME_LENGTH] and therefore must not be
+ * submitted until shortened.
+ *
+ * @param nameLength The current character count of the entered session name.
+ * @return `true` when the name is longer than the allowed maximum.
+ */
+internal fun isSessionNameOverLimit(nameLength: Int): Boolean = nameLength > MAX_SESSION_NAME_LENGTH
+
+/**
+ * Builds the supporting-text message shown when a session name exceeds [MAX_SESSION_NAME_LENGTH].
+ *
+ * @param currentLength The current character count of the entered session name.
+ * @return A human-readable message stating the limit and the current character count.
+ */
+internal fun sessionNameTooLongMessage(currentLength: Int): String =
+    "Session name is too long: maximum $MAX_SESSION_NAME_LENGTH characters, currently $currentLength. " +
+        "Please shorten the name to continue."
