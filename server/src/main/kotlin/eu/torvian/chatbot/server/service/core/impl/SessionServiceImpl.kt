@@ -5,6 +5,8 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.misc.normalizeSingleLine
+import eu.torvian.chatbot.common.models.core.MAX_SESSION_NAME_LENGTH
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -36,14 +38,19 @@ class SessionServiceImpl(
     override suspend fun createSession(userId: Long, name: String): Either<CreateSessionError, ChatSession> =
         transactionScope.transaction {
             either {
-                ensure(name.isNotBlank()) {
+                // Normalize single-line input so pasted line breaks cannot be persisted.
+                val normalizedName = normalizeSingleLine(name)
+                ensure(normalizedName.isNotBlank()) {
                     CreateSessionError.InvalidName("Session name cannot be blank.")
+                }
+                ensure(normalizedName.length <= MAX_SESSION_NAME_LENGTH) {
+                    CreateSessionError.NameTooLong(MAX_SESSION_NAME_LENGTH)
                 }
 
                 val session = withError({ daoError: SessionError.ForeignKeyViolation ->
                     CreateSessionError.InvalidRelatedEntity(daoError.message)
                 }) {
-                    sessionDao.insertSession(name).bind()
+                    sessionDao.insertSession(normalizedName).bind()
                 }
 
                 // Set ownership for the newly created session
@@ -77,13 +84,18 @@ class SessionServiceImpl(
     override suspend fun updateSessionName(id: Long, name: String): Either<UpdateSessionNameError, Unit> =
         transactionScope.transaction {
             either {
-                ensure(name.isNotBlank()) {
+                // Normalize single-line input so line breaks cannot be persisted in names.
+                val normalizedName = normalizeSingleLine(name)
+                ensure(normalizedName.isNotBlank()) {
                     UpdateSessionNameError.InvalidName("Session name cannot be blank.")
+                }
+                ensure(normalizedName.length <= MAX_SESSION_NAME_LENGTH) {
+                    UpdateSessionNameError.NameTooLong(MAX_SESSION_NAME_LENGTH)
                 }
                 withError({ daoError: SessionError.SessionNotFound ->
                     UpdateSessionNameError.SessionNotFound(daoError.id)
                 }) {
-                    sessionDao.updateSessionName(id, name).bind()
+                    sessionDao.updateSessionName(id, normalizedName).bind()
                 }
             }
         }
@@ -164,9 +176,14 @@ class SessionServiceImpl(
     override suspend fun cloneSession(id: Long, name: String): Either<CloneSessionError, ChatSession> =
         transactionScope.transaction {
             either {
+                // Normalize single-line input so pasted line breaks cannot be persisted in names.
+                val normalizedName = normalizeSingleLine(name)
                 // Validate name is not blank
-                ensure(name.isNotBlank()) {
+                ensure(normalizedName.isNotBlank()) {
                     CloneSessionError.InvalidName("Session name cannot be blank.")
+                }
+                ensure(normalizedName.length <= MAX_SESSION_NAME_LENGTH) {
+                    CloneSessionError.NameTooLong(MAX_SESSION_NAME_LENGTH)
                 }
 
                 // Load original session
@@ -188,7 +205,7 @@ class SessionServiceImpl(
                     CloneSessionError.InternalError("Failed to create cloned session: ${daoError.message}")
                 }) {
                     sessionDao.insertSession(
-                        name = name,
+                        name = normalizedName,
                         groupId = originalSession.groupId,
                         agentRoleId = originalSession.agentRoleId
                     ).bind()

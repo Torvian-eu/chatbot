@@ -4,6 +4,15 @@ import kotlinx.serialization.Serializable
 import kotlin.time.Instant
 
 /**
+ * Maximum number of characters allowed in a chat session name.
+ *
+ * This mirrors the `name` varchar(255) column of the server's `chat_sessions` table
+ * (see `ChatSessionTable`). It is shared by the UI (text field limits and view-model guards)
+ * and the server (validation), so both layers stay consistent with the database schema.
+ */
+const val MAX_SESSION_NAME_LENGTH = 255
+
+/**
  * Represents a single chat session or conversation thread.
  * Used as a shared data model between frontend and backend communication.
  *

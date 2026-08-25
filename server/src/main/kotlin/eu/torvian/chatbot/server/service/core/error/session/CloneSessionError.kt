@@ -17,6 +17,13 @@ sealed interface CloneSessionError {
     data class InvalidName(val reason: String) : CloneSessionError
 
     /**
+     * Indicates that the provided name exceeds the maximum allowed length.
+     *
+     * @property maxLength The maximum number of characters allowed for a session name.
+     */
+    data class NameTooLong(val maxLength: Int) : CloneSessionError
+
+    /**
      * Indicates that an internal error occurred during the cloning process.
      */
     data class InternalError(val message: String) : CloneSessionError
@@ -33,6 +40,12 @@ fun CloneSessionError.toApiError(): ApiError = when (this) {
         CommonApiErrorCodes.INVALID_ARGUMENT,
         "Invalid session name provided",
         "reason" to reason
+    )
+
+    is CloneSessionError.NameTooLong -> apiError(
+        CommonApiErrorCodes.INVALID_ARGUMENT,
+        "Session name is too long",
+        "maxLength" to maxLength.toString()
     )
 
     is CloneSessionError.InternalError -> apiError(

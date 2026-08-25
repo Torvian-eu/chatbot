@@ -551,6 +551,56 @@ class SessionServiceImplCloneTest {
     // --- Error Tests ---
 
     @Test
+    fun `cloneSession should normalize line breaks in the clone name`() = runTest {
+        // Arrange
+        val rawName = "Cloned\nSession\r\nName"
+        val normalizedName = "Cloned Session Name"
+        coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
+        coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
+        coEvery {
+            sessionDao.insertSession(normalizedName, testGroupId, testAgentRoleId)
+        } returns clonedSession.copy(
+            name = normalizedName,
+            currentLeafMessageId = null
+        ).right()
+        coEvery { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) } returns Unit.right()
+        coEvery { messageDao.getMessagesBySessionId(testSessionId) } returns emptyList()
+        coEvery { toolCallDao.getToolCallsBySessionId(testSessionId) } returns emptyList()
+        coEvery { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) } returns emptyList()
+        coEvery { sessionDao.getSessionById(testClonedSessionId) } returns clonedSession.copy(
+            name = normalizedName,
+            currentLeafMessageId = null
+        ).right()
+
+        // Act
+        val result = sessionService.cloneSession(testSessionId, rawName)
+
+        // Assert
+        assertTrue(result.isRight())
+        assertEquals(normalizedName, result.getOrNull()?.name)
+        coVerify(exactly = 1) { sessionDao.insertSession(normalizedName, testGroupId, testAgentRoleId) }
+    }
+
+    @Test
+    fun `cloneSession should return NameTooLong error when name exceeds max length`() = runTest {
+        // Arrange
+        val tooLongName = "x".repeat(256)
+
+        // Act
+        val result = sessionService.cloneSession(testSessionId, tooLongName)
+
+        // Assert
+        assertTrue(result.isLeft())
+        val error = result.leftOrNull()
+        assertNotNull(error)
+        assertIs<CloneSessionError.NameTooLong>(error)
+        assertEquals(255, error.maxLength)
+
+        // Verify no DAO calls were made
+        coVerify(exactly = 0) { sessionDao.getSessionById(any()) }
+    }
+
+    @Test
     fun `cloneSession should return InvalidName error when name is blank`() = runTest {
         // Act
         val result = sessionService.cloneSession(testSessionId, "   ")

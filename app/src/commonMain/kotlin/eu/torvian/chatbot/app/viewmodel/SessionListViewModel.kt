@@ -16,8 +16,10 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.common.misc.normalizeSingleLine
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.MAX_SESSION_NAME_LENGTH
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -337,7 +339,7 @@ class SessionListViewModel(
     fun showRenameSessionDialog(session: ChatSessionSummary) {
         _dialogState.value = SessionListDialogState.RenameSession(
             session = session,
-            newSessionNameInput = session.name,
+            newSessionNameInput = normalizeSingleLine(session.name).take(MAX_SESSION_NAME_LENGTH),
             onNameInputChange = { name -> updateDialogSessionName(name) },
             onRenameSession = { newName ->
                 renameSession(session, newName)
@@ -398,7 +400,7 @@ class SessionListViewModel(
      * @param session The session to clone.
      */
     fun showCloneSessionDialog(session: ChatSessionSummary) {
-        val defaultName = "${session.name} (Copy)"
+        val defaultName = normalizeSingleLine("${session.name} (Copy)").take(MAX_SESSION_NAME_LENGTH)
         _dialogState.value = SessionListDialogState.CloneSession(
             sessionId = session.id,
             defaultName = defaultName,
@@ -427,7 +429,12 @@ class SessionListViewModel(
      */
     private fun createNewSession(initialName: String? = null) {
         // If initialName is blank or null, use "New Chat" as default
-        val sessionName = initialName?.trim()?.ifBlank { "New Chat" } ?: "New Chat"
+        val sessionName = initialName
+            ?.let(::normalizeSingleLine)
+            ?.trim()
+            ?.take(MAX_SESSION_NAME_LENGTH)
+            ?.ifBlank { "New Chat" }
+            ?: "New Chat"
 
         viewModelScope.launch(uiDispatcher) {
             sessionRepository.createSession(sessionName)
@@ -453,7 +460,7 @@ class SessionListViewModel(
      * @param newName The new name for the session.
      */
     private fun renameSession(session: ChatSessionSummary, newName: String) {
-        val trimmedName = newName.trim()
+        val trimmedName = normalizeSingleLine(newName).trim().take(MAX_SESSION_NAME_LENGTH)
         if (trimmedName.isBlank()) {
             // Show inline validation error (UI concern) or update state with error
             println("Validation Error: Session name cannot be empty.")
@@ -546,7 +553,7 @@ class SessionListViewModel(
      */
     private fun cloneSession(sessionId: Long, newName: String) {
         viewModelScope.launch(uiDispatcher) {
-            sessionRepository.cloneSession(sessionId, newName.trim()).fold(
+            sessionRepository.cloneSession(sessionId, normalizeSingleLine(newName).trim().take(MAX_SESSION_NAME_LENGTH)).fold(
                 ifLeft = { repositoryError ->
                     notificationService.repositoryError(
                         error = repositoryError,
@@ -568,10 +575,12 @@ class SessionListViewModel(
      * @param newName The new session name input.
      */
     private fun updateDialogSessionName(newName: String) {
+        // Keep the full text so the dialog can report the character count when it exceeds the limit;
+        // the action button is disabled until the text fits within [MAX_SESSION_NAME_LENGTH].
         _dialogState.update { dialogState ->
             when (dialogState) {
-                is SessionListDialogState.NewSession -> dialogState.copy(sessionNameInput = newName)
-                is SessionListDialogState.RenameSession -> dialogState.copy(newSessionNameInput = newName)
+                is SessionListDialogState.NewSession -> dialogState.copy(sessionNameInput = normalizeSingleLine(newName))
+                is SessionListDialogState.RenameSession -> dialogState.copy(newSessionNameInput = normalizeSingleLine(newName))
                 else -> dialogState // No change for other states
             }
         }
@@ -583,9 +592,11 @@ class SessionListViewModel(
      * @param newName The new clone session name input.
      */
     private fun updateDialogCloneName(newName: String) {
+        // Keep the full text so the dialog can report the character count when it exceeds the limit;
+        // the action button is disabled until the text fits within [MAX_SESSION_NAME_LENGTH].
         _dialogState.update { dialogState ->
             when (dialogState) {
-                is SessionListDialogState.CloneSession -> dialogState.copy(nameInput = newName)
+                is SessionListDialogState.CloneSession -> dialogState.copy(nameInput = normalizeSingleLine(newName))
                 else -> dialogState // No change for other states
             }
         }

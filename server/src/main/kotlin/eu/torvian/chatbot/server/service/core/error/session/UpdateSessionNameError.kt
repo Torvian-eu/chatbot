@@ -15,6 +15,12 @@ sealed interface UpdateSessionNameError {
      * Indicates that the provided new name is invalid (e.g., blank).
      */
     data class InvalidName(val reason: String) : UpdateSessionNameError
+    /**
+     * Indicates that the provided new name exceeds the maximum allowed length.
+     *
+     * @property maxLength The maximum number of characters allowed for a session name.
+     */
+    data class NameTooLong(val maxLength: Int) : UpdateSessionNameError
 }
 
 fun UpdateSessionNameError.toApiError(): ApiError = when (this) {
@@ -28,5 +34,11 @@ fun UpdateSessionNameError.toApiError(): ApiError = when (this) {
         CommonApiErrorCodes.INVALID_ARGUMENT,
         "Invalid session name provided",
         "reason" to reason
+    )
+
+    is UpdateSessionNameError.NameTooLong -> apiError(
+        CommonApiErrorCodes.INVALID_ARGUMENT,
+        "Session name is too long",
+        "maxLength" to maxLength.toString()
     )
 }
