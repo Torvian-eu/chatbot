@@ -19,6 +19,9 @@ if [ ! -z "${PUID}" ]; then
     chown -R torvian:torvian /app/config /app/data /app/logs /app/workspace /app/cache
 fi
 
+# Ensure applications started through gosu use the correct home directory.
+export HOME=/home/torvian
+
 echo "Starting Chatbot Worker..."
 
 # Ensure the script runs relative to its own location
