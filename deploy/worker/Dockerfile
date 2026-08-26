@@ -31,12 +31,22 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/
 RUN groupadd -g 10001 torvian && \
     useradd -u 10001 -g torvian -m -s /bin/bash torvian
 
+# Remove the default 'ubuntu' user from the base image.
+# This prevents UID collisions when torvian is remapped at runtime.
+RUN userdel ubuntu
+
 # 6. Prepare directory structure for app and MCP caches
 RUN mkdir -p /app/config /app/data /app/logs /app/workspace /app/cache/npm /app/cache/uv
 
-# 7. Copy application files (ensuring ownership)
-COPY --chown=torvian:torvian dist/ /app
-RUN chmod +x /app/start-worker.sh
+# 7. Copy application files
+# App code and startup scripts stay root-owned to prevent tampering.
+COPY dist/ /app
+
+# Startup script must be executable but not writable by 'torvian'.
+RUN chmod 755 /app/start-worker.sh
+
+# Only runtime directories are writable by 'torvian'.
+RUN chown -R torvian:torvian /app/config /app/data /app/logs /app/workspace /app/cache
 
 # 8. Set Environment Variables
 ENV NPM_CONFIG_CACHE=/app/cache/npm
