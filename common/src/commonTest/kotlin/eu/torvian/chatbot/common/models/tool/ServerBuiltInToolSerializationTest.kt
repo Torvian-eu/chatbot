@@ -26,7 +26,7 @@ class ServerBuiltInToolSerializationTest {
     /**
      * Verifies the `instructions` input schema defines the nested item shape recursively, matching
      * [eu.torvian.chatbot.common.models.agent.AgentInstructionDto]: each item is an object with
-     * `type` (enum), `name`, `message`, and the nullable nested `custom` object carrying `modelId`.
+     * `type` (enum), `name`, `message`, and the optional nested `custom` object carrying `modelId`.
      */
     @Test
     fun `instructions schema defines the nested item shape`() {
@@ -48,19 +48,18 @@ class ServerBuiltInToolSerializationTest {
         assertEquals("string", itemProperties["name"]!!.jsonObject["type"]?.jsonPrimitive?.content)
         assertEquals("string", itemProperties["message"]!!.jsonObject["type"]?.jsonPrimitive?.content)
 
-        // The nested custom object is nullable and defines modelId for model_specific items.
+        // The nested custom object is optional (omitted when not applicable, never null) and
+        // defines modelId for model_specific items.
         val customProp = itemProperties["custom"]!!.jsonObject
-        assertEquals(
-            listOf("object", "null"),
-            customProp["type"]!!.jsonArray.map { it.jsonPrimitive.content }
-        )
+        assertEquals("object", customProp["type"]?.jsonPrimitive?.content)
         val modelIdProp = customProp["properties"]!!.jsonObject["modelId"]!!.jsonObject
         assertEquals("integer", modelIdProp["type"]?.jsonPrimitive?.content)
         assertEquals(1L, modelIdProp["minimum"]?.jsonPrimitive?.content?.toLong())
 
-        // Strict-schema consumers need the required list on the item.
+        // Strict-schema consumers need the required list on the item: type, name, and message
+        // (spawnable_agents takes an empty message); custom stays optional (omitted, never null).
         val required = items["required"]!!.jsonArray.map { it.jsonPrimitive.content }
-        assertEquals(setOf("type", "name", "message", "custom"), required.toSet())
+        assertEquals(setOf("type", "name", "message"), required.toSet())
     }
 
     /**
@@ -159,11 +158,12 @@ class ServerBuiltInToolSerializationTest {
     }
 
     /**
-     * Verifies the catalog defines exactly the eight v1 tools in stable order and that every
-     * parameterless schema passes the empty-object shape (so seeding validation never rejects it).
+     * Verifies the catalog defines every tool in stable order (the eight v1 tools plus the three
+     * targeted instruction-edit tools) and that every parameterless schema passes the empty-object
+     * shape (so seeding validation never rejects it).
      */
     @Test
-    fun `catalog defines exactly the eight v1 tools in stable order`() {
+    fun `catalog defines every tool in stable order`() {
         val names = ServerBuiltInToolCatalog.allTools.map { it.name }
         assertEquals(
             listOf(
@@ -174,7 +174,10 @@ class ServerBuiltInToolSerializationTest {
                 ServerBuiltInToolCatalog.LIST_MODELS_NAME,
                 ServerBuiltInToolCatalog.LIST_MODEL_SETTINGS_NAME,
                 ServerBuiltInToolCatalog.LIST_TOOLS_NAME,
-                ServerBuiltInToolCatalog.READ_TOOL_NAME
+                ServerBuiltInToolCatalog.READ_TOOL_NAME,
+                ServerBuiltInToolCatalog.INSERT_AGENT_ROLE_INSTRUCTION_NAME,
+                ServerBuiltInToolCatalog.EDIT_AGENT_ROLE_INSTRUCTIONS_NAME,
+                ServerBuiltInToolCatalog.REMOVE_AGENT_ROLE_INSTRUCTION_NAME
             ),
             names
         )

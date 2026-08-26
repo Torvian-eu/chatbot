@@ -16,12 +16,15 @@ import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolExecutor
 import eu.torvian.chatbot.server.service.builtin.tools.CreateAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.EditAgentRoleInstructionsTool
+import eu.torvian.chatbot.server.service.builtin.tools.InsertAgentRoleInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListAgentRolesTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListModelSettingsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListModelsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListToolsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ReadAgentRoleTool
 import eu.torvian.chatbot.server.service.builtin.tools.ReadToolTool
+import eu.torvian.chatbot.server.service.builtin.tools.RemoveAgentRoleInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.UpdateAgentRoleTool
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.agent.AgentSpawnRequestBuilder
@@ -156,8 +159,11 @@ fun serviceModule() = module {
         listOf(
             ListAgentRolesTool(agentRoleService = get(), json = get()),
             ReadAgentRoleTool(agentRoleService = get(), json = get()),
-            CreateAgentRoleTool(agentRoleService = get(), json = get()),
-            UpdateAgentRoleTool(agentRoleService = get(), json = get()),
+            CreateAgentRoleTool(agentRoleService = get()),
+            UpdateAgentRoleTool(agentRoleService = get()),
+            InsertAgentRoleInstructionTool(agentRoleService = get()),
+            EditAgentRoleInstructionsTool(agentRoleService = get()),
+            RemoveAgentRoleInstructionTool(agentRoleService = get()),
             ListModelsTool(llmModelService = get(), json = get()),
             ListModelSettingsTool(llmModelService = get(), modelSettingsService = get(), json = get()),
             ListToolsTool(toolService = get(), json = get()),

@@ -45,7 +45,10 @@ interface ServerBuiltInTool {
      *
      * @param userId The user whose server built-in tool instance is being executed.
      * @param input JSON arguments for the tool (already parsed as an object by the executor).
-     * @return Either a [ServerBuiltInToolHandlerError] or the JSON-encoded handler output.
+     * @return Either a [ServerBuiltInToolHandlerError] or the handler output: the JSON-encoded
+     *         payload for read-style tools (e.g. `read_agent_role`), or a concise human-readable
+     *         text summary/diff for mutating tools (e.g. `create_agent_role`, the instruction
+     *         tools), so the LLM context stays lean.
      */
     suspend fun execute(
         userId: Long,

@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.worker.builtin.impl
 
+import eu.torvian.chatbot.common.misc.LineDiff
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
 import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.*

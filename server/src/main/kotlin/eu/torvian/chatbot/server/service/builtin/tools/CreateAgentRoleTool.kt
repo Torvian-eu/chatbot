@@ -7,7 +7,6 @@ import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.builtin.addUnknownParameterErrors
-import eu.torvian.chatbot.server.service.builtin.encodeResult
 import eu.torvian.chatbot.server.service.builtin.invalidInputError
 import eu.torvian.chatbot.server.service.builtin.parseOptionalInstructions
 import eu.torvian.chatbot.server.service.builtin.parseOptionalLong
@@ -16,7 +15,6 @@ import eu.torvian.chatbot.server.service.builtin.parseOptionalString
 import eu.torvian.chatbot.server.service.builtin.parseRequiredString
 import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -26,12 +24,13 @@ import kotlinx.serialization.json.JsonObject
  * `model_settings_id` are optional: a role may be created without a model/settings and completed
  * later via `update_agent_role`; such a role is non-sendable until set.
  *
+ * Returns a concise one-line summary of the completed operation (see [formatCreatedAgentRole])
+ * instead of the full role JSON to keep the LLM context lean; `read_agent_role` returns the full role.
+ *
  * @property agentRoleService User-scoped role service used to create the role.
- * @property json Shared JSON codec used to parse `instructions` and serialize the handler output.
  */
 class CreateAgentRoleTool(
-    private val agentRoleService: AgentRoleService,
-    private val json: Json
+    private val agentRoleService: AgentRoleService
 ) : ServerBuiltInTool {
 
     override val name: String = ServerBuiltInToolCatalog.CREATE_AGENT_ROLE_NAME
@@ -74,7 +73,7 @@ class CreateAgentRoleTool(
         val spawnableAgentRoleIds =
             parseOptionalLongSet(input, ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY, validationErrors)
         val instructions =
-            parseOptionalInstructions(input, ServerBuiltInToolCatalog.INSTRUCTIONS_PROPERTY, json, validationErrors)
+            parseOptionalInstructions(input, ServerBuiltInToolCatalog.INSTRUCTIONS_PROPERTY, validationErrors)
         if (validationErrors.isNotEmpty()) {
             raise(invalidInputError(validationErrors))
         }
@@ -92,7 +91,7 @@ class CreateAgentRoleTool(
         val role = agentRoleService.createRole(userId, request)
             .mapLeft { error -> error.toHandlerError() }
             .bind()
-        encodeResult(json, role).bind()
+        formatCreatedAgentRole(role)
     }
 }
 

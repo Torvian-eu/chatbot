@@ -609,6 +609,27 @@ class AgentRoleServiceImplTest {
     }
 
     @Test
+    fun `createRole should reject a model_specific instruction without a model id`() = runTest {
+        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+
+        // A model_specific instruction without custom.modelId would be silently dropped at read
+        // time (the composer keeps only the instance matching the active model), so it is rejected.
+        val request = validRequest().copy(
+            instructions = listOf(
+                AgentInstructionDto(AgentInstructionTypes.MODEL_SPECIFIC, "A", "msg a")
+            )
+        )
+        val result = service.createRole(userId, request)
+
+        assertTrue(result.isLeft())
+        val error = assertIs<CreateAgentRoleError.InstructionValidationFailed>(result.leftOrNull())
+        assertTrue(error.reason.contains("custom.modelId"))
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
     fun `getAgentRoleById maps stored kinds into domain subtypes`() = runTest {
         val entity = TestDefaults.agentRole1.copy(
             instructionsJson = """
