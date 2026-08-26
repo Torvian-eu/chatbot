@@ -41,4 +41,19 @@ object AgentInstructionTypes {
      * targets a distinct model.
      */
     const val MODEL_SPECIFIC: String = "model_specific"
+
+    /**
+     * Every well-known instruction kind, in canonical display order.
+     *
+     * Used by server built-in tools and the catalog schemas to enumerate the accepted `type` values
+     * (e.g. for validation error messages and JSON-Schema `enum` arrays) without repeating the
+     * constants at each call site.
+     */
+    val allKnown: List<String> = listOf(
+        ROLE,
+        MAIN,
+        CUSTOM,
+        SPAWNABLE_AGENTS,
+        MODEL_SPECIFIC
+    )
 }

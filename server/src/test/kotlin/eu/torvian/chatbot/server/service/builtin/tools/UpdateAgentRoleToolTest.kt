@@ -14,7 +14,6 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -30,12 +29,6 @@ import kotlin.test.assertTrue
  * update with the merged state), the ownership-checked load, and input validation.
  */
 class UpdateAgentRoleToolTest {
-
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        encodeDefaults = true
-    }
 
     private val userId = 7L
 
@@ -63,7 +56,7 @@ class UpdateAgentRoleToolTest {
 
     @Test
     fun `requires the role_id property`() = runTest {
-        val tool = UpdateAgentRoleTool(mockk(), json)
+        val tool = UpdateAgentRoleTool(mockk())
 
         val result = tool.execute(userId, buildJsonObject { put("name", "x") })
 
@@ -79,7 +72,7 @@ class UpdateAgentRoleToolTest {
         coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
         coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns
             sampleRole(modelId = 3L, modelSettingsId = 4L).right()
-        val tool = UpdateAgentRoleTool(agentRoleService, json)
+        val tool = UpdateAgentRoleTool(agentRoleService)
 
         val output = assertSuccess(
             tool.execute(
@@ -87,7 +80,9 @@ class UpdateAgentRoleToolTest {
                 buildJsonObject { put("role_id", 1L); put("model_id", 3L); put("model_settings_id", 4L) }
             )
         )
-        assertTrue(output.contains("\"id\":1"))
+        // The tool returns a concise one-line operation summary, not the full role JSON, to save tokens.
+        assertTrue(output.contains("Updated agent role 'writer' (id: 1)"))
+        assertTrue(!output.contains("\"id\":1"))
 
         // The merged update request preserves every omitted field: name, description, tools,
         // spawnable roles, and instructions are carried over from the persisted role.
@@ -116,7 +111,7 @@ class UpdateAgentRoleToolTest {
         coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
         coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns
             persisted.copy(description = "Renamed description").right()
-        val tool = UpdateAgentRoleTool(agentRoleService, json)
+        val tool = UpdateAgentRoleTool(agentRoleService)
 
         assertSuccess(
             tool.execute(userId, buildJsonObject { put("role_id", 1L); put("description", "Renamed description") })
@@ -140,7 +135,7 @@ class UpdateAgentRoleToolTest {
     fun `collapses not-found and not-accessible`() = runTest {
         val agentRoleService = mockk<AgentRoleService>()
         coEvery { agentRoleService.getRoleById(userId, 99L) } returns AgentRoleError.NotFound(99L).left()
-        val tool = UpdateAgentRoleTool(agentRoleService, json)
+        val tool = UpdateAgentRoleTool(agentRoleService)
 
         val result = tool.execute(userId, buildJsonObject { put("role_id", 99L); put("name", "x") })
 
@@ -152,7 +147,7 @@ class UpdateAgentRoleToolTest {
     @Test
     fun `rejects unknown parameters without touching the persisted role`() = runTest {
         val agentRoleService = mockk<AgentRoleService>()
-        val tool = UpdateAgentRoleTool(agentRoleService, json)
+        val tool = UpdateAgentRoleTool(agentRoleService)
 
         val result = tool.execute(userId, buildJsonObject { put("role_id", 1L); putJsonArray("tools_plus") { } })
 
@@ -164,7 +159,7 @@ class UpdateAgentRoleToolTest {
 
     @Test
     fun `rejects a non-integer role_id`() = runTest {
-        val tool = UpdateAgentRoleTool(mockk(), json)
+        val tool = UpdateAgentRoleTool(mockk())
 
         val result = tool.execute(userId, buildJsonObject { put("role_id", 1.5) })
 

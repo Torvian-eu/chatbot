@@ -30,12 +30,6 @@ import kotlin.test.assertTrue
  */
 class CreateAgentRoleToolTest {
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        encodeDefaults = true
-    }
-
     private val userId = 7L
 
     private fun createdRole(id: Long = 9L, name: String = "translator") = AgentRoleDto(
@@ -57,7 +51,7 @@ class CreateAgentRoleToolTest {
 
     @Test
     fun `requires the name property`() = runTest {
-        val tool = CreateAgentRoleTool(mockk(), json)
+        val tool = CreateAgentRoleTool(mockk())
 
         val result = tool.execute(userId, buildJsonObject { put("description", "no name") })
 
@@ -69,12 +63,14 @@ class CreateAgentRoleToolTest {
     fun `creates a model-less role and maps the request`() = runTest {
         val agentRoleService = mockk<AgentRoleService>()
         coEvery { agentRoleService.createRole(userId, any()) } returns createdRole().right()
-        val tool = CreateAgentRoleTool(agentRoleService, json)
+        val tool = CreateAgentRoleTool(agentRoleService)
 
         val output = assertSuccess(
             tool.execute(userId, buildJsonObject { put("name", "translator"); put("description", "translates") })
         )
-        assertTrue(output.contains("\"id\":9"))
+        // The tool returns a concise one-line operation summary, not the full role JSON, to save tokens.
+        assertTrue(output.contains("Created agent role 'translator' (id: 9)"))
+        assertTrue(!output.contains("\"id\":9"))
 
         coVerify(exactly = 1) {
             agentRoleService.createRole(
@@ -96,7 +92,7 @@ class CreateAgentRoleToolTest {
     fun `parses every optional field including instructions`() = runTest {
         val agentRoleService = mockk<AgentRoleService>()
         coEvery { agentRoleService.createRole(userId, any()) } returns createdRole().right()
-        val tool = CreateAgentRoleTool(agentRoleService, json)
+        val tool = CreateAgentRoleTool(agentRoleService)
 
         val input = buildJsonObject {
             put("name", "writer")
@@ -141,7 +137,7 @@ class CreateAgentRoleToolTest {
     fun `maps a model-not-found failure to a readable error`() = runTest {
         val agentRoleService = mockk<AgentRoleService>()
         coEvery { agentRoleService.createRole(userId, any()) } returns CreateAgentRoleError.ModelNotFound(3L).left()
-        val tool = CreateAgentRoleTool(agentRoleService, json)
+        val tool = CreateAgentRoleTool(agentRoleService)
 
         val result = tool.execute(
             userId,
@@ -158,7 +154,7 @@ class CreateAgentRoleToolTest {
         val agentRoleService = mockk<AgentRoleService>()
         coEvery { agentRoleService.createRole(userId, any()) } returns
                 CreateAgentRoleError.NameAlreadyExists("writer").left()
-        val tool = CreateAgentRoleTool(agentRoleService, json)
+        val tool = CreateAgentRoleTool(agentRoleService)
 
         val result = tool.execute(userId, buildJsonObject { put("name", "writer") })
 
@@ -168,7 +164,7 @@ class CreateAgentRoleToolTest {
 
     @Test
     fun `accumulates every validation error before failing`() = runTest {
-        val tool = CreateAgentRoleTool(mockk(), json)
+        val tool = CreateAgentRoleTool(mockk())
 
         val result = tool.execute(
             userId,
@@ -185,7 +181,7 @@ class CreateAgentRoleToolTest {
 
     @Test
     fun `rejects a malformed instructions array`() = runTest {
-        val tool = CreateAgentRoleTool(mockk(), json)
+        val tool = CreateAgentRoleTool(mockk())
 
         val result = tool.execute(userId, buildJsonObject { put("name", "x"); put("instructions", "nope") })
 
@@ -195,7 +191,7 @@ class CreateAgentRoleToolTest {
 
     @Test
     fun `rejects a non-integer tool id inside the tool_ids array`() = runTest {
-        val tool = CreateAgentRoleTool(mockk(), json)
+        val tool = CreateAgentRoleTool(mockk())
 
         val result = tool.execute(
             userId,

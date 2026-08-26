@@ -86,6 +86,30 @@ object ServerBuiltInToolCatalog {
     /** JSON property holding the flat instruction list of a role (advanced; see [AgentInstructionDto]). */
     const val INSTRUCTIONS_PROPERTY = "instructions"
 
+    /** Canonical, unprefixed catalog name of the `insert_agent_role_instruction` tool. */
+    const val INSERT_AGENT_ROLE_INSTRUCTION_NAME = "insert_agent_role_instruction"
+
+    /** Canonical, unprefixed catalog name of the `edit_agent_role_instructions` tool. */
+    const val EDIT_AGENT_ROLE_INSTRUCTIONS_NAME = "edit_agent_role_instructions"
+
+    /** Canonical, unprefixed catalog name of the `remove_agent_role_instruction` tool. */
+    const val REMOVE_AGENT_ROLE_INSTRUCTION_NAME = "remove_agent_role_instruction"
+
+    /** JSON property holding the zero-based index into the instruction list (insert/remove tools). */
+    const val POSITION_PROPERTY = "position"
+
+    /** JSON property holding the single instruction object for `insert_agent_role_instruction`. */
+    const val INSTRUCTION_PROPERTY = "instruction"
+
+    /** JSON property holding the text-edit batch for `edit_agent_role_instructions`. */
+    const val EDITS_PROPERTY = "edits"
+
+    /** JSON property inside each [EDITS_PROPERTY] item: the exact text to be replaced. */
+    const val OLD_TEXT_PROPERTY = "oldText"
+
+    /** JSON property inside each [EDITS_PROPERTY] item: the replacement text. */
+    const val NEW_TEXT_PROPERTY = "newText"
+
     /**
      * Immutable specification of a single server built-in tool.
      *
@@ -151,105 +175,153 @@ object ServerBuiltInToolCatalog {
     }
 
     /**
-     * Builds a JSON Schema for the optional instruction list (advanced usage), with the nested
-     * item shape fully defined per the JSON Schema specification.
+     * Builds a JSON Schema for a single instruction object (one [AgentInstructionDto]).
      *
-     * The `items` entry is itself an object whose `properties` recursively describe one
-     * [AgentInstructionDto]: `type` (enum of [AgentInstructionTypes]), `name`, `message`, and the
-     * nullable nested `custom` object carrying `modelId` for `model_specific` instructions. The
-     * schema documents the shape but cannot enforce the per-type business rules (e.g.
-     * `model_specific` requires `custom.modelId`, other kinds require `custom == null`); those are
-     * validated server-side by the role service, which is more reliable than `if`/`then` for LLM
-     * function-calling providers that only support a JSON Schema subset.
+     * Shared by the `items` of the `instructions` array (`create_agent_role`/`update_agent_role`)
+     * and the `instruction` parameter of `insert_agent_role_instruction`. The schema documents the
+     * shape but cannot enforce the per-type business rules (e.g. `model_specific` requires
+     * `custom.modelId`, other kinds require no custom data); those are validated server-side by
+     * the role service, which is more reliable than `if`/`then` for LLM function-calling providers
+     * that only support a JSON Schema subset.
      *
-     * @return The JSON Schema object for the `instructions` array.
+     * `type`, `name`, and `message` are required; a `spawnable_agents` instruction takes an empty
+     * message (the server generates the text from the role's spawn allow-list). `custom` is an
+     * optional key that must be omitted (never null) when the instruction kind carries no
+     * type-specific data.
+     *
+     * @return The JSON Schema object describing one instruction.
      */
-    private fun instructionsProperty(): JsonObject = buildJsonObject {
-        put("type", "array")
-        put(
-            "description",
-            """
-            Ordered list of instructions used to compose the agent role's system prompt.
+    private fun instructionObjectSchema(): JsonObject = buildJsonObject {
+        put("type", "object")
+        put("additionalProperties", false)
 
-            Supported instruction types:
-            - role: static description of the agent's role
-            - main: project or AGENTS.md context
-            - custom: user-editable free-text instruction
-            - spawnable_agents: server-generated guidance; the supplied message is ignored
-            - model_specific: instruction applied only to custom.modelId
-            """.trimIndent()
-        )
+        putJsonObject("properties") {
+            putJsonObject("type") {
+                put("type", "string")
+                put("description", "The instruction kind.")
 
-        putJsonObject("items") {
-            put("type", "object")
-            put("additionalProperties", false)
-
-            putJsonObject("properties") {
-                putJsonObject("type") {
-                    put("type", "string")
-                    put("description", "The instruction kind.")
-
-                    putJsonArray("enum") {
-                        add(AgentInstructionTypes.ROLE)
-                        add(AgentInstructionTypes.MAIN)
-                        add(AgentInstructionTypes.CUSTOM)
-                        add(AgentInstructionTypes.SPAWNABLE_AGENTS)
-                        add(AgentInstructionTypes.MODEL_SPECIFIC)
-                    }
-                }
-
-                putJsonObject("name") {
-                    put("type", "string")
-                    put("description", "Human-readable label for the instruction.")
-                }
-
-                putJsonObject("message") {
-                    put("type", "string")
-                    put(
-                        "description",
-                        """
-                        Instruction text. For spawnable_agents the server ignores this value and
-                        generates the message from the role's spawn allow-list.
-                        """.trimIndent()
-                    )
-                }
-
-                putJsonObject("custom") {
-                    // Nullable nested object; the union type must be expressed as an array so the
-                    // LLM can either omit the value (null) or pass an object.
-                    putJsonArray("type") {
-                        add("object")
-                        add("null")
-                    }
-
-                    put(
-                        "description",
-                        """
-                        Type-specific data. For model_specific this must contain modelId; for the
-                        other currently supported instruction types it should be null.
-                        """.trimIndent()
-                    )
-
-                    putJsonObject("properties") {
-                        putJsonObject("modelId") {
-                            put("type", "integer")
-                            put("minimum", 1)
-                            put(
-                                "description",
-                                "ID of the model targeted by a model_specific instruction."
-                            )
-                        }
-                    }
-
-                    put("additionalProperties", false)
+                putJsonArray("enum") {
+                    AgentInstructionTypes.allKnown.forEach { add(it) }
                 }
             }
 
+            putJsonObject("name") {
+                put("type", "string")
+                put("description", "Human-readable label for the instruction.")
+            }
+
+            putJsonObject("message") {
+                put("type", "string")
+                put(
+                    "description",
+                    """
+                    Instruction text. For spawnable_agents pass an empty string; the server
+                    generates the message from the role's spawn allow-list.
+                    """.trimIndent()
+                )
+            }
+
+            putJsonObject("custom") {
+                put("type", "object")
+                put(
+                    "description",
+                    """
+                    Type-specific data. For model_specific this must contain modelId; for the
+                    other currently supported instruction types omit it.
+                    """.trimIndent()
+                )
+
+                putJsonObject("properties") {
+                    putJsonObject("modelId") {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put(
+                            "description",
+                            "ID of the model targeted by a model_specific instruction."
+                        )
+                    }
+                }
+
+                put("additionalProperties", false)
+            }
+        }
+
+        putJsonArray("required") {
+            add("type")
+            add("name")
+            add("message")
+        }
+    }
+
+    /**
+     * Builds a JSON Schema for the optional instruction list (advanced usage), with a different
+     * description for the `create_agent_role` tool.
+     *
+     * @param create True when building the schema for `create_agent_role`, false for `update_agent_role`.
+     * @return The JSON Schema object for the `instructions` array.
+     */
+    private fun instructionsProperty(create: Boolean): JsonObject = buildJsonObject {
+        put("type", "array")
+        put(
+            "description",
+            buildString {
+                appendLine("Ordered list of instructions used to compose the agent role's system prompt.")
+                appendLine()
+                appendLine("Supported instruction types:")
+                appendLine("- role: static description of the agent's role")
+                appendLine("- main: project or AGENTS.md context")
+                appendLine("- custom: user-editable free-text instruction")
+                appendLine("- spawnable_agents: server-generated guidance; pass an empty string (the supplied message is ignored)")
+                appendLine("- model_specific: instruction applied only to custom.modelId")
+                appendLine()
+                if (create) {
+                    append("To modify the list after creation, use `insert_agent_role_instruction`, `edit_agent_role_instructions`, or `remove_agent_role_instruction`.")
+                } else {
+                    append("Pass the entire `instructions` array to replace the whole list in one call — include every instruction you want to keep. For targeted changes, use the dedicated tools `insert_agent_role_instruction` (add), `edit_agent_role_instructions` (batch `oldText`/`newText` replacements), or `remove_agent_role_instruction` (remove).")
+                }
+            }.trimIndent()
+        )
+        put("items", instructionObjectSchema())
+    }
+
+    /**
+     * Builds a JSON Schema for the text-edit batch of `edit_agent_role_instructions`.
+     *
+     * Mirrors the worker `edit_file` tool's `edits` parameter shape: an array of `oldText`/`newText`
+     * pairs matched exactly against the original instruction texts (array order is not sequential,
+     * and all non-overlapping occurrences of each `oldText` are replaced).
+     *
+     * @return The JSON Schema object for the `edits` array.
+     */
+    private fun editsProperty(): JsonObject = buildJsonObject {
+        put("type", "array")
+        put("minItems", 1)
+        put(
+            "description",
+            "Replacement batch matched against the original instruction texts; array order is not " +
+                "sequential. Each edit replaces all non-overlapping occurrences of its oldText " +
+                "across every instruction message; the operation fails if an oldText matches nothing."
+        )
+        putJsonObject("items") {
+            put("type", "object")
+            put("additionalProperties", false)
+            putJsonObject("properties") {
+                putJsonObject(OLD_TEXT_PROPERTY) {
+                    put("type", "string")
+                    put(
+                        "description",
+                        "Exact text to replace. All non-overlapping occurrences across all " +
+                            "instruction messages are replaced; add context to target one instance."
+                    )
+                }
+                putJsonObject(NEW_TEXT_PROPERTY) {
+                    put("type", "string")
+                    put("description", "Replacement text.")
+                }
+            }
             putJsonArray("required") {
-                add("type")
-                add("name")
-                add("message")
-                add("custom")
+                add(OLD_TEXT_PROPERTY)
+                add(NEW_TEXT_PROPERTY)
             }
         }
     }
@@ -297,7 +369,8 @@ object ServerBuiltInToolCatalog {
             name = CREATE_AGENT_ROLE_NAME,
             description = "Creates a new agent role owned by the current user. The role may be " +
                 "created without a model and settings and completed later via update_agent_role; " +
-                "a role without a model/settings is non-sendable until set.",
+                "a role without a model/settings is non-sendable until set. Returns a concise " +
+                "one-line summary of the operation.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -320,7 +393,7 @@ object ServerBuiltInToolCatalog {
                         SPAWNABLE_AGENT_ROLE_IDS_PROPERTY,
                         integerArrayProperty("Optional same-user role ids this role may spawn.")
                     )
-                    put(INSTRUCTIONS_PROPERTY, instructionsProperty())
+                    put(INSTRUCTIONS_PROPERTY, instructionsProperty(create = true))
                 })
                 put("required", buildJsonArray {
                     add(NAME_PROPERTY)
@@ -333,7 +406,7 @@ object ServerBuiltInToolCatalog {
                 "provide only the fields to change; every omitted field is preserved, including the " +
                 "attached tools, spawnable roles and instructions. Passing null is treated as omitted " +
                 "— fields cannot be cleared with null; pass an empty string or an empty array to " +
-                "clear a field.",
+                "clear a field. Returns a concise one-line summary of the operation.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -360,7 +433,7 @@ object ServerBuiltInToolCatalog {
                         SPAWNABLE_AGENT_ROLE_IDS_PROPERTY,
                         integerArrayProperty("New same-user role ids this role may spawn (full replacement).")
                     )
-                    put(INSTRUCTIONS_PROPERTY, instructionsProperty())
+                    put(INSTRUCTIONS_PROPERTY, instructionsProperty(create = false))
                 })
                 put("required", buildJsonArray {
                     add(ROLE_ID_PROPERTY)
@@ -412,6 +485,85 @@ object ServerBuiltInToolCatalog {
                 })
                 put("required", buildJsonArray {
                     add(TOOL_ID_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
+            name = INSERT_AGENT_ROLE_INSTRUCTION_NAME,
+            description = "Inserts one instruction into an agent role owned by the current user at " +
+                "the given position, without rewriting the other instructions. The instruction " +
+                "object uses the same shape as an entry of update_agent_role's instructions " +
+                "parameter. Returns a concise one-line summary of the operation. Prefer this " +
+                "tool over update_agent_role when only adding one instruction, to save tokens.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(
+                        ROLE_ID_PROPERTY,
+                        integerProperty("Id of the agent role to modify. The role must be owned by the current user.")
+                    )
+                    put(
+                        POSITION_PROPERTY,
+                        integerProperty(
+                            "Zero-based position in the instruction list where the new instruction " +
+                                "is inserted: 0 inserts at the beginning, and the current list size " +
+                                "appends at the end."
+                        )
+                    )
+                    put(INSTRUCTION_PROPERTY, instructionObjectSchema())
+                })
+                put("required", buildJsonArray {
+                    add(ROLE_ID_PROPERTY)
+                    add(POSITION_PROPERTY)
+                    add(INSTRUCTION_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
+            name = EDIT_AGENT_ROLE_INSTRUCTIONS_NAME,
+            description = "Applies text replacements to the instruction messages of an agent role " +
+                "owned by the current user. Each edit replaces all non-overlapping occurrences of " +
+                "its oldText across every instruction message; edits match the original instruction " +
+                "texts (array order is not sequential), and the operation fails when an oldText " +
+                "matches nothing. Returns an edit summary and a unified diff of the changed " +
+                "instruction texts. Prefer this tool over update_agent_role for targeted text " +
+                "changes to save tokens.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(
+                        ROLE_ID_PROPERTY,
+                        integerProperty("Id of the agent role to modify. The role must be owned by the current user.")
+                    )
+                    put(EDITS_PROPERTY, editsProperty())
+                })
+                put("required", buildJsonArray {
+                    add(ROLE_ID_PROPERTY)
+                    add(EDITS_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
+            name = REMOVE_AGENT_ROLE_INSTRUCTION_NAME,
+            description = "Removes the instruction at the given position from an agent role owned by " +
+                "the current user, without rewriting the other instructions. Returns a concise " +
+                "one-line summary of the operation. Prefer this tool over update_agent_role when " +
+                "only removing one instruction, to save tokens.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(
+                        ROLE_ID_PROPERTY,
+                        integerProperty("Id of the agent role to modify. The role must be owned by the current user.")
+                    )
+                    put(
+                        POSITION_PROPERTY,
+                        integerProperty("Zero-based position of the instruction to remove.")
+                    )
+                })
+                put("required", buildJsonArray {
+                    add(ROLE_ID_PROPERTY)
+                    add(POSITION_PROPERTY)
                 })
             }
         )

@@ -419,6 +419,17 @@ class AgentRoleServiceImpl(
             errors.instructionValidationFailed("At most one 'spawnable_agents' instruction is allowed")
         }
 
+        // A `model_specific` instruction is meaningless without its target model: the composer
+        // keeps only the instance matching the active model, so a missing target would be silently
+        // dropped at read time. Reject it up front instead of accepting data that disappears.
+        ensure(instructions.none {
+            it.type == AgentInstructionTypes.MODEL_SPECIFIC && it.modelSpecificId() == null
+        }) {
+            errors.instructionValidationFailed(
+                "A 'model_specific' instruction must include custom.modelId"
+            )
+        }
+
         // `model_specific` is multi-instance (one per target model) but each instance must reference a
         // distinct model: two entries for the same model would be redundant and ambiguous at compose
         // time, where the composer keeps only the matching instance.
