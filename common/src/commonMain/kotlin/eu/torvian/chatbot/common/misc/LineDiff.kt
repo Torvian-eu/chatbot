@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.worker.builtin
+package eu.torvian.chatbot.common.misc
 
 /**
  * Line-based unified-diff utilities, matching the layout Git uses (hunk headers,
