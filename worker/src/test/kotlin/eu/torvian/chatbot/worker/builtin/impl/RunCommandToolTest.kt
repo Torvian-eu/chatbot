@@ -3,16 +3,17 @@ package eu.torvian.chatbot.worker.builtin.impl
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
-import kotlinx.coroutines.Dispatchers
+import eu.torvian.chatbot.worker.builtin.validation.truncateLinesAndBytes
+import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.*
 import java.nio.file.Path
+import java.util.concurrent.Executors
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.*
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Scenario-driven unit tests for [RunCommandTool].
@@ -68,16 +69,25 @@ class RunCommandToolTest {
      * @param command Command to execute.
      * @param args Optional command arguments.
      * @param timeout Optional timeout in seconds.
+     * @param maxLines Optional maximum number of retained output lines.
+     * @param maxBytes Optional maximum number of retained UTF-8 output bytes.
      * @return The input [kotlinx.serialization.json.JsonObject] for the tool.
      */
-    private fun buildInput(command: String, args: List<String>? = null, timeout: Long? = null): JsonObject =
-        buildJsonObject {
-            put("command", command)
-            if (args != null) putJsonArray("args") {
-                for (a in args) add(a)
-            }
-            if (timeout != null) put("timeout", timeout)
+    private fun buildInput(
+        command: String,
+        args: List<String>? = null,
+        timeout: Long? = null,
+        maxLines: Int? = null,
+        maxBytes: Int? = null,
+    ): JsonObject = buildJsonObject {
+        put("command", command)
+        if (args != null) putJsonArray("args") {
+            for (a in args) add(a)
         }
+        if (timeout != null) put("timeout", timeout)
+        if (maxLines != null) put("maxLines", maxLines)
+        if (maxBytes != null) put("maxBytes", maxBytes)
+    }
 
     /**
      * Creates an execution context rooted at [workspace] using the IO dispatcher.
@@ -105,6 +115,81 @@ class RunCommandToolTest {
         assertTrue(result.isError, "Expected error but got success: ${result.output}")
         assertEquals(code, result.errorCode, "Unexpected error code; message=${result.errorMessage}")
     }
+
+    /**
+     * Executes a command under a test-only deadline so a regression cannot hang the test worker.
+     *
+     * @param input The validated command input passed to the tool.
+     * @param executionContext The isolated workspace and execution configuration.
+     * @return The result produced by [RunCommandTool.execute].
+     */
+    private suspend fun executeWithTestDeadline(
+        input: JsonObject,
+        executionContext: BuiltInToolExecutionContext,
+    ): BuiltInToolExecutionResult = withContext(Dispatchers.Default) {
+        withTimeout(8_000.milliseconds) {
+            tool.execute(input, executionContext)
+        }
+    }
+
+    /**
+     * Builds an OS-aware command that emits a bounded amount of output without relying on a fixed
+     * global file or process identifier.
+     *
+     * @param stderr Whether output should be directed to standard error.
+     * @param byteCount Approximate number of filler bytes to emit.
+     * @param prefix Distinctive text emitted before the filler.
+     * @param suffix Distinctive text emitted after the filler.
+     * @param exitCode Exit code returned by the command.
+     * @return The executable and argument list for [RunCommandTool].
+     */
+    private fun largeOutputCommand(
+        stderr: Boolean,
+        byteCount: Int,
+        prefix: String = "PREFIX_SENTINEL",
+        suffix: String = "TAIL_SENTINEL",
+        exitCode: Int = 0,
+    ): Pair<String, List<String>> {
+        if (isWindows) {
+            // Group the loop so cmd does not treat the suffix or exit command as part of its body.
+            val iterations = maxOf(18_000, byteCount / 5 + 1_000)
+            val redirection = if (stderr) " 1>&2" else ""
+            val script =
+                "(echo $prefix & for /l %i in (1,1,$iterations) do @echo X)$redirection & echo $suffix$redirection & exit $exitCode"
+            return "cmd" to listOf("/c", script)
+        }
+        val redirection = if (stderr) " >&2" else ""
+        val script = "{ printf '$prefix'; yes X | head -c $byteCount; printf '$suffix'; }$redirection; exit $exitCode"
+        return "sh" to listOf("-c", script)
+    }
+
+    /**
+     * Builds a command that fills both independent output pipes before exiting.
+     *
+     * @param byteCount Approximate bytes emitted on each stream.
+     * @return The executable and argument list for [RunCommandTool].
+     */
+    private fun bothStreamsLargeOutputCommand(byteCount: Int): Pair<String, List<String>> {
+        if (isWindows) {
+            // Each grouped loop completes independently while both remain on separate cmd pipes.
+            val iterations = maxOf(18_000, byteCount / 5 + 1_000)
+            val script =
+                "(for /l %i in (1,1,$iterations) do @echo OUT) & (for /l %i in (1,1,$iterations) do @echo ERR 1>&2) & exit 0"
+            return "cmd" to listOf("/c", script)
+        }
+        val script = "{ yes OUT | head -c $byteCount; } & { yes ERR | head -c $byteCount >&2; } & wait"
+        return "sh" to listOf("-c", script)
+    }
+
+    /**
+     * Reads a JSON string detail while giving a useful assertion when the detail is absent.
+     *
+     * @param result Tool result containing the details object.
+     * @param key Name of the string detail to read.
+     * @return The detail value, or an empty string when the JSON value is absent.
+     */
+    private fun stringDetail(result: BuiltInToolExecutionResult, key: String): String =
+        result.details?.jsonObject?.get(key)?.jsonPrimitive?.content ?: ""
 
     /**
      * Builds an input payload where `args` is intentionally a single JSON string,
@@ -523,9 +608,474 @@ class RunCommandToolTest {
             )
 
             val success = assertSuccess(result)
-            assertFalse(success.contains("[Output truncated:"), "Empty command output should not be truncated; got: $success")
+            assertFalse(
+                success.contains("[Output truncated:"),
+                "Empty command output should not be truncated; got: $success"
+            )
             assertTrue(success.contains("exitCode: 0"), "Should report exit code 0; got: $success")
         } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that stdout larger than a normal OS pipe is drained while retaining only the request's prefix.
+     */
+    @Test
+    fun `large stdout drains without deadlock and retains bounded output`() = runTest {
+        val dir = createTempDirectory("run-command-large-stdout")
+        try {
+            val (command, args) = largeOutputCommand(stderr = false, byteCount = 128 * 1024)
+            val result = executeWithTestDeadline(
+                buildInput(command, args, timeout = 2, maxLines = 4, maxBytes = 32),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals(0, result.details?.jsonObject?.get("exitCode")?.jsonPrimitive?.int)
+            assertEquals(true, result.details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+            val stdout = stringDetail(result, "stdout")
+            assertTrue(stdout.startsWith("PREFIX_SENTINEL"), "retained prefix missing: $stdout")
+            assertTrue(stdout.toByteArray(Charsets.UTF_8).size <= 32, "stdout exceeded maxBytes")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that a large stderr pipe is drained even when the command reports a non-zero exit.
+     */
+    @Test
+    fun `large stderr drains and preserves nonzero execution error`() = runTest {
+        val dir = createTempDirectory("run-command-large-stderr")
+        try {
+            val (command, args) = largeOutputCommand(stderr = true, byteCount = 128 * 1024, exitCode = 7)
+            val result = executeWithTestDeadline(
+                buildInput(command, args, timeout = 2, maxLines = 4, maxBytes = 32),
+                context(dir),
+            )
+
+            assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
+            assertEquals(true, result.errorMessage?.contains("7"))
+            assertEquals(7, result.details?.jsonObject?.get("exitCode")?.jsonPrimitive?.int)
+            val stderr = stringDetail(result, "stderr")
+            assertTrue(stderr.startsWith("PREFIX_SENTINEL"), "retained stderr prefix missing: $stderr")
+            assertTrue(stderr.toByteArray(Charsets.UTF_8).size <= 32, "stderr exceeded maxBytes")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that independent stdout and stderr producers can both exceed pipe capacity.
+     */
+    @Test
+    fun `large stdout and stderr drain from separate pipes`() = runTest {
+        val dir = createTempDirectory("run-command-both-streams")
+        try {
+            val (command, args) = bothStreamsLargeOutputCommand(byteCount = 128 * 1024)
+            val result = executeWithTestDeadline(
+                buildInput(command, args, timeout = 5, maxLines = 4, maxBytes = 32),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertTrue(stringDetail(result, "stdout").toByteArray(Charsets.UTF_8).size <= 32)
+            assertTrue(stringDetail(result, "stderr").toByteArray(Charsets.UTF_8).size <= 32)
+            assertEquals(true, result.details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that content after the retained prefix is drained but is not returned in details or output.
+     */
+    @Test
+    fun `large output retains prefix and excludes tail sentinel`() = runTest {
+        val dir = createTempDirectory("run-command-sentinel")
+        try {
+            val (command, args) = largeOutputCommand(
+                stderr = false,
+                byteCount = 192 * 1024,
+                prefix = "FIRST_SENTINEL",
+                suffix = "LAST_SENTINEL",
+            )
+            val result = executeWithTestDeadline(
+                buildInput(command, args, timeout = 2, maxLines = 10, maxBytes = 48),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals(true, result.details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+            assertTrue(stringDetail(result, "stdout").startsWith("FIRST_SENTINEL"))
+            assertFalse(stringDetail(result, "stdout").contains("LAST_SENTINEL"))
+            assertFalse((result.output ?: "").contains("LAST_SENTINEL"))
+            assertTrue(stringDetail(result, "stdout").toByteArray(Charsets.UTF_8).size <= 48)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that the tool handles output modestly above the historical Linux pipe threshold promptly.
+     */
+    @Test
+    fun `output above historical pipe threshold completes promptly`() = runTest {
+        val dir = createTempDirectory("run-command-threshold")
+        try {
+            val (command, args) = largeOutputCommand(stderr = false, byteCount = 96 * 1024)
+            val result = executeWithTestDeadline(
+                buildInput(command, args, timeout = 2, maxLines = 2, maxBytes = 24),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals(0, result.details?.jsonObject?.get("exitCode")?.jsonPrimitive?.int)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that closing stdin allows a command which reads to EOF to finish normally.
+     */
+    @Test
+    fun `stdin is closed so an eof-reading command can exit`() = runTest {
+        val dir = createTempDirectory("run-command-stdin")
+        try {
+            val (command, args) = if (isWindows) {
+                "cmd" to listOf("/c", "more >nul & echo AFTER_EOF")
+            } else {
+                "sh" to listOf("-c", "cat >/dev/null; printf 'AFTER_EOF\\n'")
+            }
+            val result = executeWithTestDeadline(
+                buildInput(command, args, timeout = 2),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertTrue(stringDetail(result, "stdout").contains("AFTER_EOF"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that incremental UTF-8 retention never returns a partial multibyte code point and
+     * agrees with the existing truncation helper for valid process output.
+     */
+    @Test
+    fun `utf8 output respects byte boundary and existing truncation semantics`() = runTest {
+        if (isWindows) return@runTest
+        val dir = createTempDirectory("run-command-utf8")
+        try {
+            val source = "ééééé\n"
+            val file = dir.resolve("utf8.txt")
+            file.writeText(source, Charsets.UTF_8)
+            // Read a workspace file so the test isolates incremental decoding from shell quoting.
+            val (command, args) = "cat" to listOf(file.fileName.toString())
+            val maxBytes = 5
+            val result = executeWithTestDeadline(
+                buildInput(command, args, timeout = 2, maxLines = 2, maxBytes = maxBytes),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            val actual = stringDetail(result, "stdout")
+            val expected = truncateLinesAndBytes(source, maxLines = 2, maxBytes = maxBytes).text
+            assertEquals(expected, actual)
+            assertTrue(actual.toByteArray(Charsets.UTF_8).size <= maxBytes)
+            assertEquals("éé", actual, "UTF-8 output should end at a code-point boundary: $actual")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies best-effort termination of a visible Linux descendant when the root command times out.
+     */
+    @Test
+    fun `linux timeout cleanup terminates visible descendant`() = runTest {
+        if (isWindows) return@runTest
+        val dir = createTempDirectory("run-command-descendant")
+        val pidFile = dir.resolve("child.pid")
+        var childPid: Long? = null
+        try {
+            val script = $$"sleep 30 & child=$!; printf '%s' \"$child\" > '$${pidFile}'; wait"
+            val result = executeWithTestDeadline(
+                buildInput("sh", listOf("-c", script), timeout = 1),
+                context(dir),
+            )
+            assertError(result, BuiltInToolExecutionError.TIMEOUT)
+
+            val deadline = System.nanoTime() + 5_000_000_000L
+            while (!pidFile.toFile().exists() && System.nanoTime() < deadline) {
+                Thread.sleep(25)
+            }
+            childPid = pidFile.readText().trim().toLongOrNull()
+            assertTrue(childPid != null, "child PID was not recorded")
+            val recordedPid = childPid
+            var alive = true
+            while (alive && System.nanoTime() < deadline) {
+                // Java Optional interop is nullable in Kotlin; a missing handle means the child exited.
+                alive = ProcessHandle.of(recordedPid).map { it.isAlive }.orElse(false) == true
+                if (alive) Thread.sleep(25)
+            }
+            assertFalse(alive, "visible descendant $childPid survived timeout cleanup")
+        } finally {
+            childPid?.let { pid ->
+                ProcessHandle.of(pid).ifPresent { handle ->
+                    if (handle.isAlive) handle.destroyForcibly()
+                }
+            }
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Waits for a command-written PID file without assuming a fixed process startup duration.
+     *
+     * @param pidFile File expected to contain a decimal process identifier.
+     * @param timeoutMillis Maximum wall-clock time to wait.
+     * @return The recorded process identifier.
+     */
+    private fun waitForPid(pidFile: Path, timeoutMillis: Long = 3_000): Long {
+        val deadline = System.nanoTime() + timeoutMillis * 1_000_000L
+        while (System.nanoTime() < deadline) {
+            val pid = pidFile.toFile().takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull()
+            if (pid != null) return pid
+            Thread.sleep(25)
+        }
+        throw AssertionError("PID was not recorded in $pidFile")
+    }
+
+    /**
+     * Waits briefly for [pid] to become absent or non-running after command cleanup.
+     *
+     * Linux PID 1 can retain a killed orphan as a zombie in this test container; that process is
+     * terminated and no longer consumes resources even though ProcessHandle still reports it alive.
+     *
+     * @param pid Process identifier to inspect.
+     * @param timeoutMillis Maximum wall-clock time to poll.
+     * @return True when the process is no longer running.
+     */
+    private fun waitForProcessExit(pid: Long, timeoutMillis: Long = 3_000): Boolean {
+        val deadline = System.nanoTime() + timeoutMillis * 1_000_000L
+        while (System.nanoTime() < deadline) {
+            val handle = ProcessHandle.of(pid).orElse(null)
+            if (handle == null || !handle.isAlive || isLinuxZombie(pid)) return true
+            Thread.sleep(25)
+        }
+        val handle = ProcessHandle.of(pid).orElse(null)
+        return handle == null || !handle.isAlive || isLinuxZombie(pid)
+    }
+
+    /**
+     * Terminates a PID recorded by a test command, including when the assertion failed before the
+     * caller copied the PID into its local variable.
+     *
+     * @param pidFile File containing the command's PID.
+     * @param fallbackPid PID already captured by the test, if any.
+     */
+    private fun cleanupRecordedProcess(pidFile: Path, fallbackPid: Long?) {
+        val pid = fallbackPid ?: pidFile.toFile().takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull()
+        pid?.let { recordedPid ->
+            ProcessHandle.of(recordedPid).ifPresent { handle ->
+                if (handle.isAlive) handle.destroyForcibly()
+            }
+        }
+    }
+
+    /**
+     * Detects a terminated zombie in Linux's procfs when its parent reaper has not collected it.
+     *
+     * @param pid Process identifier to inspect.
+     * @return True when procfs reports the process state as zombie.
+     */
+    private fun isLinuxZombie(pid: Long): Boolean {
+        if (isWindows) return false
+        val stat = Path.of("/proc", pid.toString(), "stat").toFile()
+        val contents = stat.takeIf { it.isFile }?.readText() ?: return false
+        val stateIndex = contents.lastIndexOf(')') + 2
+        return stateIndex in contents.indices && contents[stateIndex] == 'Z'
+    }
+
+    /**
+     * Verifies CR, LF, CRLF, trailing separators, and a separator split at a reader-buffer edge.
+     */
+    @Test
+    fun `line endings and trailing empty lines match existing truncation semantics`() = runTest {
+        if (isWindows) return@runTest
+        val dir = createTempDirectory("run-command-lines")
+        try {
+            val source = "x".repeat(4095) + "\r\nsecond\rthird\n"
+            val file = dir.resolve("line-endings.txt")
+            file.toFile().writeBytes(source.toByteArray(Charsets.UTF_8))
+            val result = executeWithTestDeadline(
+                buildInput("cat", listOf(file.fileName.toString()), timeout = 2, maxLines = 10, maxBytes = 10_000),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals(
+                truncateLinesAndBytes(source, maxLines = 10, maxBytes = 10_000).text,
+                stringDetail(result, "stdout"),
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that an unterminated line is consumed without growing retained output beyond limits.
+     */
+    @Test
+    fun `long unterminated line is drained with bounded retention`() = runTest {
+        if (isWindows) return@runTest
+        val dir = createTempDirectory("run-command-long-line")
+        try {
+            val source = "LONG_LINE_PREFIX" + "x".repeat(256 * 1024) + "LONG_LINE_TAIL"
+            val file = dir.resolve("long-line.txt")
+            file.toFile().writeBytes(source.toByteArray(Charsets.UTF_8))
+            val result = executeWithTestDeadline(
+                buildInput("cat", listOf(file.fileName.toString()), timeout = 2, maxLines = 2, maxBytes = 64),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            val stdout = stringDetail(result, "stdout")
+            assertTrue(stdout.startsWith("LONG_LINE_PREFIX"))
+            assertFalse(stdout.contains("LONG_LINE_TAIL"))
+            assertTrue(stdout.toByteArray(Charsets.UTF_8).size <= 64)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies replacement decoding for malformed UTF-8 remains compatible with the process reader.
+     */
+    @Test
+    fun `malformed utf8 uses replacement characters`() = runTest {
+        if (isWindows) return@runTest
+        val dir = createTempDirectory("run-command-malformed-utf8")
+        try {
+            val file = dir.resolve("malformed.bin")
+            file.toFile().writeBytes(byteArrayOf(0xC3.toByte(), 0x28, 0x41))
+            val result = executeWithTestDeadline(
+                buildInput("cat", listOf(file.fileName.toString()), timeout = 2, maxBytes = 16),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals("\uFFFD(A", stringDetail(result, "stdout"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies supplementary code points remain whole when a reader buffer splits their surrogates.
+     */
+    @Test
+    fun `supplementary code points remain intact across reader buffer boundaries`() = runTest {
+        if (isWindows) return@runTest
+        val dir = createTempDirectory("run-command-supplementary")
+        try {
+            val source = "a".repeat(4095) + "😀\n"
+            val file = dir.resolve("supplementary.txt")
+            file.toFile().writeBytes(source.toByteArray(Charsets.UTF_8))
+            val result = executeWithTestDeadline(
+                buildInput("cat", listOf(file.fileName.toString()), timeout = 2, maxLines = 2, maxBytes = 4_100),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals(source, stringDetail(result, "stdout"))
+            assertTrue(stringDetail(result, "stdout").toByteArray(Charsets.UTF_8).size <= 4_100)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Demonstrates that reader threads do not depend on the caller's IO dispatcher having two threads.
+     */
+    @Test
+    fun `large output succeeds with a single thread caller dispatcher`() = runTest {
+        val dir = createTempDirectory("run-command-single-dispatcher")
+        val executor = Executors.newSingleThreadExecutor()
+        val dispatcher = executor.asCoroutineDispatcher()
+        try {
+            val (command, args) = largeOutputCommand(stderr = false, byteCount = 96 * 1024)
+            val result = executeWithTestDeadline(
+                buildInput(command, args, timeout = 2, maxBytes = 32),
+                context(dir).copy(ioDispatcher = dispatcher),
+            )
+
+            assertSuccess(result)
+            assertEquals(0, result.details?.jsonObject?.get("exitCode")?.jsonPrimitive?.int)
+        } finally {
+            dispatcher.close()
+            executor.shutdownNow()
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies cancellation rethrows while cleaning a running root and its visible child.
+     */
+    @Test
+    fun `cancellation cleans up the process and is rethrown`() = runTest {
+        if (isWindows) return@runTest
+        val dir = createTempDirectory("run-command-cancellation")
+        val pidFile = dir.resolve("child.pid")
+        var childPid: Long? = null
+        var commandJob: Job? = null
+        try {
+            val script = $$"sleep 30 & child=$!; printf '%s' \"$child\" > '$${pidFile}'; wait"
+            val deferred = async(Dispatchers.Default) {
+                tool.execute(
+                    buildInput("sh", listOf("-c", script), timeout = 30),
+                    context(dir),
+                )
+            }
+            commandJob = deferred
+            childPid = waitForPid(pidFile)
+            deferred.cancel(CancellationException("test cancellation"))
+            assertFailsWith<CancellationException> { deferred.await() }
+            val recordedPid = childPid
+            assertTrue(waitForProcessExit(recordedPid), "cancelled descendant survived cleanup")
+        } finally {
+            commandJob?.cancelAndJoin()
+            cleanupRecordedProcess(pidFile, childPid)
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies a descendant holding an inherited pipe is terminated after the root has exited.
+     */
+    @Test
+    fun `post exit cleanup terminates descendant holding inherited pipe`() = runTest {
+        if (isWindows) return@runTest
+        val dir = createTempDirectory("run-command-post-exit-descendant")
+        val pidFile = dir.resolve("child.pid")
+        var childPid: Long? = null
+        try {
+            val script = $$"sleep 30 & child=$!; printf '%s' \"$child\" > '$${pidFile}'; sleep 0.2; exit 0"
+            val result = executeWithTestDeadline(
+                buildInput("sh", listOf("-c", script), timeout = 1),
+                context(dir),
+            )
+            childPid = waitForPid(pidFile)
+
+            assertError(result, BuiltInToolExecutionError.TIMEOUT)
+            val recordedPid = childPid
+            assertTrue(waitForProcessExit(recordedPid), "post-exit descendant survived cleanup")
+        } finally {
+            cleanupRecordedProcess(pidFile, childPid)
             dir.toFile().deleteRecursively()
         }
     }
