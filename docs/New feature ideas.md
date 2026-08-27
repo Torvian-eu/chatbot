@@ -126,8 +126,7 @@ Normally, only the assistant can call tools. However, it sometimes is useful for
 - A dialog should be presented with all the arguments for the tool, which can be filled in manually.
 - The dialog should allow the user to select a tool from the list of available tools for the current session.
 
-
-### Add system message composer
+### (deprecated in favor of agent roles) Add system message composer
 The system message is what the LLM uses to understand the context of the conversation. It's always the first message in the conversation, and carries the heaviest weighting. We want to let the user compose the system message within the UI:
 - There should be several snippets of text (components) that the user can choose from to compose the system message:
   - The system message property from the current chat model settings (ChatModelSettings.systemMessage)
@@ -144,7 +143,16 @@ Technical notes:
 - The client app can get the contents of an AGENTS.md file by calling the built-in worker tool `read_text_file`.
 - The client app should have Repository class for managing the cached (per-session) system message and other related data.
 
+### Display reasoning/thinking tokens in UI
+- for use with Responses API only
+- only show if tokens are not encrypted; in case of encrypted tokens, most LLM's provide a reasoning summary, which we could use instead.
+
+
+
 ---
+
+
+
 
 ## Intermediate features
 
@@ -199,11 +207,17 @@ Not completed:
   - An agent tool for reading files from the local file system. This is necessary for the agent to read the content of files mentioned in the SKILL.md or AGENTS.md files.
   - A convenient way for users to load the content of an AGENTS.md file into the LLM context for the current chat session. (For instance: a button in the GUI to select an AGENTS.md file, which is then loaded into the LLM context)
 
-### Add support for OpenAI's Responses API
-- See: https://developers.openai.com/api/docs/guides/migrate-to-responses
-- We can detect if a model supports the Responses API by sending a POST request to: https://base_url/responses/input_tokens with body: {"model": "<model_name>", "input": "Hello"}. This endpoint is used to count input tokens. If the model supports the Responses API, the response will include the number of input tokens. If not, we get a 404 error. A valid response should be of the form: {"object": "response.input_tokens","input_tokens": 7}.
-- If a model supports the Responses API, add an entry to the model capabilities property (LLMModel.capabilities). For instance, add '"ResponsesAPI" = true' to the JSON object.
-- Modify OpenAIChatStrategy.kt to support Responses API. Within the function 'prepareRequest' we can check for the model capability we added. And in the function 'processSuccessResponse' we can check if the field "object" in the response body contains the value "response". (For the Chat Completions API the value is "chat.completion"). 
+### (done) Add support for OpenAI's Responses API
+The main benefit over the Chat Completions API is support for reasoning tokens. It allows replaying of reasoning tokens from previous requests.
+- Add new model type `RESPONSES` in enum class `LLMModelType`.
+- Docs:
+  - [Responses Overview](https://developers.openai.com/api/reference/responses/overview)
+  - [Migrate to the Responses API](https://developers.openai.com/api/docs/guides/migrate-to-responses)
+  - [Create a model response](https://developers.openai.com/api/reference/resources/responses/methods/create)
+  - [Streaming API responses](https://developers.openai.com/api/docs/guides/streaming-responses)
+  - [Streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events)
+  - [Function calling](https://developers.openai.com/api/docs/guides/function-calling)
+  - [Reasoning models](https://developers.openai.com/api/docs/guides/reasoning)
 
 ### Add support for MCP's resources and prompts
 - The user should be able to retrieve a resource or prompt, if currently active for the chat session. (The MCP server will be contacted to retrieve the resource or prompt)
@@ -324,7 +338,148 @@ Notes:
 ### (done) Add strip HTML capability for `fetch_web_content` and `download_file` tools
 Add an option to these tools to strip a HTML page to a bare minimum, so that only the core HTML tags, core attributes, and text content remain. A boolean parameter should be added as an on/off switch (default: on). 
 
+### (done, partially) User-defined agent roles
+
+#### UI
+- User can select an agent role for the current chat session. Replaces the model, model settings, and tools selection form elements in the top app bar.
+
+#### Data structure for `AgentRole`
+An agent role consists of the following items:
+- `id`: type: long, unique, cannot be modified after creation, created by db
+- `name`: type: String, unique, modifiable, short name
+- `display name`: type: String?
+- `description`: type: String
+- `model id`: type: Long, references `LLMModel` object
+- `model settings id`: type: Long, references `ModelSettings` object (`LLMModelType` must be `CHAT` or `RESPONSES`)
+- `tools`: type: List<ToolDefinition>, list of tools available to the agent
+- `instructions`: type: List<`AgentInstruction`>, an ordered list of instructions that the agent must always follow. This list is used to compose the system message for the LLM. (All of the message strings from `AgentInstruction.message` are concatened together, with markdown separator "---".)
+- (future extension) `project id`: type: Long?, references the project that this agent role belongs to. Useful for grouping several agent roles together.
+- (done) `spawnable agent roles`: type: List<Long>, a list of agent roles that this agent is allowed to spawn. An agent can use a `spawn_agent` tool to spawn another agent instance. (This tool will be implemented in a future stage.)
+- (future extension) `skills`: type: List<Long>, items reference class `Skill`, list of skills that the agent can use.
+
+#### interface `AgentInstruction`
+```
+interface AgentInstruction {
+    val name: String,
+    val message: String,
+    fun loadMessage()
+}
+```
+Implementations of this class include:
+- `RoleInstruction`: describes the role that the agent should take. For instance: "You are a senior software architect assisting a user who often delegates implementation to a separate AI coding agent."
+- `MainInstruction`: contains information about the project the agent should be working on. (usually AGENTS.md file contents)
+- (deprecated) `ModelSettingsInstruction`: contains the instructions for the referenced model settings object in the agent role (`ChatModelSettings.systemMessage` or `ResponsesModelSettings.instructions`). Can be useful in case a certain model needs specific instructions. This class has an extra property `modelSettingsId`. The function `loadMessage` loads the instruction from the database, and stores it in a private `_message` field.
+- `CustomInstruction`: A custom user-editable instruction for the agent. There can be multiple of these within the same list of instructions.
+- (done) `SpawnableAgentsInstruction`: contains information for the agent about how to spawn another agent, and which agent roles are available. This instruction is dynamic and is derived from the property `AgentRole.spawnable agent roles`.
+- (future extension) `SkillsInstruction`: contains information for the agent about how to use a skill, and which skills are available. This instruction is dynamic and is derived from the property `AgentRole.skills`.
+
+#### Future extensions
+**(deprecated for now, because probably not needed) Agent role overrides**
+Sometimes it's useful to override some properties from `AgentRole` temporarily, without having to create a new `AgentRole` in the databse. The class `AgentRoleOverrides` has the following properties:
+- `model settings override`: can override settings defined in the object `ModelSettings` referenced by `model settings id`. For example, this could be useful for setting a specific `temperature` for the current task.
+- `tools override`: Add or remove tools for the current task. This overrides the default `tools` list for the agent role.
+This class can be used in both the UI (ViewModel) and agent instances. 
+
+**Skills**
+Agent Skills are a lightweight, open format for extending AI agent capabilities with specialized knowledge and workflows. See: https://agentskills.io/home.
+The properties for class `Skill` are:
+- `id`: type: Long
+- `name`: type: String, same name as directory (for example: workspace/skills/<name>)
+- `description`: type String
+
+### (done, partially) Spawnable agent instances
+An agent role can be spawned as an agent instance. An agent instance needs an `AgentInstanceConfig` object to be spawned. It consists of the following items:
+- `agent role`: type: `AgentRole`
+- `operator type`: type: `OperatorType`. An operator manages the agent's instance. It's either the client app or a dedicated agent operator (running as a background service; similar to the worker, which stays connected to the server (via websocket) at all times). The operator must be registered in the worker as a trusted signer. Every tool call request for the worker is signed by the operator. (The client app already has this capability.)
+- `conversation`: type List<`RawChatMessage`>. This is usually a list with a single user message item. It contains a prompt, which describes the task for the agent to execute.
+- (future extension) `agent role overrides`: type: `AgentRoleOverrides?`, optional
+
+#### (done) Operator built-in tool `spawn_agent`
+Sends a signal to the operator to initiate the creation of a new agent instance. It can be called by the LLM at any time. It has the following parameters:
+- `agent role name`: type: String, references `AgentRole.name`
+- `prompt`: type: String, describes the task for the agent to execute.
+
+**Tool execution flow**
+- The tool must be approved by the operator first, before it can be executed: the server sends a `Chat(Stream)Event.ToolCallApprovalRequested` to the operator and the operator responds with `ChatClientEvent.ServerToolCallApproval`, a new event type. New class to be created: `ServerToolDefinition` with new `ToolType.SERVER`. It's a class derived from the interface `ToolDefinition` with no extra properties.
+- After approval, the server relays the execution of the tool back to the operator, waits for the tool result, and sends the result to the LLM that initiated the `spawn_agent` tool call. The execution relay can be done via a new type of event, sent over websocket. For instance: `Chat(Stream)Event.ServerToolExecutionRequested`.
+- The execution of the tool is orchestrated by the operator. Upon receiving the tool execution request from the server, it creates a new chat session, and sends a `ProcessNewMessageRequest` (with the value of `prompt` as content) to the server, which initiates a new websocket connection. So now the operator has to manage two websocket connections simultaneously.
+- When the `ProcessNewMessageRequest` finishes, the operator has to aggregrate the result. For simplicity, we can use the contents of the last assistant's message from the chat session, which should include a summary report.
+- The operator sends the tool result to the server, via a new `ChatClientEvent.ToolExecutionResult` event.
+- The server sends the result to the LLM that initiated the `spawn_agent` tool call.
+
+
+### (done) Add agent instruction type that's only active for a certain model
+- Multiple instances of this new type of instruction are possible in the list of instructions. The only one active will be the one equal where its model id property is equal to AgentRole.modelId
+- (future stage) `ModelSettingsInstruction` can be deprecated in favor of this. Also, the `systemMessage` property can be removed from `ChatModelSettings` and `ResponsesModelSettings`, since it would have no purpose anymore.
+
+### Projects
+Define a project that several agents can work on together. The properties for class `Project` are: `id`, `name`, `description`.
+- Allows a user to group several agent roles together
+- A project name can be selected in the top app bar. When a project is selected, only the agent roles from that project are shown in the agent role selection box.
+
+### Allow user to compact a conversation manually
+- Compacts the currently active thread (determined by the current leaf message id) in the chat session.
+- Could be implemented as a manual call to a server built-in tool (which are normally only called by the LLM).
+
+### Add system message property to chat session object
+- The system message is derived from the session's agent role's instructions list, using the `SystemPromptComposer`.
+- Currently, the system message is re-composed on every turn in `DefaultConversationTurnPreparationService.prepareNewMessageTurn`. This behavior could be replaced by on-demand composition.
+- Lifecycle: new chat session created (with non-null agent role), session's agent role updated with non-null value, current agent role itself is updated, or manual system message sync via UI -> load system message; in all other cases the session's system message stays the same
+- Main benefit: The system message for a chat session stays the same for as long as the user wants, which helps increase the (read) cache hit rate for LLM requests.
+
+### Add LLM tool for creating a user dialog
+This tool enables an LLM to gather information interactively by asking targeted questions or presenting options. It supports workflows such as generating requirements documents, specification documents, bug reports, decision-support dialogs, troubleshooting flows, configuration wizards, and other tasks that benefit from structured user interviews.
+
+### Add a status indicator in chat session list panel
+For each chat session, show a different visual indication in each of these situations:
+- agent is busy (tool call loop is running)
+- agent is requesting user input (e.g., tool call approval or user dialog)
+- agent has just completed a task with success
+- agent has just completed a task with failure
+
+### Add predefined Chat model configurations, for use in agent roles
+The `ChatModelConfig` class has the following properties:
+- `id`: type: Long; unique ID for database
+- `name`: type: String; unique short name; for example: `smart_model`, `cheap_model`
+- `displayName`: type: String; optional
+- `description`: type: String; optional
+- `modelId`: type Long; references `LLMModel`
+- `modelSettingsId`: type Long; references `ChatModelSettings.id` or `ResponsesModelSettings.id`
+
+### (done) Server built-in tools
+These could be used by the LLM for actions such as:
+- list agent roles for current user (shows a list of items with all properties from AgentRoleSummary)
+- read agent role info (input: id; shows all properties from AgentRole)
+- create agent role (input: all fields except id)
+- update agent role (input: id and fields to be modified only)
+- list models (only list items accessible by current user; shows all properties from LLMModel)
+- list model settings for a specific model (input: modelId; only list items accessible by current user; shows all properties from ModelSettings, including subtype)
+- list tools (only list items accessible by current user; lists shows only the properties: id, name, description, type, isEnabled)
+- read tool info (input: id; shows all properties from ToolDefinition and its subtype)
+- (future extension) Compact a conversation
+
+All built-in server tools should be scoped by user to prevent unauthorized access
+
+### Allow users to call an LLM tool manually
+- Any tool can be called without using an LLM
+- Selecting a tool brings up a dialog with all the form inputs that the tool needs. 
+
+### Add a built-in agent role for creating other agent roles
+Add a built-in "Agent Role Creator" agent role. 
+- Contains instructions for interviewing the user about what agent role(s) to create.
+- The interview questions can be open, or multiple choice. Multiple choice questions are preferred, because it requires less input from the user and therefore is faster.
+- Can be used to create a set of agent roles, to form a workflow. In case of a workflow, usually one agent is the orchestrator (or planner), and the others perform tasks that the orchestrator requests (via the `spawn_agent` tool).
+- The Agent Role Creator can make use of the following server tools: `list_agent_roles`, `read_agent_role`, `create_agent_role`, `update_agent_role`, `list_models`, `list_model_settings`, `list_tools`, `read_tool`, `insert_agent_role_instruction`, `edit_agent_role_instructions`, and `remove_agent_role_instruction`. (see ServerBuiltInToolCatalog.kt)
+- In order to get a better idea of what capabilities an agent can be given, the Agent Role Creator should start by examining which tools are available.
+- In the final step (upon user approval), the Agent Role Creator creates the agent role(s), according to the information gathered from the interview.
+
+### Add server built-in tools for chat session management
+
+
 ---
+
+
+
 
 ## Advanced features
 
@@ -416,8 +571,28 @@ Open questions:
 - alternative: use [Graphify](https://github.com/safishamsi/graphify) SKILL.
 
 ### Role-playing mode
+A single LLM assumes multiple roles/characters, and lets them interact with each other. For example: Product Owner, Scrum Master, Developers (Senior Software architect, Backend lead, Frontend lead).
+- Could be used for a quick brainstorm session, or to simulate a meeting. 
+
+### Workspace snapshots
+Create snapshots of the workspace folder, to allow roll back to previous points in time. Integrate in the UI: When the user sends a new message, a snapshot is created automatically. User can roll back later by clicking an action button below any user message in history (up to a certain point. For example, a maximum of 20 snapshots are kept in storage).
+
+### Allow LLM to search within chat session history
+
+
+### Agent Tool call loop interleaving
+Interleave an agent tool call loop with user messages generated by another LLM. This could be used in several ways. For instance:
+- to steer an agent in the right direction and prevent tunnel-vision.
+- to control costs or time.
+
+
+### Interactive helper tool to guide new users, or aide in quick setup
+
 
 ---
+
+
+
 
 ## Performance improvements
 
