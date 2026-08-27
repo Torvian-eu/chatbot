@@ -184,8 +184,44 @@ Solution: fix problem code in DefaultChatContextBuilder.kt and DefaultConversati
 - in DefaultChatContextBuilder.kt: add `.filter` on `ToolCallStatus` for assistant message tool calls, similar to tool result messages.
 - in DefaultConversationTurnOrchestrator.kt: remove parameter `toolCallRequests` in function `appendAssistantAndToolResults`.. use only the parameter `completedToolCalls` 
 
-### Regenerate response and Branch & Continue buttons are available while receiving
+### (resolved) Regenerate response and Branch & Continue buttons are available while receiving
 Problem: Regenerate response and Branch & Continue buttons can always be clicked, which allows simultaenous websocket connections to be active for the same chat session. This can result in orphaned connections which can never be closed again.
 
 ### (resolved) Edit tool can cause very large outputs
 Problem: When `newText` is much longer than `oldText`, and there are many occurences of `oldText` in the source text, the output diff can become very long. This can be very costly as it consumes many input tokens for the LLM on the next request.
+
+### Message not updated in UI after editing, and clicking "Save"
+This seems to happen only when switching to another session and back again, while the edit input box is still active.
+
+### (resolved) Maximum tool call arguments size of 32,000 bytes not permissive enough
+Increase to 100,000 bytes
+
+### (resolved) Chat session names with line breaks can be entered in the UI
+- It's currently not possible to see or remove such line break characters in the UI, when renaming. They can only be seen in the tool tip when hovering over a session name, which also reveals the text after a line break.
+- The issue arises when copy-pasting a text with multiple lines into the session name field, when creating a new chat session.
+
+### (resolved) Maximum number of tool call iterations (100) not permissive enough
+Increase to 200.
+
+### (resolved) Updating an agent role instruction is inefficient
+Problem: If an LLM wants to update only a small part of an instruction, the entire list of instructions needs to be overwritten, which costs a lot of tokens, and is error prone.
+Solution: Introduce three new tools: `insert_agent_role_instruction`, `edit_agent_role_instructions` and `remove_agent_role_instruction`. 
+Tool parameters for `insert_agent_role_instruction`:
+- `agent_role_id`
+- `position`: the (zero-based) position in the instruction list where the new instruction should be inserted
+- `instruction`: object with the following properties:
+  - `type`: the type of instruction (e.g. "role", "main", "custom", "spawnable_agents", "model_specific" (see AgentInstructionTypes.kt))
+  - `text`: the instruction text (must be null for "spawnable_agents" type)
+  - `custom_properties`: optional object with custom properties (e.g. "model_id" for "model_specific" type)
+
+Tool parameters for `edit_agent_role_instructions`:
+- `agent_role_id`
+- `edits`: array of edits, where each edit is an object with the following properties:
+  - `old_text`: the text to be replaced
+  - `new_text`: the new text to replace it with
+
+Tool parameters for `remove_agent_role_instruction`:
+- `agent_role_id`
+- `position`: the (zero-based) position in the instruction list where the instruction should be removed
+
+Note: The description of the `instructions` parameter of the `update_agent_role` tool should be updated to reflect the new tools. 

@@ -11,7 +11,10 @@
 - Add all-in-one installer for desktop that includes the server and the client, for simple local setup (without Docker).
 - Allow admin to add new users through the admin panel.
 - When adding a new model in the LLM configuration screen, add a default settings profile for that model automatically, to avoid the situation where a user selects a model in the chat area but no settings profiles are available for that model.
-- Add support for OpenAI Response API: https://platform.openai.com/docs/guides/migrate-to-responses
+- Add caching to disk of downloaded content for `fetch_web_content` tool
+- Add option to clone an agent role
+- On tool call badges, time scale should be based on current value. Now it's always in milliseconds.
+- Update `list_agent_roles` tool to show all properties from class`AgentRoleDto`. The property `instructions` should be shown in summarized form, only showing the instruction `type` of each item in the list.
 
 ## UI/UX
 - After deleting a message, set scroll position to bottom of the parent message. (or top of child message)
@@ -31,6 +34,14 @@
 - Add a running clock when submitting a message to the assistant, so that the user can time how long the assistant takes to respond. This can be implemented as a simple timer that starts when the user submits the message and stops when the assistant finishes responding. The elapsed time can be displayed next to the assistant's response.
 - Input area: Remove auto expand behavior, grow space until half of the viewport height, add scrollbar. 
 - [x] Move "Branch & Continue" option out of more menu, and into main action menu for messages, since its used quite often.
+- Add sound or visual notification (so that its visible on windows/linux desktop) when agent loop finished, or waiting for tool call approval.
+- Add tooltips for tool call badges, showing the command that was executed and with what parameters.
+- When adding a new model, the capabilities "Tool Calling" and "Streaming Output" should be checked by default.
+- Show notification in UI when `MAX_TOOL_CALLING_ITERATIONS` is reached
+- Show notification in UI when LLM request is retried.
+- Add agent role selection option when creating a new chat session
+- Settings Page -> Model Settings Tab -> in dropdown selection box, move active models to top and mark inactive models. optional: sort models by last used
+- Settings Page -> Agent Roles Tab -> Details view -> make content body for instructions selectable
 
 ## Security
 - [x] User account will be locked after a certain number of failed login attempts.
