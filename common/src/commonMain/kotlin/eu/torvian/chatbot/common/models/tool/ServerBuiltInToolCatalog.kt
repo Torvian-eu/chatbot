@@ -343,8 +343,10 @@ object ServerBuiltInToolCatalog {
     val allTools: List<ServerBuiltInToolSpec> = listOf(
         ServerBuiltInToolSpec(
             name = LIST_AGENT_ROLES_NAME,
-            description = "Lists all agent roles owned by the current user, returning each role's " +
-                "id, name, display name, and description.",
+            description = "Lists all agent roles owned by the current user, returning each role's id, " +
+                "name, display name, description, model id, model settings id, attached tool ids, " +
+                "spawnable role ids, and instruction types only. Use read_agent_role with a role id " +
+                "to inspect full instruction contents.",
             inputSchema = emptyObjectSchema()
         ),
         ServerBuiltInToolSpec(
