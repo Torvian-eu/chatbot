@@ -109,6 +109,12 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
 
             // Failed login attempts table (for lockout feature)
             Table.FAILED_LOGIN_ATTEMPTS to FailedLoginAttemptsTable,
+
+            // Conversation-compaction chunk tables (reference chat_sessions, llm_models,
+            // model_settings and llm_providers, so they are created after all of those; reverse-order
+            // cleanup drops the coverage table before the chunk table and chunks before sessions).
+            Table.CONVERSATION_COMPACTION_CHUNKS to ConversationCompactionChunkTable,
+            Table.CONVERSATION_COMPACTION_CHUNK_MESSAGES to ConversationCompactionChunkMessageTable,
         )
 
         /**

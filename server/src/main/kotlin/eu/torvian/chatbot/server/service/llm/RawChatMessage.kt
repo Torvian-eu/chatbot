@@ -17,7 +17,10 @@ import kotlinx.serialization.json.JsonObject
  * - Focused on role, content, and tool-related information
  *
  * The conversion from [eu.torvian.chatbot.common.models.core.ChatMessage] to [RawChatMessage] happens in the service layer
- * when building context for LLM requests.
+ * when building context for LLM requests. Source identity (message IDs and timestamps) is deliberately
+ * kept outside this type and is carried by the companion
+ * [eu.torvian.chatbot.server.service.core.chat.context.ConversationContext] units, so provider
+ * serialization can never leak database metadata.
  */
 sealed class RawChatMessage {
     /**

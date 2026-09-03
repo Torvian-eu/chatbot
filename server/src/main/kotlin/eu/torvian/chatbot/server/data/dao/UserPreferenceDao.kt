@@ -18,6 +18,18 @@ interface UserPreferenceDao {
     suspend fun getPreferencesForUser(userId: Long, internalDeviceId: Long?): List<UserPreferenceEntity>
 
     /**
+     * Retrieves exactly one global (device-independent) preference row for the user and key.
+     *
+     * Server-side features such as conversation compaction must read the global row directly so a
+     * device-scoped row can never enable or override server-side behavior.
+     *
+     * @param userId Owning user identifier.
+     * @param key Logical preference key.
+     * @return The global preference row, or `null` when the user has no global value for [key].
+     */
+    suspend fun getGlobalPreference(userId: Long, key: String): UserPreferenceEntity?
+
+    /**
      * Inserts or updates a preference row for the supplied scope.
      *
      * @param userId Owning user identifier.

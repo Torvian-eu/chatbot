@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.llm.strategy
 
 import arrow.core.Either
+import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.llm.LLMModel
@@ -83,14 +84,16 @@ class ResponsesStrategy(
         // non-empty plaintext `content`, while encrypted payloads are only replayable to the exact model
         // that produced them (checked per item against `targetModelId`). Unknown (null) defaults to
         // unencrypted, which keeps the historical plaintext `content` replay behavior.
-        val reasoningEncrypted = modelConfig.isReasoningEncrypted()
-        val inputItems = messages.flatMap {
-            it.toResponsesInput(
-                replayReasoning = settings.replayReasoning,
-                reasoningEncrypted = reasoningEncrypted,
-                targetModelId = modelConfig.id,
-            )
-        }
+        // Input-bearing fields (input items, instructions, tools, tool_choice) are built once and
+        // embedded verbatim into the request body so the token counter shares the exact projection.
+        val inputProjection = buildInputProjection(
+            messages = messages,
+            modelConfig = modelConfig,
+            provider = provider,
+            settings = settings,
+            systemMessage = systemMessage,
+            tools = tools
+        ).getOrElse { error -> return error.left() }
 
         val requestBodyJson = buildJsonObject {
             // Start with custom parameters from settings, allowing forwards-compatible overrides.
@@ -99,15 +102,8 @@ class ResponsesStrategy(
             }
 
             put("model", JsonPrimitive(modelConfig.name))
-            put("input", JsonArray(inputItems))
             put("stream", JsonPrimitive(settings.stream))
 
-            // The composed system prompt is the single source of truth. The system prompt is
-            // composed server-side from agent-role instructions (ROLE, MAIN, CUSTOM, MODEL_SPECIFIC,
-            // SPAWNABLE_AGENTS) and passed in as [systemMessage].
-            if (!systemMessage.isNullOrBlank()) {
-                put("instructions", JsonPrimitive(systemMessage))
-            }
             settings.temperature?.let { put("temperature", JsonPrimitive(it)) }
             settings.maxOutputTokens?.let { put("max_output_tokens", JsonPrimitive(it)) }
             settings.topP?.let { put("top_p", JsonPrimitive(it)) }
@@ -128,12 +124,8 @@ class ResponsesStrategy(
             val store = provider.type != LLMProviderType.OPENROUTER && settings.store
             put("store", JsonPrimitive(store))
 
-            if (!tools.isNullOrEmpty()) {
-                val apiTools = tools.map { mapToolDefinition(it) }
-                put("tools", json.encodeToJsonElement(apiTools))
-                put("tool_choice", JsonPrimitive("auto"))
-                logger.debug("Added ${tools.size} tools to Responses request")
-            }
+            // Input-bearing fields are merged last so generation/storage settings can never override them.
+            inputProjection.forEach { (key, value) -> put(key, value) }
         }
 
         val customHeaders = buildMap {
@@ -157,6 +149,45 @@ class ResponsesStrategy(
             contentType = GenericContentType.APPLICATION_JSON,
             customHeaders = customHeaders
         ).right()
+    }
+
+    override fun buildInputProjection(
+        messages: List<RawChatMessage>,
+        modelConfig: LLMModel,
+        provider: LLMProvider,
+        settings: ModelSettings,
+        systemMessage: String?,
+        tools: List<ToolDefinition>?
+    ): Either<LLMCompletionError.ConfigurationError, JsonObject> {
+        if (settings !is ResponsesModelSettings) {
+            return LLMCompletionError.ConfigurationError(
+                "ResponsesStrategy requires ResponsesModelSettings but received ${settings::class.simpleName}."
+            ).left()
+        }
+
+        // The target model's reasoning mode drives what may be replayed, mirroring prepareRequest so
+        // the counted projection matches the actual `input` payload byte-for-byte.
+        val reasoningEncrypted = modelConfig.isReasoningEncrypted()
+        val inputItems = messages.flatMap {
+            it.toResponsesInput(
+                replayReasoning = settings.replayReasoning,
+                reasoningEncrypted = reasoningEncrypted,
+                targetModelId = modelConfig.id,
+            )
+        }
+
+        return buildJsonObject {
+            put("input", JsonArray(inputItems))
+            // The composed system prompt is the single source of truth; it maps to `instructions`.
+            if (!systemMessage.isNullOrBlank()) {
+                put("instructions", JsonPrimitive(systemMessage))
+            }
+            if (!tools.isNullOrEmpty()) {
+                val apiTools = tools.map { mapToolDefinition(it) }
+                put("tools", json.encodeToJsonElement(apiTools))
+                put("tool_choice", JsonPrimitive("auto"))
+            }
+        }.right()
     }
 
     override fun processSuccessResponse(

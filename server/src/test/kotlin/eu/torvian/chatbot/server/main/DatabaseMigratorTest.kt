@@ -34,6 +34,29 @@ class DatabaseMigratorTest {
     }
 
     @Test
+    fun `migrate should create conversation compaction chunk tables on a fresh database`() {
+        val dbFile = Files.createTempFile("chatbot-migration-v26", ".db")
+        try {
+            val config = DatabaseConfig(
+                vendor = "sqlite",
+                type = "file",
+                filepath = dbFile.toString()
+            )
+
+            val migrator = DatabaseMigrator(config)
+            migrator.migrate()
+
+            assertTrue(hasVersionEntry(config.url, "26"))
+            assertTrue(hasTable(config.url, "conversation_compaction_chunks"))
+            assertTrue(hasTable(config.url, "conversation_compaction_chunk_messages"))
+            assertTrue(hasIndex(config.url, "conversation_compaction_chunks_session_created_idx"))
+            assertTrue(hasIndex(config.url, "conversation_compaction_chunk_messages_message_idx"))
+        } finally {
+            dbFile.deleteIfExists()
+        }
+    }
+
+    @Test
     fun `migrate should fail on an existing non-empty database without Flyway history`() {
         val dbFile = Files.createTempFile("chatbot-migration-existing", ".db")
         try {
@@ -157,6 +180,19 @@ class DatabaseMigratorTest {
             stmt.executeQuery().use { rs ->
                 assertTrue(rs.next(), "Expected row with id $id")
                 return rs.getString("variable_params_json")
+            }
+        }
+    }
+
+    private fun hasIndex(url: String, indexName: String): Boolean {
+        DriverManager.getConnection(url).use { connection ->
+            connection.prepareStatement(
+                "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?"
+            ).use { statement ->
+                statement.setString(1, indexName)
+                statement.executeQuery().use { resultSet ->
+                    return resultSet.next()
+                }
             }
         }
     }

@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.llm.strategy
 
 import eu.torvian.chatbot.common.models.llm.*
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.server.service.llm.GenericContentType
 import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
@@ -442,5 +443,52 @@ class OpenAIChatStrategyRequestTest : OpenAIChatStrategyTestBase() {
             requestBodyJson.containsKey("stream_options"),
             "Request should not contain stream_options when streaming is disabled"
         )
+    }
+
+    /**
+     * Verifies the input projection shared with the token counter equals the input-bearing fields
+     * actually embedded in the prepared request body, so counting can never drift from the payload.
+     */
+    @Test
+    @DisplayName("buildInputProjection should equal the input-bearing fields of the prepared request")
+    fun buildInputProjection_equalsPreparedRequestInputFields() {
+        val messages = listOf(
+            RawChatMessage.User("Hello"),
+            RawChatMessage.Assistant("Hi there!"),
+            RawChatMessage.Tool(content = "{\"ok\":true}", toolCallId = "call-1", name = "search")
+        )
+        val model = TestDefaults.llmModel1
+        val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key")
+        val settings = TestDefaults.modelSettings1.copy(stream = false)
+        val tool = LocalMCPToolDefinition(
+            id = 8L,
+            name = "search",
+            description = "Searches docs",
+            config = buildJsonObject { },
+            inputSchema = buildJsonObject { },
+            outputSchema = null,
+            isEnabled = true,
+            createdAt = kotlin.time.Instant.fromEpochMilliseconds(0L),
+            updatedAt = kotlin.time.Instant.fromEpochMilliseconds(0L),
+            serverId = 1L,
+            mcpToolName = "search"
+        )
+        val systemMessage = "You are a helpful assistant."
+
+        val prepared = strategy.prepareRequest(messages, model, provider, settings, "sk", listOf(tool), systemMessage)
+            .getOrNull()
+            ?: throw AssertionError("Expected successful request preparation")
+        val projection = strategy.buildInputProjection(messages, model, provider, settings, systemMessage, listOf(tool))
+            .getOrNull()
+            ?: throw AssertionError("Expected successful projection")
+
+        val body = Json.decodeFromString<JsonObject>(prepared.body as String)
+        val inputFields = body.filterKeys { it in setOf("messages", "tools", "tool_choice") }
+        assertEquals(Json.encodeToString(projection), Json.encodeToString(inputFields))
+        // Generation/output settings must never enter the projection.
+        assertFalse(projection.containsKey("model"))
+        assertFalse(projection.containsKey("stream"))
+        assertFalse(projection.containsKey("temperature"))
+        assertFalse(projection.containsKey("max_tokens"))
     }
 }

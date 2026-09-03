@@ -36,6 +36,18 @@ class UserPreferenceDaoExposed(
                 .map { it.toUserPreferenceEntity() }
         }
 
+    override suspend fun getGlobalPreference(userId: Long, key: String): UserPreferenceEntity? =
+        transactionScope.transaction {
+            UserPreferencesTable.selectAll()
+                .where {
+                    (UserPreferencesTable.userId eq userId) and
+                        (UserPreferencesTable.prefKey eq key) and
+                        (UserPreferencesTable.deviceId.isNull())
+                }
+                .singleOrNull()
+                ?.toUserPreferenceEntity()
+        }
+
     override suspend fun upsertPreference(
         userId: Long,
         internalDeviceId: Long?,

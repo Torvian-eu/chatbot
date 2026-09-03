@@ -7,6 +7,7 @@ import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlin.test.*
 
 class OllamaChatStrategyTest {
@@ -201,5 +202,38 @@ class OllamaChatStrategyTest {
     @Test
     fun `strategy should have correct provider type`() {
         assertEquals(LLMProviderType.OLLAMA, strategy.providerType)
+    }
+
+    /**
+     * Verifies the input projection shared with the token counter equals the input-bearing fields
+     * actually embedded in the prepared request body, so counting can never drift from the payload.
+     */
+    @Test
+    fun `buildInputProjection equals the input-bearing fields of the prepared request`() {
+        val systemMessage = "You are a helpful assistant."
+        val prepared = strategy.prepareRequest(
+            messages = testMessages,
+            modelConfig = testModel,
+            provider = testProvider,
+            settings = testSettings,
+            apiKey = null,
+            systemMessage = systemMessage
+        ).getOrElse { throw AssertionError("Expected successful request preparation") }
+        val projection = strategy.buildInputProjection(
+            messages = testMessages,
+            modelConfig = testModel,
+            provider = testProvider,
+            settings = testSettings,
+            systemMessage = systemMessage
+        ).getOrElse { throw AssertionError("Expected successful projection") }
+
+        val body = json.decodeFromString<JsonObject>(prepared.body as String)
+        // Only input-bearing fields (messages and optional tools) are part of the projection.
+        val inputFields = body.filterKeys { it == "messages" || it == "tools" }
+        assertEquals(json.encodeToString(projection), json.encodeToString(inputFields))
+        // Generation options are not input: the projection must not contain model/stream/options.
+        assertFalse(projection.containsKey("model"))
+        assertFalse(projection.containsKey("stream"))
+        assertFalse(projection.containsKey("options"))
     }
 }
