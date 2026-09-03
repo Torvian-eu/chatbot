@@ -133,6 +133,25 @@ sealed interface ChatStreamEvent {
     }
 
     /**
+     * Informational event emitted when the server persisted a conversation-compaction chunk and the
+     * primary response that uses it is about to be generated (streaming surface).
+     *
+     * The event only appears on turns where a chunk was actually persisted and used; it never
+     * appears on disabled, fit, or hybrid-reuse paths. Clients must treat it as a non-transcript
+     * status (for example a subtle notice); it must not create or replace transcript messages and
+     * must not be stored into the conversation. See [CompactionCompletedPayload] for the wire
+     * contract.
+     *
+     * @property payload The compaction notification details.
+     */
+    @Serializable
+    data class CompactionCompleted(
+        val payload: CompactionCompletedPayload
+    ) : ChatStreamEvent {
+        override val eventType: String = "conversation_compacted"
+    }
+
+    /**
      * Sent by the server to relay one operator tool execution to the operator.
      *
      * This is a generic envelope: [payload] is the JSON-serialized, tool-specific execution request

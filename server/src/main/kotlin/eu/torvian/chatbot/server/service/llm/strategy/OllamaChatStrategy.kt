@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.llm.strategy
 
 import arrow.core.Either
+import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.llm.*
@@ -49,21 +50,16 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         }
         val chatSettings: ChatModelSettings = settings
 
-        // 1. Build the messages list with system message if present
-        val apiMessages = buildList {
-            // Add the composed system message (single source of truth) if present. The system
-            // prompt is composed server-side from agent-role instructions (ROLE, MAIN, CUSTOM,
-            // MODEL_SPECIFIC, SPAWNABLE_AGENTS) and passed in as a single [systemMessage].
-            if (!systemMessage.isNullOrBlank()) {
-                add(buildJsonObject {
-                    put("role", JsonPrimitive("system"))
-                    put("content", JsonPrimitive(systemMessage))
-                })
-            }
-
-            // Add all conversation messages
-            addAll(messages.map { it.toOllamaApiMessage() })
-        }
+        // Input-bearing fields (system message, conversation messages, tools) are built once and
+        // embedded verbatim into the request body so the token counter shares the exact projection.
+        val inputProjection = buildInputProjection(
+            messages = messages,
+            modelConfig = modelConfig,
+            provider = provider,
+            settings = settings,
+            systemMessage = systemMessage,
+            tools = tools
+        ).getOrElse { error -> return error.left() }
 
         // 2. Build options object from settings
         val optionsJson = buildJsonObject {
@@ -84,7 +80,6 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         // 3. Build the request body
         val requestBodyJson = buildJsonObject {
             put("model", JsonPrimitive(modelConfig.name))
-            put("messages", JsonArray(apiMessages))
             put("stream", JsonPrimitive(settings.stream))
 
             // Add options if not empty
@@ -92,13 +87,8 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
                 put("options", optionsJson)
             }
 
-            // 4. Add tools if provided and not empty
-            if (!tools.isNullOrEmpty()) {
-                val apiTools = tools.map { mapToolDefinitionToOllamaApi(it) }
-                put("tools", json.encodeToJsonElement(apiTools))
-
-                logger.debug("Added ${tools.size} tools to request")
-            }
+            // Input-bearing fields are merged last; generation options can never override them.
+            inputProjection.forEach { (key, value) -> put(key, value) }
         }
 
         // 5. Determine API specific path and headers
@@ -125,6 +115,42 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
             contentType = GenericContentType.APPLICATION_JSON,
             customHeaders = customHeaders
         ).right()
+    }
+
+    override fun buildInputProjection(
+        messages: List<RawChatMessage>,
+        modelConfig: LLMModel,
+        provider: LLMProvider,
+        settings: ModelSettings,
+        systemMessage: String?,
+        tools: List<ToolDefinition>?
+    ): Either<LLMCompletionError.ConfigurationError, JsonObject> {
+        if (settings !is ChatModelSettings) {
+            return LLMCompletionError.ConfigurationError(
+                "OllamaChatStrategy requires ChatModelSettings but received ${settings::class.simpleName}."
+            ).left()
+        }
+
+        // The projection mirrors exactly what prepareRequest embeds: the composed system message as
+        // a system role entry (when non-blank), every conversation message, and tools when present.
+        // Generation options are deliberately excluded because they do not consume conversational input.
+        val apiMessages = buildList {
+            if (!systemMessage.isNullOrBlank()) {
+                add(buildJsonObject {
+                    put("role", JsonPrimitive("system"))
+                    put("content", JsonPrimitive(systemMessage))
+                })
+            }
+            addAll(messages.map { it.toOllamaApiMessage() })
+        }
+
+        return buildJsonObject {
+            put("messages", JsonArray(apiMessages))
+            if (!tools.isNullOrEmpty()) {
+                val apiTools = tools.map { mapToolDefinitionToOllamaApi(it) }
+                put("tools", json.encodeToJsonElement(apiTools))
+            }
+        }.right()
     }
 
     override fun processSuccessResponse(responseBody: String): Either<LLMCompletionError.InvalidResponseError, LLMCompletionResult> {

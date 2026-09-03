@@ -8,7 +8,6 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
-import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -29,7 +28,6 @@ import org.apache.logging.log4j.Logger
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
-import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 
@@ -70,6 +68,11 @@ class LLMApiClientKtor(
          */
         private const val MAX_LLM_STREAMING_RESPONSE_BYTES: Long = 50L * 1024L * 1024L
     }
+
+    /**
+     * Shared strategy-selection rule so the counting path and the request path resolve dialects identically.
+     */
+    private val strategyResolver = ChatCompletionStrategyResolver(strategies, responsesStrategy)
 
     override suspend fun completeChat(
         messages: List<RawChatMessage>,
@@ -151,7 +154,7 @@ class LLMApiClientKtor(
                 } catch (e: ResponseBodyLimitExceededException) {
                     val errorMessage =
                         "Response from ${provider.name} exceeded the configured transport limit of " +
-                            "$MAX_LLM_NON_STREAMING_RESPONSE_BYTES bytes"
+                                "$MAX_LLM_NON_STREAMING_RESPONSE_BYTES bytes"
                     logger.error(errorMessage, e)
                     return@withContext LLMCompletionError.OtherError(errorMessage).left()
                 } catch (e: CharacterCodingException) {
@@ -288,7 +291,7 @@ class LLMApiClientKtor(
         } catch (e: ResponseBodyLimitExceededException) {
             val errorMessage =
                 "Streaming response from ${provider.name} exceeded the configured transport limit of " +
-                    "$MAX_LLM_STREAMING_RESPONSE_BYTES bytes"
+                        "$MAX_LLM_STREAMING_RESPONSE_BYTES bytes"
             logger.error(errorMessage, e)
             send(LLMCompletionError.OtherError(errorMessage).left())
         } catch (e: CharacterCodingException) {
@@ -393,8 +396,8 @@ class LLMApiClientKtor(
      *
      * The strategy is chosen from the concrete [ModelSettings] subtype, because the settings profile
      * decides the API dialect for the invocation: RESPONSES settings (OpenAI Responses API) are routed
-     * to [responsesStrategy] when one is registered; all other settings use the strategy registered for
-     * the provider type. This allows a single model to serve both Chat Completions and Responses
+     * to the Responses strategy when one is registered; all other settings use the strategy registered
+     * for the provider type. This allows a single model to serve both Chat Completions and Responses
      * requests through different settings profiles attached to it.
      *
      * @param settings The settings profile attached to the request, which determines the API dialect.
@@ -404,12 +407,7 @@ class LLMApiClientKtor(
     private fun resolveStrategy(
         settings: ModelSettings,
         provider: LLMProvider,
-    ): ChatCompletionStrategy? {
-        return when (settings) {
-            is ResponsesModelSettings -> responsesStrategy
-            else -> strategies[provider.type]
-        }
-    }
+    ): ChatCompletionStrategy? = strategyResolver.resolve(settings, provider)
 }
 
 
@@ -554,6 +552,7 @@ private suspend fun readUtf8BodyLimited(
                 channel.closedCause?.let { throw it }
                 return decodeUtf8(output.toByteArray())
             }
+
             0 -> continue
             else -> {
                 totalBytes += bytesRead

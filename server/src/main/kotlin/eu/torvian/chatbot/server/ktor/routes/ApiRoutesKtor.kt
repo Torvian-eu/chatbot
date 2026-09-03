@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionConfigurationService
 import eu.torvian.chatbot.server.service.security.AuthenticationService
 import eu.torvian.chatbot.server.service.security.TokenService
 import eu.torvian.chatbot.server.service.security.AccountManagementService
@@ -50,7 +51,8 @@ class ApiRoutesKtor(
     private val json: Json,
     private val appConfig: AppConfiguration,
     private val userPreferenceService: UserPreferenceService,
-    private val serverBuiltInToolNamePrefixService: ServerBuiltInToolNamePrefixService
+    private val serverBuiltInToolNamePrefixService: ServerBuiltInToolNamePrefixService,
+    private val conversationCompactionConfigurationService: ConversationCompactionConfigurationService
 ) {
     /**
      * Configures the API routes using the Ktor Resources plugin.
@@ -105,7 +107,11 @@ class ApiRoutesKtor(
      * Configures routes related to authenticated self-service preferences (/api/v1/me).
      */
     fun configureMeRoutes(route: Route) {
-        route.configureMeRoutes(userPreferenceService, serverBuiltInToolNamePrefixService)
+        route.configureMeRoutes(
+            userPreferenceService,
+            serverBuiltInToolNamePrefixService,
+            conversationCompactionConfigurationService
+        )
     }
 
     /**

@@ -12,6 +12,8 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.time.Instant
 
@@ -142,7 +144,7 @@ class DefaultChatContextBuilderTest {
             startingMessageId = 3L,
             sessionMessages = listOf(siblingBranchMessage, branchUserMessage, assistantWithToolCall, userMessage),
             toolCalls = toolCalls
-        )
+        ).flatten()
 
         assertEquals(8, context.size)
         assertEquals(RawChatMessage.User::class, context[0]::class)
@@ -214,7 +216,7 @@ class DefaultChatContextBuilderTest {
             startingMessageId = 2L,
             sessionMessages = listOf(userMessage, assistantMessage),
             toolCalls = emptyList()
-        )
+        ).flatten()
 
         assertEquals(2, context.size)
         val reconstructedAssistant = context[1] as RawChatMessage.Assistant
@@ -223,5 +225,160 @@ class DefaultChatContextBuilderTest {
         assertEquals("opaque", reconstructedAssistant.reasoningItems[0]["encrypted_content"]?.jsonPrimitive?.content)
         // The source model id is carried onto the raw message so replay can gate encrypted payloads.
         assertEquals(5L, reconstructedAssistant.reasoningModelId)
+    }
+
+    /**
+     * Verifies the identity-bearing units carry ordered source IDs and timestamps and that an
+     * assistant source plus its tool results stay inside one unit.
+     */
+    @Test
+    fun `buildContext returns one identity unit per source with assistant and results together`() {
+        val builder = DefaultChatContextBuilder(
+            fileReferenceContentBuilder = DefaultFileReferenceContentBuilder(),
+            toolResultContentBuilder = DefaultToolResultContentBuilder()
+        )
+        val modifiedAt = Instant.fromEpochMilliseconds(1_700_000_000_000L)
+        val userMessage = ChatMessage.UserMessage(
+            id = 1L, sessionId = 44L, content = "Question", createdAt = modifiedAt, updatedAt = modifiedAt,
+            parentMessageId = null, childrenMessageIds = listOf(2L)
+        )
+        val assistantMessage = ChatMessage.AssistantMessage(
+            id = 2L, sessionId = 44L, content = "", createdAt = modifiedAt, updatedAt = modifiedAt,
+            parentMessageId = 1L, childrenMessageIds = emptyList(), modelId = 5L, settingsId = 6L
+        )
+        val toolCalls = listOf(
+            ToolCall(
+                id = 11L, messageId = 2L, toolDefinitionId = 8L, toolName = "search",
+                toolCallId = "call-1", input = "{}", output = "{\"ok\":true}",
+                status = ToolCallStatus.SUCCESS, executedAt = modifiedAt
+            ),
+            ToolCall(
+                id = 12L, messageId = 2L, toolDefinitionId = 8L, toolName = "search",
+                toolCallId = "call-2", input = "{}", output = "{\"ok\":false}",
+                status = ToolCallStatus.SUCCESS, executedAt = modifiedAt
+            )
+        )
+
+        val context = builder.buildContext(
+            startingMessageId = 2L,
+            sessionMessages = listOf(userMessage, assistantMessage),
+            toolCalls = toolCalls
+        )
+
+        assertEquals(2, context.units.size)
+        assertEquals(listOf(1L, 2L), context.units.map { it.source.id })
+        assertEquals(listOf(modifiedAt, modifiedAt), context.units.map { it.source.updatedAt })
+        assertEquals(1, context.units[0].rawMessages.size)
+        // The assistant source expands into assistant + both tool results inside ONE unit, so a
+        // compaction replacement boundary can never split the call from its results.
+        assertEquals(3, context.units[1].rawMessages.size)
+        assertIs<RawChatMessage.Assistant>(context.units[1].rawMessages[0])
+        assertEquals(2, context.units[1].rawMessages.filterIsInstance<RawChatMessage.Tool>().size)
+    }
+
+    /**
+     * Verifies a missing starting message is rejected instead of returning a partial chain.
+     */
+    @Test
+    fun `buildContext rejects a missing starting message`() {
+        val builder = DefaultChatContextBuilder(
+            fileReferenceContentBuilder = DefaultFileReferenceContentBuilder(),
+            toolResultContentBuilder = DefaultToolResultContentBuilder()
+        )
+        val modifiedAt = Instant.fromEpochMilliseconds(1_700_000_000_000L)
+        val userMessage = ChatMessage.UserMessage(
+            id = 1L, sessionId = 44L, content = "Question", createdAt = modifiedAt, updatedAt = modifiedAt,
+            parentMessageId = null, childrenMessageIds = emptyList()
+        )
+
+        assertFailsWith<IllegalStateException> {
+            builder.buildContext(
+                startingMessageId = 99L,
+                sessionMessages = listOf(userMessage),
+                toolCalls = emptyList()
+            )
+        }
+    }
+
+    /**
+     * Verifies a broken parent link is rejected instead of returning a partial chain.
+     */
+    @Test
+    fun `buildContext rejects a broken parent link`() {
+        val builder = DefaultChatContextBuilder(
+            fileReferenceContentBuilder = DefaultFileReferenceContentBuilder(),
+            toolResultContentBuilder = DefaultToolResultContentBuilder()
+        )
+        val modifiedAt = Instant.fromEpochMilliseconds(1_700_000_000_000L)
+        // Child references a parent that is absent from the message set.
+        val child = ChatMessage.UserMessage(
+            id = 2L, sessionId = 44L, content = "Reply", createdAt = modifiedAt, updatedAt = modifiedAt,
+            parentMessageId = 1L, childrenMessageIds = emptyList()
+        )
+
+        assertFailsWith<IllegalStateException> {
+            builder.buildContext(
+                startingMessageId = 2L,
+                sessionMessages = listOf(child),
+                toolCalls = emptyList()
+            )
+        }
+    }
+
+    /**
+     * Verifies a cyclic parent chain is rejected instead of silently truncating the thread.
+     */
+    @Test
+    fun `buildContext rejects a cyclic parent chain`() {
+        val builder = DefaultChatContextBuilder(
+            fileReferenceContentBuilder = DefaultFileReferenceContentBuilder(),
+            toolResultContentBuilder = DefaultToolResultContentBuilder()
+        )
+        val modifiedAt = Instant.fromEpochMilliseconds(1_700_000_000_000L)
+        val a = ChatMessage.UserMessage(
+            id = 1L, sessionId = 44L, content = "A", createdAt = modifiedAt, updatedAt = modifiedAt,
+            parentMessageId = 2L, childrenMessageIds = emptyList()
+        )
+        val b = ChatMessage.UserMessage(
+            id = 2L, sessionId = 44L, content = "B", createdAt = modifiedAt, updatedAt = modifiedAt,
+            parentMessageId = 1L, childrenMessageIds = emptyList()
+        )
+
+        assertFailsWith<IllegalStateException> {
+            builder.buildContext(
+                startingMessageId = 1L,
+                sessionMessages = listOf(a, b),
+                toolCalls = emptyList()
+            )
+        }
+    }
+
+    /**
+     * Verifies mixed-session source chains are rejected so coverage can never cross sessions.
+     */
+    @Test
+    fun `buildContext rejects mixed-session chains`() {
+        val builder = DefaultChatContextBuilder(
+            fileReferenceContentBuilder = DefaultFileReferenceContentBuilder(),
+            toolResultContentBuilder = DefaultToolResultContentBuilder()
+        )
+        val modifiedAt = Instant.fromEpochMilliseconds(1_700_000_000_000L)
+        val root = ChatMessage.UserMessage(
+            id = 1L, sessionId = 44L, content = "Root", createdAt = modifiedAt, updatedAt = modifiedAt,
+            parentMessageId = null, childrenMessageIds = listOf(2L)
+        )
+        // Child belongs to a different session than its parent.
+        val foreignChild = ChatMessage.UserMessage(
+            id = 2L, sessionId = 45L, content = "Foreign", createdAt = modifiedAt, updatedAt = modifiedAt,
+            parentMessageId = 1L, childrenMessageIds = emptyList()
+        )
+
+        assertFailsWith<IllegalStateException> {
+            builder.buildContext(
+                startingMessageId = 2L,
+                sessionMessages = listOf(root, foreignChild),
+                toolCalls = emptyList()
+            )
+        }
     }
 }

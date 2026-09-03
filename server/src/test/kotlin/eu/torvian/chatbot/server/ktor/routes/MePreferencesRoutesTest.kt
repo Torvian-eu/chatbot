@@ -1,11 +1,13 @@
 package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.api.ChatbotApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.resources.MeResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
 import eu.torvian.chatbot.common.models.api.me.UserPreferenceDTO
 import eu.torvian.chatbot.common.models.user.PreferenceScope
@@ -24,6 +26,7 @@ import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -51,6 +54,12 @@ class MePreferencesRoutesTest {
 
     private val user1 = TestDefaults.user1
 
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        encodeDefaults = true
+    }
+
     @BeforeEach
     fun setUp() = runTest {
         container = defaultTestContainer()
@@ -76,7 +85,15 @@ class MePreferencesRoutesTest {
                 Table.USER_DEVICES,
                 Table.USER_PREFERENCES,
                 Table.TOOL_DEFINITIONS,
-                Table.SERVER_BUILTIN_TOOL_DEFINITIONS
+                Table.SERVER_BUILTIN_TOOL_DEFINITIONS,
+                Table.LLM_PROVIDERS,
+                Table.LLM_MODELS,
+                Table.MODEL_SETTINGS,
+                Table.LLM_PROVIDER_OWNERS,
+                Table.LLM_MODEL_OWNERS,
+                Table.MODEL_SETTINGS_OWNERS,
+                Table.USER_GROUPS,
+                Table.USER_GROUP_MEMBERSHIPS
             )
         )
     }
@@ -98,17 +115,18 @@ class MePreferencesRoutesTest {
         val before = seeder.ensureForUser(user1.id).getOrNull()!!
         assertTrue(before.all { it.name == "chatbot-${it.builtInToolName}" })
 
-        val response = client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX))) {
-            authenticate(token)
-            contentType(ContentType.Application.Json)
-            setBody(
-                UserPreferenceDTO(
-                    key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX,
-                    value = "acme-",
-                    scope = PreferenceScope.GLOBAL
+        val response =
+            client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX))) {
+                authenticate(token)
+                contentType(ContentType.Application.Json)
+                setBody(
+                    UserPreferenceDTO(
+                        key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX,
+                        value = "acme-",
+                        scope = PreferenceScope.GLOBAL
+                    )
                 )
-            )
-        }
+            }
 
         assertEquals(HttpStatusCode.NoContent, response.status)
         assertEquals("acme-", storedPrefix(user1.id))
@@ -124,17 +142,18 @@ class MePreferencesRoutesTest {
         val token = authHelper.createUserAndGetToken(user1)
         val before = seeder.ensureForUser(user1.id).getOrNull()!!
 
-        val response = client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX))) {
-            authenticate(token)
-            contentType(ContentType.Application.Json)
-            setBody(
-                UserPreferenceDTO(
-                    key = "some_other_key",
-                    value = "acme-",
-                    scope = PreferenceScope.GLOBAL
+        val response =
+            client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX))) {
+                authenticate(token)
+                contentType(ContentType.Application.Json)
+                setBody(
+                    UserPreferenceDTO(
+                        key = "some_other_key",
+                        value = "acme-",
+                        scope = PreferenceScope.GLOBAL
+                    )
                 )
-            )
-        }
+            }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
         val error = response.body<ApiError>()
@@ -150,17 +169,18 @@ class MePreferencesRoutesTest {
         val token = authHelper.createUserAndGetToken(user1)
         val before = seeder.ensureForUser(user1.id).getOrNull()!!
 
-        val response = client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX))) {
-            authenticate(token)
-            contentType(ContentType.Application.Json)
-            setBody(
-                UserPreferenceDTO(
-                    key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX,
-                    value = "bad.prefix",
-                    scope = PreferenceScope.GLOBAL
+        val response =
+            client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX))) {
+                authenticate(token)
+                contentType(ContentType.Application.Json)
+                setBody(
+                    UserPreferenceDTO(
+                        key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX,
+                        value = "bad.prefix",
+                        scope = PreferenceScope.GLOBAL
+                    )
                 )
-            )
-        }
+            }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
         val error = response.body<ApiError>()
@@ -175,17 +195,18 @@ class MePreferencesRoutesTest {
         val token = authHelper.createUserAndGetToken(user1)
         seeder.ensureForUser(user1.id)
 
-        val response = client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX))) {
-            authenticate(token)
-            contentType(ContentType.Application.Json)
-            setBody(
-                UserPreferenceDTO(
-                    key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX,
-                    value = "acme-",
-                    scope = PreferenceScope.DEVICE
+        val response =
+            client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX))) {
+                authenticate(token)
+                contentType(ContentType.Application.Json)
+                setBody(
+                    UserPreferenceDTO(
+                        key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX,
+                        value = "acme-",
+                        scope = PreferenceScope.DEVICE
+                    )
                 )
-            )
-        }
+            }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
         val error = response.body<ApiError>()
@@ -211,9 +232,10 @@ class MePreferencesRoutesTest {
         }
         assertEquals("acme-", storedPrefix(user1.id))
 
-        val response = client.delete(href(MeResource.Preferences.ByKey(key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX))) {
-            authenticate(token)
-        }
+        val response =
+            client.delete(href(MeResource.Preferences.ByKey(key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX))) {
+                authenticate(token)
+            }
 
         assertEquals(HttpStatusCode.NoContent, response.status)
         assertNull(storedPrefix(user1.id))
@@ -245,13 +267,281 @@ class MePreferencesRoutesTest {
                 .firstOrNull { it.prefKey == "current_theme" }?.prefValue
         )
 
-        val deleteResponse = client.delete(href(MeResource.Preferences.ByKey(key = "current_theme", scope = PreferenceScope.GLOBAL))) {
-            authenticate(token)
-        }
+        val deleteResponse =
+            client.delete(href(MeResource.Preferences.ByKey(key = "current_theme", scope = PreferenceScope.GLOBAL))) {
+                authenticate(token)
+            }
         assertEquals(HttpStatusCode.NoContent, deleteResponse.status)
         assertNull(
             userPreferenceDao.getPreferencesForUser(user1.id, null)
                 .firstOrNull { it.prefKey == "current_theme" }
         )
     }
+
+    @Test
+    fun `PUT conversation_compaction with DEVICE scope returns 400`() = app {
+        val token = authHelper.createUserAndGetToken(user1)
+
+        val response = client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
+            authenticate(token)
+            contentType(ContentType.Application.Json)
+            setBody(
+                UserPreferenceDTO(
+                    key = PreferenceKeys.CONVERSATION_COMPACTION,
+                    value = """{"modelId":1,"settingsId":1,"instruction":"Summarize"}""",
+                    scope = PreferenceScope.DEVICE
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
+        assertNull(storedCompactionPreference(user1.id))
+    }
+
+    @Test
+    fun `PUT conversation_compaction with malformed JSON returns 400`() = app {
+        val token = authHelper.createUserAndGetToken(user1)
+
+        val response = client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
+            authenticate(token)
+            contentType(ContentType.Application.Json)
+            setBody(
+                UserPreferenceDTO(
+                    key = PreferenceKeys.CONVERSATION_COMPACTION,
+                    value = "not-json{",
+                    scope = PreferenceScope.GLOBAL
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
+        assertNull(storedCompactionPreference(user1.id))
+    }
+
+    @Test
+    fun `PUT conversation_compaction with a body key that does not match the path returns 400`() = app {
+        val token = authHelper.createUserAndGetToken(user1)
+
+        val response = client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
+            authenticate(token)
+            contentType(ContentType.Application.Json)
+            setBody(
+                UserPreferenceDTO(
+                    key = "some_other_key",
+                    value = """{"modelId":1,"settingsId":1,"instruction":"Summarize"}""",
+                    scope = PreferenceScope.GLOBAL
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
+        assertNull(storedCompactionPreference(user1.id))
+    }
+
+    @Test
+    fun `PUT conversation_compaction with an accessible model and non-streaming settings stores the canonical value`() =
+        app {
+            val token = authHelper.createUserAndGetToken(user1)
+            val provider = TestDefaults.llmProvider1.copy(apiKeyId = null)
+            val model = TestDefaults.llmModel1.copy(providerId = provider.id)
+            val settings = TestDefaults.modelSettings1.copy(modelId = model.id, stream = false)
+            testDataManager.insertLLMProvider(provider)
+            testDataManager.insertLLMModel(model)
+            testDataManager.insertModelSettings(settings)
+            testDataManager.insertProviderOwnership(provider.id, user1.id)
+            testDataManager.insertModelOwnership(model.id, user1.id)
+            testDataManager.insertSettingsOwnership(settings.id, user1.id)
+
+            val value =
+                """{"modelId":${model.id},"settingsId":${settings.id},"instruction":"Summarize faithfully","thresholdTokens":50000}"""
+            val response =
+                client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
+                    authenticate(token)
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        UserPreferenceDTO(
+                            key = PreferenceKeys.CONVERSATION_COMPACTION,
+                            value = value,
+                            scope = PreferenceScope.GLOBAL
+                        )
+                    )
+                }
+
+            assertEquals(HttpStatusCode.NoContent, response.status)
+            // The service stores the canonical re-encoding, which now materializes the defaulted
+            // summaryLabel alongside the explicit fields, so raw round-trip equality no longer holds.
+            val canonical = json.encodeToString(
+                ConversationCompactionPreference.serializer(),
+                ConversationCompactionPreference(
+                    modelId = model.id,
+                    settingsId = settings.id,
+                    instruction = "Summarize faithfully",
+                    thresholdTokens = 50_000L
+                )
+            )
+            assertEquals(canonical, storedCompactionPreference(user1.id))
+        }
+
+    @Test
+    fun `PUT conversation_compaction without model and settings stores the inactive preference`() = app {
+        // A preference whose model/settings rows no longer exist is stored as-is (no runtime
+        // resolution), so the client can persist null ids and re-configure a valid pair later.
+        val token = authHelper.createUserAndGetToken(user1)
+
+        val value = """{"modelId":null,"settingsId":null,"instruction":"Summarize"}"""
+        val response =
+            client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
+                authenticate(token)
+                contentType(ContentType.Application.Json)
+                setBody(
+                    UserPreferenceDTO(
+                        key = PreferenceKeys.CONVERSATION_COMPACTION,
+                        value = value,
+                        scope = PreferenceScope.GLOBAL
+                    )
+                )
+            }
+
+        assertEquals(HttpStatusCode.NoContent, response.status)
+        val canonical = json.encodeToString(
+            ConversationCompactionPreference.serializer(),
+            ConversationCompactionPreference(
+                modelId = null,
+                settingsId = null,
+                instruction = "Summarize"
+            )
+        )
+        assertEquals(canonical, storedCompactionPreference(user1.id))
+    }
+
+    @Test
+    fun `PUT conversation_compaction with streaming settings is rejected as a model configuration error`() = app {
+        val token = authHelper.createUserAndGetToken(user1)
+        val provider = TestDefaults.llmProvider1.copy(apiKeyId = null)
+        val model = TestDefaults.llmModel1.copy(providerId = provider.id)
+        val settings = TestDefaults.modelSettings1.copy(modelId = model.id, stream = true)
+        testDataManager.insertLLMProvider(provider)
+        testDataManager.insertLLMModel(model)
+        testDataManager.insertModelSettings(settings)
+        testDataManager.insertProviderOwnership(provider.id, user1.id)
+        testDataManager.insertModelOwnership(model.id, user1.id)
+        testDataManager.insertSettingsOwnership(settings.id, user1.id)
+
+        val value = """{"modelId":${model.id},"settingsId":${settings.id},"instruction":"Summarize"}"""
+        val response = client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
+            authenticate(token)
+            contentType(ContentType.Application.Json)
+            setBody(
+                UserPreferenceDTO(
+                    key = PreferenceKeys.CONVERSATION_COMPACTION,
+                    value = value,
+                    scope = PreferenceScope.GLOBAL
+                )
+            )
+        }
+
+        // The chat-like/non-streaming profile check is a static write-time concern: a streaming
+        // settings profile cannot drive the non-streaming auxiliary call, so the PUT is rejected.
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(ChatbotApiErrorCodes.MODEL_CONFIGURATION_ERROR.code, error.code)
+        assertNull(storedCompactionPreference(user1.id))
+    }
+
+    @Test
+    fun `DELETE conversation_compaction removes only the global row`() = app {
+        val token = authHelper.createUserAndGetToken(user1)
+        val provider = TestDefaults.llmProvider1.copy(apiKeyId = null)
+        val model = TestDefaults.llmModel1.copy(providerId = provider.id)
+        val settings = TestDefaults.modelSettings1.copy(modelId = model.id, stream = false)
+        testDataManager.insertLLMProvider(provider)
+        testDataManager.insertLLMModel(model)
+        testDataManager.insertModelSettings(settings)
+        testDataManager.insertProviderOwnership(provider.id, user1.id)
+        testDataManager.insertModelOwnership(model.id, user1.id)
+        testDataManager.insertSettingsOwnership(settings.id, user1.id)
+        val rawValue = """{"modelId":${model.id},"settingsId":${settings.id},"instruction":"Summarize"}"""
+
+        client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
+            authenticate(token)
+            contentType(ContentType.Application.Json)
+            setBody(
+                UserPreferenceDTO(
+                    key = PreferenceKeys.CONVERSATION_COMPACTION,
+                    value = rawValue,
+                    scope = PreferenceScope.GLOBAL
+                )
+            )
+        }
+        // The service stores the canonical encoding, which materializes the default threshold.
+        assertEquals(canonicalCompactionValue(model.id, settings.id), storedCompactionPreference(user1.id))
+
+        val response = client.delete(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
+            authenticate(token)
+        }
+
+        assertEquals(HttpStatusCode.NoContent, response.status)
+        assertNull(storedCompactionPreference(user1.id))
+    }
+
+    @Test
+    fun `GET conversation_compaction returns the stored raw string`() = app {
+        val token = authHelper.createUserAndGetToken(user1)
+        val provider = TestDefaults.llmProvider1.copy(apiKeyId = null)
+        val model = TestDefaults.llmModel1.copy(providerId = provider.id)
+        val settings = TestDefaults.modelSettings1.copy(modelId = model.id, stream = false)
+        testDataManager.insertLLMProvider(provider)
+        testDataManager.insertLLMModel(model)
+        testDataManager.insertModelSettings(settings)
+        testDataManager.insertProviderOwnership(provider.id, user1.id)
+        testDataManager.insertModelOwnership(model.id, user1.id)
+        testDataManager.insertSettingsOwnership(settings.id, user1.id)
+        val rawValue = """{"modelId":${model.id},"settingsId":${settings.id},"instruction":"Summarize"}"""
+
+        client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
+            authenticate(token)
+            contentType(ContentType.Application.Json)
+            setBody(
+                UserPreferenceDTO(
+                    key = PreferenceKeys.CONVERSATION_COMPACTION,
+                    value = rawValue,
+                    scope = PreferenceScope.GLOBAL
+                )
+            )
+        }
+
+        val getResponse = client.get("/api/v1/me/preferences") {
+            authenticate(token)
+        }
+        assertEquals(HttpStatusCode.OK, getResponse.status)
+        val body = getResponse.body<Map<String, String>>()
+        assertTrue(body.containsKey(PreferenceKeys.CONVERSATION_COMPACTION))
+        assertEquals(canonicalCompactionValue(model.id, settings.id), body[PreferenceKeys.CONVERSATION_COMPACTION])
+    }
+
+    /**
+     * Canonical JSON encoding of the default-threshold preference for the given model/settings ids.
+     */
+    private fun canonicalCompactionValue(modelId: Long, settingsId: Long): String = json.encodeToString(
+        ConversationCompactionPreference.serializer(),
+        ConversationCompactionPreference(
+            modelId = modelId,
+            settingsId = settingsId,
+            instruction = "Summarize"
+        )
+    )
+
+    /**
+     * Reads the stored global conversation-compaction preference value for the user.
+     */
+    private suspend fun storedCompactionPreference(userId: Long): String? =
+        userPreferenceDao.getPreferencesForUser(userId, null)
+            .firstOrNull { it.prefKey == PreferenceKeys.CONVERSATION_COMPACTION }
+            ?.prefValue
 }

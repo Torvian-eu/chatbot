@@ -38,5 +38,9 @@ fun MessageEvent.toChatEvent(): ChatEvent {
             toolName = toolName,
             payload = payload
         )
+
+        is MessageEvent.CompactionCompleted -> ChatEvent.CompactionCompleted(
+            payload = payload
+        )
     }
 }

@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.koin
 
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.tool.ToolNameSanitizer
 import eu.torvian.chatbot.common.models.tool.ToolNameValidator
 import eu.torvian.chatbot.common.models.tool.ToolNamePrefixValidator
@@ -31,6 +32,14 @@ import eu.torvian.chatbot.server.service.core.agent.AgentSpawnRequestBuilder
 import eu.torvian.chatbot.server.service.core.agent.DefaultAgentSpawnRequestBuilder
 import eu.torvian.chatbot.server.service.core.agent.DefaultSystemPromptComposer
 import eu.torvian.chatbot.server.service.core.agent.SystemPromptComposer
+import eu.torvian.chatbot.server.service.core.chat.compaction.ApproximateChatInputTokenCounter
+import eu.torvian.chatbot.server.service.core.chat.compaction.ChatInputTokenCounter
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionConfigurationResolver
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionConfigurationService
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionService
+import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationCompactionConfigurationResolver
+import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationCompactionConfigurationService
+import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationCompactionService
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.FileReferenceContentBuilder
@@ -46,8 +55,12 @@ import eu.torvian.chatbot.server.service.core.chat.turn.DefaultConversationTurnO
 import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
+import eu.torvian.chatbot.server.service.llm.ChatCompletionStrategyResolver
 import eu.torvian.chatbot.server.service.llm.DefaultReasoningCapabilityRecorder
 import eu.torvian.chatbot.server.service.llm.ReasoningCapabilityRecorder
+import eu.torvian.chatbot.server.service.llm.strategy.OllamaChatStrategy
+import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
+import eu.torvian.chatbot.server.service.llm.strategy.ResponsesStrategy
 import eu.torvian.chatbot.server.service.email.LoggingMailService
 import eu.torvian.chatbot.server.service.email.MailService
 import eu.torvian.chatbot.server.service.email.SmtpMailService
@@ -75,6 +88,23 @@ import org.koin.dsl.module
  * Dependency injection module for configuring the application's service layer.
  */
 fun serviceModule() = module {
+    // --- Chat completion strategies and the shared dialect resolver ---
+    // Bound here (rather than in mainModule) so the input token counter, the compaction resolver and
+    // the test container resolve the identical dialect-selection rule as the HTTP client.
+    single<OpenAIChatStrategy> { OpenAIChatStrategy(get()) }
+    single<OllamaChatStrategy> { OllamaChatStrategy(get()) }
+    single<ResponsesStrategy> { ResponsesStrategy(get()) }
+    single<ChatCompletionStrategyResolver> {
+        ChatCompletionStrategyResolver(
+            strategies = mapOf(
+                LLMProviderType.OPENAI to get<OpenAIChatStrategy>(),
+                LLMProviderType.OPENROUTER to get<OpenAIChatStrategy>(),
+                LLMProviderType.OLLAMA to get<OllamaChatStrategy>(),
+            ),
+            responsesStrategy = get<ResponsesStrategy>()
+        )
+    }
+
     // --- Tool-name sanitization/validation (LLM-safe character set) ---
     single { ToolNameSanitizer() }
     single { ToolNameValidator() }
@@ -110,8 +140,40 @@ fun serviceModule() = module {
         )
     }
     single<ConversationTurnOrchestrator> {
-        DefaultConversationTurnOrchestrator(get(), get(), get(), get(), get(), get())
+        DefaultConversationTurnOrchestrator(get(), get(), get(), get(), get(), get(), get())
     }
+    // --- Automated conversation compaction ---
+    single<ChatInputTokenCounter> {
+        ApproximateChatInputTokenCounter(strategyResolver = get(), json = get())
+    }
+    single<ConversationCompactionConfigurationResolver> {
+        DefaultConversationCompactionConfigurationResolver(
+            llmModelService = get(),
+            modelSettingsService = get(),
+            llmProviderService = get(),
+            credentialManager = get()
+        )
+    }
+    single<ConversationCompactionConfigurationService> {
+        DefaultConversationCompactionConfigurationService(
+            json = get(),
+            userPreferenceDao = get(),
+            authorizationService = get(),
+            modelSettingsService = get(),
+            transactionScope = get()
+        )
+    }
+    single<ConversationCompactionService> {
+        DefaultConversationCompactionService(
+            userPreferenceDao = get(),
+            chunkDao = get(),
+            configurationResolver = get(),
+            tokenCounter = get(),
+            llmApiClient = get(),
+            json = get()
+        )
+    }
+
     single<ChatService> { ChatServiceImpl(get(), get()) }
     single<ToolService> { ToolServiceImpl(get(), get(), get(), get(), get(), get()) }
     single<ToolCallService> { ToolCallServiceImpl(get(), get()) }

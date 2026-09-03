@@ -44,9 +44,6 @@ fun mainModule(application: Application) = module {
         }
     }
 
-    single<OpenAIChatStrategy> { OpenAIChatStrategy(get()) }
-    single<OllamaChatStrategy> { OllamaChatStrategy(get()) }
-    single<ResponsesStrategy> { ResponsesStrategy(get()) }
     single<OpenAIModelDiscoveryStrategy> { OpenAIModelDiscoveryStrategy(get()) }
     single<OllamaModelDiscoveryStrategy> { OllamaModelDiscoveryStrategy(get()) }
     single<OpenRouterModelDiscoveryStrategy> { OpenRouterModelDiscoveryStrategy(get()) }

@@ -243,4 +243,14 @@ enum class Table {
      * Table for storing device verification tokens for email-based device trust.
      */
     DEVICE_VERIFICATION_TOKENS,
+
+    /**
+     * Table for storing persisted automated conversation-compaction chunks.
+     */
+    CONVERSATION_COMPACTION_CHUNKS,
+
+    /**
+     * Table for storing the ordered message-ID coverage of compaction chunks.
+     */
+    CONVERSATION_COMPACTION_CHUNK_MESSAGES,
 }

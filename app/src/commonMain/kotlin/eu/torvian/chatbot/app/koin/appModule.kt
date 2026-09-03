@@ -41,6 +41,7 @@ import eu.torvian.chatbot.app.viewmodel.settings.AgentRolesViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.BuiltInToolsViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.OperatorToolsViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.ServerBuiltInToolsViewModel
+import eu.torvian.chatbot.app.viewmodel.settings.ConversationCompactionViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.E2EASecurityViewModel
 import io.ktor.client.*
 import io.ktor.client.plugins.logging.*
@@ -623,6 +624,14 @@ fun appModule(config: AppConfiguration): Module = module {
         E2EASecurityViewModel(
             deviceIdentityService = get(),
             clipboardService = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
+        ConversationCompactionViewModel(
+            userPreferenceRepository = get(),
+            modelRepository = get(),
+            modelSettingsRepository = get(),
             notificationService = get()
         )
     }

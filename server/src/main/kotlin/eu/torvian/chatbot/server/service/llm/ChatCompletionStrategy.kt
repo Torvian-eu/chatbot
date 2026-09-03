@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Defines the interface for provider-specific chat completion logic.
@@ -48,6 +49,36 @@ interface ChatCompletionStrategy {
         tools: List<ToolDefinition>? = null,
         systemMessage: String? = null
     ): Either<LLMCompletionError.ConfigurationError, ApiRequestConfig>
+
+    /**
+     * Builds the compact, input-only JSON projection of the request that would be sent to the provider.
+     *
+     * The projection contains exactly the wire fields that consume conversational input context
+     * (system/instructions, messages/input items, tool definitions, and provider-required wrappers
+     * such as `tool_choice`), excluding generation/output settings (`model`, `stream`, sampling
+     * parameters, `store`, etc.). Request preparation must embed these exact fields into the request
+     * body, and the repository-owned token counter must serialize this projection, so the counted
+     * input can never drift from the actual provider payload.
+     *
+     * @param messages The conversation context as a list of RawChatMessage.
+     * @param modelConfig Details of the specific LLM model being used.
+     * @param provider Configuration of the LLM provider, including base URL and type.
+     * @param settings Specific generation settings for this request.
+     * @param systemMessage Optional composed system prompt (single source of truth). When non-blank
+     *            it is injected as the system message/instructions field; when null/blank it is omitted.
+     * @param tools Optional list of tool definitions. When non-empty the projection includes the
+     *            provider tool format and (for dialects that support it) `tool_choice`.
+     * @return Either a [LLMCompletionError.ConfigurationError] if the settings subtype is unsupported
+     *         by this strategy, or the input projection object.
+     */
+    fun buildInputProjection(
+        messages: List<RawChatMessage>,
+        modelConfig: LLMModel,
+        provider: LLMProvider,
+        settings: ModelSettings,
+        systemMessage: String? = null,
+        tools: List<ToolDefinition>? = null
+    ): Either<LLMCompletionError.ConfigurationError, JsonObject>
 
     /**
      * Processes a raw successful API response body string into the generic result ([LLMCompletionResult]).

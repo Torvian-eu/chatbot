@@ -2,6 +2,8 @@ package eu.torvian.chatbot.server.service.core.chat.turn
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionChunk
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionError
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
 
 /**
@@ -140,6 +142,34 @@ sealed interface ConversationTurnEvent {
      */
     data class ExternalServiceError(
         val llmError: LLMCompletionError
+    ) : ConversationTurnEvent
+
+    /**
+     * Signals that the automated compaction policy aborted the turn before the primary LLM call.
+     *
+     * The oversized uncompacted primary request is never sent; the turn terminates with this error
+     * followed by [TurnCompleted]. Previously persisted user/assistant/tool rows remain durable.
+     *
+     * @property error Typed compaction failure category.
+     */
+    data class CompactionFailed(
+        val error: ConversationCompactionError
+    ) : ConversationTurnEvent
+
+    /**
+     * Signals that a conversation-compaction chunk was persisted by the preflight and the turn
+     * proceeds to the primary call that uses it.
+     *
+     * Emission is strictly tied to usage: the orchestrator emits this immediately before the primary
+     * assistant step that consumes the chunk, so a chunk persisted by `preparePrimaryContext` is
+     * always matched with the response that uses it. No event is emitted on disabled, fit, or
+     * hybrid-reuse paths (nothing persisted). The public surfaces derive a bounded, provider-neutral
+     * notification from [chunk] (see `toCompactionCompletedPayload`).
+     *
+     * @property chunk The persisted chunk that will back the upcoming primary response.
+     */
+    data class CompactionCompleted(
+        val chunk: ConversationCompactionChunk
     ) : ConversationTurnEvent
 
     /**

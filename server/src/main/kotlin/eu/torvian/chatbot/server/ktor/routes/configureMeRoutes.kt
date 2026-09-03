@@ -16,6 +16,8 @@ import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.ServerBuiltInToolNamePrefixService
 import eu.torvian.chatbot.server.service.core.UserPreferenceService
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionConfigurationService
+import eu.torvian.chatbot.server.service.core.chat.compaction.toApiError
 import eu.torvian.chatbot.server.service.core.error.preferences.toApiError
 import eu.torvian.chatbot.server.service.core.error.serverbuiltin.toApiError
 import io.ktor.http.*
@@ -37,7 +39,8 @@ import java.util.*
  */
 fun Route.configureMeRoutes(
     userPreferenceService: UserPreferenceService,
-    serverBuiltInToolNamePrefixService: ServerBuiltInToolNamePrefixService
+    serverBuiltInToolNamePrefixService: ServerBuiltInToolNamePrefixService,
+    conversationCompactionConfigurationService: ConversationCompactionConfigurationService
 ) {
     authenticate(AuthSchemes.USER_JWT) {
         // GET /api/v1/me/preferences - Resolve the effective preference map for the current user.
@@ -73,31 +76,55 @@ fun Route.configureMeRoutes(
 
             val result = either {
                 val deviceId = parseDeviceHeader().bind()
-                if (resource.key == PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX) {
-                    // Mirror the generic preference path's contract: the body key must match the
-                    // path key. Otherwise a client could send a body claiming a different key while
-                    // the prefix is silently updated, which would make the route surface looser than
-                    // the generic key/value endpoint.
-                    ensure(request.key == resource.key) {
-                        apiError(
-                            CommonApiErrorCodes.INVALID_ARGUMENT,
-                            "Preference key in the body must match the path parameter"
-                        )
+                when (resource.key) {
+                    PreferenceKeys.CONVERSATION_COMPACTION -> {
+                        // Mirror the generic preference path's contract: the body key must match the
+                        // path key. Otherwise a client could store a value under a different key.
+                        ensure(request.key == resource.key) {
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "Preference key in the body must match the path parameter"
+                            )
+                        }
+                        // Compaction executes server-side from the global row only; a device-scoped
+                        // value would be silently ignored, so reject it instead of storing it.
+                        ensure(request.scope == PreferenceScope.GLOBAL) {
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "The conversation compaction preference must be stored in the GLOBAL scope"
+                            )
+                        }
+                        conversationCompactionConfigurationService.updateConfiguration(userId, request.value)
+                            .mapLeft { it.toApiError() }
+                            .bind()
                     }
-                    // The tool-name prefix governs server-side execution, so only the GLOBAL scope
-                    // is meaningful; a device-scoped value would be silently ignored by the
-                    // executor, which is worse than rejecting it here.
-                    ensure(request.scope == PreferenceScope.GLOBAL) {
-                        apiError(
-                            CommonApiErrorCodes.INVALID_ARGUMENT,
-                            "The server built-in tool name prefix must be stored in the GLOBAL scope"
-                        )
+
+                    PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX -> {
+                        // Mirror the generic preference path's contract: the body key must match the
+                        // path key. Otherwise a client could send a body claiming a different key while
+                        // the prefix is silently updated, which would make the route surface looser than
+                        // the generic key/value endpoint.
+                        ensure(request.key == resource.key) {
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "Preference key in the body must match the path parameter"
+                            )
+                        }
+                        // The tool-name prefix governs server-side execution, so only the GLOBAL scope
+                        // is meaningful; a device-scoped value would be silently ignored by the
+                        // executor, which is worse than rejecting it here.
+                        ensure(request.scope == PreferenceScope.GLOBAL) {
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "The server built-in tool name prefix must be stored in the GLOBAL scope"
+                            )
+                        }
+                        serverBuiltInToolNamePrefixService.updatePrefix(userId, request.value)
+                            .mapLeft { it.toApiError() }
+                            .bind()
                     }
-                    serverBuiltInToolNamePrefixService.updatePrefix(userId, request.value)
-                        .mapLeft { it.toApiError() }
-                        .bind()
-                } else {
-                    userPreferenceService.updatePreference(userId, deviceId, resource.key, request)
+
+                    else -> userPreferenceService.updatePreference(userId, deviceId, resource.key, request)
                         .mapLeft { it.toApiError() }
                         .bind()
                 }
@@ -111,18 +138,30 @@ fun Route.configureMeRoutes(
 
             val result = either {
                 val deviceId = parseDeviceHeader().bind()
-                if (resource.key == PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX) {
-                    // DELETE always resets the global row (and renames the user's tools back to the
-                    // server default); the scope query parameter is ignored for this key.
-                    serverBuiltInToolNamePrefixService.deletePrefix(userId)
-                        .mapLeft { it.toApiError() }
-                        .bind()
-                } else {
-                    // Extract scope from query parameter, default to DEVICE if not specified.
-                    val scope = resource.scope ?: PreferenceScope.DEVICE
-                    userPreferenceService.deletePreference(userId, deviceId, resource.key, scope)
-                        .mapLeft { it.toApiError() }
-                        .bind()
+                when (resource.key) {
+                    // Compaction is enabled/disabled by the presence of the global row; the scope query
+                    // parameter is ignored for this key, exactly like the tool-name prefix key.
+                    PreferenceKeys.CONVERSATION_COMPACTION -> {
+                        conversationCompactionConfigurationService.deleteConfiguration(userId)
+                            .mapLeft { it.toApiError() }
+                            .bind()
+                    }
+
+                    PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX -> {
+                        // DELETE always resets the global row (and renames the user's tools back to the
+                        // server default); the scope query parameter is ignored for this key.
+                        serverBuiltInToolNamePrefixService.deletePrefix(userId)
+                            .mapLeft { it.toApiError() }
+                            .bind()
+                    }
+
+                    else -> {
+                        // Extract scope from query parameter, default to DEVICE if not specified.
+                        val scope = resource.scope ?: PreferenceScope.DEVICE
+                        userPreferenceService.deletePreference(userId, deviceId, resource.key, scope)
+                            .mapLeft { it.toApiError() }
+                            .bind()
+                    }
                 }
             }
             call.respondEither(result, HttpStatusCode.NoContent)

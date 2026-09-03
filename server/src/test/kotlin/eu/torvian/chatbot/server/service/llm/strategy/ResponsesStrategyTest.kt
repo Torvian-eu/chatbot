@@ -865,4 +865,37 @@ class ResponsesStrategyTest {
         assertEquals("second", reasoningChunks[2].delta)
         assertEquals(1, reasoningChunks[2].outputIndex)
     }
+
+    /**
+     * Verifies the input projection shared with the token counter equals the input-bearing fields
+     * actually embedded in the prepared Responses request body, so counting can never drift.
+     */
+    @Test
+    @DisplayName("buildInputProjection should equal the input-bearing fields of the prepared Responses request")
+    fun buildInputProjection_equalsPreparedRequestInputFields() {
+        val messages = listOf(
+            RawChatMessage.User("Hello"),
+            RawChatMessage.Assistant("Hi there!"),
+            RawChatMessage.Tool(content = "{\"result\":42}", toolCallId = "call_1", name = "getWeather")
+        )
+        val provider = TestDefaults.llmProvider1.copy(apiKeyId = "openai-key", baseUrl = "https://api.openai.com/v1")
+        val systemMessage = "You are a helpful assistant."
+
+        val prepared = strategy.prepareRequest(messages, responsesModel, provider, responsesSettings, "sk-test", systemMessage = systemMessage)
+            .getOrNull()
+            ?: throw AssertionError("Expected successful request preparation")
+        val projection = strategy.buildInputProjection(messages, responsesModel, provider, responsesSettings, systemMessage)
+            .getOrNull()
+            ?: throw AssertionError("Expected successful projection")
+
+        val body = Json.decodeFromString<JsonObject>(prepared.body as String)
+        val inputFields = body.filterKeys { it in setOf("input", "instructions", "tools", "tool_choice") }
+        assertEquals(Json.encodeToString(projection), Json.encodeToString(inputFields))
+        // Generation/output settings must never enter the projection.
+        assertFalse(projection.containsKey("model"))
+        assertFalse(projection.containsKey("stream"))
+        assertFalse(projection.containsKey("store"))
+        assertFalse(projection.containsKey("max_output_tokens"))
+        assertFalse(projection.containsKey("reasoning"))
+    }
 }
