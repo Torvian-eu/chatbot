@@ -550,6 +550,17 @@ class SendMessageUseCase(
                                 )
                             }
 
+                            is ChatStreamEvent.CompactionCompleted -> {
+                                // FR-13: display a subtle informational notice. The event never
+                                // creates/replaces transcript messages; the repository also keeps the
+                                // session cache untouched.
+                                notificationService.genericSuccess(
+                                    "Conversation compacted: ${chatUpdate.payload.coveredMessageIds.size} " +
+                                        "messages summarized (${chatUpdate.payload.sourceTokenCount} → " +
+                                        "${chatUpdate.payload.resultTokenCount} tokens)"
+                                )
+                            }
+
                             else -> {
                                 // Other events (e.g., delta, tool completed) are handled by the repository's
                                 // applyStreamEvent method, which updates the UI state reactively.
@@ -619,6 +630,17 @@ class SendMessageUseCase(
                                 notificationService.apiError(
                                     error = event.error,
                                     shortMessageRes = Res.string.error_sending_message_short
+                                )
+                            }
+
+                            is ChatEvent.CompactionCompleted -> {
+                                // FR-13: display a subtle informational notice. The event never
+                                // creates/replaces transcript messages; the repository also keeps the
+                                // session cache untouched.
+                                notificationService.genericSuccess(
+                                    "Conversation compacted: ${event.payload.coveredMessageIds.size} " +
+                                        "messages summarized (${event.payload.sourceTokenCount} → " +
+                                        "${event.payload.resultTokenCount} tokens)"
                                 )
                             }
 

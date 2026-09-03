@@ -8,6 +8,7 @@ import eu.torvian.chatbot.app.repository.UserPreferenceRepository
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.UserPreferenceApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.common.models.api.me.PreferenceDetailDTO
 import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
 import eu.torvian.chatbot.common.models.api.me.UserPreferenceDTO
@@ -15,6 +16,7 @@ import eu.torvian.chatbot.common.models.user.PreferenceScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.Json
 
 /**
  * Default implementation of [UserPreferenceRepository].
@@ -42,6 +44,16 @@ class DefaultUserPreferenceRepository(
     private val _detailedPreferences = MutableStateFlow<Map<String, PreferenceDetailDTO>>(emptyMap())
     override val detailedPreferences: StateFlow<Map<String, PreferenceDetailDTO>> = _detailedPreferences.asStateFlow()
 
+    private val _compactionPreference = MutableStateFlow<ConversationCompactionPreference?>(null)
+    override val compactionPreference: StateFlow<ConversationCompactionPreference?> = _compactionPreference.asStateFlow()
+
+    /** Lenient JSON codec matching the server's canonical preference encoding. */
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        encodeDefaults = true
+    }
+
     override suspend fun syncPreferences(): Either<RepositoryError, Unit> = either {
         val preferences = withError({ apiError ->
             apiError.toRepositoryError("Failed to sync preferences")
@@ -53,6 +65,22 @@ class DefaultUserPreferenceRepository(
         // The prefix key is only present once the user has stored a value; absent means the server
         // default applies, which the settings UI surfaces as a placeholder hint.
         _serverBuiltInToolNamePrefix.value = preferences[PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX]
+        // The compaction key is only present once a global row exists; absent means automatic
+        // compaction is disabled. A stored value that cannot be decoded (e.g. edited by hand on the
+        // server) is treated as absent so the settings UI shows the disabled state instead of
+        // crashing; the runtime turn still surfaces the server's own invalid-configuration error.
+        _compactionPreference.value = preferences[PreferenceKeys.CONVERSATION_COMPACTION]
+            ?.let { rawValue ->
+                runCatching {
+                    json.decodeFromString<ConversationCompactionPreference>(rawValue)
+                }.getOrElse { decodeError ->
+                    logger.warn(
+                        "Failed to decode conversation_compaction preference (treating as disabled): " +
+                            "${decodeError.message}"
+                    )
+                    null
+                }
+            }
 
         logger.info("Synced theme preference: ${_theme.value}")
     }.onLeft { error ->
@@ -126,5 +154,36 @@ class DefaultUserPreferenceRepository(
         syncPreferences().bind()
         syncDetailedPreferences().bind()
         logger.info("Reset server built-in tool name prefix")
+    }
+
+    override suspend fun setCompactionPreference(
+        preference: ConversationCompactionPreference
+    ): Either<RepositoryError, Unit> = either {
+        val dto = UserPreferenceDTO(
+            key = PreferenceKeys.CONVERSATION_COMPACTION,
+            // Canonical JSON keeps the client and the server on the same decoding contract; the
+            // server re-validates and stores its own canonical encoding of the same value.
+            value = json.encodeToString(ConversationCompactionPreference.serializer(), preference),
+            scope = PreferenceScope.GLOBAL
+        )
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to update conversation compaction preference")
+        }) {
+            api.updatePreference(PreferenceKeys.CONVERSATION_COMPACTION, dto).bind()
+        }
+        syncPreferences().bind()
+        syncDetailedPreferences().bind()
+        logger.info("Updated conversation compaction preference")
+    }
+
+    override suspend fun clearCompactionPreference(): Either<RepositoryError, Unit> = either {
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to clear conversation compaction preference")
+        }) {
+            api.deletePreference(PreferenceKeys.CONVERSATION_COMPACTION, PreferenceScope.GLOBAL).bind()
+        }
+        syncPreferences().bind()
+        syncDetailedPreferences().bind()
+        logger.info("Cleared conversation compaction preference")
     }
 }

@@ -506,6 +506,15 @@ class DefaultSessionRepository(
                 // No session-cache mutation: the operator executor drives the spawned conversation on
                 // its own second WebSocket and reports the result back through the chat socket.
             }
+
+            is ChatEvent.CompactionCompleted -> {
+                // FR-13: the compaction notification is informational — it must never create, replace,
+                // or mutate transcript messages — so the session cache is intentionally left untouched.
+                logger.debug(
+                    "Compaction notification for session $sessionId: chunk ${event.payload.chunkId} " +
+                        "covers ${event.payload.coveredMessageIds.size} messages"
+                )
+            }
         }
     }
 
@@ -629,6 +638,15 @@ class DefaultSessionRepository(
                 logger.debug("Operator tool execution requested: toolCallId=${event.toolCallId}, name=${event.toolName}")
                 // No session-cache mutation: the operator executor drives the spawned conversation on
                 // its own second WebSocket and reports the result back through the chat socket.
+            }
+
+            is ChatStreamEvent.CompactionCompleted -> {
+                // FR-13: the compaction notification is informational — it must never create, replace,
+                // or mutate transcript messages — so the session cache is intentionally left untouched.
+                logger.debug(
+                    "Compaction notification for session $sessionId: chunk ${event.payload.chunkId} " +
+                        "covers ${event.payload.coveredMessageIds.size} messages"
+                )
             }
         }
 

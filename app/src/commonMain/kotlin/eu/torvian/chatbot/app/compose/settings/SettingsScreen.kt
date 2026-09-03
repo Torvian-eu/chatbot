@@ -162,6 +162,13 @@ fun SettingsScreen(
                         breadcrumbSegments = breadcrumbs
                     }
 
+                    SettingsCategory.ConversationCompaction -> ConversationCompactionTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+
                     SettingsCategory.Appearance -> AppearanceTabRoute(
                         authState = authState,
                         categoryResetSignal = categoryResetSignal

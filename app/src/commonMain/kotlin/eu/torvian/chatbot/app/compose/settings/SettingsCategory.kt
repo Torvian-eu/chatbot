@@ -14,6 +14,7 @@ enum class SettingsCategory {
     OperatorTools,
     ServerBuiltInTools,
     E2EASecurity,
+    ConversationCompaction,
     Appearance,
     About
 }
@@ -33,6 +34,7 @@ val SettingsCategory.displayLabel: String
         SettingsCategory.OperatorTools -> "Operator Tools"
         SettingsCategory.ServerBuiltInTools -> "Server Built-In Tools"
         SettingsCategory.E2EASecurity -> "E2EA Security"
+        SettingsCategory.ConversationCompaction -> "Conversation Compaction"
         SettingsCategory.Appearance -> "Appearance"
         SettingsCategory.About -> "About"
     }
