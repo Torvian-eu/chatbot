@@ -27,4 +27,13 @@ object ChatbotApiErrorCodes {
      * occurred downstream and was not caused by the client's request format or state.
      */
     val EXTERNAL_SERVICE_ERROR = ApiErrorCode("external-service-error", 500)
+
+    /**
+     * Indicates that an enabled automated conversation compaction could not be completed: the auxiliary
+     * summarization call failed or timed out, its output was invalid, the resulting context still exceeds
+     * the configured threshold, the source thread changed during persistence, or chunk persistence failed.
+     * The active turn is terminated and the oversized uncompacted primary request is never sent.
+     * Corresponds to HTTP Status Code 500 Internal Server Error.
+     */
+    val CONVERSATION_COMPACTION_FAILED = ApiErrorCode("conversation-compaction-failed", 500)
 }

@@ -18,4 +18,14 @@ object PreferenceKeys {
      * GLOBAL scope because server-side execution needs a single effective value per user.
      */
     const val SERVER_BUILTIN_TOOL_NAME_PREFIX = "server_builtin_tool_name_prefix"
+
+    /**
+     * Global-scope user preference holding the user's conversation-compaction configuration.
+     *
+     * The value is a JSON-encoded [ConversationCompactionPreference] carrying the compaction model ID,
+     * settings ID, summarization instruction, and the token threshold that triggers automatic compaction.
+     * The preference must be stored in the GLOBAL scope because server-side turn execution needs a single
+     * effective value per user; an absent row means automatic compaction is disabled.
+     */
+    const val CONVERSATION_COMPACTION = "conversation_compaction"
 }
