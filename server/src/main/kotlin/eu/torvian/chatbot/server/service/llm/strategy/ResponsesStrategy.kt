@@ -4,23 +4,9 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.llm.LLMProviderType
-import eu.torvian.chatbot.common.models.llm.ModelSettings
-import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
-import eu.torvian.chatbot.common.models.llm.isReasoningEncrypted
+import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
-import eu.torvian.chatbot.server.service.llm.ApiRequestConfig
-import eu.torvian.chatbot.server.service.llm.ChatCompletionStrategy
-import eu.torvian.chatbot.server.service.llm.GenericContentType
-import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
-import eu.torvian.chatbot.server.service.llm.LLMCompletionError
-import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
-import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
-import eu.torvian.chatbot.server.service.llm.OpenRouterClientInfo
-import eu.torvian.chatbot.server.service.llm.RawChatMessage
-import eu.torvian.chatbot.server.service.llm.adaptReasoningItemForReplay
+import eu.torvian.chatbot.server.service.llm.*
 import io.ktor.http.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -534,17 +520,11 @@ class ResponsesStrategy(
                 }
             }
 
-            if (content != null) {
-                add(buildJsonObject {
-                    put("role", JsonPrimitive("assistant"))
-                    put("content", buildJsonArray {
-                        add(buildJsonObject {
-                            put("type", JsonPrimitive("output_text"))
-                            put("text", JsonPrimitive(content))
-                        })
-                    })
-                })
-            }
+            add(buildJsonObject {
+                put("role", JsonPrimitive("assistant"))
+                put("content", JsonPrimitive(content ?: ""))
+            })
+
             toolCalls?.forEach { toolCall ->
                 add(buildJsonObject {
                     put("type", JsonPrimitive("function_call"))
