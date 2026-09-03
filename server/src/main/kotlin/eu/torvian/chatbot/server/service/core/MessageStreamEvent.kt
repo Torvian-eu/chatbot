@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.service.core
 
+import eu.torvian.chatbot.common.models.api.core.CompactionCompletedPayload
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
@@ -153,6 +154,21 @@ sealed class MessageStreamEvent {
         val toolCallId: Long,
         val toolName: String,
         val payload: String
+    ) : MessageStreamEvent()
+
+    /**
+     * Informational event emitted when the server persisted a conversation-compaction chunk and the
+     * primary response that uses it is about to be generated (streaming surface).
+     *
+     * The event only appears on turns where a chunk was actually persisted and used; it never
+     * appears on disabled, fit, or hybrid-reuse paths. Clients must treat it as a non-transcript
+     * status and must not create or replace transcript messages. The payload is bounded and
+     * provider-neutral (see [CompactionCompletedPayload]).
+     *
+     * @property payload The compaction notification details.
+     */
+    data class CompactionCompleted(
+        val payload: CompactionCompletedPayload
     ) : MessageStreamEvent()
 
     /**

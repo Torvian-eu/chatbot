@@ -8,8 +8,11 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionService
 import eu.torvian.chatbot.server.service.core.chat.content.ToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.context.ChatContextBuilder
+import eu.torvian.chatbot.server.service.core.chat.context.ConversationContext
+import eu.torvian.chatbot.server.service.core.chat.context.SourceMessageSnapshot
 import eu.torvian.chatbot.server.service.core.chat.persistence.ConversationTurnPersistence
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallExecutionEvent
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
@@ -33,6 +36,8 @@ import java.util.concurrent.CancellationException
  * @property conversationTurnPersistence Collaborator that owns message and tool-call persistence workflow.
  * @property reasoningCapabilityRecorder Collaborator that records a model's reasoning mode (encrypted vs
  *            plaintext) from observed reasoning items, used to adapt reasoning replay across model switches.
+ * @property conversationCompactionService Policy that runs before every primary LLM call and may replace
+ *            the oversized primary context with one labeled synthetic summary.
  */
 class DefaultConversationTurnOrchestrator(
     private val llmApiClient: LLMApiClient,
@@ -41,6 +46,7 @@ class DefaultConversationTurnOrchestrator(
     private val chatContextBuilder: ChatContextBuilder,
     private val conversationTurnPersistence: ConversationTurnPersistence,
     private val reasoningCapabilityRecorder: ReasoningCapabilityRecorder,
+    private val conversationCompactionService: ConversationCompactionService,
 ) : ConversationTurnOrchestrator {
 
     companion object {
@@ -111,8 +117,26 @@ class DefaultConversationTurnOrchestrator(
     ) {
         val preparedTurn = prepareTurn(request, emit)
         var lastMessageId = preparedTurn.lastMessageId
-        var currentContext = preparedTurn.currentContext
         var iterationCount = 0
+
+        // The full identity-bearing source context is handed to the compaction state once at turn
+        // start: it initializes the rolling window (eligible prior summary + delta, or the full
+        // thread) and the identity ledger, after which the full uncompressed content is released —
+        // the window (one optional summary + additional uncompressed messages) and the ledger are the
+        // loop's only conversation state from here on. A structurally invalid preference fails here
+        // (InvalidConfiguration left) and aborts the turn before any counting or primary call.
+        val compactionState = conversationCompactionService.beginTurn(
+            userId = request.userId,
+            sessionId = request.session.id,
+            initialUnits = preparedTurn.conversationContext.units
+        ).getOrElse { error ->
+            logger.error(
+                "Conversation compaction setup failed for session ${request.session.id}: $error"
+            )
+            emit(ConversationTurnEvent.CompactionFailed(error))
+            emit(ConversationTurnEvent.TurnCompleted)
+            return
+        }
 
         while (iterationCount < MAX_TOOL_CALLING_ITERATIONS && !request.turnControlSignal.isCancelled) {
             if (request.turnControlSignal.isPaused) {
@@ -122,8 +146,41 @@ class DefaultConversationTurnOrchestrator(
                 emit(ConversationTurnEvent.TurnCompleted)
                 break
             }
+
+            // Exact compaction integration point: runs once for the initial primary call and once for
+            // every post-tool primary call. A failure terminates the turn before any primary request.
+            val preflight = conversationCompactionService.preparePrimaryContext(
+                state = compactionState,
+                primaryConfig = request.llmConfig,
+                expectedLeafMessageId = lastMessageId
+            ).getOrElse { error ->
+                logger.error(
+                    "Conversation compaction preflight failed for session ${request.session.id}: $error"
+                )
+                emit(ConversationTurnEvent.CompactionFailed(error))
+                emit(ConversationTurnEvent.TurnCompleted)
+                break
+            }
+
             iterationCount++
-            val assistantStep = processAssistantStep(request, currentContext, lastMessageId, emit) ?: break
+            // FR-12 emission rule: the compaction notification is emitted only when this preflight
+            // persisted a chunk AND the turn proceeds to the primary call. Emitting here (immediately
+            // before processAssistantStep) keeps the event strictly tied to usage — nothing is emitted
+            // on disabled/fit/hybrid-reuse paths (no persisted chunk).
+            preflight.persistedChunkIfAny?.let { persistedChunk ->
+                emit(ConversationTurnEvent.CompactionCompleted(persistedChunk))
+            }
+            // preflight.primaryMessages is the rolling window verified to fit the threshold: the
+            // original flattened thread (first preflight, raw fits), the hybrid [summary] + additional
+            // uncompressed messages (the steady state), or the summary message alone right after a
+            // compaction (the user's compaction instruction is expected to make that summary
+            // self-contained enough to continue from).
+            val assistantStep = processAssistantStep(
+                request,
+                preflight.primaryMessages,
+                lastMessageId,
+                emit
+            ) ?: break
             lastMessageId = assistantStep.assistantMessage.id
 
             val pendingToolCalls = conversationTurnPersistence.persistPendingToolCalls(
@@ -134,14 +191,19 @@ class DefaultConversationTurnOrchestrator(
             emit(ConversationTurnEvent.ToolCallsReceived(pendingToolCalls))
 
             val completedToolCalls = executeToolCalls(request, pendingToolCalls, emit)
-            currentContext = appendAssistantAndToolResults(
-                currentContext = currentContext,
-                assistantContent = assistantStep.assistantContent,
-                completedToolCalls = completedToolCalls,
-                reasoningItems = assistantStep.reasoningItems,
-                // Within one turn the model never changes, so in-turn reasoning is always same-model; this
-                // lets encrypted reasoning replay to the current model on the follow-up LLM call.
-                reasoningModelId = request.llmConfig.model.id
+            // Grow the rolling window with the newly completed assistant/tool unit so the next
+            // preflight covers it (the follow-up iteration sees the appended unit; the service's own
+            // window/ledger state is updated by the preflight itself, so there is no record hook).
+            compactionState.appendUnit(
+                source = SourceMessageSnapshot(
+                    id = assistantStep.assistantMessage.id,
+                    updatedAt = assistantStep.assistantMessage.updatedAt
+                ),
+                rawMessages = assistantAndToolResultMessages(
+                    assistantStep = assistantStep,
+                    completedToolCalls = completedToolCalls,
+                    reasoningModelId = request.llmConfig.model.id
+                )
             )
         }
     }
@@ -183,13 +245,13 @@ class DefaultConversationTurnOrchestrator(
         }
 
         val sessionToolCalls = conversationTurnPersistence.loadSessionToolCalls(request.session.id)
-        val currentContext = chatContextBuilder.buildContext(
+        val conversationContext = chatContextBuilder.buildContext(
             startingMessageId = lastMessageId,
             sessionMessages = updatedSessionMessages,
             toolCalls = sessionToolCalls
         )
 
-        return PreparedTurnState(lastMessageId = lastMessageId, currentContext = currentContext)
+        return PreparedTurnState(lastMessageId = lastMessageId, conversationContext = conversationContext)
     }
 
     /**
@@ -473,29 +535,25 @@ class DefaultConversationTurnOrchestrator(
     }
 
     /**
-     * Extends the LLM context with the assistant tool-call request and the resulting tool outputs.
+     * Derives the provider-facing raw messages for one completed assistant source unit.
      *
-     * @param currentContext Context accumulated so far for the turn.
-     * @param assistantContent Assistant content associated with the tool-call request.
+     * @param assistantStep Completed assistant step whose content and reasoning enter the unit.
      * @param completedToolCalls Completed tool calls whose calls and results should be appended.
-     * @param reasoningItems Replay-safe reasoning items emitted with the assistant step, forwarded so the next
-     *            follow-up LLM request can replay chain-of-thought. Opaque payload; never logged or rendered.
-     * @param reasoningModelId ID of the model that produced [reasoningItems] (the current turn's model),
-     *            used to gate encrypted reasoning replay on the follow-up LLM request.
-     * @return Updated raw context used for the next assistant iteration.
+     * @param reasoningModelId ID of the model that produced the step's reasoning items (the current
+     *            turn's model), used to gate encrypted reasoning replay on the follow-up LLM request.
+     * @return The ordered raw messages (assistant message followed by its tool results) appended as one
+     *         source unit, so compaction can never split the call from its results.
      */
-    private fun appendAssistantAndToolResults(
-        currentContext: List<RawChatMessage>,
-        assistantContent: String?,
+    private fun assistantAndToolResultMessages(
+        assistantStep: AssistantStepOutcome,
         completedToolCalls: List<ToolCall>,
-        reasoningItems: List<JsonObject>?,
         reasoningModelId: Long?
     ): List<RawChatMessage> {
         // Derive both provider messages from the same ordered collection so a result can never
         // be emitted without its matching assistant tool call. Every recorded call is replayed,
         // so a tool-calling assistant step always carries its full set of calls in context.
         val assistantContextMessage = RawChatMessage.Assistant(
-            content = assistantContent,
+            content = assistantStep.assistantContent,
             toolCalls = completedToolCalls.map { toolCall ->
                 RawChatMessage.Assistant.ToolCall(
                     id = toolCall.toolCallId,
@@ -503,7 +561,7 @@ class DefaultConversationTurnOrchestrator(
                     arguments = toolCall.input
                 )
             },
-            reasoningItems = reasoningItems,
+            reasoningItems = assistantStep.reasoningItems,
             reasoningModelId = reasoningModelId
         )
         // A provider transcript must not contain a result without its replayed assistant call.
@@ -515,7 +573,7 @@ class DefaultConversationTurnOrchestrator(
             )
         }
 
-        return currentContext + assistantContextMessage + toolResultMessages
+        return listOf(assistantContextMessage) + toolResultMessages
     }
 
     /**
@@ -662,7 +720,7 @@ class DefaultConversationTurnOrchestrator(
                                     // is wired, they carry no side effect here. Never persist or replay them.
                                     logger.trace(
                                         "Reasoning text delta discarded (no UI consumer): index=${chunk.outputIndex}, " +
-                                            "contentIndex=${chunk.contentIndex}, delta=${chunk.delta.take(200)}"
+                                                "contentIndex=${chunk.contentIndex}, delta=${chunk.delta.take(200)}"
                                     )
                                 }
 
@@ -716,11 +774,11 @@ class DefaultConversationTurnOrchestrator(
      * Carries the initial loop state after user persistence and context reconstruction.
      *
      * @property lastMessageId Message that anchors the next assistant reply.
-     * @property currentContext Reconstructed raw chat context for the next LLM request.
+     * @property conversationContext Reconstructed identity-bearing source context for the turn.
      */
     private data class PreparedTurnState(
         val lastMessageId: Long,
-        val currentContext: List<RawChatMessage>
+        val conversationContext: ConversationContext
     )
 
     /**

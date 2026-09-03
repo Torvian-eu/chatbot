@@ -58,6 +58,10 @@ fun MessageStreamEvent.toChatStreamEvent(): ChatStreamEvent {
             payload = payload
         )
 
+        is MessageStreamEvent.CompactionCompleted -> CompactionCompleted(
+            payload = payload
+        )
+
         is MessageStreamEvent.StreamCompleted -> StreamCompleted
     }
 }

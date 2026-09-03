@@ -66,7 +66,8 @@ fun miscModule() = module {
             json = get(),
             appConfig = get(),
             userPreferenceService = get(),
-            serverBuiltInToolNamePrefixService = get()
+            serverBuiltInToolNamePrefixService = get(),
+            conversationCompactionConfigurationService = get()
         )
     }
 }

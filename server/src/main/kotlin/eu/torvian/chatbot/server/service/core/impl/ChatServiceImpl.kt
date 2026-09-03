@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.chat.preparation.ConversationTurnPreparationService
+import eu.torvian.chatbot.server.service.core.chat.compaction.toCompactionCompletedPayload
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnEvent
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnOrchestrator
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnRequest
@@ -153,7 +154,11 @@ class ChatServiceImpl(
                 toolName = toolName,
                 payload = payload
             ).right()
+            is ConversationTurnEvent.CompactionCompleted -> MessageEvent.CompactionCompleted(
+                payload = chunk.toCompactionCompletedPayload()
+            ).right()
             is ConversationTurnEvent.ExternalServiceError -> ProcessNewMessageError.ExternalServiceError(llmError).left()
+            is ConversationTurnEvent.CompactionFailed -> ProcessNewMessageError.ConversationCompactionFailed(error).left()
             ConversationTurnEvent.TurnCompleted -> MessageEvent.StreamCompleted.right()
             is ConversationTurnEvent.AssistantMessageStarted,
             is ConversationTurnEvent.AssistantMessageDelta,
@@ -197,7 +202,11 @@ class ChatServiceImpl(
                 toolName = toolName,
                 payload = payload
             ).right()
+            is ConversationTurnEvent.CompactionCompleted -> MessageStreamEvent.CompactionCompleted(
+                payload = chunk.toCompactionCompletedPayload()
+            ).right()
             is ConversationTurnEvent.ExternalServiceError -> ProcessNewMessageError.ExternalServiceError(llmError).left()
+            is ConversationTurnEvent.CompactionFailed -> ProcessNewMessageError.ConversationCompactionFailed(error).left()
             ConversationTurnEvent.TurnCompleted -> MessageStreamEvent.StreamCompleted.right()
             is ConversationTurnEvent.AssistantMessageSaved -> {
                 throw IllegalStateException("Non-streaming turn event emitted for streaming mapping: $this")

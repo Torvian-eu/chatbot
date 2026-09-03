@@ -168,6 +168,8 @@ class SessionRoutesTest {
                 Table.SESSION_CURRENT_LEAF,
                 Table.TOOL_CALLS,
                 Table.USERS,
+                Table.USER_DEVICES,
+                Table.USER_PREFERENCES,
                 Table.ROLES, Table.USER_ROLE_ASSIGNMENTS,
                 Table.USER_SESSIONS,
                 Table.CHAT_SESSION_OWNERS,

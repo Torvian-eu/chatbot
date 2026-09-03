@@ -1,12 +1,19 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
+import arrow.core.right
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.server.service.core.chat.compaction.CompactedMessageCoverage
+import eu.torvian.chatbot.server.service.core.chat.compaction.CompactionTurnState
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionChunk
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionService
+import eu.torvian.chatbot.server.service.core.chat.compaction.PrimaryContextPreflight
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
+import eu.torvian.chatbot.server.service.core.chat.context.ConversationContextUnit
 import eu.torvian.chatbot.server.service.core.chat.context.DefaultChatContextBuilder
 import eu.torvian.chatbot.server.service.core.chat.persistence.ConversationTurnPersistence
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
@@ -38,6 +45,9 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
 
     /** Mocked reasoning-capability recorder invoked after each assistant response. */
     protected lateinit var reasoningCapabilityRecorder: ReasoningCapabilityRecorder
+
+    /** Mocked compaction policy returning a disabled preflight so existing behavior stays unchanged. */
+    protected lateinit var conversationCompactionService: ConversationCompactionService
 
     /** Orchestrator under test, recreated before each test. */
     protected lateinit var orchestrator: DefaultConversationTurnOrchestrator
@@ -99,9 +109,25 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
         toolCallOrchestrator = mockk()
         conversationTurnPersistence = mockk()
         reasoningCapabilityRecorder = mockk()
+        conversationCompactionService = mockk()
         // Recording is a no-op by default so tests not focused on reasoning do not need explicit stubs;
         // dedicated tests verify the recorder is invoked with the expected model and reasoning items.
         coEvery { reasoningCapabilityRecorder.record(any(), any()) } returns Unit
+        // Compaction is disabled by default: beginTurn yields a Disabled state carrying the initial
+        // units the orchestrator handed over, and every preflight returns the original flattened
+        // window with no persisted chunk.
+        coEvery { conversationCompactionService.beginTurn(any(), any(), any()) } coAnswers {
+            CompactionTurnState.Disabled(
+                testSession.id,
+                thirdArg<List<ConversationContextUnit>>().toMutableList()
+            ).right()
+        }
+        coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } coAnswers {
+            PrimaryContextPreflight(
+                primaryMessages = firstArg<CompactionTurnState>().units.flatMap { it.rawMessages },
+                persistedChunkIfAny = null
+            ).right()
+        }
 
         orchestrator = DefaultConversationTurnOrchestrator(
             llmApiClient = llmApiClient,
@@ -112,7 +138,8 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
                 toolResultContentBuilder = DefaultToolResultContentBuilder()
             ),
             conversationTurnPersistence = conversationTurnPersistence,
-            reasoningCapabilityRecorder = reasoningCapabilityRecorder
+            reasoningCapabilityRecorder = reasoningCapabilityRecorder,
+            conversationCompactionService = conversationCompactionService
         )
     }
 
@@ -121,6 +148,45 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
      */
     @AfterEach
     fun tearDown() {
-        clearMocks(llmApiClient, toolCallOrchestrator, conversationTurnPersistence, reasoningCapabilityRecorder)
+        clearMocks(
+            llmApiClient,
+            toolCallOrchestrator,
+            conversationTurnPersistence,
+            reasoningCapabilityRecorder,
+            conversationCompactionService
+        )
     }
+
+    /**
+     * Builds a fake persisted compaction chunk for tests that verify the compaction-completed event.
+     *
+     * The chunk mirrors the shape the production service returns from `preparePrimaryContext` but is
+     * fully deterministic so event assertions can check ids, coverage, and token counts.
+     *
+     * @param id Primary key of the fake chunk.
+     * @return A fake persisted [ConversationCompactionChunk].
+     */
+    protected fun compactionChunk(id: Long = 55L): ConversationCompactionChunk = ConversationCompactionChunk(
+        id = id,
+        sessionId = testSession.id,
+        summary = "Summarized conversation",
+        modelId = 1L,
+        settingsId = 1L,
+        providerId = 1L,
+        modelName = "gpt-4o-mini",
+        settingsName = "Default",
+        providerName = "OpenAI",
+        instruction = "Summarize",
+        thresholdTokens = 100_000L,
+        sourceTokenCount = 450L,
+        resultTokenCount = 150L,
+        tokenCounterVersion = "test-v1",
+        coverageCount = 3,
+        createdAt = baseInstant.toEpochMilliseconds(),
+        coverage = listOf(
+            CompactedMessageCoverage(ordinal = 0, messageId = 1L, observedUpdatedAt = baseInstant),
+            CompactedMessageCoverage(ordinal = 1, messageId = 2L, observedUpdatedAt = baseInstant),
+            CompactedMessageCoverage(ordinal = 2, messageId = 3L, observedUpdatedAt = baseInstant)
+        )
+    )
 }
