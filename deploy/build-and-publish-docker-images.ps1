@@ -3,8 +3,9 @@
     Builds (and optionally publishes) the Torvian chatbot Docker images for the server and worker.
 .DESCRIPTION
     Installs the server and worker distributions, then builds their Docker images.
-    By default it also tags (for production releases) and pushes the images to the GitHub Container Registry.
-    Use the switches below to limit which images are built or to skip publishing entirely.
+    By default it tags production images as 'latest', non-production images as 'snapshot',
+    and pushes the images to the GitHub Container Registry. Use the switches below to limit
+    which images are built or to skip publishing entirely.
 #>
 
 param (
@@ -113,7 +114,8 @@ foreach ($Img in $Images) {
     $ContextPath = Join-Path $DeployDir $Img.Context
 
     $VersionTag = "$Registry/$Org/${ImgName}:$ReleaseTag"
-    $LatestTag = "$Registry/$Org/${ImgName}:latest"
+    $ChannelTagName = if ($IsProduction) { "latest" } else { "snapshot" }
+    $ChannelTag = "$Registry/$Org/${ImgName}:$ChannelTagName"
 
     Write-Host "`n--- Processing Image: $ImgName ---" -ForegroundColor Cyan
 
@@ -123,15 +125,14 @@ foreach ($Img in $Images) {
     if ($LASTEXITCODE -ne 0) { Write-Error "Docker build failed for $ImgName"; continue }
     Write-Host "Image build successful." -ForegroundColor Green
 
-    # Process production tagging if applicable
-    if ($IsProduction) {
-        Write-Host "Tagging image: $LatestTag" -ForegroundColor Gray
-        docker tag $VersionTag $LatestTag
-        if ($LASTEXITCODE -ne 0) { Write-Error "Tagging failed for $ImgName"; continue }
-        Write-Host "Tagging successful." -ForegroundColor Green
-    }
+    # Add a mutable channel tag: stable releases use 'latest', while all other releases use
+    # 'snapshot'. The version-specific tag remains available for reproducible deployments.
+    Write-Host "Tagging image: $ChannelTag" -ForegroundColor Gray
+    docker tag $VersionTag $ChannelTag
+    if ($LASTEXITCODE -ne 0) { Write-Error "Tagging failed for $ImgName"; continue }
+    Write-Host "Tagging successful." -ForegroundColor Green
 
-    # Push (skipped when -NoPublish is specified; build and tag still run locally)
+    # Push (skipped when -NoPublish is specified; both tags still exist locally)
     if ($NoPublish) {
         Write-Host "Skipping push for $ImgName (NoPublish)." -ForegroundColor Yellow
         continue
@@ -141,13 +142,9 @@ foreach ($Img in $Images) {
     docker push $VersionTag
     if ($LASTEXITCODE -ne 0) { Write-Error "Failed to push $VersionTag"; continue }
 
-    if ($IsProduction) {
-        docker push $LatestTag
-        if ($LASTEXITCODE -ne 0) { Write-Error "Failed to push $LatestTag"; continue }
-        Write-Host "Successfully pushed $ImgName (latest & $ReleaseTag)" -ForegroundColor Green
-    } else {
-        Write-Host "Successfully pushed $ImgName ($ReleaseTag only)" -ForegroundColor Green
-    }
+    docker push $ChannelTag
+    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to push $ChannelTag"; continue }
+    Write-Host "Successfully pushed $ImgName ($ChannelTagName & $ReleaseTag)" -ForegroundColor Green
 }
 
 Write-Host "`n--- Docker Pipeline Complete ---" -ForegroundColor Cyan
