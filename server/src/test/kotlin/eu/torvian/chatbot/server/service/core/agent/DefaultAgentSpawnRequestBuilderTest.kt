@@ -11,6 +11,7 @@ import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.SpawnRequestBuildError
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -83,9 +84,64 @@ class DefaultAgentSpawnRequestBuilderTest {
         val request = result.getOrNull()!!
         assertEquals(role, request.agentRoleToSpawn)
         assertEquals("Implementation task", request.subject)
+        // Absent flag → default summary-return mode.
+        assertEquals(false, request.interactive)
         assertEquals(OperatorType.CLIENT_APP, request.operatorType)
         assertEquals(42L, request.toolCallId)
         assertEquals(listOf(AgentSpawnMessage.User("Do the thing")), request.conversation)
+    }
+
+    /**
+     * Verifies that an explicit `interactive: true` is validated and carried through into the
+     * request unchanged, with all remaining fields untouched.
+     */
+    @Test
+    fun `build carries interactive true into the request`() = runTest {
+        coEvery { agentRoleService.getRoleByName(1L, "implementer") } returns role.right()
+        coEvery { agentRoleService.getRoleById(1L, 1L) } returns sourceRole.right()
+
+        val result = builder.build(
+            1L,
+            1L,
+            toolCall(
+                input = """{"subject":"Implementation task","agent_role_name":"implementer","prompt":"Do the thing","interactive":true}"""
+            )
+        )
+
+        assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
+        val request = result.getOrNull()!!
+        assertEquals(true, request.interactive)
+        assertEquals(role, request.agentRoleToSpawn)
+        assertEquals("Implementation task", request.subject)
+        assertEquals(OperatorType.CLIENT_APP, request.operatorType)
+        assertEquals(42L, request.toolCallId)
+        assertEquals(listOf(AgentSpawnMessage.User("Do the thing")), request.conversation)
+    }
+
+    /**
+     * Verifies that a present-but-non-boolean `interactive` value is rejected as
+     * [SpawnRequestBuildError.InvalidInput] before any role lookup: argument validation completes
+     * before I/O, so the builder never leaks whether a role exists for malformed input.
+     */
+    @Test
+    fun `build rejects a non boolean interactive value before role lookup`() = runTest {
+        val malformedInteractive = listOf(
+            // Explicit JSON null is also malformed: the builder must not silently fall back.
+            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","interactive":null}""",
+            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","interactive":"yes"}""",
+            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","interactive":1}""",
+            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","interactive":[true]}""",
+            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","interactive":{"x":1}}"""
+        )
+
+        malformedInteractive.forEach { input ->
+            val result = builder.build(1L, 1L, toolCall(input = input))
+
+            assertIs<SpawnRequestBuildError.InvalidInput>(result.leftOrNull())
+        }
+        // Validation precedes I/O: neither role lookup may have been reached for malformed input.
+        coVerify(exactly = 0) { agentRoleService.getRoleByName(any(), any()) }
+        coVerify(exactly = 0) { agentRoleService.getRoleById(any(), any()) }
     }
 
     /**

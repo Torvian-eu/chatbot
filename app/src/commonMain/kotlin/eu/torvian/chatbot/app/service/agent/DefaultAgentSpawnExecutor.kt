@@ -42,11 +42,16 @@ import kotlin.time.Duration.Companion.seconds
  * - nested `spawn_agent` calls inside the spawned conversation run through the spawned session's own
  *   pipeline.
  *
- * The executor awaits the send job, aggregates the spawned turn's last assistant message via
- * [ChatViewModel.lastAssistantMessageContent], and reports it as a
- * [ChatClientEvent.ToolExecutionResult] on the primary socket. When the primary turn ends or is
- * cancelled mid-spawn, the spawned send is force-cancelled (it runs in the spawned VM's scope and
- * would otherwise be orphaned). Any failure is reported as an error result so the calling LLM hears
+ * The executor awaits the send job. In default mode (no `interactive` flag / `interactive = false`)
+ * it aggregates the spawned turn's last assistant message via
+ * [ChatViewModel.lastAssistantMessageContent] and reports it as a
+ * [ChatClientEvent.ToolExecutionResult] on the primary socket. In interactive (handoff) mode
+ * (`interactive = true`) it deliberately **skips aggregation**: as soon as the spawned first turn's
+ * send job completes naturally the tool returns an empty SUCCESS result (`output = null`), leaving
+ * the still-visible session for the user to continue in the app and paste the final summary back
+ * manually. When the primary turn ends or is cancelled mid-spawn, the spawned send is force-cancelled
+ * (it runs in the spawned VM's scope and would otherwise be orphaned); after a natural completion
+ * that call is already a no-op. Any failure is reported as an error result so the calling LLM hears
  * a readable message.
  *
  * @property sessionRepository Repository used to create the spawned session and attach the role.
@@ -173,7 +178,8 @@ class DefaultAgentSpawnExecutor(
                 sessionId = session.id,
                 userId = userId,
                 prompt = prompt,
-                toolCallId = toolCallId
+                toolCallId = toolCallId,
+                interactive = request.interactive
             )
             clientEvents(result)
         } finally {
@@ -186,8 +192,8 @@ class DefaultAgentSpawnExecutor(
     }
 
     /**
-     * Drives the spawned turn through the spawned session's [ChatViewModel] and aggregates the last
-     * assistant message.
+     * Drives the spawned turn through the spawned session's [ChatViewModel] and, in default mode,
+     * aggregates the last assistant message.
      *
      * Keeps the spawned ChatState flows subscribed for the whole turn: its derived flows
      * (`sessionDataState`, `currentAgentRole`, `currentModel`, `currentSettings`) use
@@ -196,11 +202,23 @@ class DefaultAgentSpawnExecutor(
      * the call waits (bounded) until the role's model/settings resolve, then sets the input and
      * sends; the send job's completion is the deterministic turn-completion signal.
      *
+     * After the send job completes, [interactive] selects the result shape: `false` aggregates the
+     * spawned turn's last assistant message and returns it as the tool output (blank summary →
+     * error result); `true` (handoff mode) never consults
+     * [ChatViewModel.lastAssistantMessageContent] and returns an **empty** success result — the
+     * spawned session stays open for the user to continue in the app and report the final summary
+     * back manually. The caller's `finally` block still calls
+     * [ChatViewModel.forceCancelSend], which is a no-op once the send job has completed naturally,
+     * so a handed-off session is never torn down.
+     *
      * @param spawnedChatViewModel The spawned session's ChatViewModel (same instance the UI uses).
      * @param sessionId The spawned session's identifier.
      * @param userId The authenticated user's identifier.
      * @param prompt The first user message of the spawned conversation.
      * @param toolCallId Correlation key of the originating tool call, echoed into error results.
+     * @param interactive Whether the spawn runs in interactive (handoff) mode. `true` skips summary
+     *            aggregation and returns an empty success result after the send job completes;
+     *            `false` (default) aggregates the last assistant message as the tool output.
      * @return The [ChatClientEvent.ToolExecutionResult] to emit on the primary socket.
      */
     private suspend fun runSpawnedTurnThroughViewModel(
@@ -208,7 +226,8 @@ class DefaultAgentSpawnExecutor(
         sessionId: Long,
         userId: Long,
         prompt: String,
-        toolCallId: Long
+        toolCallId: Long,
+        interactive: Boolean
     ): ChatClientEvent.ToolExecutionResult = coroutineScope {
         // Keep the derived ChatState flows subscribed while the turn runs: they use
         // `SharingStarted.WhileSubscribed`, so a headless VM with no UI subscriber never computes
@@ -246,6 +265,15 @@ class DefaultAgentSpawnExecutor(
             val sendJob = spawnedChatViewModel.sendMessage()
                 ?: return@coroutineScope toolError(toolCallId, "Spawned send was refused.")
             sendJob.join()
+
+            if (interactive) {
+                // Handoff mode: the spawned first turn closed naturally. Never aggregate a summary —
+                // the user continues this session in the app and pastes the final result back to the
+                // orchestrator manually, so the tool result is deliberately empty (SUCCESS with no
+                // output). All defaults of ToolExecutionResult apply: output = null, isError = false,
+                // errorMessage = null.
+                return@coroutineScope ChatClientEvent.ToolExecutionResult(toolCallId = toolCallId)
+            }
 
             val summary = spawnedChatViewModel.lastAssistantMessageContent()
             if (summary.isNullOrBlank()) {

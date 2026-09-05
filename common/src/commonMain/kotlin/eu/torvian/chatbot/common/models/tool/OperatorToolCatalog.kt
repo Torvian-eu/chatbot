@@ -36,6 +36,15 @@ object OperatorToolCatalog {
     const val SPAWN_AGENT_PROMPT_PROPERTY = "prompt"
 
     /**
+     * JSON property selecting interactive (handoff) spawn mode. Absent or `false` preserves the
+     * default summary-return behavior (the tool returns the spawned agent's final summary); `true`
+     * runs the spawn in handoff mode, where the tool completes with empty output after the first
+     * spawned turn and the user continues the conversation in the app, reporting the result back to
+     * the calling model manually.
+     */
+    const val SPAWN_AGENT_INTERACTIVE_PROPERTY = "interactive"
+
+    /**
      * Immutable specification of a single operator tool.
      *
      * @property name Public tool name exposed to the LLM; also the discriminator carried in
@@ -70,6 +79,16 @@ object OperatorToolCatalog {
                     put(SPAWN_AGENT_PROMPT_PROPERTY, buildJsonObject {
                         put("type", "string")
                         put("description", "Task description for the spawned agent. The spawned agent is expected to end with a summary report.")
+                    })
+                    // Optional handoff switch: deliberately NOT in `required` so default-mode calls
+                    // keep today's summary-return contract byte-for-byte and LLM-facing drift is
+                    // confined to this property's description.
+                    put(SPAWN_AGENT_INTERACTIVE_PROPERTY, buildJsonObject {
+                        put("type", "boolean")
+                        put(
+                            "description",
+                            "Handoff mode. When true, the spawned conversation's first turn starts automatically but its summary is NOT returned to the calling model: the tool completes with empty output, and the user continues the conversation in the app and reports the result back manually. When false or absent (default), the tool returns the spawned agent's final summary as its result."
+                        )
                     })
                 })
                 put("required", buildJsonArray {
