@@ -222,6 +222,58 @@ class KtorAgentRoleApiClientTest {
         }
     }
 
+    // --- setRoleDisabled ---
+
+    @Test
+    fun `setRoleDisabled - success`() = runTest {
+        val updated = mockRole(10, "translator").copy(disabled = true)
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals(
+                href(AgentRoleResource.ById.Disabled(parent = AgentRoleResource.ById(roleId = 10L))),
+                request.url.fullPath
+            )
+            val body = request.body.toByteArray().decodeToString()
+            // The codec is pretty-printing, so tolerate the whitespace around the separator.
+            assertTrue(
+                Regex("\"disabled\"\\s*:\\s*true").containsMatchIn(body),
+                "Request body should carry the requested disabled state, got: $body"
+            )
+            respond(
+                content = json.encodeToString(updated),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.setRoleDisabled(10L, disabled = true)) {
+            is Either.Right -> assertTrue(result.value.disabled)
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `setRoleDisabled - failure - 409 Conflict`() = runTest {
+        val mockEngine = MockEngine { _ ->
+            respond(
+                content = json.encodeToString(
+                    apiError(CommonApiErrorCodes.CONFLICT, "Agent role is disabled")
+                ),
+                status = HttpStatusCode.Conflict,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.setRoleDisabled(10L, disabled = false)) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(409, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.CONFLICT.code, error.apiError.code)
+            }
+        }
+    }
+
     @Test
     fun `updateRole - failure - 404 Not Found`() = runTest {
         val request = UpdateAgentRoleRequest(name = "editor", modelId = 1L, modelSettingsId = 2L)

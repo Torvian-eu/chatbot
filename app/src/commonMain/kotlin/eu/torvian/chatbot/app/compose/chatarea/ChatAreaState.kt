@@ -17,7 +17,8 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * Encapsulates all UI state relevant to the main Chat Area.
  *
  * @property sessionUiState The state of the currently loaded chat session.
- * @property availableAgentRoles The state of all agent roles owned by the current user.
+ * @property availableAgentRoles The state of agent roles available for the top-bar selector; filtered to
+ *            roles not disabled for the current user (disabled roles are hidden from the selector).
  * @property currentAgentRole The agent role currently selected for the session, or null when none is attached.
  * @property canSend Whether the composer is enabled: a resolvable agent role with a model and settings is required.
  * @property modelsById A map of all available models indexed by their ID for quick lookup.

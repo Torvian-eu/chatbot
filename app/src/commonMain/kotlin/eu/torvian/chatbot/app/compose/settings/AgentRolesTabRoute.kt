@@ -100,6 +100,7 @@ fun AgentRolesTabRoute(
             viewModel.updateRoleForm(update)
         override fun onSaveRole() = viewModel.saveRole()
         override fun onDeleteRole(roleId: Long) = viewModel.deleteRole(roleId)
+        override fun onToggleRoleDisabled(role: AgentRoleDto) = viewModel.setRoleDisabled(role)
         override fun onCancelDialog() = viewModel.cancelDialog()
     }
 

@@ -43,8 +43,11 @@ interface ChatState {
     val availableModels: StateFlow<DataState<RepositoryError, List<LLMModel>>>
 
     /**
-     * The list of agent roles owned by the current user, used by the top-bar role selector
-     * and the role management surface.
+     * The list of agent roles available for session selection, used by the top-bar role selector.
+     * Filtered to roles that are **not disabled for the current user**: disabled roles drop out of
+     * the selector and of the [currentAgentRole] derivation, so a session attached to a disabled
+     * role resolves as inert ("No role", composer gated). This is a filtered view of the repository
+     * stream; the settings tab reads the unfiltered stream so disabled roles stay re-enableable.
      */
     val availableAgentRoles: StateFlow<DataState<RepositoryError, List<AgentRoleDto>>>
 

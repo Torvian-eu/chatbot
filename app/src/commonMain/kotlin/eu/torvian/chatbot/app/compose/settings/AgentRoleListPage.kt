@@ -22,6 +22,7 @@ import eu.torvian.chatbot.common.models.agent.AgentRoleDto
  * @param roles Roles to render in the list.
  * @param selectedRole Currently focused role, used only for row highlighting.
  * @param onRoleSelected Callback invoked when the user opens a role detail page.
+ * @param onToggleRoleDisabled Callback invoked when the user flips a role's enable/disable switch.
  * @param onAddNewRole Callback invoked when the user starts the add-role flow.
  * @param modifier Modifier applied to the page container.
  */
@@ -30,6 +31,7 @@ fun AgentRoleListPage(
     roles: List<AgentRoleDto>,
     selectedRole: AgentRoleDto?,
     onRoleSelected: (AgentRoleDto) -> Unit,
+    onToggleRoleDisabled: (AgentRoleDto) -> Unit,
     onAddNewRole: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -73,6 +75,7 @@ fun AgentRoleListPage(
                     AgentRoleListItem(
                         role = role,
                         isSelected = selectedRole?.id == role.id,
+                        onToggleDisabled = onToggleRoleDisabled,
                         onClick = { onRoleSelected(role) }
                     )
                 }

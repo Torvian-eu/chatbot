@@ -74,6 +74,21 @@ interface AgentRoleRepository {
     suspend fun updateRole(roleId: Long, request: UpdateAgentRoleRequest): Either<RepositoryError, AgentRoleDto>
 
     /**
+     * Sets the disabled state of a role for the current user (per-user, idempotent).
+     *
+     * After a successful toggle the updated role replaces the previous entry in [roles] (mirroring
+     * the [updateRole] refresh pattern), so the chat selector and the settings tab react without a
+     * manual reload. The settings tab reads the unfiltered stream and therefore keeps disabled roles
+     * visible and re-enableable; the chat derivation filters them out on top of this same stream.
+     *
+     * @param roleId The unique identifier of the role to toggle.
+     * @param disabled Desired state: `true` disables the role for the current user, `false` re-enables it.
+     * @return [Either.Right] with the updated [AgentRoleDto] on success, or [Either.Left] with
+     *         [RepositoryError] on failure.
+     */
+    suspend fun setRoleDisabled(roleId: Long, disabled: Boolean): Either<RepositoryError, AgentRoleDto>
+
+    /**
      * Deletes an agent role and removes it from [roles].
      *
      * Sessions referencing the role are unassigned server-side via `SET NULL`; the next session

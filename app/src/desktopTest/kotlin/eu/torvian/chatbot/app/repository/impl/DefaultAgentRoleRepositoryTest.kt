@@ -107,6 +107,40 @@ class DefaultAgentRoleRepositoryTest {
     }
 
     @Test
+    fun `setRoleDisabled - replaces entry in state with the new flag`() = runTest {
+        coEvery { api.getAllRoles() } returns Either.Right(listOf(role(1, "writer")))
+        repository.loadRoles()
+
+        val disabled = role(1, "writer").copy(disabled = true)
+        coEvery { api.setRoleDisabled(1L, true) } returns Either.Right(disabled)
+
+        val result = repository.setRoleDisabled(1L, disabled = true)
+
+        assertTrue(result.isRight())
+        val state = repository.roles.value
+        assertTrue(state is DataState.Success)
+        assertEquals(true, state.data.single().disabled)
+        coVerify(exactly = 1) { api.setRoleDisabled(1L, true) }
+    }
+
+    @Test
+    fun `setRoleDisabled - failure leaves state unchanged`() = runTest {
+        coEvery { api.getAllRoles() } returns Either.Right(listOf(role(1, "writer")))
+        repository.loadRoles()
+
+        coEvery { api.setRoleDisabled(1L, true) } returns Either.Left(
+            eu.torvian.chatbot.app.service.api.ApiResourceError.UnknownError("boom", null)
+        )
+
+        val result = repository.setRoleDisabled(1L, disabled = true)
+
+        assertTrue(result.isLeft())
+        val state = repository.roles.value
+        assertTrue(state is DataState.Success)
+        assertEquals(false, state.data.single().disabled)
+    }
+
+    @Test
     fun `deleteRole - removes entry from state`() = runTest {
         coEvery { api.getAllRoles() } returns Either.Right(listOf(role(1, "writer"), role(2, "coder")))
         repository.loadRoles()

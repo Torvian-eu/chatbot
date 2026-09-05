@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.service.api
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleDisabledRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 
 /**
@@ -57,6 +58,20 @@ interface AgentRoleApi {
      *         [Either.Left] containing an [ApiResourceError] on failure.
      */
     suspend fun updateRole(roleId: Long, request: UpdateAgentRoleRequest): Either<ApiResourceError, AgentRoleDto>
+
+    /**
+     * Sets the disabled state of a role for the current user (per-user, idempotent).
+     *
+     * Corresponds to `PUT /api/v1/agent-roles/{roleId}/disabled` with body
+     * [UpdateAgentRoleDisabledRequest]. The app always acts as the current authenticated user, so no
+     * per-user client plumbing is needed.
+     *
+     * @param roleId The unique identifier of the role to toggle.
+     * @param disabled Desired state: `true` disables the role for the current user, `false` re-enables it.
+     * @return [Either.Right] containing the updated [AgentRoleDto] on success, or
+     *         [Either.Left] containing an [ApiResourceError] on failure.
+     */
+    suspend fun setRoleDisabled(roleId: Long, disabled: Boolean): Either<ApiResourceError, AgentRoleDto>
 
     /**
      * Deletes an agent role. Sessions referencing it are unassigned via `SET NULL` on the server.

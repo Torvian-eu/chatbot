@@ -180,6 +180,33 @@ class AgentRolesViewModelTest {
     }
 
     @Test
+    fun `setRoleDisabled - routes the flipped state to the repository`() = runTest(dispatcher) {
+        val enabled = role(7, "writer")
+        val disabled = enabled.copy(disabled = true)
+        coEvery { repository.setRoleDisabled(7L, true) } returns Either.Right(disabled)
+
+        viewModel.setRoleDisabled(enabled)
+
+        coVerify(exactly = 1) { repository.setRoleDisabled(7L, true) }
+        coVerify(exactly = 0) { notificationService.repositoryError(any<RepositoryError>(), any<String>()) }
+    }
+
+    @Test
+    fun `setRoleDisabled - failure notifies without changing state`() = runTest(dispatcher) {
+        val disabled = role(7, "writer").copy(disabled = true)
+        coEvery { repository.setRoleDisabled(7L, false) } returns Either.Left(
+            RepositoryError.OtherError("toggle failed")
+        )
+
+        viewModel.setRoleDisabled(disabled)
+
+        coVerify(exactly = 1) { repository.setRoleDisabled(7L, false) }
+        coVerify {
+            notificationService.repositoryError(any<RepositoryError>(), any<String>())
+        }
+    }
+
+    @Test
     fun `form mode is preserved between add and edit`() = runTest(dispatcher) {
         viewModel.startAddingNewRole()
         val addForm = (viewModel.dialogState.value as AgentRoleDialogState.AddRole).formState
