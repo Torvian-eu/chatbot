@@ -101,6 +101,9 @@ class DefaultConversationTurnPreparationServiceTest {
         stream = false
     )
 
+    /** The authenticated user sending the message whose per-user disabled state applies to the turn. */
+    private val userId = 7L
+
     private val testRole = AgentRole(
         id = 1L,
         name = "Test Role",
@@ -163,7 +166,7 @@ class DefaultConversationTurnPreparationServiceTest {
     @Test
     fun `prepareNewMessageTurn should return ModelConfigurationError when content is null and parentMessageId is null`() =
         runTest {
-            val result = preparationService.prepareNewMessageTurn(1L, null, null, false)
+            val result = preparationService.prepareNewMessageTurn(userId, 1L, null, null, false)
 
             assertTrue(result.isLeft())
             val error = result.leftOrNull()
@@ -181,7 +184,7 @@ class DefaultConversationTurnPreparationServiceTest {
         val sessionId = 999L
         coEvery { sessionDao.getSessionById(sessionId) } returns SessionError.SessionNotFound(sessionId).left()
 
-        val result = preparationService.prepareNewMessageTurn(sessionId, "test content", null, false)
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
 
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
@@ -199,7 +202,7 @@ class DefaultConversationTurnPreparationServiceTest {
         val sessionId = 1L
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.copy(agentRoleId = null).right()
 
-        val result = preparationService.prepareNewMessageTurn(sessionId, "test content", null, false)
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
 
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
@@ -215,9 +218,9 @@ class DefaultConversationTurnPreparationServiceTest {
     fun `prepareNewMessageTurn should return ModelConfigurationError when role references a deleted model`() = runTest {
         val sessionId = 1L
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
-        coEvery { agentRoleService.getAgentRoleById(testSession.agentRoleId!!) } returns testRole.copy(modelId = null).right()
+        coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns testRole.copy(modelId = null).right()
 
-        val result = preparationService.prepareNewMessageTurn(sessionId, "test content", null, false)
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
 
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
@@ -234,10 +237,10 @@ class DefaultConversationTurnPreparationServiceTest {
         val sessionId = 1L
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery {
-            agentRoleService.getAgentRoleById(testSession.agentRoleId!!)
+            agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!)
         } returns testRole.copy(modelSettingsId = null).right()
 
-        val result = preparationService.prepareNewMessageTurn(sessionId, "test content", null, false)
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
 
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
@@ -256,7 +259,7 @@ class DefaultConversationTurnPreparationServiceTest {
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery { messageDao.getMessageById(parentMessageId) } returns MessageError.MessageNotFound(parentMessageId).left()
 
-        val result = preparationService.prepareNewMessageTurn(sessionId, "test content", parentMessageId, false)
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", parentMessageId, false)
 
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
@@ -275,10 +278,10 @@ class DefaultConversationTurnPreparationServiceTest {
         val sessionId = 1L
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery {
-            agentRoleService.getAgentRoleById(testSession.agentRoleId!!)
+            agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!)
         } returns AgentRoleError.NotFound(testSession.agentRoleId!!).left()
 
-        val result = preparationService.prepareNewMessageTurn(sessionId, "test content", null, false)
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
 
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
@@ -300,14 +303,14 @@ class DefaultConversationTurnPreparationServiceTest {
             instructions = listOf(CustomInstruction("Role", "You are a senior architect."))
         )
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
-        coEvery { agentRoleService.getAgentRoleById(testSession.agentRoleId!!) } returns roleWithInstructions.right()
+        coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns roleWithInstructions.right()
         coEvery { systemPromptComposer.compose(roleWithInstructions) } returns "composed system"
         coEvery { llmModelService.getModelById(testModel.id) } returns testModel.right()
         coEvery { modelSettingsService.getSettingsById(streamingSettings.id) } returns streamingSettings.right()
         coEvery { llmProviderService.getProviderById(testModel.providerId) } returns testProvider.right()
         coEvery { credentialManager.getCredential(testProvider.apiKeyId!!) } returns "test-api-key".right()
 
-        val result = preparationService.prepareNewMessageTurn(sessionId, "test content", null, true)
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, true)
 
         assertTrue(result.isRight())
         val preparedTurn = result.getOrNull()
@@ -351,7 +354,7 @@ class DefaultConversationTurnPreparationServiceTest {
             tools = setOf(toolId)
         )
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
-        coEvery { agentRoleService.getAgentRoleById(testSession.agentRoleId!!) } returns roleWithTools.right()
+        coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns roleWithTools.right()
         coEvery { systemPromptComposer.compose(roleWithTools) } returns ""
         coEvery { llmModelService.getModelById(toolCallingModel.id) } returns toolCallingModel.right()
         coEvery { modelSettingsService.getSettingsById(testSettings.id) } returns testSettings.right()
@@ -359,9 +362,33 @@ class DefaultConversationTurnPreparationServiceTest {
         coEvery { credentialManager.getCredential(testProvider.apiKeyId!!) } returns "test-api-key".right()
         coEvery { toolService.getToolsByIds(setOf(toolId)) } returns mapOf(toolId to tool)
 
-        val result = preparationService.prepareNewMessageTurn(sessionId, "test content", null, false)
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
 
         assertEquals(listOf(tool), result.getOrNull()?.llmConfig?.tools)
         coVerify(exactly = 1) { toolService.getToolsByIds(setOf(toolId)) }
+    }
+
+    /**
+     * Verifies inert semantics: a role disabled for the user sending the message blocks the turn with
+     * a model-configuration error, using the flag already loaded on the domain role (no extra lookup).
+     */
+    @Test
+    fun `prepareNewMessageTurn should return ModelConfigurationError when the attached role is disabled for the sender`() = runTest {
+        val sessionId = 1L
+        coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
+        coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns testRole.copy(disabled = true).right()
+
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
+
+        assertTrue(result.isLeft())
+        val error = result.leftOrNull()
+        assertNotNull(error)
+        assertIs<ValidateNewMessageError.ModelConfigurationError>(error)
+        assertTrue(error.message.contains("disabled"))
+        assertTrue(error.message.contains(userId.toString()))
+        // The disabled flag rides the loaded domain role; the role service is consulted exactly once
+        // (the disabled read is folded into the single-role load, no additional lookup at turn time).
+        coVerify(exactly = 1) { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) }
+        coVerify(exactly = 0) { llmModelService.getModelById(any()) }
     }
 }

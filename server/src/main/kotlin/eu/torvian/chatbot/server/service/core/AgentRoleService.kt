@@ -54,12 +54,31 @@ interface AgentRoleService {
      * Intended for server-internal flows (e.g. turn preparation) where the role reference came from an
      * already-authorized session, so re-checking ownership is unnecessary. The returned role carries
      * domain `AgentInstruction` objects whose messages are resolved lazily via
-     * `AgentInstruction.loadMessage()`.
+     * `AgentInstruction.loadMessage()`, and the per-user `disabled` flag resolved for [userId] (the
+     * caller has already bound [userId] to the session, so scoping only the flag — never the role row
+     * lookup — keeps the per-user semantics correct for future shared roles).
      *
+     * @param userId The requesting user whose per-user disabled state applies to the loaded role.
      * @param roleId The ID of the role to load.
      * @return Either [AgentRoleError.NotFound] if the role does not exist, or the domain [AgentRole].
      */
-    suspend fun getAgentRoleById(roleId: Long): Either<AgentRoleError.NotFound, AgentRole>
+    suspend fun getAgentRoleById(userId: Long, roleId: Long): Either<AgentRoleError.NotFound, AgentRole>
+
+    /**
+     * Sets the disabled state of a role owned by [userId] for that same user, idempotently.
+     *
+     * The operation is ownership-checked (a foreign or nonexistent role collapses to
+     * [AgentRoleError.NotFound], consistent with every other role op) and scoped per user: a row
+     * `(user, role)` is inserted for `disabled = true` and deleted for `false`. The returned DTO
+     * always carries the newly requested [AgentRoleDto.disabled] value.
+     *
+     * @param userId The requesting user; also the owner whose ownership is verified and the user the
+     *            disabled state applies to.
+     * @param roleId The ID of the role to toggle.
+     * @param disabled Desired state: `true` disables the role for [userId], `false` re-enables it.
+     * @return Either [AgentRoleError.NotFound] or the updated [AgentRoleDto] with resolved instructions.
+     */
+    suspend fun setRoleDisabled(userId: Long, roleId: Long, disabled: Boolean): Either<AgentRoleError.NotFound, AgentRoleDto>
 
     /**
      * Creates a new agent role owned by the user.

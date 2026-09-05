@@ -102,6 +102,20 @@ class ReadAgentRoleToolTest {
         assertEquals("writer", decoded.name)
         assertEquals(setOf(5L, 6L), decoded.tools)
         assertEquals(1, decoded.instructions.size)
+        // The DTO serialization carries the per-user disabled flag (read-only exposure).
+        assertTrue(output.contains("\"disabled\":false"), "disabled must be present in the output JSON")
+    }
+
+    @Test
+    fun `returns a disabled role flag in the output`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        coEvery { agentRoleService.getRoleById(userId, 1L) } returns sampleRole().copy(disabled = true).right()
+        val tool = ReadAgentRoleTool(agentRoleService, json)
+
+        val output = assertSuccess(tool.execute(userId, buildJsonObject { put("role_id", 1L) }))
+        val decoded = json.decodeFromString(AgentRoleDto.serializer(), output)
+
+        assertTrue(decoded.disabled)
     }
 
     @Test

@@ -12,6 +12,8 @@ interface ConversationTurnPreparationService {
     /**
      * Validates the request shape and assembles the resolved session plus LLM runtime configuration.
      *
+     * @param userId The authenticated user whose per-user role-disabled state applies to the turn; the
+     *            caller guarantees session access for this user before invoking preparation.
      * @param sessionId Session that should receive the new turn.
      * @param content Optional user content. When null, the request continues from [parentMessageId].
      * @param parentMessageId Optional parent message to continue from.
@@ -19,6 +21,7 @@ interface ConversationTurnPreparationService {
      * @return Either the original validation error surface or the prepared runtime inputs.
      */
     suspend fun prepareNewMessageTurn(
+        userId: Long,
         sessionId: Long,
         content: String?,
         parentMessageId: Long?,

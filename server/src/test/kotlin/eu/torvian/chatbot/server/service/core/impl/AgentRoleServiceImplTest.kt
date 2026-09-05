@@ -31,6 +31,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -45,6 +46,7 @@ class AgentRoleServiceImplTest {
     private lateinit var agentRoleToolDao: AgentRoleToolDao
     private lateinit var agentRoleOwnershipDao: AgentRoleOwnershipDao
     private lateinit var agentRoleSpawnableRoleDao: AgentRoleSpawnableRoleDao
+    private lateinit var agentRoleDisabledDao: AgentRoleDisabledDao
     private lateinit var modelDao: ModelDao
     private lateinit var settingsDao: SettingsDao
     private lateinit var toolDefinitionDao: ToolDefinitionDao
@@ -79,6 +81,7 @@ class AgentRoleServiceImplTest {
         agentRoleToolDao = mockk()
         agentRoleOwnershipDao = mockk()
         agentRoleSpawnableRoleDao = mockk()
+        agentRoleDisabledDao = mockk()
         modelDao = mockk()
         settingsDao = mockk()
         toolDefinitionDao = mockk()
@@ -89,6 +92,7 @@ class AgentRoleServiceImplTest {
             agentRoleToolDao = agentRoleToolDao,
             agentRoleSpawnableRoleDao = agentRoleSpawnableRoleDao,
             agentRoleOwnershipDao = agentRoleOwnershipDao,
+            agentRoleDisabledDao = agentRoleDisabledDao,
             modelDao = modelDao,
             settingsDao = settingsDao,
             toolDefinitionDao = toolDefinitionDao,
@@ -101,6 +105,13 @@ class AgentRoleServiceImplTest {
         coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(any()) } returns emptySet()
         coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(any()) } returns emptyMap()
         coEvery { agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(any(), any()) } returns Unit
+
+        // The disabled-markers DAO is likewise always consulted; default its reads to "enabled" for
+        // both the batch and the single-role shapes, and its writes to no-ops unless a test asserts
+        // specific behavior.
+        coEvery { agentRoleDisabledDao.getDisabledRoleIds(any(), any()) } returns emptySet()
+        coEvery { agentRoleDisabledDao.isRoleDisabled(any(), any()) } returns false
+        coEvery { agentRoleDisabledDao.setRoleDisabled(any(), any(), any()) } returns Unit
 
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
@@ -115,6 +126,7 @@ class AgentRoleServiceImplTest {
             agentRoleToolDao,
             agentRoleOwnershipDao,
             agentRoleSpawnableRoleDao,
+            agentRoleDisabledDao,
             modelDao,
             settingsDao,
             toolDefinitionDao,
@@ -483,7 +495,7 @@ class AgentRoleServiceImplTest {
         coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
         coEvery { agentRoleOwnershipDao.getOwner(1L) } returns GetOwnerError.ResourceNotFound("1").left()
 
-        val result = service.getAgentRoleById(1L)
+        val result = service.getAgentRoleById(userId, 1L)
 
         assertTrue(result.isLeft())
         assertIs<eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError.NotFound>(result.leftOrNull())
@@ -644,7 +656,7 @@ class AgentRoleServiceImplTest {
         coEvery { agentRoleToolDao.getToolsForRole(1L) } returns emptySet()
         coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(1L) } returns emptySet()
 
-        val result = service.getAgentRoleById(1L)
+        val result = service.getAgentRoleById(userId, 1L)
 
         assertTrue(result.isRight())
         val role = result.getOrNull()!!
@@ -653,5 +665,141 @@ class AgentRoleServiceImplTest {
         val modelSpecific = role.instructions[1]
         assertIs<ModelSpecificInstruction>(modelSpecific)
         assertEquals(2L, modelSpecific.modelId)
+    }
+
+    @Test
+    fun `getAllRolesForUser maps the per-user disabled flag with a single batch read`() = runTest {
+        coEvery { agentRoleDao.getAllRolesForUser(userId) } returns listOf(TestDefaults.agentRole1, TestDefaults.agentRole2)
+        coEvery { agentRoleToolDao.getToolsForRoles(listOf(1L, 2L)) } returns mapOf(1L to emptySet(), 2L to emptySet())
+        coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(listOf(1L, 2L)) } returns emptyMap()
+        // Role 1 is disabled for the user; role 2 is not. The service must resolve both flags from the
+        // single batch DAO read (no N+1 per role).
+        coEvery { agentRoleDisabledDao.getDisabledRoleIds(userId, listOf(1L, 2L)) } returns setOf(1L)
+
+        val roles = service.getAllRolesForUser(userId)
+
+        assertEquals(2, roles.size)
+        assertTrue(roles[0].disabled)
+        assertFalse(roles[1].disabled)
+        coVerify(exactly = 1) { agentRoleDisabledDao.getDisabledRoleIds(userId, listOf(1L, 2L)) }
+    }
+
+    @Test
+    fun `getRoleById reports disabled for the requesting user when a side-table row exists`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { agentRoleToolDao.getToolsForRole(1L) } returns emptySet()
+        coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(1L) } returns emptySet()
+        coEvery { agentRoleDisabledDao.isRoleDisabled(userId, 1L) } returns true
+
+        val result = service.getRoleById(userId, 1L)
+
+        assertTrue(result.isRight())
+        assertTrue(result.getOrNull()!!.disabled)
+    }
+
+    @Test
+    fun `disabled state is isolated per user for the same role`() = runTest {
+        // userA disabled role 1; the service must keep userB's reads enabled for the same role. The
+        // domain load (`getAgentRoleById`) is the requester-scoped path: the role row is resolved by
+        // id, ownership stays with userA, and only the disabled flag varies with the requesting user
+        // (exactly what future shared roles need).
+        val userA = 7L
+        val userB = 8L
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userA.right()
+        coEvery { agentRoleDao.getRoleByNameForUser(userA, "Senior Architect") } returns TestDefaults.agentRole1.right()
+        coEvery { agentRoleToolDao.getToolsForRole(1L) } returns emptySet()
+        coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(1L) } returns emptySet()
+        coEvery { agentRoleDisabledDao.isRoleDisabled(userA, 1L) } returns true
+        coEvery { agentRoleDisabledDao.isRoleDisabled(userB, 1L) } returns false
+
+        val dtoForA = service.getRoleById(userA, 1L).getOrNull()!!
+        val byNameForA = service.getRoleByName(userA, "Senior Architect").getOrNull()!!
+        val domainForA = service.getAgentRoleById(userA, 1L).getOrNull()!!
+        val domainForB = service.getAgentRoleById(userB, 1L).getOrNull()!!
+
+        assertTrue(dtoForA.disabled)
+        assertTrue(byNameForA.disabled)
+        assertTrue(domainForA.disabled)
+        assertFalse(domainForB.disabled)
+    }
+
+    @Test
+    fun `getAgentRoleById resolves the per-user disabled flag on the domain role`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { agentRoleToolDao.getToolsForRole(1L) } returns emptySet()
+        coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(1L) } returns emptySet()
+        coEvery { agentRoleDisabledDao.isRoleDisabled(userId, 1L) } returns true
+
+        val result = service.getAgentRoleById(userId, 1L)
+
+        assertTrue(result.isRight())
+        assertTrue(result.getOrNull()!!.disabled)
+        coVerify(exactly = 1) { agentRoleDisabledDao.isRoleDisabled(userId, 1L) }
+    }
+
+    @Test
+    fun `createRole returns a role enabled for the new owner`() = runTest {
+        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        coEvery {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+        } returns TestDefaults.agentRole1
+        coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val result = service.createRole(userId, validRequest())
+
+        assertTrue(result.isRight())
+        assertFalse(result.getOrNull()!!.disabled)
+        // No disabled marker is consulted or written for a fresh role.
+        coVerify(exactly = 0) { agentRoleDisabledDao.getDisabledRoleIds(any(), any()) }
+        coVerify(exactly = 0) { agentRoleDisabledDao.isRoleDisabled(any(), any()) }
+        coVerify(exactly = 0) { agentRoleDisabledDao.setRoleDisabled(any(), any(), any()) }
+    }
+
+    @Test
+    fun `setRoleDisabled disables an owned role and returns the updated DTO`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { agentRoleToolDao.getToolsForRole(1L) } returns emptySet()
+        coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(1L) } returns emptySet()
+
+        val result = service.setRoleDisabled(userId, 1L, disabled = true)
+
+        assertTrue(result.isRight())
+        assertTrue(result.getOrNull()!!.disabled)
+        coVerify(exactly = 1) { agentRoleDisabledDao.setRoleDisabled(userId, 1L, true) }
+    }
+
+    @Test
+    fun `setRoleDisabled re-enables idempotently and returns an enabled DTO`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { agentRoleToolDao.getToolsForRole(1L) } returns emptySet()
+        coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(1L) } returns emptySet()
+
+        val result = service.setRoleDisabled(userId, 1L, disabled = false)
+
+        assertTrue(result.isRight())
+        assertFalse(result.getOrNull()!!.disabled)
+        // Same idempotent write pattern regardless of the current side-table state.
+        coVerify(exactly = 1) { agentRoleDisabledDao.setRoleDisabled(userId, 1L, false) }
+    }
+
+    @Test
+    fun `setRoleDisabled rejects a foreign role without writing`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns GetOwnerError.ResourceNotFound("1").left()
+
+        val result = service.setRoleDisabled(userId, 1L, disabled = true)
+
+        assertTrue(result.isLeft())
+        assertIs<eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError.NotFound>(result.leftOrNull())
+        coVerify(exactly = 0) { agentRoleDisabledDao.setRoleDisabled(any(), any(), any()) }
     }
 }

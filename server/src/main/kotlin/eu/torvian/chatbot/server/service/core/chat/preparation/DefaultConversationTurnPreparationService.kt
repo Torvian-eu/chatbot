@@ -62,6 +62,7 @@ class DefaultConversationTurnPreparationService(
 ) : ConversationTurnPreparationService {
 
     override suspend fun prepareNewMessageTurn(
+        userId: Long,
         sessionId: Long,
         content: String?,
         parentMessageId: Long?,
@@ -102,7 +103,17 @@ class DefaultConversationTurnPreparationService(
                     "Agent role $agentRoleId selected for session $sessionId no longer exists"
                 )
             }) {
-                agentRoleService.getAgentRoleById(agentRoleId).bind()
+                agentRoleService.getAgentRoleById(userId, agentRoleId).bind()
+            }
+
+            // Inert semantics: a role disabled for the user sending the message is unusable even if it
+            // is still attached. `disabled` rides the loaded domain role (resolved per requesting user
+            // via getAgentRoleById), so this gate adds no extra database lookup. It is the authoritative
+            // enforcement that also closes the attach/toggle race window.
+            ensure(!role.disabled) {
+                ValidateNewMessageError.ModelConfigurationError(
+                    "Agent role $agentRoleId selected for session $sessionId is disabled for user $userId"
+                )
             }
 
             // model_id/model_settings_id are nullable because deleting the referenced model/settings

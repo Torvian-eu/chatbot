@@ -273,6 +273,7 @@ fun serviceModule() = module {
             agentRoleToolDao = get(),
             agentRoleSpawnableRoleDao = get(),
             agentRoleOwnershipDao = get(),
+            agentRoleDisabledDao = get(),
             modelDao = get(),
             settingsDao = get(),
             toolDefinitionDao = get(),

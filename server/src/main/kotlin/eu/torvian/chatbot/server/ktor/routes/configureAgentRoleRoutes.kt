@@ -4,6 +4,7 @@ import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.resources.AgentRoleResource
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleDisabledRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
@@ -32,6 +33,7 @@ import io.ktor.server.routing.*
  * - GET /api/v1/agent-roles/{roleId} - Get a specific role (with resolved instructions)
  * - PUT /api/v1/agent-roles/{roleId} - Update a specific role
  * - DELETE /api/v1/agent-roles/{roleId} - Delete a specific role
+ * - PUT /api/v1/agent-roles/{roleId}/disabled - Set the per-user disabled state of a specific role
  *
  * @param agentRoleService Service backing the agent-role CRUD operations.
  * @param authorizationService Authorization service retained for parity with the other resource routes;
@@ -95,6 +97,19 @@ fun Route.configureAgentRoleRoutes(
                 }
             }
             call.respondEither(result, HttpStatusCode.NoContent)
+        }
+
+        // PUT /api/v1/agent-roles/{roleId}/disabled - Toggle the per-user disabled state (ownership checked)
+        put<AgentRoleResource.ById.Disabled> { resource ->
+            val userId = call.getUserId()
+            val request = call.receive<UpdateAgentRoleDisabledRequest>()
+
+            val result = either {
+                withError({ e: AgentRoleError -> e.toApiError() }) {
+                    agentRoleService.setRoleDisabled(userId, resource.parent.roleId, request.disabled).bind()
+                }
+            }
+            call.respondEither(result)
         }
     }
 }

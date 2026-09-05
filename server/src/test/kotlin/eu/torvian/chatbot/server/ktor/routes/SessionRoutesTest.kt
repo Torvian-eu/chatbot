@@ -488,6 +488,37 @@ class SessionRoutesTest {
     }
 
     @Test
+    fun `PUT session agentRole should return 409 when the role is disabled for the requesting user`() = sessionTestApplication {
+        // Arrange
+        testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
+        testDataManager.insertAgentRoleOwnership(testAgentRole2.id, authHelper.defaultTestUser.id)
+        // A per-user disabled marker: the role exists and is owned, but the requesting user disabled it.
+        testDataManager.insertAgentRoleDisabled(testAgentRole2.id, authHelper.defaultTestUser.id)
+        val updateRequest = UpdateSessionAgentRoleRequest(agentRoleId = testAgentRole2.id)
+
+        // Act
+        val response =
+            client.put(href(SessionResource.ById.AgentRole(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
+
+        // Assert
+        assertEquals(HttpStatusCode.Conflict, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.CONFLICT.code, error.code)
+        assertEquals("Agent role is disabled", error.message)
+
+        // The attach must not reach the session update: the session keeps its previous role
+        // (testSession.agentRoleId = testAgentRole.id), i.e. the disabled role was never attached.
+        val retrievedSession = testDataManager.getChatSession(testSession.id)
+        assertNotNull(retrievedSession)
+        assertEquals(testAgentRole.id, retrievedSession.agentRoleId)
+    }
+
+    @Test
     fun `PUT session agentRole should return 404 for non-existent session`() = sessionTestApplication {
         // Arrange
         val nonExistentId = 999L

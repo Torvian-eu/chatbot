@@ -17,6 +17,8 @@ interface ChatService {
     /**
      * Validates a new message request and prepares the configuration.
      *
+     * @param userId The authenticated user sending the message; the per-user role-disabled state is
+     *            resolved for this user during preparation.
      * @param sessionId The ID of the session
      * @param content The message content (null for Branch & Continue mode)
      * @param parentMessageId Optional parent message ID. Must be non-null when [content] is null.
@@ -24,6 +26,7 @@ interface ChatService {
      * @return Either a validation error or a pair of (ChatSession, LLMConfig)
      */
     suspend fun validateProcessNewMessageRequest(
+        userId: Long,
         sessionId: Long,
         content: String?,
         parentMessageId: Long?,

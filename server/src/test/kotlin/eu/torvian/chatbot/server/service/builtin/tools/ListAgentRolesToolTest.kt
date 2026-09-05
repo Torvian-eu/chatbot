@@ -12,6 +12,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -129,7 +130,8 @@ class ListAgentRolesToolTest {
             "modelSettingsId",
             "tools",
             "spawnableAgentRoleIds",
-            "instructions"
+            "instructions",
+            "disabled"
         )
 
         assertEquals(2, roles.size)
@@ -142,6 +144,8 @@ class ListAgentRolesToolTest {
         assertEquals("Writes code", writer.getValue("description").jsonPrimitive.content)
         assertEquals(3L, writer.getValue("modelId").jsonPrimitive.long)
         assertEquals(4L, writer.getValue("modelSettingsId").jsonPrimitive.long)
+        // The per-user flag is always present (boolean, never omitted).
+        assertEquals(false, writer.getValue("disabled").jsonPrimitive.boolean)
         assertEquals(
             setOf(5L, 6L),
             writer.getValue("tools").jsonArray.map { it.jsonPrimitive.long }.toSet()
@@ -163,6 +167,8 @@ class ListAgentRolesToolTest {
         assertEquals(emptyList(), editor.getValue("tools").jsonArray)
         assertEquals(emptyList(), editor.getValue("spawnableAgentRoleIds").jsonArray)
         assertEquals(emptyList(), editor.getValue("instructions").jsonArray)
+        // The disabled flag is always present even for roles without a side-table row.
+        assertEquals(false, editor.getValue("disabled").jsonPrimitive.boolean)
 
         assertFalse(output.contains("Role instruction name"))
         assertFalse(output.contains("Custom instruction name"))
@@ -186,6 +192,25 @@ class ListAgentRolesToolTest {
         assertTrue(tool.description.contains("instruction types only"))
         assertTrue(tool.description.contains("read_agent_role"))
         assertTrue(tool.description.contains("full instruction contents"))
+    }
+
+    /**
+     * Verifies that the per-user disabled flag is projected for disabled roles too.
+     */
+    @Test
+    fun `projects the disabled flag for roles disabled by the current user`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        coEvery { agentRoleService.getAllRolesForUser(userId) } returns listOf(
+            sampleRole(id = 1L).copy(disabled = true),
+            sampleRole(id = 2L, name = "editor").copy(disabled = false)
+        )
+        val tool = ListAgentRolesTool(agentRoleService, json)
+
+        val output = assertSuccess(tool.execute(userId, buildJsonObject { }))
+        val roles = json.parseToJsonElement(output).jsonArray
+
+        assertEquals(true, roles[0].jsonObject.getValue("disabled").jsonPrimitive.boolean)
+        assertEquals(false, roles[1].jsonObject.getValue("disabled").jsonPrimitive.boolean)
     }
 
     /**
