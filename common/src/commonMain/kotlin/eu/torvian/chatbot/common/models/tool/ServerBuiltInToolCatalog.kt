@@ -83,7 +83,7 @@ object ServerBuiltInToolCatalog {
     /** JSON property holding the spawn allow-list (role ids a role may spawn). */
     const val SPAWNABLE_AGENT_ROLE_IDS_PROPERTY = "spawnable_agent_role_ids"
 
-    /** JSON property holding the flat instruction list of a role (advanced; see [AgentInstructionDto]). */
+    /** JSON property holding the flat instruction list of a role (advanced; see AgentInstructionDto). */
     const val INSTRUCTIONS_PROPERTY = "instructions"
 
     /** Canonical, unprefixed catalog name of the `insert_agent_role_instruction` tool. */
@@ -175,7 +175,7 @@ object ServerBuiltInToolCatalog {
     }
 
     /**
-     * Builds a JSON Schema for a single instruction object (one [AgentInstructionDto]).
+     * Builds a JSON Schema for a single instruction object (one AgentInstructionDto).
      *
      * Shared by the `items` of the `instructions` array (`create_agent_role`/`update_agent_role`)
      * and the `instruction` parameter of `insert_agent_role_instruction`. The schema documents the
@@ -345,15 +345,16 @@ object ServerBuiltInToolCatalog {
             name = LIST_AGENT_ROLES_NAME,
             description = "Lists all agent roles owned by the current user, returning each role's id, " +
                 "name, display name, description, model id, model settings id, attached tool ids, " +
-                "spawnable role ids, and instruction types only. Use read_agent_role with a role id " +
-                "to inspect full instruction contents.",
+                "spawnable role ids, instruction types only, and its disabled flag (roles disabled by " +
+                "the current user are hidden from session selection). Use read_agent_role with a role " +
+                "id to inspect full instruction contents.",
             inputSchema = emptyObjectSchema()
         ),
         ServerBuiltInToolSpec(
             name = READ_AGENT_ROLE_NAME,
             description = "Reads one agent role owned by the current user by its id, returning the " +
-                "full role including its model/settings ids, attached tool ids, spawnable role ids " +
-                "and resolved instructions.",
+                "full role including its model/settings ids, attached tool ids, spawnable role ids, " +
+                "resolved instructions, and its disabled flag for the current user.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
