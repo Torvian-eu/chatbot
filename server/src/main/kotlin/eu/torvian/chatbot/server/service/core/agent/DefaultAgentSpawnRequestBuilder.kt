@@ -17,12 +17,18 @@ import kotlinx.serialization.json.*
 /**
  * Default implementation of [AgentSpawnRequestBuilder].
  *
- * Parses the tool-call input JSON for the `subject`, `agent_role_name`, and `prompt` parameters
- * (see [OperatorToolCatalog]), resolves the role by name through the user-scoped
- * [AgentRoleService.getRoleByName], enforces the source role's spawn allow-list through
+ * Parses the tool-call input JSON for the `subject`, `agent_role_name`, `prompt`, and optional
+ * `interactive` parameters (see [OperatorToolCatalog]), resolves the role by name through the
+ * user-scoped [AgentRoleService.getRoleByName], enforces the source role's spawn allow-list through
  * [AgentRoleService.getRoleById], and assembles the [AgentSpawnRequest] with a single
  * [AgentSpawnMessage.User] carrying the prompt. The persisted [ToolCall.id] is used as the
  * correlation key echoed back in the operator's `ToolExecutionResult`.
+ *
+ * The optional `interactive` flag is validated as pure tool input before any role lookup: absent →
+ * `false` (default summary-return mode); present-but-non-boolean JSON →
+ * [SpawnRequestBuildError.InvalidInput]. `interactive = true` selects handoff mode — the request
+ * carries the flag unchanged and the operator completes the tool with empty output instead of
+ * returning the spawned agent's summary.
  *
  * @property agentRoleService User-scoped agent-role lookup used to resolve the spawn target and the
  *            source role's allow-list.
@@ -42,6 +48,11 @@ class DefaultAgentSpawnRequestBuilder(
 
     /**
      * Parses and resolves a spawn call and applies source-role authorization.
+     *
+     * The optional [OperatorToolCatalog.SPAWN_AGENT_INTERACTIVE_PROPERTY] flag is read as part of
+     * argument validation, before any role lookup: absent → `false`; a present value must be a JSON
+     * boolean, otherwise the call fails with [SpawnRequestBuildError.InvalidInput] and never reaches
+     * role resolution (malformed tool input must not touch I/O or leak whether a role exists).
      *
      * @param userId Ownership scope for role lookup.
      * @param requestingAgentRoleId Source role id from the validated session.
@@ -87,6 +98,26 @@ class DefaultAgentSpawnRequestBuilder(
                     )
                 )
 
+            // Optional handoff flag: absent → default summary-return mode; present must be a JSON
+            // boolean (true = handoff). Strings/numbers/objects/arrays/explicit null are malformed
+            // tool input, reported as InvalidInput exactly like the other parameter checks above.
+            // JSON `null` is a JsonPrimitive whose booleanOrNull is null, so it also lands here
+            // instead of silently falling back to default mode.
+            val interactive = when (val element = arguments[OperatorToolCatalog.SPAWN_AGENT_INTERACTIVE_PROPERTY]) {
+                null -> false
+                is JsonPrimitive -> element.booleanOrNull
+                    ?: raise(
+                        SpawnRequestBuildError.InvalidInput(
+                            "'${OperatorToolCatalog.SPAWN_AGENT_INTERACTIVE_PROPERTY}' must be a boolean in spawn_agent arguments"
+                        )
+                    )
+                else -> raise(
+                    SpawnRequestBuildError.InvalidInput(
+                        "'${OperatorToolCatalog.SPAWN_AGENT_INTERACTIVE_PROPERTY}' must be a boolean in spawn_agent arguments"
+                    )
+                )
+            }
+
             // The lookup is user-scoped (names are only unique per owner), so a NotFoundByName result
             // means the role does not exist or belongs to another user — both are reported identically.
             val role = withError({ _: AgentRoleError.NotFoundByName ->
@@ -110,6 +141,7 @@ class DefaultAgentSpawnRequestBuilder(
             AgentSpawnRequest(
                 agentRoleToSpawn = role,
                 subject = subject,
+                interactive = interactive,
                 operatorType = OperatorType.CLIENT_APP,
                 conversation = listOf(AgentSpawnMessage.User(prompt)),
                 toolCallId = toolCall.id

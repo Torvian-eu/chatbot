@@ -79,14 +79,21 @@ class DefaultAgentSpawnExecutorTest {
      *
      * @param toolCallId Correlation identifier carried by the request.
      * @param prompt User message sent to the spawned agent.
+     * @param interactive Whether the request selects interactive (handoff) spawn mode. Defaults to
+     *            `false` so the existing default-mode tests stay pinned to summary-return behavior.
      * @return JSON payload accepted by the app-side executor.
      */
-    private fun spawnPayload(toolCallId: Long = 42L, prompt: String = "Do the thing"): String =
+    private fun spawnPayload(
+        toolCallId: Long = 42L,
+        prompt: String = "Do the thing",
+        interactive: Boolean = false
+    ): String =
         json.encodeToString(
             AgentSpawnRequest.serializer(),
             AgentSpawnRequest(
                 agentRoleToSpawn = role,
                 subject = "Implementation task",
+                interactive = interactive,
                 conversation = listOf(AgentSpawnMessage.User(prompt)),
                 toolCallId = toolCallId
             )
@@ -260,6 +267,48 @@ class DefaultAgentSpawnExecutorTest {
         verify { viewModel.updateInput("Do the thing") }
         verify { viewModel.sendMessage() }
         verify { viewModel.lastAssistantMessageContent() }
+    }
+
+    /**
+     * Verifies interactive (handoff) mode: the session is created with the role attached and the
+     * first turn is still driven headlessly, but the spawned summary is never aggregated — the tool
+     * completes with an empty SUCCESS result as soon as the send job finishes, leaving the session
+     * for the user to continue in the app.
+     */
+    @Test
+    fun `execute in interactive handoff mode emits an empty success result and skips aggregation`() = runTest {
+        val sessionRepository = mockk<SessionRepository>()
+        coEvery { sessionRepository.createSession("Spawned: Implementation task") } returns session.right()
+        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+
+        // The summary is present, so aggregation would succeed if consulted — proving it is skipped.
+        val (resolver, viewModel) = successfulViewModel(summary = "FINAL SUMMARY")
+        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        var result: ChatClientEvent.ToolExecutionResult? = null
+
+        executor.execute(
+            toolCallId = 42L,
+            toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
+            payload = spawnPayload(interactive = true),
+            clientEvents = { result = it }
+        )
+
+        // Handoff mode: empty SUCCESS result (all ToolExecutionResult defaults) after the spawned
+        // first turn's send job completed naturally.
+        assertEquals(42L, result?.toolCallId)
+        assertNull(result?.output)
+        assertEquals(false, result?.isError)
+        assertNull(result?.errorMessage)
+        coVerify { sessionRepository.createSession("Spawned: Implementation task") }
+        coVerify { sessionRepository.updateSessionAgentRole(session.id, role.id) }
+        // The spawned conversation is still driven headlessly: load → input → send.
+        verify { viewModel.loadSession(session.id, userId) }
+        verify { viewModel.updateInput("Do the thing") }
+        verify { viewModel.sendMessage() }
+        // Handoff mode never consults the spawned summary.
+        verify(exactly = 0) { viewModel.lastAssistantMessageContent() }
+        // The finally block still runs the lifecycle no-op after natural completion.
+        verify { viewModel.forceCancelSend() }
     }
 
     @Test

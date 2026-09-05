@@ -148,4 +148,55 @@ class DefaultOperatorToolExecutorTest {
         assertEquals(ToolCallStatus.ERROR, result.status)
         assertTrue(result.errorMessage.orEmpty().contains("writer"))
     }
+
+    /**
+     * Verifies that an awaited empty (output = null) success result maps to a terminal SUCCESS tool
+     * call — the interactive-mode contract — and that the `interactive` flag survives the generic
+     * payload relay unchanged (the server side is payload-agnostic).
+     */
+    @Test
+    fun `awaited empty result maps to SUCCESS with null output and relays interactive true`() = runTest {
+        val request = AgentSpawnRequest(
+            agentRoleToSpawn = AgentRoleDto(id = 5L, name = "writer", modelId = 1L, modelSettingsId = 2L),
+            subject = "Summary task",
+            interactive = true,
+            conversation = listOf(AgentSpawnMessage.User("Write a summary")),
+            toolCallId = 1L
+        )
+        val builder = mockk<AgentSpawnRequestBuilder>()
+        coEvery { builder.build(1L, any(), any()) } returns request.right()
+
+        val executor = DefaultOperatorToolExecutor(builder, json)
+        val supported = toolCall()
+
+        var relayed: ToolCallExecutionEvent.OperatorToolExecutionRequested? = null
+        val result = executor.executeTool(
+            userId = 1L,
+            requestingAgentRoleId = 5L,
+            toolCall = supported,
+            emitEvent = { event ->
+                if (event is ToolCallExecutionEvent.OperatorToolExecutionRequested) relayed = event
+            },
+            operatorToolResultFlow = flowOf(
+                OperatorToolExecutionResult(
+                    toolCallId = supported.id,
+                    output = null,
+                    isError = false,
+                    errorMessage = null
+                )
+            )
+        )
+
+        // An empty-success operator result becomes a terminal SUCCESS tool call with null output.
+        assertEquals(ToolCallStatus.SUCCESS, result.status)
+        assertEquals(null, result.output)
+
+        // The relayed payload is a decodable AgentSpawnRequest carrying the interactive flag.
+        val relay = assertIs<ToolCallExecutionEvent.OperatorToolExecutionRequested>(relayed)
+        assertEquals(supported.id, relay.toolCallId)
+        assertEquals(OperatorToolCatalog.SPAWN_AGENT_NAME, relay.toolName)
+        val decoded = json.decodeFromString(AgentSpawnRequest.serializer(), relay.payloadJson)
+        assertEquals(request, decoded)
+        assertEquals(true, decoded.interactive)
+    }
 }
