@@ -134,14 +134,14 @@ class ChatServiceImplTest {
     fun `validateProcessNewMessageRequest should delegate to preparation service and map prepared turn`() = runTest {
         val preparedTurn = PreparedConversationTurn(testSession, testLlmConfig)
         coEvery {
-            conversationTurnPreparationService.prepareNewMessageTurn(1L, "test content", 2L, true)
+            conversationTurnPreparationService.prepareNewMessageTurn(7L, 1L, "test content", 2L, true)
         } returns preparedTurn.right()
 
-        val result = chatService.validateProcessNewMessageRequest(1L, "test content", 2L, true)
+        val result = chatService.validateProcessNewMessageRequest(7L, 1L, "test content", 2L, true)
 
         assertEquals((testSession to testLlmConfig).right(), result)
         coVerify(exactly = 1) {
-            conversationTurnPreparationService.prepareNewMessageTurn(1L, "test content", 2L, true)
+            conversationTurnPreparationService.prepareNewMessageTurn(7L, 1L, "test content", 2L, true)
         }
     }
 
@@ -149,10 +149,10 @@ class ChatServiceImplTest {
     fun `validateProcessNewMessageRequest should return preparation errors unchanged`() = runTest {
         val error = ValidateNewMessageError.SessionNotFound(999L)
         coEvery {
-            conversationTurnPreparationService.prepareNewMessageTurn(999L, "test content", null, false)
+            conversationTurnPreparationService.prepareNewMessageTurn(7L, 999L, "test content", null, false)
         } returns error.left()
 
-        val result = chatService.validateProcessNewMessageRequest(999L, "test content", null, false)
+        val result = chatService.validateProcessNewMessageRequest(7L, 999L, "test content", null, false)
 
         assertEquals(error.left(), result)
     }

@@ -111,6 +111,25 @@ class DefaultAgentRoleRepository(
         )
     }
 
+    override suspend fun setRoleDisabled(roleId: Long, disabled: Boolean): Either<RepositoryError, AgentRoleDto> {
+        logger.info("Setting disabled=$disabled for agent role ID: $roleId")
+
+        return agentRoleApi.setRoleDisabled(roleId, disabled).fold(
+            ifLeft = { error ->
+                val repoError = error.toRepositoryError("Failed to update agent role enabled state")
+                logger.warn("Failed to update agent role enabled state for ID: $roleId: ${repoError.message}")
+                repoError.left()
+            },
+            ifRight = { updatedRole ->
+                logger.info("Successfully updated agent role enabled state for ID: $roleId")
+                updateRolesState { list ->
+                    list.map { if (it.id == updatedRole.id) updatedRole else it }
+                }
+                updatedRole.right()
+            }
+        )
+    }
+
     override suspend fun deleteRole(roleId: Long): Either<RepositoryError, Unit> {
         logger.info("Deleting agent role ID: $roleId")
 

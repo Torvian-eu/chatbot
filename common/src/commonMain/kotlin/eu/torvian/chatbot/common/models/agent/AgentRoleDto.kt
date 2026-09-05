@@ -26,6 +26,11 @@ import kotlinx.serialization.Serializable
  *            that targets belong to the same user; self-spawn (the role granting itself) is allowed.
  * @property instructions Flat, type-tagged instruction list (see [AgentInstructionDto]) that is
  *            composed into the role's system prompt at turn time.
+ * @property disabled Whether the role is disabled **for the current user**. The flag is derived from
+ *            a per-user side table (`agent_role_disabled`): an absent row means enabled, a present
+ *            row means disabled. Clients use it to hide roles from session selection (chat top bar)
+ *            and to render the settings enable/disable switch; it defaults to false so payloads
+ *            produced before this property existed (and fresh roles) decode as enabled.
  */
 @Serializable
 data class AgentRoleDto(
@@ -37,5 +42,6 @@ data class AgentRoleDto(
     val modelSettingsId: Long?,
     val tools: Set<Long> = emptySet(),
     val spawnableAgentRoleIds: Set<Long> = emptySet(),
-    val instructions: List<AgentInstructionDto> = emptyList()
+    val instructions: List<AgentInstructionDto> = emptyList(),
+    val disabled: Boolean = false
 )

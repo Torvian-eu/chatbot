@@ -254,6 +254,30 @@ class AgentRolesViewModel(
     }
 
     /**
+     * Toggles the current user's disabled state of [role] (switch off = disabled, on = enabled).
+     *
+     * The repository updates the shared `roles` StateFlow on success, so both the settings list and
+     * the chat-screen derivation react without a manual reload; failures surface as a notification
+     * mirroring [deleteRole].
+     *
+     * @param role The role whose per-user disabled state is flipped to `!role.disabled`.
+     */
+    fun setRoleDisabled(role: AgentRoleDto) {
+        viewModelScope.launch(uiDispatcher) {
+            agentRoleRepository.setRoleDisabled(role.id, !role.disabled)
+                .fold(
+                    ifLeft = { error ->
+                        notificationService.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to update agent role"
+                        )
+                    },
+                    ifRight = { /* the shared roles StateFlow replaces the entry, nothing else to do */ }
+                )
+        }
+    }
+
+    /**
      * Cancels any dialog (form or confirmation).
      */
     fun cancelDialog() {

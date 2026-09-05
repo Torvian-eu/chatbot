@@ -70,6 +70,7 @@ fun AgentRolesTab(
                         roles = roles,
                         selectedRole = selectedRole,
                         onRoleSelected = { role -> onOpenRoleDetails(role) },
+                        onToggleRoleDisabled = { role -> actions.onToggleRoleDisabled(role) },
                         onAddNewRole = { actions.onStartAddingNewRole() },
                         modifier = Modifier.fillMaxSize()
                     )

@@ -11,6 +11,7 @@ import io.ktor.resources.*
  * - GET /api/v1/agent-roles/{roleId} - Get a specific role (with resolved instructions)
  * - PUT /api/v1/agent-roles/{roleId} - Update a specific role
  * - DELETE /api/v1/agent-roles/{roleId} - Delete a specific role
+ * - PUT /api/v1/agent-roles/{roleId}/disabled - Set the disabled state of a role for the current user
  */
 @Resource("agent-roles")
 class AgentRoleResource(val parent: Api = Api()) {
@@ -21,5 +22,16 @@ class AgentRoleResource(val parent: Api = Api()) {
      * @property roleId The unique identifier of the agent role.
      */
     @Resource("{roleId}")
-    class ById(val parent: AgentRoleResource = AgentRoleResource(), val roleId: Long)
+    class ById(val parent: AgentRoleResource = AgentRoleResource(), val roleId: Long) {
+        /**
+         * Resource for toggling the current user's disabled state for a role:
+         * PUT /api/v1/agent-roles/{roleId}/disabled. The body carries the new state
+         * ([eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleDisabledRequest]); the path
+         * itself holds no value.
+         *
+         * @property parent The parent [ById] resource carrying the role id.
+         */
+        @Resource("disabled")
+        class Disabled(val parent: ById)
+    }
 }

@@ -42,6 +42,7 @@ class ChatServiceImpl(
     }
 
     override suspend fun validateProcessNewMessageRequest(
+        userId: Long,
         sessionId: Long,
         content: String?,
         parentMessageId: Long?,
@@ -49,7 +50,7 @@ class ChatServiceImpl(
     ): Either<ValidateNewMessageError, Pair<ChatSession, LLMConfig>> {
         return when (
             val preparedTurn = conversationTurnPreparationService
-                .prepareNewMessageTurn(sessionId, content, parentMessageId, isStreaming)
+                .prepareNewMessageTurn(userId, sessionId, content, parentMessageId, isStreaming)
         ) {
             is Either.Left -> preparedTurn.value.left()
             is Either.Right -> (preparedTurn.value.session to preparedTurn.value.llmConfig).right()

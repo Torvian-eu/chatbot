@@ -193,7 +193,10 @@ private fun CompactAgentRoleSelector(
                     expanded = expanded,
                     onDismissRequest = { expanded = false }
                 ) {
-                    availableRoles.data.forEach { role ->
+                    // Defense-in-depth: the state layer already filters disabled roles out of
+                    // availableRoles, but an extra guard here keeps a stale/disabled entry from ever
+                    // becoming a selectable option (e.g. if a role is disabled mid-open-menu).
+                    availableRoles.data.filter { !it.disabled }.forEach { role ->
                         DropdownMenuItem(
                             text = { Text(role.displayName ?: role.name) },
                             onClick = {

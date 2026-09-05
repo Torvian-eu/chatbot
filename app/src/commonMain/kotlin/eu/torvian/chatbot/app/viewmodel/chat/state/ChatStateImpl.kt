@@ -162,10 +162,26 @@ class ChatStateImpl(
             initialValue = DataState.Idle
         )
 
-    // All agent roles owned by the current user, exposed directly from the repository so the
-    // top-bar selector and the management tab share a single reactive source.
+    // Agent roles available for the chat top-bar selector: a filtered view of the repository stream
+    // keeping only roles that are not disabled for the current user. Roles disabled for the user drop
+    // out of `rolesById`/`currentAgentRole` immediately (reactive, no manual reload), which makes a
+    // session still attached to such a role inert ("No role" + composer gated) until an enabled role
+    // is selected. The settings tab reads the unfiltered repository stream instead, so disabled roles
+    // stay visible and re-enableable there. Only `Success` is rewritten; the other DataState variants
+    // pass through unchanged.
     override val availableAgentRoles: StateFlow<DataState<RepositoryError, List<AgentRoleDto>>> =
-        agentRoleRepository.roles
+        agentRoleRepository.roles.map { dataState ->
+            when (dataState) {
+                is DataState.Success -> DataState.Success(dataState.data.filter { !it.disabled })
+                is DataState.Error -> dataState
+                is DataState.Loading -> dataState
+                is DataState.Idle -> dataState
+            }
+        }.stateIn(
+            scope = backgroundScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = DataState.Idle
+        )
 
     private val allModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> = modelRepository.models
 

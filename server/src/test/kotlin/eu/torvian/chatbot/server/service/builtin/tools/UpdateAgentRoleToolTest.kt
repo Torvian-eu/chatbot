@@ -158,6 +158,22 @@ class UpdateAgentRoleToolTest {
     }
 
     @Test
+    fun `rejects a disabled parameter as unknown`() = runTest {
+        // Per Q4(a) the flag is read-only for the LLM: update_agent_role has no `disabled` parameter,
+        // and a hallucinated one must be rejected like any other unknown argument (the dedicated
+        // PUT /agent-roles/{id}/disabled endpoint is the only surface that changes the flag).
+        val agentRoleService = mockk<AgentRoleService>()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        val result = tool.execute(userId, buildJsonObject { put("role_id", 1L); put("disabled", true) })
+
+        val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
+        assertTrue(error.message.contains("Unknown parameter: 'disabled'"))
+        coVerify(exactly = 0) { agentRoleService.getRoleById(any(), any()) }
+        coVerify(exactly = 0) { agentRoleService.updateRole(any(), any(), any()) }
+    }
+
+    @Test
     fun `rejects a non-integer role_id`() = runTest {
         val tool = UpdateAgentRoleTool(mockk())
 

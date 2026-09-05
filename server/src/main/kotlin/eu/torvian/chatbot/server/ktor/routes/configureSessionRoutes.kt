@@ -107,11 +107,16 @@ fun Route.configureSessionRoutes(
             val request = call.receive<UpdateSessionAgentRoleRequest>()
             val result = either {
                 requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
-                request.agentRoleId?.let { roleId ->
-                    // The role must exist and be owned by the requesting user before it can be attached.
+                // The role must exist and be owned by the requesting user before it can be attached.
+                // Capture the already-fetched (per-user) DTO: reusing it for the disabled check avoids
+                // an extra lookup, and a role disabled for the requesting user must not be attachable.
+                val role = request.agentRoleId?.let { roleId ->
                     withError({ e: AgentRoleError -> e.toApiError() }) {
                         agentRoleService.getRoleById(userId, roleId).bind()
                     }
+                }
+                if (role?.disabled == true) {
+                    raise(UpdateSessionAgentRoleIdError.AgentRoleDisabled(role.id).toApiError())
                 }
                 withError({ e: UpdateSessionAgentRoleIdError -> e.toApiError() }) {
                     sessionService.updateSessionAgentRoleId(sessionId, request.agentRoleId).bind()

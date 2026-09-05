@@ -22,6 +22,15 @@ sealed interface UpdateSessionAgentRoleIdError {
      * @property agentRoleId The missing/inaccessible role identifier.
      */
     data class AgentRoleNotFound(val agentRoleId: Long) : UpdateSessionAgentRoleIdError
+
+    /**
+     * Indicates that the referenced agent role is disabled **for the requesting user**, so it cannot
+     * be attached to the session. Reaching this error means the role exists and is owned/accessible;
+     * only its per-user disabled state blocks the attach.
+     *
+     * @property agentRoleId The disabled role identifier.
+     */
+    data class AgentRoleDisabled(val agentRoleId: Long) : UpdateSessionAgentRoleIdError
 }
 
 /**
@@ -37,6 +46,12 @@ fun UpdateSessionAgentRoleIdError.toApiError(): ApiError = when (this) {
     is UpdateSessionAgentRoleIdError.AgentRoleNotFound -> apiError(
         CommonApiErrorCodes.INVALID_ARGUMENT,
         "Agent role not found or not accessible",
+        "agentRoleId" to agentRoleId.toString()
+    )
+
+    is UpdateSessionAgentRoleIdError.AgentRoleDisabled -> apiError(
+        CommonApiErrorCodes.CONFLICT,
+        "Agent role is disabled",
         "agentRoleId" to agentRoleId.toString()
     )
 }

@@ -121,5 +121,6 @@ interface AgentRolesTabActions {
     fun onUpdateRoleForm(update: (AgentRoleFormState) -> AgentRoleFormState)
     fun onSaveRole()
     fun onDeleteRole(roleId: Long)
+    fun onToggleRoleDisabled(role: AgentRoleDto)
     fun onCancelDialog()
 }

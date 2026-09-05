@@ -101,6 +101,7 @@ class SessionMessagesWebSocketHandler(
                     requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
                     withError({ validateError: ValidateNewMessageError -> validateError.toApiError() }) {
                         chatService.validateProcessNewMessageRequest(
+                            userId,
                             sessionId,
                             processRequest.content,
                             processRequest.parentMessageId,

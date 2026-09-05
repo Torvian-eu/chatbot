@@ -21,6 +21,10 @@ package eu.torvian.chatbot.server.service.core.agent
  * @property spawnableAgentRoleIds Unordered same-user role identifiers this role may spawn; may
  *            include the role's own id (self-spawn).
  * @property instructions Domain instruction objects composing the role's system prompt.
+ * @property disabled Whether the role is disabled **for the requesting/acting user** (not globally
+ *            and not for the owner in a future shared-role stage). Derived from the per-user
+ *            `agent_role_disabled` side table: an absent row means enabled, a present row means
+ *            disabled. Rides the domain role so turn-time enforcement needs no extra lookup.
  */
 data class AgentRole(
     val id: Long,
@@ -31,5 +35,6 @@ data class AgentRole(
     val modelSettingsId: Long?,
     val tools: Set<Long> = emptySet(),
     val spawnableAgentRoleIds: Set<Long> = emptySet(),
-    val instructions: List<AgentInstruction> = emptyList()
+    val instructions: List<AgentInstruction> = emptyList(),
+    val disabled: Boolean = false
 )

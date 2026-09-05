@@ -21,7 +21,7 @@ import kotlinx.serialization.json.put
 /**
  * `list_agent_roles` server built-in tool.
  *
- * Returns all nine [eu.torvian.chatbot.common.models.agent.AgentRoleDto] properties for every agent
+ * Returns all ten [eu.torvian.chatbot.common.models.agent.AgentRoleDto] properties for every agent
  * role owned by the current user, with instructions summarized to their type strings. The tool
  * accepts no input parameters; any supplied argument is rejected as invalid input.
  *
@@ -73,6 +73,9 @@ class ListAgentRolesTool(
                         put("spawnableAgentRoleIds", buildJsonArray {
                             role.spawnableAgentRoleIds.forEach { add(it) }
                         })
+                        // Per-user disabled flag: boolean, never omitted, mirrors the explicit-null
+                        // handling style used for nullable fields above.
+                        put("disabled", role.disabled)
                         // Only instruction types are exposed; names, messages, and custom metadata belong to read_agent_role.
                         put("instructions", buildJsonArray {
                             role.instructions.forEach { add(it.type) }

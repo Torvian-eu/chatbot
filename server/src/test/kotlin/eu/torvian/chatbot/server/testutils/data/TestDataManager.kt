@@ -305,6 +305,18 @@ interface TestDataManager {
      */
     suspend fun insertAgentRoleOwnership(roleId: Long, userId: Long)
 
+    /**
+     * Inserts a per-user disabled marker for an agent role into the database. Creates the table if it
+     * does not exist.
+     *
+     * A row means the role is disabled for [userId]; absence of the row means enabled. This helper
+     * exists for route tests that need a disabled role without going through the service layer.
+     *
+     * @param roleId The ID of the agent role to mark disabled.
+     * @param userId The ID of the user for whom the role is disabled.
+     */
+    suspend fun insertAgentRoleDisabled(roleId: Long, userId: Long)
+
     // --- Access records ---
 
     /**

@@ -386,6 +386,8 @@ fun ChatScreen(
                 agentRoleManagementViewModel.updateRoleForm(update)
             override fun onSaveRole() = agentRoleManagementViewModel.saveRole()
             override fun onDeleteRole(roleId: Long) = agentRoleManagementViewModel.deleteRole(roleId)
+            override fun onToggleRoleDisabled(role: AgentRoleDto) =
+                agentRoleManagementViewModel.setRoleDisabled(role)
             override fun onCancelDialog() = agentRoleManagementViewModel.cancelDialog()
         }
     }

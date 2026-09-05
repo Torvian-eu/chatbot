@@ -55,6 +55,11 @@ enum class Table {
     AGENT_ROLE_SPAWNABLE_ROLES,
 
     /**
+     * Table for storing per-user disabled markers for agent roles.
+     */
+    AGENT_ROLE_DISABLED,
+
+    /**
      * Table for storing API secrets.
      */
     API_SECRETS,

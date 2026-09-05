@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.common.api.resources.AgentRoleResource
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleDisabledRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -46,6 +47,13 @@ class KtorAgentRoleApiClient(
         safeApiCall {
             client.put(AgentRoleResource.ById(roleId = roleId)) {
                 setBody(request)
+            }.body<AgentRoleDto>()
+        }
+
+    override suspend fun setRoleDisabled(roleId: Long, disabled: Boolean): Either<ApiResourceError, AgentRoleDto> =
+        safeApiCall {
+            client.put(AgentRoleResource.ById.Disabled(parent = AgentRoleResource.ById(roleId = roleId))) {
+                setBody(UpdateAgentRoleDisabledRequest(disabled))
             }.body<AgentRoleDto>()
         }
 

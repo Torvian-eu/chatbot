@@ -20,6 +20,7 @@ import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleOwnershipDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleToolDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleSpawnableRoleDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleDisabledDao
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
@@ -63,6 +64,7 @@ import org.apache.logging.log4j.Logger
  * @property agentRoleToolDao DAO for the `agent_role_tools` join table (the role's tool ids).
  * @property agentRoleSpawnableRoleDao DAO for the role-to-role spawn allow-list.
  * @property agentRoleOwnershipDao DAO for the `agent_role_owners` table (per-user ownership).
+ * @property agentRoleDisabledDao DAO for the `agent_role_disabled` side table (per-user disabled state).
  * @property modelDao DAO used to validate model references.
  * @property settingsDao DAO used to validate settings references (existence, chat-capability, and model match).
  * @property toolDefinitionDao DAO used to validate tool references.
@@ -73,6 +75,7 @@ class AgentRoleServiceImpl(
     private val agentRoleDao: AgentRoleDao,
     private val agentRoleToolDao: AgentRoleToolDao,
     private val agentRoleOwnershipDao: AgentRoleOwnershipDao,
+    private val agentRoleDisabledDao: AgentRoleDisabledDao,
     private val modelDao: ModelDao,
     private val settingsDao: SettingsDao,
     private val toolDefinitionDao: ToolDefinitionDao,
@@ -124,15 +127,18 @@ class AgentRoleServiceImpl(
     override suspend fun getAllRolesForUser(userId: Long): List<AgentRoleDto> = transactionScope.transaction {
         logger.debug("Retrieving agent roles for user $userId")
         val entities = agentRoleDao.getAllRolesForUser(userId)
-        // Batch-load every role's tool ids in one query so the list endpoint avoids an N+1 read.
+        // Batch-load every role's tool ids and the user's disabled ids in one query each so the
+        // list endpoint avoids an N+1 read (mirrors the spawn allow-list batch pattern).
         val roleIds = entities.map { it.id }
         val toolsByRole = agentRoleToolDao.getToolsForRoles(roleIds)
         val spawnableByRole = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(roleIds)
+        val disabledRoleIds = agentRoleDisabledDao.getDisabledRoleIds(userId, roleIds)
         entities.map {
             it.toAgentRole(
                 tools = toolsByRole[it.id].orEmpty(),
                 spawnableRoleIds = spawnableByRole[it.id].orEmpty(),
-                ownerId = userId
+                ownerId = userId,
+                disabled = it.id in disabledRoleIds
             ).toDto()
         }
     }
@@ -141,11 +147,13 @@ class AgentRoleServiceImpl(
         transactionScope.transaction {
             either {
                 val entity = loadOwnedRole(userId, roleId, AgentRoleError.NotFound(roleId))
+                val disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id)
                 val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
                 entity.toAgentRole(
                     tools = agentRoleToolDao.getToolsForRole(entity.id),
                     spawnableRoleIds = spawnableRoleIds,
-                    ownerId = userId
+                    ownerId = userId,
+                    disabled = disabled
                 ).toDto()
             }
         }
@@ -158,16 +166,18 @@ class AgentRoleServiceImpl(
                 val entity = withError({ _: AgentRoleDaoError.NotFoundByName -> AgentRoleError.NotFoundByName(name) }) {
                     agentRoleDao.getRoleByNameForUser(userId, name).bind()
                 }
+                val disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id)
                 val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
                 entity.toAgentRole(
                     tools = agentRoleToolDao.getToolsForRole(entity.id),
                     spawnableRoleIds = spawnableRoleIds,
-                    ownerId = userId
+                    ownerId = userId,
+                    disabled = disabled
                 ).toDto()
             }
         }
 
-    override suspend fun getAgentRoleById(roleId: Long): Either<AgentRoleError.NotFound, AgentRole> =
+    override suspend fun getAgentRoleById(userId: Long, roleId: Long): Either<AgentRoleError.NotFound, AgentRole> =
         transactionScope.transaction {
             either {
                 val entity = withError({ _: AgentRoleDaoError.NotFound -> AgentRoleError.NotFound(roleId) }) {
@@ -185,7 +195,27 @@ class AgentRoleServiceImpl(
                 }) {
                     agentRoleOwnershipDao.getOwner(roleId).bind()
                 }
-                loadDomainRole(entity, ownerId)
+                loadDomainRole(entity, ownerId, userId)
+            }
+        }
+
+    override suspend fun setRoleDisabled(userId: Long, roleId: Long, disabled: Boolean): Either<AgentRoleError.NotFound, AgentRoleDto> =
+        transactionScope.transaction {
+            either {
+                logger.info("Setting disabled=$disabled for agent role $roleId (user $userId)")
+                val entity = loadOwnedRole(userId, roleId, AgentRoleError.NotFound(roleId))
+                // Idempotent insert/delete of the (user, role) row inside the same transaction as the
+                // ownership check; a foreign or nonexistent role is rejected before any write happens.
+                agentRoleDisabledDao.setRoleDisabled(userId, entity.id, disabled)
+                val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
+                entity.toAgentRole(
+                    tools = agentRoleToolDao.getToolsForRole(entity.id),
+                    spawnableRoleIds = spawnableRoleIds,
+                    ownerId = userId,
+                    // The DTO must echo the requested state even if the row pre-existed: the write is
+                    // idempotent, so the new value equals the requested value by construction.
+                    disabled = disabled
+                ).toDto()
             }
         }
 
@@ -239,7 +269,9 @@ class AgentRoleServiceImpl(
             entity.toAgentRole(
                 tools = request.toolIds,
                 spawnableRoleIds = request.spawnableAgentRoleIds,
-                ownerId = userId
+                ownerId = userId,
+                // No side-table row is ever inserted on create: a fresh role is enabled for its owner.
+                disabled = false
             ).toDto()
         }
     }
@@ -293,10 +325,14 @@ class AgentRoleServiceImpl(
             agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(roleId, request.spawnableAgentRoleIds)
 
             logger.info("Updated agent role $roleId for user $userId")
+            // The side-table disabled marker is untouched by the full-replacement row update, so the
+            // returned DTO must re-read the per-user flag (single-role existence check, mirrors the
+            // single role paths) rather than defaulting it.
             updated.toAgentRole(
                 tools = request.toolIds,
                 spawnableRoleIds = request.spawnableAgentRoleIds,
-                ownerId = userId
+                ownerId = userId,
+                disabled = agentRoleDisabledDao.isRoleDisabled(userId, roleId)
             ).toDto()
         }
     }
@@ -520,14 +556,18 @@ class AgentRoleServiceImpl(
      *
      * @param entity Stored role row.
      * @param ownerId Owner scope used by dynamic instruction loaders.
+     * @param userId Requesting user whose per-user disabled state applies (used only for the disabled
+     *            flag; the role row itself is resolved by id, and the caller has already bound
+     *            [userId] to the session).
      * @return Domain role with current relation ids and lazy instruction sources.
      */
-    private suspend fun loadDomainRole(entity: AgentRoleEntity, ownerId: Long): AgentRole {
+    private suspend fun loadDomainRole(entity: AgentRoleEntity, ownerId: Long, userId: Long): AgentRole {
         val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
         return entity.toAgentRole(
             tools = agentRoleToolDao.getToolsForRole(entity.id),
             spawnableRoleIds = spawnableRoleIds,
-            ownerId = ownerId
+            ownerId = ownerId,
+            disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id)
         )
     }
 
@@ -539,12 +579,14 @@ class AgentRoleServiceImpl(
      * @param tools Attached tool ids.
      * @param spawnableRoleIds Unordered target role ids.
      * @param ownerId Owner used to scope dynamic target-summary queries.
+     * @param disabled Whether the role is disabled for the requesting user (side-table derived).
      * @return Domain role with lazy instruction sources.
      */
     private fun AgentRoleEntity.toAgentRole(
         tools: Set<Long>,
         spawnableRoleIds: Set<Long>,
-        ownerId: Long
+        ownerId: Long,
+        disabled: Boolean
     ): AgentRole = AgentRole(
         id = id,
         name = name,
@@ -560,7 +602,8 @@ class AgentRoleServiceImpl(
                 spawnableRoleIds = spawnableRoleIds,
                 roleToolIds = tools
             )
-        }
+        },
+        disabled = disabled
     )
 
     /**
@@ -579,7 +622,8 @@ class AgentRoleServiceImpl(
         modelSettingsId = modelSettingsId,
         tools = tools,
         spawnableAgentRoleIds = spawnableAgentRoleIds,
-        instructions = instructions.map { it.toDto() }
+        instructions = instructions.map { it.toDto() },
+        disabled = disabled
     )
 
     /**
