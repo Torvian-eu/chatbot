@@ -306,6 +306,156 @@ class DatabaseMigratorAgentRolesTest {
         }
     }
 
+    @Test
+    fun `agent role disabled rows are per-user side-table state`() {
+        val dbFile = Files.createTempFile("chatbot-agent-roles-disabled", ".db")
+        try {
+            val config = DatabaseConfig(vendor = "sqlite", type = "file", filepath = dbFile.toString())
+            DatabaseMigrator(config).migrate()
+
+            DriverManager.getConnection(config.url).use { connection ->
+                connection.createStatement().use { statement ->
+                    // `agent_role_disabled` must exist and `agent_roles` must NOT gain a `disabled`
+                    // column (the disabled state is a per-user side-table marker, not a role row field).
+                    assertTrue(hasTable(connection, "agent_role_disabled"))
+                    statement.executeQuery("PRAGMA table_info(agent_roles)").use { resultSet ->
+                        var hasDisabledColumn = false
+                        while (resultSet.next()) {
+                            if (resultSet.getString("name") == "disabled") hasDisabledColumn = true
+                        }
+                        assertFalse(hasDisabledColumn, "disabled column must not exist on agent_roles")
+                    }
+
+                    statement.executeUpdate(
+                        "INSERT INTO users (id, username, password_hash, email, status, created_at, updated_at) " +
+                            "VALUES (1, 'u1', 'h', NULL, 'ENABLED', 0, 0)"
+                    )
+                    statement.executeUpdate(
+                        "INSERT INTO users (id, username, password_hash, email, status, created_at, updated_at) " +
+                            "VALUES (2, 'u2', 'h', NULL, 'ENABLED', 0, 0)"
+                    )
+                    statement.executeUpdate(
+                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at) " +
+                            "VALUES (1, 'architect', '', '[]', 0, 0)"
+                    )
+                    statement.executeUpdate(
+                        "INSERT INTO agent_role_disabled (role_id, user_id) VALUES (1, 1)"
+                    )
+                    // Per-user rows for the SAME role coexist: (role 1, userB) is accepted next to (role 1, userA).
+                    statement.executeUpdate(
+                        "INSERT INTO agent_role_disabled (role_id, user_id) VALUES (1, 2)"
+                    )
+                }
+            }
+
+            // Runtime-style connection WITH FK enforcement, like the app's Exposed connections.
+            val runtimeConfig = SQLiteConfig().apply { enforceForeignKeys(true) }
+            SQLiteDataSource(runtimeConfig).apply { url = config.url }.connection.use { connection ->
+                connection.createStatement().use { statement ->
+                    // Duplicate (role, user) rows are rejected by the composite primary key.
+                    assertFailsWith<SQLException> {
+                        statement.executeUpdate(
+                            "INSERT INTO agent_role_disabled (role_id, user_id) VALUES (1, 1)"
+                        )
+                    }
+
+                    // Unknown role/user references are rejected by the foreign keys.
+                    assertFailsWith<SQLException> {
+                        statement.executeUpdate(
+                            "INSERT INTO agent_role_disabled (role_id, user_id) VALUES (999, 1)"
+                        )
+                    }
+                    assertFailsWith<SQLException> {
+                        statement.executeUpdate(
+                            "INSERT INTO agent_role_disabled (role_id, user_id) VALUES (1, 999)"
+                        )
+                    }
+                }
+
+                // A second role plus a disabled row for it: deleting the role cascades every user's rows.
+                connection.createStatement().use { statement ->
+                    statement.executeUpdate(
+                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at) " +
+                            "VALUES (2, 'reviewer', '', '[]', 0, 0)"
+                    )
+                    statement.executeUpdate(
+                        "INSERT INTO agent_role_disabled (role_id, user_id) VALUES (2, 1)"
+                    )
+                    statement.executeUpdate(
+                        "INSERT INTO agent_role_disabled (role_id, user_id) VALUES (2, 2)"
+                    )
+                    statement.executeUpdate("DELETE FROM agent_roles WHERE id = 2")
+                }
+                assertEquals(
+                    0,
+                    countRows(connection, "SELECT COUNT(*) FROM agent_role_disabled WHERE role_id = 2"),
+                    "role deletion must cascade away every user's disabled rows for that role"
+                )
+
+                // Deleting a user cascades that user's rows only (role 1 still has user 2's row).
+                connection.createStatement().use { statement ->
+                    statement.executeUpdate("DELETE FROM users WHERE id = 1")
+                }
+                assertEquals(
+                    0,
+                    countRows(connection, "SELECT COUNT(*) FROM agent_role_disabled WHERE user_id = 1"),
+                    "user deletion must cascade away that user's disabled rows"
+                )
+                assertEquals(
+                    1,
+                    countRows(connection, "SELECT COUNT(*) FROM agent_role_disabled WHERE user_id = 2"),
+                    "other users' disabled rows must survive a user deletion"
+                )
+                connection.createStatement().use { statement ->
+                    statement.executeQuery("PRAGMA foreign_key_check").use { resultSet ->
+                        assertFalse(resultSet.next(), "foreign_key_check must be clean after the cascades")
+                    }
+                }
+            }
+        } finally {
+            dbFile.deleteIfExists()
+        }
+    }
+
+    @Test
+    fun `agent roles seeded before V27 are all enabled for all users`() {
+        val dbFile = Files.createTempFile("chatbot-agent-roles-disabled-upgrade", ".db")
+        try {
+            val config = DatabaseConfig(vendor = "sqlite", type = "file", filepath = dbFile.toString())
+
+            // Migrate to V26 (the state right before the disabled side table) and seed roles.
+            flywayFor(config.url, target = "26").migrate()
+            DriverManager.getConnection(config.url).use { connection ->
+                connection.createStatement().use { statement ->
+                    statement.executeUpdate(
+                        "INSERT INTO users (id, username, password_hash, email, status, created_at, updated_at) " +
+                            "VALUES (1, 'u1', 'h', NULL, 'ENABLED', 0, 0)"
+                    )
+                    statement.executeUpdate(
+                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at) " +
+                            "VALUES (1, 'architect', '', '[]', 0, 0)"
+                    )
+                    statement.executeUpdate(
+                        "INSERT INTO agent_role_owners (role_id, user_id) VALUES (1, 1)"
+                    )
+                }
+            }
+
+            // Migrate to latest (V27 creates agent_role_disabled without inserting rows).
+            DatabaseMigrator(config).migrate()
+
+            DriverManager.getConnection(config.url).use { connection ->
+                assertEquals(
+                    0,
+                    countRows(connection, "SELECT COUNT(*) FROM agent_role_disabled"),
+                    "upgrading a DB with existing roles must leave every role enabled for every user"
+                )
+            }
+        } finally {
+            dbFile.deleteIfExists()
+        }
+    }
+
     /**
      * Builds a Flyway instance over the given SQLite URL, optionally stopping at [target].
      *
@@ -339,6 +489,19 @@ class DatabaseMigratorAgentRolesTest {
     private fun hasIndex(connection: Connection, indexName: String): Boolean =
         connection.prepareStatement("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?").use { statement ->
             statement.setString(1, indexName)
+            statement.executeQuery().use { resultSet -> resultSet.next() }
+        }
+
+    /**
+     * Whether a table with the given name exists in the database.
+     *
+     * @param connection The open connection.
+     * @param tableName The table name to look up.
+     * @return `true` if the table exists, `false` otherwise.
+     */
+    private fun hasTable(connection: Connection, tableName: String): Boolean =
+        connection.prepareStatement("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").use { statement ->
+            statement.setString(1, tableName)
             statement.executeQuery().use { resultSet -> resultSet.next() }
         }
 

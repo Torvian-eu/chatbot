@@ -96,6 +96,9 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             // agent_role_spawnable_roles self-references agent_roles (source and target), so it must
             // be created after agent_roles.
             Table.AGENT_ROLE_SPAWNABLE_ROLES to AgentRoleSpawnableRolesTable,
+            // agent_role_disabled references both agent_roles and users, so it must be created after
+            // both.
+            Table.AGENT_ROLE_DISABLED to AgentRoleDisabledTable,
             Table.TOOL_CALLS to ToolCallTable,
             Table.SESSION_TOOL_CONFIG to SessionToolConfigTable,
 
@@ -540,6 +543,16 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             return@transaction
         }
 
+    override suspend fun insertAgentRoleDisabled(roleId: Long, userId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.AGENT_ROLE_DISABLED)
+            AgentRoleDisabledTable.insert {
+                it[AgentRoleDisabledTable.roleId] = roleId
+                it[AgentRoleDisabledTable.userId] = userId
+            }
+            return@transaction
+        }
+
     // --- Access records ---
 
     override suspend fun insertProviderAccess(providerId: Long, groupId: Long, accessMode: AccessMode) =
@@ -773,6 +786,9 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         // Every role read also loads the spawn allow-list from `agent_role_spawnable_roles`, so that
         // table must exist whenever roles are set up as well.
         if (data.agentRoles.isNotEmpty()) required += Table.AGENT_ROLE_SPAWNABLE_ROLES
+        // Every role read also resolves the per-user disabled flag from `agent_role_disabled`, so that
+        // table must exist whenever roles are set up as well.
+        if (data.agentRoles.isNotEmpty()) required += Table.AGENT_ROLE_DISABLED
         if (data.sessionCurrentLeaves.isNotEmpty()) required += Table.SESSION_CURRENT_LEAF
 
         return required
