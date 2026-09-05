@@ -88,8 +88,9 @@ class ResponsesStrategyTest {
         assertEquals("user", input[0].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("Hello", input[0].jsonObject["content"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content)
 
-        // Assistant text item
+        // Assistant text item: content is a direct string.
         assertEquals("assistant", input[1].jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("Hi there!", input[1].jsonObject["content"]?.jsonPrimitive?.content)
 
         // Function call output item
         assertEquals("function_call_output", input[2].jsonObject["type"]?.jsonPrimitive?.content)
@@ -131,10 +132,14 @@ class ResponsesStrategyTest {
         assertTrue(result.isRight())
         val body = Json.decodeFromString<JsonObject>(result.getOrNull()!!.body as String)
         val input = body["input"]?.jsonArray
-        assertEquals(1, input?.size)
-        assertEquals("function_call", input!![0].jsonObject["type"]?.jsonPrimitive?.content)
-        assertEquals("call_a", input[0].jsonObject["call_id"]?.jsonPrimitive?.content)
-        assertEquals("getWeather", input[0].jsonObject["name"]?.jsonPrimitive?.content)
+        // The assistant message is always present (its content serializes to an empty string when null),
+        // followed by the folded function_call item.
+        assertEquals(2, input?.size)
+        assertEquals("assistant", input!![0].jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("", input[0].jsonObject["content"]?.jsonPrimitive?.content)
+        assertEquals("function_call", input[1].jsonObject["type"]?.jsonPrimitive?.content)
+        assertEquals("call_a", input[1].jsonObject["call_id"]?.jsonPrimitive?.content)
+        assertEquals("getWeather", input[1].jsonObject["name"]?.jsonPrimitive?.content)
     }
 
     @Test
@@ -475,7 +480,8 @@ class ResponsesStrategyTest {
         assertEquals("summary_text", replayedReasoning["summary"]?.jsonArray?.get(0)?.jsonObject?.get("type")?.jsonPrimitive?.content)
         assertEquals("Chain of thought.", replayedReasoning["content"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content)
         assertEquals("assistant", input[2].jsonObject["role"]?.jsonPrimitive?.content)
-        assertEquals("Let me think.", input[2].jsonObject["content"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content)
+        // Replayed assistant content is a direct string, not an output_text item array.
+        assertEquals("Let me think.", input[2].jsonObject["content"]?.jsonPrimitive?.content)
     }
 
     @Test
