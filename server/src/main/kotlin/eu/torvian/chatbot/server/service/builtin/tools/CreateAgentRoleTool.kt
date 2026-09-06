@@ -5,6 +5,7 @@ import arrow.core.raise.either
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.builtin.addUnknownParameterErrors
 import eu.torvian.chatbot.server.service.builtin.invalidInputError
@@ -45,8 +46,8 @@ class CreateAgentRoleTool(
     override val inputSchema: JsonObject get() = spec.inputSchema
 
     override suspend fun execute(
-        userId: Long,
-        input: JsonObject
+        input: JsonObject,
+        context: ToolCallExecutionContext
     ): Either<ServerBuiltInToolHandlerError, String> = either {
         val validationErrors = mutableListOf<String>()
         addUnknownParameterErrors(
@@ -88,7 +89,7 @@ class CreateAgentRoleTool(
             spawnableAgentRoleIds = spawnableAgentRoleIds ?: emptySet(),
             instructions = instructions ?: emptyList()
         )
-        val role = agentRoleService.createRole(userId, request)
+        val role = agentRoleService.createRole(context.userId, request)
             .mapLeft { error -> error.toHandlerError() }
             .bind()
         formatCreatedAgentRole(role)

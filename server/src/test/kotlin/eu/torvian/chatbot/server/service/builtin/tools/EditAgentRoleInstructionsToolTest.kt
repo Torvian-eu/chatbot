@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
@@ -33,6 +34,18 @@ import kotlin.test.assertTrue
 class EditAgentRoleInstructionsToolTest {
 
     private val userId = 7L
+
+    /**
+     * Fully-populated execution context for handler-level tests: the handlers ignore the session
+     * fields, so fixed non-null values keep the fixture simple while matching the real contract.
+     */
+    private fun context(userId: Long = this.userId): ToolCallExecutionContext =
+        ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 1L,
+            sessionName = "Session",
+            agentRoleId = 1L
+        )
 
     private fun sampleRole() = AgentRoleDto(
         id = 1L,
@@ -64,7 +77,6 @@ class EditAgentRoleInstructionsToolTest {
 
         val output = assertSuccess(
             tool.execute(
-                userId,
                 buildJsonObject {
                     put("role_id", 1L)
                     putJsonArray("edits") {
@@ -73,7 +85,8 @@ class EditAgentRoleInstructionsToolTest {
                             put("newText", "Kotlin 2.3")
                         })
                     }
-                }
+                },
+                context()
             )
         )
 
@@ -124,7 +137,6 @@ class EditAgentRoleInstructionsToolTest {
 
         val output = assertSuccess(
             tool.execute(
-                userId,
                 buildJsonObject {
                     put("role_id", 1L)
                     putJsonArray("edits") {
@@ -133,7 +145,8 @@ class EditAgentRoleInstructionsToolTest {
                             put("newText", "X")
                         })
                     }
-                }
+                },
+                context()
             )
         )
         assertTrue(output.contains("- matched occurrences: 2"))
@@ -167,7 +180,6 @@ class EditAgentRoleInstructionsToolTest {
         // deterministically regardless of caller order -> "X", not a sequential "X"/"aY" mix.
         val output = assertSuccess(
             tool.execute(
-                userId,
                 buildJsonObject {
                     put("role_id", 1L)
                     putJsonArray("edits") {
@@ -180,7 +192,8 @@ class EditAgentRoleInstructionsToolTest {
                             put("newText", "Y")
                         })
                     }
-                }
+                },
+                context()
             )
         )
 
@@ -210,7 +223,6 @@ class EditAgentRoleInstructionsToolTest {
         val tool = EditAgentRoleInstructionsTool(agentRoleService)
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 putJsonArray("edits") {
@@ -219,7 +231,8 @@ class EditAgentRoleInstructionsToolTest {
                         put("newText", "x")
                     })
                 }
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.OperationFailed>(result.leftOrNull())
@@ -232,7 +245,7 @@ class EditAgentRoleInstructionsToolTest {
     fun `requires the edits parameter`() = runTest {
         val tool = EditAgentRoleInstructionsTool(mockk())
 
-        val result = tool.execute(userId, buildJsonObject { put("role_id", 1L) })
+        val result = tool.execute(buildJsonObject { put("role_id", 1L) }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Missing required argument: edits"))
@@ -243,11 +256,11 @@ class EditAgentRoleInstructionsToolTest {
         val tool = EditAgentRoleInstructionsTool(mockk())
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 putJsonArray("edits") { }
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
@@ -259,13 +272,13 @@ class EditAgentRoleInstructionsToolTest {
         val tool = EditAgentRoleInstructionsTool(mockk())
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 putJsonArray("edits") {
                     add(buildJsonObject { put("newText", "x") })
                 }
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
@@ -277,7 +290,6 @@ class EditAgentRoleInstructionsToolTest {
         val tool = EditAgentRoleInstructionsTool(mockk())
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 putJsonArray("edits") {
@@ -286,7 +298,8 @@ class EditAgentRoleInstructionsToolTest {
                         put("newText", "x")
                     })
                 }
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
@@ -299,7 +312,6 @@ class EditAgentRoleInstructionsToolTest {
         val tool = EditAgentRoleInstructionsTool(agentRoleService)
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 putJsonArray("edits") {
@@ -309,7 +321,8 @@ class EditAgentRoleInstructionsToolTest {
                     })
                 }
                 put("dry_run", true)
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
@@ -325,7 +338,6 @@ class EditAgentRoleInstructionsToolTest {
         val tool = EditAgentRoleInstructionsTool(agentRoleService)
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 99L)
                 putJsonArray("edits") {
@@ -334,7 +346,8 @@ class EditAgentRoleInstructionsToolTest {
                         put("newText", "b")
                     })
                 }
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.NotFoundOrNotAccessible>(result.leftOrNull())
@@ -360,7 +373,6 @@ class EditAgentRoleInstructionsToolTest {
 
         val output = assertSuccess(
             tool.execute(
-                userId,
                 buildJsonObject {
                     put("role_id", 1L)
                     putJsonArray("edits") {
@@ -369,7 +381,8 @@ class EditAgentRoleInstructionsToolTest {
                             put("newText", "ü")
                         })
                     }
-                }
+                },
+                context()
             )
         )
 
@@ -391,7 +404,6 @@ class EditAgentRoleInstructionsToolTest {
         // identical, so the report shows the "(no changes)" branch instead of an empty diff.
         val output = assertSuccess(
             tool.execute(
-                userId,
                 buildJsonObject {
                     put("role_id", 1L)
                     putJsonArray("edits") {
@@ -400,7 +412,8 @@ class EditAgentRoleInstructionsToolTest {
                             put("newText", "Kotlin")
                         })
                     }
-                }
+                },
+                context()
             )
         )
 

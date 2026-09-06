@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.chat.compaction.CompactionTurnState
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionError
@@ -252,8 +253,12 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
         } returns listOf(pendingToolCall)
         every {
             toolCallOrchestrator.executeAndUpdateToolCalls(
-                1L,
-                testRoleId,
+                ToolCallExecutionContext(
+                    userId = 1L,
+                    sessionId = 1L,
+                    sessionName = "Session",
+                    agentRoleId = testRoleId
+                ),
                 listOf(pendingToolCall),
                 listOf(toolDefinition),
                 any(),
@@ -596,8 +601,12 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
         } returns listOf(pendingToolCall)
         every {
             toolCallOrchestrator.executeAndUpdateToolCalls(
-                1L,
-                testRoleId,
+                ToolCallExecutionContext(
+                    userId = 1L,
+                    sessionId = 1L,
+                    sessionName = "Session",
+                    agentRoleId = testRoleId
+                ),
                 listOf(pendingToolCall),
                 listOf(toolDefinition),
                 any(),
@@ -902,8 +911,12 @@ class DefaultConversationTurnOrchestratorNonStreamingTest : DefaultConversationT
         } returns listOf(pendingToolCall)
         every {
             toolCallOrchestrator.executeAndUpdateToolCalls(
-                1L,
-                testRoleId,
+                ToolCallExecutionContext(
+                    userId = 1L,
+                    sessionId = 1L,
+                    sessionName = "Session",
+                    agentRoleId = testRoleId
+                ),
                 listOf(pendingToolCall),
                 listOf(toolDefinition),
                 any(),

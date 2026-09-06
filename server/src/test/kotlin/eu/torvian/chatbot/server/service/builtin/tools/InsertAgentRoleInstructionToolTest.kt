@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.agent.modelSpecificId
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
@@ -35,6 +36,18 @@ import kotlin.test.assertTrue
 class InsertAgentRoleInstructionToolTest {
 
     private val userId = 7L
+
+    /**
+     * Fully-populated execution context for handler-level tests: the handlers ignore the session
+     * fields, so fixed non-null values keep the fixture simple while matching the real contract.
+     */
+    private fun context(userId: Long = this.userId): ToolCallExecutionContext =
+        ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 1L,
+            sessionName = "Session",
+            agentRoleId = 1L
+        )
 
     private fun sampleRole() = AgentRoleDto(
         id = 1L,
@@ -66,7 +79,7 @@ class InsertAgentRoleInstructionToolTest {
     fun `requires role_id position and instruction`() = runTest {
         val tool = InsertAgentRoleInstructionTool(mockk())
 
-        val result = tool.execute(userId, buildJsonObject { })
+        val result = tool.execute(buildJsonObject { }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Missing required argument: role_id"))
@@ -84,12 +97,12 @@ class InsertAgentRoleInstructionToolTest {
 
         val output = assertSuccess(
             tool.execute(
-                userId,
                 buildJsonObject {
                     put("role_id", 1L)
                     put("position", 1L)
                     put("instruction", customInstruction())
-                }
+                },
+                context()
             )
         )
 
@@ -129,12 +142,12 @@ class InsertAgentRoleInstructionToolTest {
 
         val output = assertSuccess(
             tool.execute(
-                userId,
                 buildJsonObject {
                     put("role_id", 1L)
                     put("position", 2L)
                     put("instruction", customInstruction())
-                }
+                },
+                context()
             )
         )
         assertTrue(output.contains("0-based position 2"))
@@ -160,12 +173,12 @@ class InsertAgentRoleInstructionToolTest {
 
         val output = assertSuccess(
             tool.execute(
-                userId,
                 buildJsonObject {
                     put("role_id", 1L)
                     put("position", 0L)
                     put("instruction", customInstruction())
-                }
+                },
+                context()
             )
         )
         assertTrue(output.contains("at 0-based position 0"))
@@ -192,7 +205,6 @@ class InsertAgentRoleInstructionToolTest {
 
         val output = assertSuccess(
             tool.execute(
-                userId,
                 buildJsonObject {
                     put("role_id", 1L)
                     put("position", 0L)
@@ -204,7 +216,8 @@ class InsertAgentRoleInstructionToolTest {
                             put("modelId", 2L)
                         }
                     })
-                }
+                },
+                context()
             )
         )
         assertTrue(
@@ -232,12 +245,12 @@ class InsertAgentRoleInstructionToolTest {
         val tool = InsertAgentRoleInstructionTool(agentRoleService)
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 put("position", 5L)
                 put("instruction", customInstruction())
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
@@ -251,7 +264,6 @@ class InsertAgentRoleInstructionToolTest {
         val tool = InsertAgentRoleInstructionTool(agentRoleService)
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 put("position", 0L)
@@ -259,7 +271,8 @@ class InsertAgentRoleInstructionToolTest {
                     put("type", AgentInstructionTypes.ROLE)
                     put("name", "Role")
                 })
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
@@ -279,7 +292,6 @@ class InsertAgentRoleInstructionToolTest {
 
         val output = assertSuccess(
             tool.execute(
-                userId,
                 buildJsonObject {
                     put("role_id", 1L)
                     put("position", 0L)
@@ -288,7 +300,8 @@ class InsertAgentRoleInstructionToolTest {
                         put("name", "Spawn")
                         put("message", "")
                     })
-                }
+                },
+                context()
             )
         )
         assertTrue(output.contains("Inserted instruction (type=spawnable_agents, name=Spawn) at 0-based position 0"))
@@ -312,7 +325,6 @@ class InsertAgentRoleInstructionToolTest {
         val tool = InsertAgentRoleInstructionTool(mockk())
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 put("position", 0L)
@@ -321,7 +333,8 @@ class InsertAgentRoleInstructionToolTest {
                     put("name", "Role")
                     put("message", "x")
                 })
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
@@ -335,12 +348,12 @@ class InsertAgentRoleInstructionToolTest {
         val tool = InsertAgentRoleInstructionTool(agentRoleService)
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 99L)
                 put("position", 0L)
                 put("instruction", customInstruction())
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.NotFoundOrNotAccessible>(result.leftOrNull())
@@ -357,7 +370,6 @@ class InsertAgentRoleInstructionToolTest {
         // a stray key (here a typo of the old proposal's "custom_properties" shape) is rejected
         // instead of being silently dropped from the persisted role.
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 put("position", 0L)
@@ -367,7 +379,8 @@ class InsertAgentRoleInstructionToolTest {
                     put("message", "Be concise.")
                     put("custom_properties", buildJsonObject { put("model_id", 5) })
                 })
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
@@ -382,13 +395,13 @@ class InsertAgentRoleInstructionToolTest {
         val tool = InsertAgentRoleInstructionTool(agentRoleService)
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 put("position", 0L)
                 put("instruction", customInstruction())
                 put("custom_properties", buildJsonObject { put("model_id", 5) })
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
@@ -407,7 +420,6 @@ class InsertAgentRoleInstructionToolTest {
 
         // Inserting a second 'role' instruction violates the shared instruction-list rules.
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 put("position", 0L)
@@ -416,7 +428,8 @@ class InsertAgentRoleInstructionToolTest {
                     put("name", "Role 2")
                     put("message", "Second role.")
                 })
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.OperationFailed>(result.leftOrNull())

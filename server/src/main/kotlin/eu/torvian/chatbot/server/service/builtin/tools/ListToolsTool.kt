@@ -5,6 +5,7 @@ import arrow.core.raise.either
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
 import eu.torvian.chatbot.common.models.tool.ToolSummary
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.builtin.addUnknownParameterErrors
 import eu.torvian.chatbot.server.service.builtin.encodeResult
@@ -41,8 +42,8 @@ class ListToolsTool(
     override val inputSchema: JsonObject get() = spec.inputSchema
 
     override suspend fun execute(
-        userId: Long,
-        input: JsonObject
+        input: JsonObject,
+        context: ToolCallExecutionContext
     ): Either<ServerBuiltInToolHandlerError, String> = either {
         val validationErrors = mutableListOf<String>()
         // Parameterless tool: reject any argument so hallucinated parameters surface to the LLM.
@@ -51,7 +52,7 @@ class ListToolsTool(
             raise(invalidInputError(validationErrors))
         }
 
-        val tools = toolService.getToolsForUser(userId)
+        val tools = toolService.getToolsForUser(context.userId)
         val summaries = tools.map { tool ->
             ToolSummary(
                 id = tool.id,

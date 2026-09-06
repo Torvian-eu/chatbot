@@ -15,9 +15,9 @@ import kotlinx.serialization.json.JsonObject
  * `chatbot-list_agent_roles`); that prefixed name is never used for dispatch.
  *
  * Implementations are stateless and receive their user-scoped service dependencies through
- * constructor injection (wired in the Koin module), so [execute] only needs the caller identity and
- * the parsed arguments. Expected failures are returned as typed [ServerBuiltInToolHandlerError]s,
- * never thrown.
+ * constructor injection (wired in the Koin module), so [execute] only needs the parsed arguments
+ * and the [ToolCallExecutionContext] (caller identity plus the turn's session context). Expected
+ * failures are returned as typed [ServerBuiltInToolHandlerError]s, never thrown.
  *
  * @property name Canonical catalog name (the executor dispatch key).
  * @property description Human-readable description surfaced to the LLM.
@@ -35,23 +35,31 @@ interface ServerBuiltInTool {
     val inputSchema: JsonObject
 
     /**
-     * Executes the tool for [userId] with the parsed [input].
+     * Executes the tool for the caller in [context] with the parsed [input].
      *
-     * Every handler is strictly user-scoped; not-found and not-accessible collapse into a single
-     * [ServerBuiltInToolHandlerError.NotFoundOrNotAccessible] so the tool never leaks the existence
-     * of another user's resources. Implementations validate every input parameter and accumulate all
-     * validation errors before failing (mirroring the worker built-in tool style), returning a single
-     * [ServerBuiltInToolHandlerError.InvalidInput] that lists every issue at once.
+     * Every handler is strictly user-scoped ([ToolCallExecutionContext.userId]); not-found
+     * and not-accessible collapse into a single [ServerBuiltInToolHandlerError.NotFoundOrNotAccessible]
+     * so the tool never leaks the existence of another user's resources. Implementations validate
+     * every input parameter and accumulate all validation errors before failing (mirroring the
+     * worker built-in tool style), returning a single [ServerBuiltInToolHandlerError.InvalidInput]
+     * that lists every issue at once.
      *
-     * @param userId The user whose server built-in tool instance is being executed.
+     * The session-context fields of [ToolCallExecutionContext] are non-null: the chat-turn pipeline
+     * is the only producer and always supplies a validated session with a selected agent role
+     * before tool calls execute. A tool that needs session identity (e.g. `get_current_session_info`)
+     * can therefore rely on [ToolCallExecutionContext.sessionId]/`sessionName`/`agentRoleId` being
+     * present.
+     *
      * @param input JSON arguments for the tool (already parsed as an object by the executor).
+     * @param context Caller identity plus the turn's session/role context; see
+     *            [ToolCallExecutionContext].
      * @return Either a [ServerBuiltInToolHandlerError] or the handler output: the JSON-encoded
      *         payload for read-style tools (e.g. `read_agent_role`), or a concise human-readable
      *         text summary/diff for mutating tools (e.g. `create_agent_role`, the instruction
      *         tools), so the LLM context stays lean.
      */
     suspend fun execute(
-        userId: Long,
-        input: JsonObject
+        input: JsonObject,
+        context: ToolCallExecutionContext
     ): Either<ServerBuiltInToolHandlerError, String>
 }

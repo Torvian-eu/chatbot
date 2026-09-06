@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.AgentRoleService
 import io.mockk.coEvery
@@ -41,6 +42,18 @@ class ListAgentRolesToolTest {
     }
 
     private val userId = 7L
+
+    /**
+     * Fully-populated execution context for handler-level tests: the handlers ignore the session
+     * fields, so fixed non-null values keep the fixture simple while matching the real contract.
+     */
+    private fun context(userId: Long = this.userId): ToolCallExecutionContext =
+        ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 1L,
+            sessionName = "Session",
+            agentRoleId = 1L
+        )
 
     /**
      * Creates a role fixture with configurable nullable and collection properties.
@@ -119,7 +132,7 @@ class ListAgentRolesToolTest {
         )
         val tool = ListAgentRolesTool(agentRoleService, json)
 
-        val output = assertSuccess(tool.execute(userId, buildJsonObject { }))
+        val output = assertSuccess(tool.execute(buildJsonObject { }, context()))
         val roles = json.parseToJsonElement(output).jsonArray
         val expectedKeys = setOf(
             "id",
@@ -206,7 +219,7 @@ class ListAgentRolesToolTest {
         )
         val tool = ListAgentRolesTool(agentRoleService, json)
 
-        val output = assertSuccess(tool.execute(userId, buildJsonObject { }))
+        val output = assertSuccess(tool.execute(buildJsonObject { }, context()))
         val roles = json.parseToJsonElement(output).jsonArray
 
         assertEquals(true, roles[0].jsonObject.getValue("disabled").jsonPrimitive.boolean)
@@ -222,7 +235,7 @@ class ListAgentRolesToolTest {
         coEvery { agentRoleService.getAllRolesForUser(userId) } returns emptyList()
         val tool = ListAgentRolesTool(agentRoleService, json)
 
-        val output = assertSuccess(tool.execute(userId, buildJsonObject { }))
+        val output = assertSuccess(tool.execute(buildJsonObject { }, context()))
 
         assertEquals("[]", output)
     }
@@ -235,7 +248,7 @@ class ListAgentRolesToolTest {
         val agentRoleService = mockk<AgentRoleService>()
         val tool = ListAgentRolesTool(agentRoleService, json)
 
-        val result = tool.execute(userId, buildJsonObject { put("foo", "bar") })
+        val result = tool.execute(buildJsonObject { put("foo", "bar") }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Unknown parameter: 'foo'"))

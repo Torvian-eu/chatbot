@@ -62,30 +62,30 @@ class DefaultServerBuiltInToolExecutorTest {
     /**
      * Minimal [ServerBuiltInTool] double used to exercise the executor without any real tool logic.
      *
-     * Records the arguments it was invoked with so tests can verify delegation; the caller supplies
-     * the canned [Either] result via [result].
+     * Records the context and input it was invoked with so tests can verify delegation; the caller
+     * supplies the canned [Either] result via [result].
      */
     private class StubTool(
         override val name: String = "stub_tool",
-        private val result: (Long, JsonObject) -> Either<ServerBuiltInToolHandlerError, String>
+        private val result: (ToolCallExecutionContext, JsonObject) -> Either<ServerBuiltInToolHandlerError, String>
     ) : ServerBuiltInTool {
 
         override val description: String = "Stub tool for executor tests"
         override val inputSchema: JsonObject = buildJsonObject { put("type", "object") }
 
-        /** User id passed to the most recent [execute] call. */
-        var lastUserId: Long? = null
+        /** Execution context passed to the most recent [execute] call. */
+        var lastContext: ToolCallExecutionContext? = null
 
         /** Parsed input object passed to the most recent [execute] call. */
         var lastInput: JsonObject? = null
 
         override suspend fun execute(
-            userId: Long,
-            input: JsonObject
+            input: JsonObject,
+            context: ToolCallExecutionContext
         ): Either<ServerBuiltInToolHandlerError, String> {
-            lastUserId = userId
+            lastContext = context
             lastInput = input
-            return result(userId, input)
+            return result(context, input)
         }
     }
 
@@ -115,6 +115,20 @@ class DefaultServerBuiltInToolExecutorTest {
         builtInToolName = builtInToolName
     )
 
+    /**
+     * Builds a fully-populated execution context for executor-level tests.
+     *
+     * @param userId Caller identity carried into the handler.
+     * @return The context passed to [DefaultServerBuiltInToolExecutor.executeTool].
+     */
+    private fun context(userId: Long = this.userId): ToolCallExecutionContext =
+        ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 1L,
+            sessionName = "Session",
+            agentRoleId = 1L
+        )
+
     private fun executor(tool: ServerBuiltInTool): DefaultServerBuiltInToolExecutor =
         DefaultServerBuiltInToolExecutor(
             json = json,
@@ -134,7 +148,7 @@ class DefaultServerBuiltInToolExecutorTest {
         val builtExecutor = executor(StubTool { _, _ -> "unused".right() })
 
         val result = builtExecutor.executeTool(
-            userId,
+            context(),
             serverBuiltInToolDefinition(builtInToolName = "future_tool"),
             toolCall(toolName = "chatbot-future_tool")
         )
@@ -152,7 +166,7 @@ class DefaultServerBuiltInToolExecutorTest {
         val builtExecutor = executor(StubTool { _, _ -> "unused".right() })
 
         val result = builtExecutor.executeTool(
-            userId,
+            context(),
             serverBuiltInToolDefinition(),
             toolCall(input = "not json")
         )
@@ -165,7 +179,7 @@ class DefaultServerBuiltInToolExecutorTest {
         val builtExecutor = executor(StubTool { _, _ -> "unused".right() })
 
         val result = builtExecutor.executeTool(
-            userId,
+            context(),
             serverBuiltInToolDefinition(),
             toolCall(input = "[1,2,3]")
         )
@@ -179,12 +193,12 @@ class DefaultServerBuiltInToolExecutorTest {
         val builtExecutor = executor(stub)
 
         val result = builtExecutor.executeTool(
-            userId,
+            context(),
             serverBuiltInToolDefinition(),
             toolCall(input = """{"a":1}""")
         )
 
-        assertEquals(userId, stub.lastUserId)
+        assertEquals(userId, stub.lastContext?.userId)
         assertEquals(buildJsonObject { put("a", 1) }, stub.lastInput)
         assertEquals(ToolCallStatus.SUCCESS, result.status)
     }
@@ -197,16 +211,40 @@ class DefaultServerBuiltInToolExecutorTest {
         val builtExecutor = executor(stub)
 
         val result = builtExecutor.executeTool(
-            userId,
+            context(),
             serverBuiltInToolDefinition(name = "acme-stub_tool", builtInToolName = "stub_tool"),
             toolCall(toolName = "acme-stub_tool")
         )
 
         assertEquals(ToolCallStatus.SUCCESS, result.status)
-        assertEquals(userId, stub.lastUserId)
+        assertEquals(userId, stub.lastContext?.userId)
         // The stub was invoked exactly once: dispatch found the handler via the canonical name
-        // instead of falling into the unknown-name branch (lastUserId stays null if never called).
-        assertNotNull(stub.lastUserId, "the stub tool should have been executed")
+        // instead of falling into the unknown-name branch (lastContext stays null if never called).
+        assertNotNull(stub.lastContext, "the stub tool should have been executed")
+    }
+
+    @Test
+    fun `forwards the session context to the matching tool`() = runTest {
+        val stub = StubTool { _, _ -> """{"ok":true}""".right() }
+        val builtExecutor = executor(stub)
+        val callContext = ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 42L,
+            sessionName = "Session",
+            agentRoleId = 7L
+        )
+
+        val result = builtExecutor.executeTool(
+            context = callContext,
+            toolDefinition = serverBuiltInToolDefinition(),
+            toolCall = toolCall(input = """{"a":1}""")
+        )
+
+        // The executor forwards the turn's session context verbatim: the handler receives the
+        // session/role identity via the context so tools like get_current_session_info can resolve
+        // it.
+        assertEquals(callContext, stub.lastContext)
+        assertEquals(ToolCallStatus.SUCCESS, result.status)
     }
 
     // --- Result mapping ---
@@ -216,7 +254,7 @@ class DefaultServerBuiltInToolExecutorTest {
         val builtExecutor = executor(StubTool { _, _ -> """{"ok":true}""".right() })
 
         val result = builtExecutor.executeTool(
-            userId,
+            context(),
             serverBuiltInToolDefinition(),
             toolCall()
         )
@@ -236,7 +274,7 @@ class DefaultServerBuiltInToolExecutorTest {
         )
 
         val result = builtExecutor.executeTool(
-            userId,
+            context(),
             serverBuiltInToolDefinition(),
             toolCall()
         )

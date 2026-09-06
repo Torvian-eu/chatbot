@@ -16,6 +16,7 @@ import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorError
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolExecutor
 import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
@@ -263,8 +264,12 @@ class DefaultToolCallOrchestratorTest {
                 LocalMCPExecutorEvent.ToolExecutionResult(result)
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -299,8 +304,12 @@ class DefaultToolCallOrchestratorTest {
         val updates = trackToolCallUpdates()
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -353,8 +362,12 @@ class DefaultToolCallOrchestratorTest {
             } returns BuiltInWorkerToolExecutorEvent.ToolExecutionResult(result)
 
             val events = orchestrator.executeAndUpdateToolCalls(
-                userId = 1L,
-                requestingAgentRoleId = 0L,
+                context = ToolCallExecutionContext(
+                    userId = 1L,
+                    sessionId = 1L,
+                    sessionName = "Session",
+                    agentRoleId = 0L
+                ),
                 pendingToolCalls = listOf(pending),
                 toolDefinitions = listOf(toolDef),
                 toolApprovalFlow = flowOf(approval),
@@ -413,8 +426,12 @@ class DefaultToolCallOrchestratorTest {
             } returns BuiltInWorkerToolExecutorEvent.ToolExecutionResult(result)
 
             val events = orchestrator.executeAndUpdateToolCalls(
-                userId = 1L,
-                requestingAgentRoleId = 0L,
+                context = ToolCallExecutionContext(
+                    userId = 1L,
+                    sessionId = 1L,
+                    sessionName = "Session",
+                    agentRoleId = 0L
+                ),
                 pendingToolCalls = listOf(pending),
                 toolDefinitions = listOf(toolDef),
                 toolApprovalFlow = flowOf(approval),
@@ -470,8 +487,12 @@ class DefaultToolCallOrchestratorTest {
         } returns BuiltInWorkerToolExecutorEvent.ToolExecutionResult(result)
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -523,8 +544,12 @@ class DefaultToolCallOrchestratorTest {
         )
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -562,8 +587,12 @@ class DefaultToolCallOrchestratorTest {
         val updates = trackToolCallUpdates()
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -604,8 +633,12 @@ class DefaultToolCallOrchestratorTest {
         trackToolCallUpdates()
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(alreadyExecuted),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(
@@ -695,8 +728,12 @@ class DefaultToolCallOrchestratorTest {
         }
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -730,8 +767,12 @@ class DefaultToolCallOrchestratorTest {
         val updates = trackToolCallUpdates()
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -771,8 +812,12 @@ class DefaultToolCallOrchestratorTest {
         )
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -839,15 +884,23 @@ class DefaultToolCallOrchestratorTest {
         val approval = serverBuiltInApproval(pending.id, approved = true)
         val updates = trackToolCallUpdates()
 
-        coEvery { serverBuiltInToolExecutor.executeTool(1L, any(), pending) } returns pending.copy(
+        coEvery { serverBuiltInToolExecutor.executeTool(
+            ToolCallExecutionContext(userId = 1L, sessionId = 1L, sessionName = "Session", agentRoleId = 0L),
+            any(),
+            pending
+        ) } returns pending.copy(
             status = ToolCallStatus.SUCCESS,
             output = "[{\"id\":1,\"name\":\"writer\"}]",
             durationMs = 3L
         )
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -867,7 +920,11 @@ class DefaultToolCallOrchestratorTest {
             listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.SUCCESS),
             updates.map { it.status }
         )
-        coVerify(exactly = 1) { serverBuiltInToolExecutor.executeTool(1L, any(), pending) }
+        coVerify(exactly = 1) { serverBuiltInToolExecutor.executeTool(
+            ToolCallExecutionContext(userId = 1L, sessionId = 1L, sessionName = "Session", agentRoleId = 0L),
+            any(),
+            pending
+        ) }
     }
 
     @Test
@@ -878,8 +935,12 @@ class DefaultToolCallOrchestratorTest {
         val updates = trackToolCallUpdates()
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -910,15 +971,23 @@ class DefaultToolCallOrchestratorTest {
 
         // The executor maps an expected failure (e.g. role not found) into a terminal ERROR call
         // carrying the LLM-readable JSON error; the orchestrator persists and relays it as-is.
-        coEvery { serverBuiltInToolExecutor.executeTool(1L, any(), pending) } returns pending.copy(
+        coEvery { serverBuiltInToolExecutor.executeTool(
+            ToolCallExecutionContext(userId = 1L, sessionId = 1L, sessionName = "Session", agentRoleId = 0L),
+            any(),
+            pending
+        ) } returns pending.copy(
             status = ToolCallStatus.ERROR,
             errorMessage = "{\"error\":\"not_found_or_not_accessible\",\"message\":\"Agent role 99 not found or not accessible by the current user.\"}",
             durationMs = 2L
         )
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = flowOf(approval),
@@ -957,8 +1026,12 @@ class DefaultToolCallOrchestratorTest {
         controlSignal.cancel()
 
         val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            requestingAgentRoleId = 0L,
+            context = ToolCallExecutionContext(
+                userId = 1L,
+                sessionId = 1L,
+                sessionName = "Session",
+                agentRoleId = 0L
+            ),
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
             toolApprovalFlow = emptyFlow(),

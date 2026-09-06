@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.raise.either
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.builtin.addUnknownParameterErrors
 import eu.torvian.chatbot.server.service.builtin.encodeResult
@@ -40,8 +41,8 @@ class ReadAgentRoleTool(
     override val inputSchema: JsonObject get() = spec.inputSchema
 
     override suspend fun execute(
-        userId: Long,
-        input: JsonObject
+        input: JsonObject,
+        context: ToolCallExecutionContext
     ): Either<ServerBuiltInToolHandlerError, String> = either {
         val validationErrors = mutableListOf<String>()
         addUnknownParameterErrors(input, setOf(ServerBuiltInToolCatalog.ROLE_ID_PROPERTY), validationErrors)
@@ -51,7 +52,7 @@ class ReadAgentRoleTool(
         }
         // roleId is non-null here: a null result always coincides with a recorded validation error,
         // and we bail out above when any error was recorded.
-        val role = agentRoleService.getRoleById(userId, roleId!!)
+        val role = agentRoleService.getRoleById(context.userId, roleId!!)
             .mapLeft {
                 ServerBuiltInToolHandlerError.NotFoundOrNotAccessible(
                     "Agent role $roleId not found or not accessible by the current user."

@@ -95,6 +95,9 @@ object ServerBuiltInToolCatalog {
     /** Canonical, unprefixed catalog name of the `remove_agent_role_instruction` tool. */
     const val REMOVE_AGENT_ROLE_INSTRUCTION_NAME = "remove_agent_role_instruction"
 
+    /** Canonical, unprefixed catalog name of the `get_current_session_info` tool. */
+    const val GET_CURRENT_SESSION_INFO_NAME = "get_current_session_info"
+
     /** JSON property holding the zero-based index into the instruction list (insert/remove tools). */
     const val POSITION_PROPERTY = "position"
 
@@ -569,6 +572,14 @@ object ServerBuiltInToolCatalog {
                     add(POSITION_PROPERTY)
                 })
             }
+        ),
+        ServerBuiltInToolSpec(
+            name = GET_CURRENT_SESSION_INFO_NAME,
+            description = "Returns the current chat session's id and name together with the id, " +
+                "name, and (when set) display name of the agent role selected for that session. The " +
+                "session is the one the current conversation belongs to and is always owned by the " +
+                "current user, so no other user's data is ever exposed.",
+            inputSchema = emptyObjectSchema()
         )
     )
 }
