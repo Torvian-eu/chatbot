@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
@@ -31,6 +32,18 @@ import kotlin.test.assertTrue
 class RemoveAgentRoleInstructionToolTest {
 
     private val userId = 7L
+
+    /**
+     * Fully-populated execution context for handler-level tests: the handlers ignore the session
+     * fields, so fixed non-null values keep the fixture simple while matching the real contract.
+     */
+    private fun context(userId: Long = this.userId): ToolCallExecutionContext =
+        ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 1L,
+            sessionName = "Session",
+            agentRoleId = 1L
+        )
 
     private fun sampleRole() = AgentRoleDto(
         id = 1L,
@@ -63,11 +76,11 @@ class RemoveAgentRoleInstructionToolTest {
 
         val output = assertSuccess(
             tool.execute(
-                userId,
                 buildJsonObject {
                     put("role_id", 1L)
                     put("position", 1L)
-                }
+                },
+                context()
             )
         )
 
@@ -99,7 +112,7 @@ class RemoveAgentRoleInstructionToolTest {
     fun `requires role_id and position`() = runTest {
         val tool = RemoveAgentRoleInstructionTool(mockk())
 
-        val result = tool.execute(userId, buildJsonObject { put("role_id", 1L) })
+        val result = tool.execute(buildJsonObject { put("role_id", 1L) }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Missing required argument: position"))
@@ -113,21 +126,21 @@ class RemoveAgentRoleInstructionToolTest {
         val tool = RemoveAgentRoleInstructionTool(agentRoleService)
 
         val tooHigh = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 put("position", 3L)
-            }
+            },
+            context()
         )
         val tooHighError = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(tooHigh.leftOrNull())
         assertTrue(tooHighError.message.contains("position"))
 
         val negative = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 put("position", -1L)
-            }
+            },
+            context()
         )
         val negativeError = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(negative.leftOrNull())
         assertTrue(negativeError.message.contains("position"))
@@ -143,11 +156,11 @@ class RemoveAgentRoleInstructionToolTest {
         val tool = RemoveAgentRoleInstructionTool(agentRoleService)
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 put("position", 0L)
-            }
+            },
+            context()
         )
 
         // The empty list is special-cased: the generic bounds message would otherwise read
@@ -165,11 +178,11 @@ class RemoveAgentRoleInstructionToolTest {
         val tool = RemoveAgentRoleInstructionTool(agentRoleService)
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 99L)
                 put("position", 0L)
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.NotFoundOrNotAccessible>(result.leftOrNull())
@@ -183,12 +196,12 @@ class RemoveAgentRoleInstructionToolTest {
         val tool = RemoveAgentRoleInstructionTool(agentRoleService)
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("role_id", 1L)
                 put("position", 0L)
                 put("index", 0L)
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())

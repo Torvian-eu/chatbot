@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.builtin.tools
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import io.mockk.coEvery
@@ -34,6 +35,18 @@ class ListModelsToolTest {
 
     private val userId = 7L
 
+    /**
+     * Fully-populated execution context for handler-level tests: the handlers ignore the session
+     * fields, so fixed non-null values keep the fixture simple while matching the real contract.
+     */
+    private fun context(userId: Long = this.userId): ToolCallExecutionContext =
+        ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 1L,
+            sessionName = "Session",
+            agentRoleId = 1L
+        )
+
     private fun assertSuccess(result: Either<ServerBuiltInToolHandlerError, String>): String {
         assertTrue(result.isRight(), "Expected success but got: ${result.leftOrNull()}")
         return assertNotNull(result.getOrNull())
@@ -49,7 +62,7 @@ class ListModelsToolTest {
         coEvery { llmModelService.getAllAccessibleModels(userId, AccessMode.READ) } returns models
         val tool = ListModelsTool(llmModelService, json)
 
-        val output = assertSuccess(tool.execute(userId, buildJsonObject { }))
+        val output = assertSuccess(tool.execute(buildJsonObject { }, context()))
         val decoded = json.decodeFromString<List<LLMModel>>(output)
 
         assertEquals(2, decoded.size)
@@ -62,7 +75,7 @@ class ListModelsToolTest {
         val llmModelService = mockk<LLMModelService>()
         val tool = ListModelsTool(llmModelService, json)
 
-        val result = tool.execute(userId, buildJsonObject { put("provider", "openai") })
+        val result = tool.execute(buildJsonObject { put("provider", "openai") }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Unknown parameter: 'provider'"))

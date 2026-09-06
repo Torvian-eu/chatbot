@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
@@ -35,6 +36,18 @@ class ListModelSettingsToolTest {
 
     private val userId = 7L
 
+    /**
+     * Fully-populated execution context for handler-level tests: the handlers ignore the session
+     * fields, so fixed non-null values keep the fixture simple while matching the real contract.
+     */
+    private fun context(userId: Long = this.userId): ToolCallExecutionContext =
+        ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 1L,
+            sessionName = "Session",
+            agentRoleId = 1L
+        )
+
     private fun assertSuccess(result: Either<ServerBuiltInToolHandlerError, String>): String {
         assertTrue(result.isRight(), "Expected success but got: ${result.leftOrNull()}")
         return assertNotNull(result.getOrNull())
@@ -44,7 +57,7 @@ class ListModelSettingsToolTest {
     fun `requires the model_id property`() = runTest {
         val tool = ListModelSettingsTool(mockk(), mockk(), json)
 
-        val result = tool.execute(userId, buildJsonObject { })
+        val result = tool.execute(buildJsonObject { }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Missing required argument: model_id"))
@@ -58,7 +71,7 @@ class ListModelSettingsToolTest {
         coEvery { llmModelService.getAllAccessibleModels(userId, AccessMode.READ) } returns emptyList()
         val tool = ListModelSettingsTool(llmModelService, modelSettingsService, json)
 
-        val result = tool.execute(userId, buildJsonObject { put("model_id", 5L) })
+        val result = tool.execute(buildJsonObject { put("model_id", 5L) }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.NotFoundOrNotAccessible>(result.leftOrNull())
         assertTrue(error.message.contains("not found or not accessible by the current user"))
@@ -76,7 +89,7 @@ class ListModelSettingsToolTest {
             listOf(settings)
         val tool = ListModelSettingsTool(llmModelService, modelSettingsService, json)
 
-        val output = assertSuccess(tool.execute(userId, buildJsonObject { put("model_id", 5L) }))
+        val output = assertSuccess(tool.execute(buildJsonObject { put("model_id", 5L) }, context()))
 
         assertTrue(output.contains("\"type\":\"chat\""))
         assertTrue(output.contains("\"name\":\"Default\""))
@@ -91,7 +104,7 @@ class ListModelSettingsToolTest {
         val modelSettingsService = mockk<ModelSettingsService>()
         val tool = ListModelSettingsTool(llmModelService, modelSettingsService, json)
 
-        val result = tool.execute(userId, buildJsonObject { put("model_id", 5L); put("verbose", true) })
+        val result = tool.execute(buildJsonObject { put("model_id", 5L); put("verbose", true) }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Unknown parameter: 'verbose'"))

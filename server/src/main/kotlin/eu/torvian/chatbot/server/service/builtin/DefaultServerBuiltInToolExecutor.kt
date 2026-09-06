@@ -43,7 +43,7 @@ class DefaultServerBuiltInToolExecutor(
     }
 
     override suspend fun executeTool(
-        userId: Long,
+        context: ToolCallExecutionContext,
         toolDefinition: ServerBuiltInToolDefinition,
         toolCall: ToolCall
     ): ToolCall {
@@ -73,7 +73,7 @@ class DefaultServerBuiltInToolExecutor(
             startTime = startTime
         )
 
-        return tool.execute(userId, input).fold(
+        return tool.execute(input, context).fold(
             ifLeft = { error ->
                 logger.warn(
                     "Server built-in tool '${toolDefinition.builtInToolName}' failed for tool call ${toolCall.id}: $error"

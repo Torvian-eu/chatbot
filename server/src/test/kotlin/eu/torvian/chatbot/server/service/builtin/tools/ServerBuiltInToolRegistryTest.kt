@@ -17,8 +17,8 @@ import kotlin.test.assertNotNull
  * Tests the Koin-registered server built-in tool registry.
  *
  * Verifies that the `Map<String, ServerBuiltInTool>` binding (the executor's dispatch table) is
- * keyed by every canonical catalog name — including the three targeted instruction tools — and
- * that those keys resolve to the correct handler implementations.
+ * keyed by every canonical catalog name — including the three targeted instruction tools and
+ * `get_current_session_info` — and that those keys resolve to the correct handler implementations.
  */
 class ServerBuiltInToolRegistryTest {
 
@@ -55,6 +55,9 @@ class ServerBuiltInToolRegistryTest {
         )
         assertIs<RemoveAgentRoleInstructionTool>(
             tools[ServerBuiltInToolCatalog.REMOVE_AGENT_ROLE_INSTRUCTION_NAME]
+        )
+        assertIs<GetCurrentSessionInfoTool>(
+            tools[ServerBuiltInToolCatalog.GET_CURRENT_SESSION_INFO_NAME]
         )
     }
 }

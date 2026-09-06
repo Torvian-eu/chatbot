@@ -8,6 +8,7 @@ import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolExecutor
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
 import kotlinx.coroutines.NonCancellable
@@ -55,8 +56,7 @@ class DefaultToolCallOrchestrator(
     private val logger: Logger = LogManager.getLogger(DefaultToolCallOrchestrator::class.java)
 
     override fun executeAndUpdateToolCalls(
-        userId: Long,
-        requestingAgentRoleId: Long,
+        context: ToolCallExecutionContext,
         pendingToolCalls: List<ToolCall>,
         toolDefinitions: List<ToolDefinition>?,
         toolApprovalFlow: Flow<ToolCallApprovalSubmission>,
@@ -143,8 +143,8 @@ class DefaultToolCallOrchestrator(
 
                     is OperatorToolDefinition -> {
                         executeOperatorTool(
-                            userId = userId,
-                            requestingAgentRoleId = requestingAgentRoleId,
+                            userId = context.userId,
+                            requestingAgentRoleId = context.agentRoleId,
                             toolCall = pendingToolCall,
                             operatorToolResultFlow = operatorToolResultFlow
                         )
@@ -152,7 +152,7 @@ class DefaultToolCallOrchestrator(
 
                     is ServerBuiltInToolDefinition -> {
                         executeServerBuiltInTool(
-                            userId = userId,
+                            context = context,
                             toolDefinition = toolDef,
                             toolCall = pendingToolCall
                         )
@@ -478,14 +478,22 @@ class DefaultToolCallOrchestrator(
      * The already-resolved [ServerBuiltInToolDefinition] is passed through so the executor can
      * dispatch on the canonical [ServerBuiltInToolDefinition.builtInToolName] without any further
      * lookup; the orchestrator resolved the definition for approval, so no extra query is
-     * introduced.
+     * introduced. The fully-populated [ToolCallExecutionContext] (caller identity plus the turn's
+     * session/role context) is forwarded so handlers that need session/role identity can resolve
+     * it directly.
+     *
+     * @param context Caller identity plus the turn's session/role context; see
+     *            [ToolCallExecutionContext].
+     * @param toolDefinition The resolved server built-in tool definition being executed.
+     * @param toolCall The persisted tool call being executed.
+     * @return The terminal [ToolCall] produced by the executor.
      */
     private suspend fun executeServerBuiltInTool(
-        userId: Long,
+        context: ToolCallExecutionContext,
         toolDefinition: ServerBuiltInToolDefinition,
         toolCall: ToolCall
     ): ToolCall = serverBuiltInToolExecutor.executeTool(
-        userId = userId,
+        context = context,
         toolDefinition = toolDefinition,
         toolCall = toolCall
     )

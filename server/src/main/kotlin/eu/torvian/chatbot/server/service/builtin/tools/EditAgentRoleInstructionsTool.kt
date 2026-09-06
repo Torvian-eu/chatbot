@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.builtin.TextEditSpec
 import eu.torvian.chatbot.server.service.builtin.addUnknownParameterErrors
@@ -54,8 +55,8 @@ class EditAgentRoleInstructionsTool(
     override val inputSchema: JsonObject get() = spec.inputSchema
 
     override suspend fun execute(
-        userId: Long,
-        input: JsonObject
+        input: JsonObject,
+        context: ToolCallExecutionContext
     ): Either<ServerBuiltInToolHandlerError, String> = either {
         val validationErrors = mutableListOf<String>()
         addUnknownParameterErrors(
@@ -74,7 +75,7 @@ class EditAgentRoleInstructionsTool(
 
         // roleId is non-null here: a null result always coincides with a recorded validation error,
         // and we bail out above when any error was recorded.
-        val persisted = agentRoleService.getRoleById(userId, roleId!!)
+        val persisted = agentRoleService.getRoleById(context.userId, roleId!!)
             .mapLeft {
                 ServerBuiltInToolHandlerError.NotFoundOrNotAccessible(
                     "Agent role $roleId not found or not accessible by the current user."
@@ -95,7 +96,7 @@ class EditAgentRoleInstructionsTool(
             instructions = outcome.newInstructions
         )
 
-        agentRoleService.updateRole(userId, roleId, request)
+        agentRoleService.updateRole(context.userId, roleId, request)
             .mapLeft { error -> error.toHandlerError() }
             .bind()
         renderReport(persisted, outcome, edits)

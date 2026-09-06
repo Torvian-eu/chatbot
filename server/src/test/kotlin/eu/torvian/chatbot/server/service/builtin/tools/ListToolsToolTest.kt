@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolSummary
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.ToolService
 import io.mockk.coEvery
@@ -37,6 +38,18 @@ class ListToolsToolTest {
 
     private val userId = 7L
 
+    /**
+     * Fully-populated execution context for handler-level tests: the handlers ignore the session
+     * fields, so fixed non-null values keep the fixture simple while matching the real contract.
+     */
+    private fun context(userId: Long = this.userId): ToolCallExecutionContext =
+        ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 1L,
+            sessionName = "Session",
+            agentRoleId = 1L
+        )
+
     private val now = Instant.fromEpochMilliseconds(1_700_000_000_000L)
 
     private fun sampleServerBuiltInTool(
@@ -67,7 +80,7 @@ class ListToolsToolTest {
         coEvery { toolService.getToolsForUser(userId) } returns listOf(sampleServerBuiltInTool())
         val tool = ListToolsTool(toolService, json)
 
-        val output = assertSuccess(tool.execute(userId, buildJsonObject { }))
+        val output = assertSuccess(tool.execute(buildJsonObject { }, context()))
         val decoded = json.decodeFromString<List<ToolSummary>>(output)
 
         assertEquals(1, decoded.size)
@@ -86,7 +99,7 @@ class ListToolsToolTest {
         val toolService = mockk<ToolService>()
         val tool = ListToolsTool(toolService, json)
 
-        val result = tool.execute(userId, buildJsonObject { put("include_disabled", true) })
+        val result = tool.execute(buildJsonObject { put("include_disabled", true) }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Unknown parameter: 'include_disabled'"))

@@ -6,6 +6,7 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
@@ -38,6 +39,18 @@ class ReadAgentRoleToolTest {
 
     private val userId = 7L
 
+    /**
+     * Fully-populated execution context for handler-level tests: the handlers ignore the session
+     * fields, so fixed non-null values keep the fixture simple while matching the real contract.
+     */
+    private fun context(userId: Long = this.userId): ToolCallExecutionContext =
+        ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 1L,
+            sessionName = "Session",
+            agentRoleId = 1L
+        )
+
     private fun sampleRole(id: Long = 1L) = AgentRoleDto(
         id = id,
         name = "writer",
@@ -61,7 +74,7 @@ class ReadAgentRoleToolTest {
     fun `requires the role_id property`() = runTest {
         val tool = ReadAgentRoleTool(mockk(), json)
 
-        val result = tool.execute(userId, buildJsonObject { })
+        val result = tool.execute(buildJsonObject { }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Missing required argument: role_id"))
@@ -71,7 +84,7 @@ class ReadAgentRoleToolTest {
     fun `rejects a non-integer role_id`() = runTest {
         val tool = ReadAgentRoleTool(mockk(), json)
 
-        val result = tool.execute(userId, buildJsonObject { put("role_id", "abc") })
+        val result = tool.execute(buildJsonObject { put("role_id", "abc") }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Argument 'role_id' must be an integer"))
@@ -83,7 +96,7 @@ class ReadAgentRoleToolTest {
         coEvery { agentRoleService.getRoleById(userId, 99L) } returns AgentRoleError.NotFound(99L).left()
         val tool = ReadAgentRoleTool(agentRoleService, json)
 
-        val result = tool.execute(userId, buildJsonObject { put("role_id", 99L) })
+        val result = tool.execute(buildJsonObject { put("role_id", 99L) }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.NotFoundOrNotAccessible>(result.leftOrNull())
         assertTrue(error.message.contains("not found or not accessible by the current user"))
@@ -95,7 +108,7 @@ class ReadAgentRoleToolTest {
         coEvery { agentRoleService.getRoleById(userId, 1L) } returns sampleRole().right()
         val tool = ReadAgentRoleTool(agentRoleService, json)
 
-        val output = assertSuccess(tool.execute(userId, buildJsonObject { put("role_id", 1L) }))
+        val output = assertSuccess(tool.execute(buildJsonObject { put("role_id", 1L) }, context()))
         val decoded = json.decodeFromString(AgentRoleDto.serializer(), output)
 
         assertEquals(1L, decoded.id)
@@ -112,7 +125,7 @@ class ReadAgentRoleToolTest {
         coEvery { agentRoleService.getRoleById(userId, 1L) } returns sampleRole().copy(disabled = true).right()
         val tool = ReadAgentRoleTool(agentRoleService, json)
 
-        val output = assertSuccess(tool.execute(userId, buildJsonObject { put("role_id", 1L) }))
+        val output = assertSuccess(tool.execute(buildJsonObject { put("role_id", 1L) }, context()))
         val decoded = json.decodeFromString(AgentRoleDto.serializer(), output)
 
         assertTrue(decoded.disabled)
@@ -123,7 +136,7 @@ class ReadAgentRoleToolTest {
         val agentRoleService = mockk<AgentRoleService>()
         val tool = ReadAgentRoleTool(agentRoleService, json)
 
-        val result = tool.execute(userId, buildJsonObject { put("role_id", 1L); put("limit", 5L) })
+        val result = tool.execute(buildJsonObject { put("role_id", 1L); put("limit", 5L) }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Unknown parameter: 'limit'"))

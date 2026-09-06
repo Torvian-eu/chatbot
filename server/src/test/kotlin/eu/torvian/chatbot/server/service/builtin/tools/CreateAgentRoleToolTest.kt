@@ -6,6 +6,7 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
@@ -32,6 +33,18 @@ class CreateAgentRoleToolTest {
 
     private val userId = 7L
 
+    /**
+     * Fully-populated execution context for handler-level tests: the handlers ignore the session
+     * fields, so fixed non-null values keep the fixture simple while matching the real contract.
+     */
+    private fun context(userId: Long = this.userId): ToolCallExecutionContext =
+        ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 1L,
+            sessionName = "Session",
+            agentRoleId = 1L
+        )
+
     private fun createdRole(id: Long = 9L, name: String = "translator") = AgentRoleDto(
         id = id,
         name = name,
@@ -53,7 +66,7 @@ class CreateAgentRoleToolTest {
     fun `requires the name property`() = runTest {
         val tool = CreateAgentRoleTool(mockk())
 
-        val result = tool.execute(userId, buildJsonObject { put("description", "no name") })
+        val result = tool.execute(buildJsonObject { put("description", "no name") }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Missing required argument: name"))
@@ -66,7 +79,7 @@ class CreateAgentRoleToolTest {
         val tool = CreateAgentRoleTool(agentRoleService)
 
         val output = assertSuccess(
-            tool.execute(userId, buildJsonObject { put("name", "translator"); put("description", "translates") })
+            tool.execute(buildJsonObject { put("name", "translator"); put("description", "translates") }, context())
         )
         // The tool returns a concise one-line operation summary, not the full role JSON, to save tokens.
         assertTrue(output.contains("Created agent role 'translator' (id: 9)"))
@@ -113,7 +126,7 @@ class CreateAgentRoleToolTest {
                 )
             }
         }
-        tool.execute(userId, input)
+        tool.execute(input, context())
 
         coVerify(exactly = 1) {
             agentRoleService.createRole(
@@ -140,8 +153,8 @@ class CreateAgentRoleToolTest {
         val tool = CreateAgentRoleTool(agentRoleService)
 
         val result = tool.execute(
-            userId,
-            buildJsonObject { put("name", "x"); put("model_id", 3L); put("model_settings_id", 4L) }
+            buildJsonObject { put("name", "x"); put("model_id", 3L); put("model_settings_id", 4L) },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.OperationFailed>(result.leftOrNull())
@@ -156,7 +169,7 @@ class CreateAgentRoleToolTest {
                 CreateAgentRoleError.NameAlreadyExists("writer").left()
         val tool = CreateAgentRoleTool(agentRoleService)
 
-        val result = tool.execute(userId, buildJsonObject { put("name", "writer") })
+        val result = tool.execute(buildJsonObject { put("name", "writer") }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.OperationFailed>(result.leftOrNull())
         assertEquals("name_already_exists", error.code)
@@ -167,8 +180,8 @@ class CreateAgentRoleToolTest {
         val tool = CreateAgentRoleTool(mockk())
 
         val result = tool.execute(
-            userId,
-            buildJsonObject { put("name", 123); put("model_id", "not-a-number"); put("unknown", true) }
+            buildJsonObject { put("name", 123); put("model_id", "not-a-number"); put("unknown", true) },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
@@ -183,7 +196,7 @@ class CreateAgentRoleToolTest {
     fun `rejects a malformed instructions array`() = runTest {
         val tool = CreateAgentRoleTool(mockk())
 
-        val result = tool.execute(userId, buildJsonObject { put("name", "x"); put("instructions", "nope") })
+        val result = tool.execute(buildJsonObject { put("name", "x"); put("instructions", "nope") }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Argument 'instructions' must be an array of instruction objects"))
@@ -194,11 +207,11 @@ class CreateAgentRoleToolTest {
         val tool = CreateAgentRoleTool(mockk())
 
         val result = tool.execute(
-            userId,
             buildJsonObject {
                 put("name", "x")
                 putJsonArray("tool_ids") { add(JsonPrimitive("not-an-id")) }
-            }
+            },
+            context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())

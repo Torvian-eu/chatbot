@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.tool.OperatorToolDefinition
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.ToolService
 import io.mockk.coEvery
@@ -36,6 +37,18 @@ class ReadToolToolTest {
 
     private val userId = 7L
 
+    /**
+     * Fully-populated execution context for handler-level tests: the handlers ignore the session
+     * fields, so fixed non-null values keep the fixture simple while matching the real contract.
+     */
+    private fun context(userId: Long = this.userId): ToolCallExecutionContext =
+        ToolCallExecutionContext(
+            userId = userId,
+            sessionId = 1L,
+            sessionName = "Session",
+            agentRoleId = 1L
+        )
+
     private val now = Instant.fromEpochMilliseconds(1_700_000_000_000L)
 
     private fun assertSuccess(result: Either<ServerBuiltInToolHandlerError, String>): String {
@@ -47,7 +60,7 @@ class ReadToolToolTest {
     fun `requires the tool_id property`() = runTest {
         val tool = ReadToolTool(mockk(), json)
 
-        val result = tool.execute(userId, buildJsonObject { })
+        val result = tool.execute(buildJsonObject { }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Missing required argument: tool_id"))
@@ -72,7 +85,7 @@ class ReadToolToolTest {
         coEvery { toolService.getToolsForUser(userId) } returns listOf(owned)
         val tool = ReadToolTool(toolService, json)
 
-        val result = tool.execute(userId, buildJsonObject { put("tool_id", 999L) })
+        val result = tool.execute(buildJsonObject { put("tool_id", 999L) }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.NotFoundOrNotAccessible>(result.leftOrNull())
         assertTrue(error.message.contains("not found or not accessible by the current user"))
@@ -96,7 +109,7 @@ class ReadToolToolTest {
         coEvery { toolService.getToolsForUser(userId) } returns listOf(operatorTool)
         val tool = ReadToolTool(toolService, json)
 
-        val output = assertSuccess(tool.execute(userId, buildJsonObject { put("tool_id", 70L) }))
+        val output = assertSuccess(tool.execute(buildJsonObject { put("tool_id", 70L) }, context()))
 
         // The full polymorphic definition is emitted through the sealed ToolDefinition serializer
         // (same contract as the REST tool routes) and carries the subtype fields.
@@ -109,7 +122,7 @@ class ReadToolToolTest {
         val toolService = mockk<ToolService>()
         val tool = ReadToolTool(toolService, json)
 
-        val result = tool.execute(userId, buildJsonObject { put("tool_id", 1L); put("expand", true) })
+        val result = tool.execute(buildJsonObject { put("tool_id", 1L); put("expand", true) }, context())
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Unknown parameter: 'expand'"))

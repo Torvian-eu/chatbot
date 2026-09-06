@@ -6,6 +6,7 @@ import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.builtin.addUnknownParameterErrors
 import eu.torvian.chatbot.server.service.builtin.encodeResult
@@ -45,8 +46,8 @@ class ListModelSettingsTool(
     override val inputSchema: JsonObject get() = spec.inputSchema
 
     override suspend fun execute(
-        userId: Long,
-        input: JsonObject
+        input: JsonObject,
+        context: ToolCallExecutionContext
     ): Either<ServerBuiltInToolHandlerError, String> = either {
         val validationErrors = mutableListOf<String>()
         addUnknownParameterErrors(input, setOf(ServerBuiltInToolCatalog.MODEL_ID_PROPERTY), validationErrors)
@@ -57,14 +58,14 @@ class ListModelSettingsTool(
 
         // modelId is non-null here: a null result always coincides with a recorded validation error,
         // and we bail out above when any error was recorded.
-        val accessibleModels = llmModelService.getAllAccessibleModels(userId, AccessMode.READ)
+        val accessibleModels = llmModelService.getAllAccessibleModels(context.userId, AccessMode.READ)
         ensure(!accessibleModels.none { it.id == modelId }) {
             ServerBuiltInToolHandlerError.NotFoundOrNotAccessible(
                 "Model $modelId not found or not accessible by the current user."
             )
         }
         val settings =
-            modelSettingsService.getAccessibleSettingsByModelId(userId, modelId!!, AccessMode.READ)
+            modelSettingsService.getAccessibleSettingsByModelId(context.userId, modelId!!, AccessMode.READ)
         encodeResult(json, settings).bind()
     }
 }

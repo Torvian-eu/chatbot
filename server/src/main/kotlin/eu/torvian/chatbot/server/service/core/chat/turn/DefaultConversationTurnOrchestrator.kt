@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionService
 import eu.torvian.chatbot.server.service.core.chat.content.ToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.context.ChatContextBuilder
@@ -496,9 +497,18 @@ class DefaultConversationTurnOrchestrator(
             ?: throw IllegalStateException(
                 "Cannot execute tool calls for session ${request.session.id}: no agent role selected"
             )
+        // Bundle the caller identity with the turn's session context into the single execution
+        // context consumed by the whole approval/execution chain. Every field is non-null: the
+        // session and the validated agent role are guaranteed above, and server built-in tool
+        // handlers receive this object to resolve session/role identity.
+        val sessionContext = ToolCallExecutionContext(
+            userId = request.userId,
+            sessionId = request.session.id,
+            sessionName = request.session.name,
+            agentRoleId = requestingAgentRoleId
+        )
         val executionEvents = toolCallOrchestrator.executeAndUpdateToolCalls(
-            request.userId,
-            requestingAgentRoleId,
+            sessionContext,
             pendingToolCalls,
             request.llmConfig.tools,
             request.toolApprovalFlow,

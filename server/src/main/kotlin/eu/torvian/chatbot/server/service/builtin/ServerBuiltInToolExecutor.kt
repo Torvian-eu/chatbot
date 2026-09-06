@@ -12,8 +12,10 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * user-scoped handler against the server's own services and returns a terminal [ToolCall]
  * (SUCCESS or ERROR), never throwing for expected failures.
  *
- * No session or turn-anchor context is needed: every handler is a user-scoped read/manage
- * operation that needs only [userId] plus the tool call.
+ * The session-context fields of [ToolCallExecutionContext] are non-null: the chat-turn pipeline
+ * is the only producer and always supplies a validated session with a selected agent role before
+ * tool calls execute. This lets tools that need the current session/role identity (e.g.
+ * `get_current_session_info`) resolve it directly from the context.
  */
 interface ServerBuiltInToolExecutor {
 
@@ -29,15 +31,15 @@ interface ServerBuiltInToolExecutor {
      * Unsupported canonical names (a registry/DB inconsistency) and malformed inputs produce a
      * terminal ERROR [ToolCall] instead of an exception.
      *
-     * @param userId The user whose server built-in tool instance is being executed (ownership scope
-     *            for every handler).
+     * @param context Caller identity plus the turn's session/role context, bundled so the
+     *            executor contract stays stable; see [ToolCallExecutionContext].
      * @param toolDefinition The resolved server built-in tool definition being executed; dispatch
      *            keys on its [ServerBuiltInToolDefinition.builtInToolName].
      * @param toolCall The persisted tool call being executed.
      * @return The terminal [ToolCall] with output/error fields populated.
      */
     suspend fun executeTool(
-        userId: Long,
+        context: ToolCallExecutionContext,
         toolDefinition: ServerBuiltInToolDefinition,
         toolCall: ToolCall
     ): ToolCall
