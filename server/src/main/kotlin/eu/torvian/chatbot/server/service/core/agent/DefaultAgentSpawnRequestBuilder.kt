@@ -6,6 +6,7 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.models.agent.AgentSpawnMessage
 import eu.torvian.chatbot.common.models.agent.AgentSpawnRequest
+import eu.torvian.chatbot.common.models.agent.OperatorToolMode
 import eu.torvian.chatbot.common.models.agent.OperatorType
 import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -18,17 +19,18 @@ import kotlinx.serialization.json.*
  * Default implementation of [AgentSpawnRequestBuilder].
  *
  * Parses the tool-call input JSON for the `subject`, `agent_role_name`, `prompt`, and optional
- * `interactive` parameters (see [OperatorToolCatalog]), resolves the role by name through the
+ * `mode` parameters (see [OperatorToolCatalog]), resolves the role by name through the
  * user-scoped [AgentRoleService.getRoleByName], enforces the source role's spawn allow-list through
  * [AgentRoleService.getRoleById], and assembles the [AgentSpawnRequest] with a single
  * [AgentSpawnMessage.User] carrying the prompt. The persisted [ToolCall.id] is used as the
  * correlation key echoed back in the operator's `ToolExecutionResult`.
  *
- * The optional `interactive` flag is validated as pure tool input before any role lookup: absent →
- * `false` (default summary-return mode); present-but-non-boolean JSON →
- * [SpawnRequestBuildError.InvalidInput]. `interactive = true` selects handoff mode — the request
- * carries the flag unchanged and the operator completes the tool with empty output instead of
- * returning the spawned agent's summary.
+ * The optional `mode` enum is validated as pure tool input before any role lookup: absent →
+ * [OperatorToolMode.WAIT_FOR_RESPONSE] (default summary-return mode); present must be a JSON string
+ * equal to one of the two serialized wire values (`wait_for_response` / `fire_and_forget`), any
+ * other JSON value → [SpawnRequestBuildError.InvalidInput]. The mode is carried into the request
+ * unchanged and selects whether the operator returns the spawned summary (wait) or starts the
+ * spawned turn in the background and returns only the session id (fire-and-forget).
  *
  * @property agentRoleService User-scoped agent-role lookup used to resolve the spawn target and the
  *            source role's allow-list.
@@ -49,10 +51,12 @@ class DefaultAgentSpawnRequestBuilder(
     /**
      * Parses and resolves a spawn call and applies source-role authorization.
      *
-     * The optional [OperatorToolCatalog.SPAWN_AGENT_INTERACTIVE_PROPERTY] flag is read as part of
-     * argument validation, before any role lookup: absent → `false`; a present value must be a JSON
-     * boolean, otherwise the call fails with [SpawnRequestBuildError.InvalidInput] and never reaches
-     * role resolution (malformed tool input must not touch I/O or leak whether a role exists).
+     * The optional [OperatorToolCatalog.SPAWN_AGENT_MODE_PROPERTY] enum is read as part of argument
+     * validation, before any role lookup: absent → [OperatorToolMode.WAIT_FOR_RESPONSE]; a present
+     * value must be a JSON string equal to one of the two serialized wire values, anything else
+     * fails with [SpawnRequestBuildError.InvalidInput] and never reaches role resolution (malformed
+     * tool input must not touch I/O or leak whether a role exists). A legacy `interactive` key is
+     * ignored by property-name lookup and therefore falls back to wait mode.
      *
      * @param userId Ownership scope for role lookup.
      * @param requestingAgentRoleId Source role id from the validated session.
@@ -98,22 +102,27 @@ class DefaultAgentSpawnRequestBuilder(
                     )
                 )
 
-            // Optional handoff flag: absent → default summary-return mode; present must be a JSON
-            // boolean (true = handoff). Strings/numbers/objects/arrays/explicit null are malformed
-            // tool input, reported as InvalidInput exactly like the other parameter checks above.
-            // JSON `null` is a JsonPrimitive whose booleanOrNull is null, so it also lands here
-            // instead of silently falling back to default mode.
-            val interactive = when (val element = arguments[OperatorToolCatalog.SPAWN_AGENT_INTERACTIVE_PROPERTY]) {
-                null -> false
-                is JsonPrimitive -> element.booleanOrNull
+            // Optional execution mode: absent → wait-for-response (default). A present value must be
+            // a JSON string equal to one of the two serialized wire values; strings/numbers/objects/
+            // arrays/explicit null are malformed tool input, reported as InvalidInput exactly like
+            // the other parameter checks above. JSON `null` is a JsonPrimitive whose contentOrNull is
+            // null, so it also lands here instead of silently falling back to default mode. The
+            // enum's @SerialName values are the schema values too, so decoding through the serializer
+            // keeps both aligned.
+            val mode = when (val element = arguments[OperatorToolCatalog.SPAWN_AGENT_MODE_PROPERTY]) {
+                null -> OperatorToolMode.WAIT_FOR_RESPONSE
+                is JsonPrimitive -> element.contentOrNull
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { raw -> runCatching { json.decodeFromString(OperatorToolMode.serializer(), "\"$raw\"") }.getOrNull() }
                     ?: raise(
                         SpawnRequestBuildError.InvalidInput(
-                            "'${OperatorToolCatalog.SPAWN_AGENT_INTERACTIVE_PROPERTY}' must be a boolean in spawn_agent arguments"
+                            "'${OperatorToolCatalog.SPAWN_AGENT_MODE_PROPERTY}' must be one of 'wait_for_response', 'fire_and_forget' in spawn_agent arguments"
                         )
                     )
+
                 else -> raise(
                     SpawnRequestBuildError.InvalidInput(
-                        "'${OperatorToolCatalog.SPAWN_AGENT_INTERACTIVE_PROPERTY}' must be a boolean in spawn_agent arguments"
+                        "'${OperatorToolCatalog.SPAWN_AGENT_MODE_PROPERTY}' must be one of 'wait_for_response', 'fire_and_forget' in spawn_agent arguments"
                     )
                 )
             }
@@ -141,7 +150,7 @@ class DefaultAgentSpawnRequestBuilder(
             AgentSpawnRequest(
                 agentRoleToSpawn = role,
                 subject = subject,
-                interactive = interactive,
+                mode = mode,
                 operatorType = OperatorType.CLIENT_APP,
                 conversation = listOf(AgentSpawnMessage.User(prompt)),
                 toolCallId = toolCall.id
