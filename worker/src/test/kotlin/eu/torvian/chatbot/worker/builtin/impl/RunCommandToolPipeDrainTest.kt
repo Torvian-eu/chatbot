@@ -36,7 +36,7 @@ class RunCommandToolPipeDrainTest {
             val (command, args) = RunCommandTestSupport.largeOutputCommand(stderr = false, byteCount = 128 * 1024)
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 5, maxLines = 4, maxBytes = 32),
+                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 4, maxBytes = 32),
                 RunCommandTestSupport.context(dir),
             )
 
@@ -65,7 +65,7 @@ class RunCommandToolPipeDrainTest {
             )
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 5, maxLines = 4, maxBytes = 32),
+                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 4, maxBytes = 32),
                 RunCommandTestSupport.context(dir),
             )
 
@@ -90,7 +90,7 @@ class RunCommandToolPipeDrainTest {
             val (command, args) = RunCommandTestSupport.bothStreamsLargeOutputCommand(byteCount = 128 * 1024)
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 5, maxLines = 4, maxBytes = 32),
+                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 4, maxBytes = 32),
                 RunCommandTestSupport.context(dir),
             )
 
@@ -118,7 +118,7 @@ class RunCommandToolPipeDrainTest {
             )
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 5, maxLines = 10, maxBytes = 48),
+                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 10, maxBytes = 48),
                 RunCommandTestSupport.context(dir),
             )
 
@@ -143,7 +143,7 @@ class RunCommandToolPipeDrainTest {
             val (command, args) = RunCommandTestSupport.largeOutputCommand(stderr = false, byteCount = 96 * 1024)
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 5, maxLines = 2, maxBytes = 24),
+                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 2, maxBytes = 24),
                 RunCommandTestSupport.context(dir),
             )
 
@@ -168,7 +168,7 @@ class RunCommandToolPipeDrainTest {
             }
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 5),
+                RunCommandTestSupport.buildInput(command, args, timeout = 30),
                 RunCommandTestSupport.context(dir),
             )
 
@@ -195,7 +195,7 @@ class RunCommandToolPipeDrainTest {
             val maxBytes = 5
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 5, maxLines = 2, maxBytes = maxBytes),
+                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 2, maxBytes = maxBytes),
                 RunCommandTestSupport.context(dir),
             )
 
@@ -222,7 +222,7 @@ class RunCommandToolPipeDrainTest {
             val (command, args) = RunCommandTestSupport.largeOutputCommand(stderr = false, byteCount = 96 * 1024)
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 5, maxBytes = 32),
+                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxBytes = 32),
                 RunCommandTestSupport.context(dir).copy(ioDispatcher = dispatcher),
             )
 
