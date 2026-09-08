@@ -4,6 +4,7 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.agent.AgentSpawnMessage
+import eu.torvian.chatbot.common.models.agent.OperatorToolMode
 import eu.torvian.chatbot.common.models.agent.OperatorType
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
@@ -84,19 +85,73 @@ class DefaultAgentSpawnRequestBuilderTest {
         val request = result.getOrNull()!!
         assertEquals(role, request.agentRoleToSpawn)
         assertEquals("Implementation task", request.subject)
-        // Absent flag → default summary-return mode.
-        assertEquals(false, request.interactive)
+        // Absent mode → default wait-for-response (summary-return) behavior.
+        assertEquals(OperatorToolMode.WAIT_FOR_RESPONSE, request.mode)
         assertEquals(OperatorType.CLIENT_APP, request.operatorType)
         assertEquals(42L, request.toolCallId)
         assertEquals(listOf(AgentSpawnMessage.User("Do the thing")), request.conversation)
     }
 
     /**
-     * Verifies that an explicit `interactive: true` is validated and carried through into the
+     * Verifies that an explicit `mode: fire_and_forget` is validated and carried through into the
      * request unchanged, with all remaining fields untouched.
      */
     @Test
-    fun `build carries interactive true into the request`() = runTest {
+    fun `build carries fire and forget mode into the request`() = runTest {
+        coEvery { agentRoleService.getRoleByName(1L, "implementer") } returns role.right()
+        coEvery { agentRoleService.getRoleById(1L, 1L) } returns sourceRole.right()
+
+        val result = builder.build(
+            1L,
+            1L,
+            toolCall(
+                input = """{"subject":"Implementation task","agent_role_name":"implementer","prompt":"Do the thing","mode":"fire_and_forget"}"""
+            )
+        )
+
+        assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
+        val request = result.getOrNull()!!
+        assertEquals(OperatorToolMode.FIRE_AND_FORGET, request.mode)
+        assertEquals(role, request.agentRoleToSpawn)
+        assertEquals("Implementation task", request.subject)
+        assertEquals(OperatorType.CLIENT_APP, request.operatorType)
+        assertEquals(42L, request.toolCallId)
+        assertEquals(listOf(AgentSpawnMessage.User("Do the thing")), request.conversation)
+    }
+
+    /**
+     * Verifies that a present-but-invalid `mode` value is rejected as
+     * [SpawnRequestBuildError.InvalidInput] before any role lookup: argument validation completes
+     * before I/O, so the builder never leaks whether a role exists for malformed input.
+     */
+    @Test
+    fun `build rejects an invalid mode value before role lookup`() = runTest {
+        val malformedModes = listOf(
+            // Explicit JSON null is also malformed: the builder must not silently fall back.
+            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","mode":null}""",
+            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","mode":"yes"}""",
+            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","mode":1}""",
+            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","mode":[true]}""",
+            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","mode":{"x":1}}"""
+        )
+
+        malformedModes.forEach { input ->
+            val result = builder.build(1L, 1L, toolCall(input = input))
+
+            assertIs<SpawnRequestBuildError.InvalidInput>(result.leftOrNull())
+        }
+        // Validation precedes I/O: neither role lookup may have been reached for malformed input.
+        coVerify(exactly = 0) { agentRoleService.getRoleByName(any(), any()) }
+        coVerify(exactly = 0) { agentRoleService.getRoleById(any(), any()) }
+    }
+
+    /**
+     * Verifies that a legacy `interactive` key (from a stale LLM schema) is ignored by the builder's
+     * property-name lookup and therefore falls back to the default wait-for-response mode — the
+     * wire change is not a compatibility break for stale model output.
+     */
+    @Test
+    fun `build ignores a legacy interactive key and defaults to wait mode`() = runTest {
         coEvery { agentRoleService.getRoleByName(1L, "implementer") } returns role.right()
         coEvery { agentRoleService.getRoleById(1L, 1L) } returns sourceRole.right()
 
@@ -109,39 +164,7 @@ class DefaultAgentSpawnRequestBuilderTest {
         )
 
         assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
-        val request = result.getOrNull()!!
-        assertEquals(true, request.interactive)
-        assertEquals(role, request.agentRoleToSpawn)
-        assertEquals("Implementation task", request.subject)
-        assertEquals(OperatorType.CLIENT_APP, request.operatorType)
-        assertEquals(42L, request.toolCallId)
-        assertEquals(listOf(AgentSpawnMessage.User("Do the thing")), request.conversation)
-    }
-
-    /**
-     * Verifies that a present-but-non-boolean `interactive` value is rejected as
-     * [SpawnRequestBuildError.InvalidInput] before any role lookup: argument validation completes
-     * before I/O, so the builder never leaks whether a role exists for malformed input.
-     */
-    @Test
-    fun `build rejects a non boolean interactive value before role lookup`() = runTest {
-        val malformedInteractive = listOf(
-            // Explicit JSON null is also malformed: the builder must not silently fall back.
-            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","interactive":null}""",
-            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","interactive":"yes"}""",
-            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","interactive":1}""",
-            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","interactive":[true]}""",
-            """{"subject":"Task","agent_role_name":"implementer","prompt":"Do the thing","interactive":{"x":1}}"""
-        )
-
-        malformedInteractive.forEach { input ->
-            val result = builder.build(1L, 1L, toolCall(input = input))
-
-            assertIs<SpawnRequestBuildError.InvalidInput>(result.leftOrNull())
-        }
-        // Validation precedes I/O: neither role lookup may have been reached for malformed input.
-        coVerify(exactly = 0) { agentRoleService.getRoleByName(any(), any()) }
-        coVerify(exactly = 0) { agentRoleService.getRoleById(any(), any()) }
+        assertEquals(OperatorToolMode.WAIT_FOR_RESPONSE, result.getOrNull()!!.mode)
     }
 
     /**

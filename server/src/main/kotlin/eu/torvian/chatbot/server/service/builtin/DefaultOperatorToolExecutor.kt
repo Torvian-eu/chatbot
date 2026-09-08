@@ -2,10 +2,13 @@ package eu.torvian.chatbot.server.service.builtin
 
 import arrow.core.getOrElse
 import eu.torvian.chatbot.common.models.agent.AgentSpawnRequest
+import eu.torvian.chatbot.common.models.agent.SendMessageRequest
 import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.server.service.core.agent.AgentSpawnRequestBuilder
+import eu.torvian.chatbot.server.service.core.agent.SendMessageRequestBuilder
+import eu.torvian.chatbot.server.service.core.error.agent.SendMessageRequestBuildError
 import eu.torvian.chatbot.server.service.core.error.agent.SpawnRequestBuildError
 import eu.torvian.chatbot.server.service.core.toolcall.OperatorToolExecutionResult
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallExecutionEvent
@@ -21,11 +24,19 @@ import kotlin.time.Instant
 /**
  * Default implementation of [OperatorToolExecutor].
  *
- * For a `spawn_agent` call the executor:
+ * Dispatches on the tool call's name — the discriminator carried in the relay envelope — to the
+ * matching payload builder:
  *
- * 1. Builds the typed [AgentSpawnRequest] via [AgentSpawnRequestBuilder] (input parsing, user-scoped
- *    role lookup, and the source role's spawn allow-list). A build failure is mapped to a tool-level
- *    ERROR result, so the LLM hears a clear message instead of the turn crashing.
+ *  - `spawn_agent` → [AgentSpawnRequestBuilder] (input parsing, user-scoped role lookup, and the
+ *    source role's spawn allow-list) producing an [AgentSpawnRequest];
+ *  - `send_message` → [SendMessageRequestBuilder] (input parsing + target-session existence and
+ *    same-user ownership validation) producing a [SendMessageRequest];
+ *  - any other name → fail-fast unsupported-tool error.
+ *
+ * For a supported call the executor:
+ *
+ * 1. Builds the typed payload (a build failure is mapped to a tool-level ERROR result, so the LLM
+ *    hears a clear message instead of the turn crashing).
  * 2. Serializes the typed payload into the generic relay envelope (`toolName` = the tool call's
  *    [ToolCall.toolName], which for operator tools is unique per user) and emits
  *    [ToolCallExecutionEvent.OperatorToolExecutionRequested].
@@ -38,10 +49,13 @@ import kotlin.time.Instant
  *
  * @property agentSpawnRequestBuilder Builds the typed spawn payload (role-by-name + ownership +
  *            source-role allow-list).
- * @property json JSON codec used to serialize the typed payload into the envelope.
+ * @property sendMessageRequestBuilder Builds the typed send-message payload (input parsing +
+ *            target-session existence and same-user ownership).
+ * @property json JSON codec used to serialize the typed payloads into the envelope.
  */
 class DefaultOperatorToolExecutor(
     private val agentSpawnRequestBuilder: AgentSpawnRequestBuilder,
+    private val sendMessageRequestBuilder: SendMessageRequestBuilder,
     private val json: Json
 ) : OperatorToolExecutor {
 
@@ -59,38 +73,65 @@ class DefaultOperatorToolExecutor(
     ): ToolCall {
         val startTime = Clock.System.now()
 
-        // Only `spawn_agent` is implemented so far. Any other operator-tool name reaching this
-        // executor is a misconfiguration (the orchestrator dispatches operator tools here by
-        // definition), so fail fast with a readable tool-level error instead of emitting a relay
-        // event the operator would not recognize.
-        if (toolCall.toolName != OperatorToolCatalog.SPAWN_AGENT_NAME) {
-            logger.warn(
-                "Unsupported operator tool '${toolCall.toolName}' for tool call ${toolCall.id}"
-            )
-            return toolCall.toErrorResult(
-                errorMessage = "Unsupported operator tool '${toolCall.toolName}'. " +
-                    "Only '${OperatorToolCatalog.SPAWN_AGENT_NAME}' is supported.",
-                startTime = startTime
-            )
-        }
+        // Build + serialize phase: each supported branch produces the relay JSON or returns a
+        // terminal ERROR tool call early; the unsupported branch fails fast. The emit + await +
+        // map tail below is shared by both supported tools.
+        val payloadJson = when (toolCall.toolName) {
+            OperatorToolCatalog.SPAWN_AGENT_NAME -> {
+                val payload = agentSpawnRequestBuilder.build(userId, requestingAgentRoleId, toolCall)
+                    .getOrElse { buildError ->
+                        logger.warn("spawn_agent payload build failed for tool call ${toolCall.id}: $buildError")
+                        return toolCall.toErrorResult(
+                            errorMessage = buildError.toUserMessage(),
+                            startTime = startTime
+                        )
+                    }
+                runCatching {
+                    json.encodeToString(AgentSpawnRequest.serializer(), payload)
+                }.getOrElse { error ->
+                    logger.error("Failed to serialize AgentSpawnRequest for tool call ${toolCall.id}", error)
+                    return toolCall.toErrorResult(
+                        errorMessage = "Failed to serialize the spawn request: ${error.message}",
+                        startTime = startTime
+                    )
+                }
+            }
 
-        val payload = agentSpawnRequestBuilder.build(userId, requestingAgentRoleId, toolCall)
-            .getOrElse { buildError ->
-                logger.warn("spawn_agent payload build failed for tool call ${toolCall.id}: $buildError")
+            OperatorToolCatalog.SEND_MESSAGE_NAME -> {
+                val payload = sendMessageRequestBuilder.build(userId, toolCall)
+                    .getOrElse { buildError ->
+                        logger.warn("send_message payload build failed for tool call ${toolCall.id}: $buildError")
+                        return toolCall.toErrorResult(
+                            errorMessage = buildError.toUserMessage(),
+                            startTime = startTime
+                        )
+                    }
+                runCatching {
+                    json.encodeToString(SendMessageRequest.serializer(), payload)
+                }.getOrElse { error ->
+                    logger.error("Failed to serialize SendMessageRequest for tool call ${toolCall.id}", error)
+                    return toolCall.toErrorResult(
+                        errorMessage = "Failed to serialize the send request: ${error.message}",
+                        startTime = startTime
+                    )
+                }
+            }
+
+            else -> {
+                // Only the two catalogued operator tools are implemented. Any other operator-tool
+                // name reaching this executor is a misconfiguration (the orchestrator dispatches
+                // operator tools here by definition), so fail fast with a readable tool-level error
+                // instead of emitting a relay event the operator would not recognize.
+                logger.warn(
+                    "Unsupported operator tool '${toolCall.toolName}' for tool call ${toolCall.id}"
+                )
                 return toolCall.toErrorResult(
-                    errorMessage = buildError.toUserMessage(),
+                    errorMessage = "Unsupported operator tool '${toolCall.toolName}'. " +
+                        "Only '${OperatorToolCatalog.SPAWN_AGENT_NAME}' and " +
+                        "'${OperatorToolCatalog.SEND_MESSAGE_NAME}' are supported.",
                     startTime = startTime
                 )
             }
-
-        val payloadJson = runCatching {
-            json.encodeToString(AgentSpawnRequest.serializer(), payload)
-        }.getOrElse { error ->
-            logger.error("Failed to serialize AgentSpawnRequest for tool call ${toolCall.id}", error)
-            return toolCall.toErrorResult(
-                errorMessage = "Failed to serialize the spawn request: ${error.message}",
-                startTime = startTime
-            )
         }
 
         emitEvent(
@@ -149,6 +190,23 @@ class DefaultOperatorToolExecutor(
             "Role '$roleName' not found. You may only spawn agent roles owned by the current user."
         is SpawnRequestBuildError.RoleNotAllowed ->
             "The current agent role is not permitted to spawn role '$roleName'."
+    }
+
+    /**
+     * Converts a [SendMessageRequestBuildError] into a human-readable message for the calling LLM.
+     *
+     * Both the not-found and not-owned variants surface the same sentence so the server never leaks
+     * whether a foreign session exists — the caller only learns the target is not usable by them.
+     *
+     * @receiver The typed build failure.
+     * @return A message the LLM can act on.
+     */
+    private fun SendMessageRequestBuildError.toUserMessage(): String = when (this) {
+        is SendMessageRequestBuildError.InvalidInput -> reason
+        is SendMessageRequestBuildError.SessionNotFound ->
+            "Chat session $sessionId not found or not owned by the current user. You may only message chat sessions you own."
+        is SendMessageRequestBuildError.SessionNotAccessible ->
+            "Chat session $sessionId not found or not owned by the current user. You may only message chat sessions you own."
     }
 
     /**

@@ -3,10 +3,12 @@ package eu.torvian.chatbot.app.koin
 import eu.torvian.chatbot.app.config.AppConfiguration
 import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
+import eu.torvian.chatbot.app.service.agent.AgentSpawnTool
+import eu.torvian.chatbot.app.service.agent.DefaultOperatorToolExecutor
+import eu.torvian.chatbot.app.service.agent.OperatorToolExecutor
+import eu.torvian.chatbot.app.service.agent.SendMessageTool
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
-import eu.torvian.chatbot.app.service.agent.AgentSpawnExecutor
-import eu.torvian.chatbot.app.service.agent.DefaultAgentSpawnExecutor
 import eu.torvian.chatbot.app.service.auth.*
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
@@ -18,16 +20,10 @@ import eu.torvian.chatbot.app.service.security.RequestSigningService
 import eu.torvian.chatbot.app.startup.AppStartupInitializer
 import eu.torvian.chatbot.app.startup.DefaultAppStartupInitializer
 import eu.torvian.chatbot.app.viewmodel.*
-import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.*
-import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
-import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelSlotManager
-import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelStoreOwnerProvider
-import eu.torvian.chatbot.app.viewmodel.chat.KoinSpawnedChatViewModelResolver
-import eu.torvian.chatbot.app.viewmodel.chat.MutableChatViewModelStoreOwnerProvider
-import eu.torvian.chatbot.app.viewmodel.chat.SpawnedChatViewModelResolver
+import eu.torvian.chatbot.app.viewmodel.chat.*
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatStateImpl
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
@@ -36,13 +32,8 @@ import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.app.viewmodel.common.CoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.DefaultCoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
-import eu.torvian.chatbot.app.viewmodel.settings.AboutViewModel
-import eu.torvian.chatbot.app.viewmodel.settings.AgentRolesViewModel
-import eu.torvian.chatbot.app.viewmodel.settings.BuiltInToolsViewModel
-import eu.torvian.chatbot.app.viewmodel.settings.OperatorToolsViewModel
-import eu.torvian.chatbot.app.viewmodel.settings.ServerBuiltInToolsViewModel
-import eu.torvian.chatbot.app.viewmodel.settings.ConversationCompactionViewModel
-import eu.torvian.chatbot.app.viewmodel.settings.E2EASecurityViewModel
+import eu.torvian.chatbot.app.viewmodel.settings.*
+import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import io.ktor.client.*
 import io.ktor.client.plugins.logging.*
 import kotlinx.coroutines.CoroutineScope
@@ -354,13 +345,25 @@ fun appModule(config: AppConfiguration): Module = module {
         )
     }
 
-    // Coordinator for operator tools (e.g. spawn_agent): drives the spawned conversation through the
-    // spawned session's own ChatViewModel and reports the result back on the original chat socket.
-    single<AgentSpawnExecutor> {
-        DefaultAgentSpawnExecutor(
-            sessionRepository = get(),
-            authRepository = get(),
-            spawnedViewModelResolver = get()
+    // Coordinator for operator tools (spawn_agent, send_message): the single central operator-tool
+    // executor, a router that dispatches each call to the per-tool OperatorTool registered for the
+    // tool's catalog name (spawn creates the session, send targets an existing one). The target
+    // conversation is driven through the session's own ChatViewModel and the result is reported
+    // back on the original chat socket. The map mirrors the server's built-in tool registry style;
+    // the keys are the catalog names the relay uses as the payload discriminator.
+    single<OperatorToolExecutor> {
+        DefaultOperatorToolExecutor(
+            mapOf(
+                OperatorToolCatalog.SPAWN_AGENT_NAME to AgentSpawnTool(
+                    sessionRepository = get<SessionRepository>(),
+                    authRepository = get<AuthRepository>(),
+                    spawnedViewModelResolver = get<SpawnedChatViewModelResolver>()
+                ),
+                OperatorToolCatalog.SEND_MESSAGE_NAME to SendMessageTool(
+                    authRepository = get<AuthRepository>(),
+                    spawnedViewModelResolver = get<SpawnedChatViewModelResolver>()
+                )
+            )
         )
     }
 
@@ -531,7 +534,15 @@ fun appModule(config: AppConfiguration): Module = module {
             normalScope
         )
     }
-    viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get<SessionSelectionController>(), get()) }
+    viewModel {
+        SessionListViewModel(
+            get<SessionRepository>(),
+            get<GroupRepository>(),
+            get<EventBus>(),
+            get<SessionSelectionController>(),
+            get()
+        )
+    }
     viewModel {
         ProviderConfigViewModel(
             get<ProviderRepository>(),
@@ -651,7 +662,7 @@ fun appModule(config: AppConfiguration): Module = module {
         )
     }
     // Provide application-level CoroutineScope for global tasks
-    single( qualifier = named("ApplicationCoroutineScope")) {
+    single(qualifier = named("ApplicationCoroutineScope")) {
         CoroutineScope(Dispatchers.Default + SupervisorJob())
     }
 }

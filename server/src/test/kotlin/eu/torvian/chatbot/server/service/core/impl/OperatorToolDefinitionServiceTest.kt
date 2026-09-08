@@ -66,18 +66,21 @@ class OperatorToolDefinitionServiceTest {
         val user1Tools = service.getOperatorToolsForUser(TestDefaults.user1.id)
         val user2Tools = service.getOperatorToolsForUser(TestDefaults.user2.id)
 
-        assertEquals(1, user1Tools.size)
-        assertEquals(1, user2Tools.size)
-        assertEquals(TestDefaults.user1.id, user1Tools.single().userId)
-        assertEquals(TestDefaults.user2.id, user2Tools.single().userId)
-        assertTrue(user1Tools.single().id != user2Tools.single().id)
+        // One instance per catalog spec (spawn_agent + send_message) for each user.
+        assertEquals(OperatorToolCatalog.allTools.size, user1Tools.size)
+        assertEquals(OperatorToolCatalog.allTools.size, user2Tools.size)
+        val user1Spawn = user1Tools.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
+        val user2Spawn = user2Tools.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
+        assertEquals(TestDefaults.user1.id, user1Spawn.userId)
+        assertEquals(TestDefaults.user2.id, user2Spawn.userId)
+        assertTrue(user1Spawn.id != user2Spawn.id)
     }
 
     @Test
     fun `updateOperatorTool toggles enabled state for the owning user`() = runTest {
         val seeder = container.get<OperatorToolDefinitionSeeder>()
         val seeded = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
-        val original = seeded.single()
+        val original = seeded.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
         assertTrue(original.isEnabled)
 
         val result = service.updateOperatorTool(
@@ -96,7 +99,7 @@ class OperatorToolDefinitionServiceTest {
     fun `updateOperatorTool by non-owner returns Forbidden`() = runTest {
         val seeder = container.get<OperatorToolDefinitionSeeder>()
         val seeded = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
-        val original = seeded.single()
+        val original = seeded.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
 
         val result = service.updateOperatorTool(
             userId = TestDefaults.user2.id,
@@ -106,7 +109,8 @@ class OperatorToolDefinitionServiceTest {
         assertTrue(result.isLeft())
         assertIs<UpdateOperatorToolError.Forbidden>(result.leftOrNull())
         // The owner's row must not be modified by the foreign update attempt.
-        val after = service.getOperatorToolsForUser(TestDefaults.user1.id).single()
+        val after = service.getOperatorToolsForUser(TestDefaults.user1.id)
+            .single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
         assertTrue(after.isEnabled)
     }
 
@@ -114,7 +118,7 @@ class OperatorToolDefinitionServiceTest {
     fun `resetOperatorToolsToDefaults reconciles the user's tools`() = runTest {
         val seeder = container.get<OperatorToolDefinitionSeeder>()
         val seeded = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
-        val edited = seeded.single().copy(
+        val edited = seeded.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }.copy(
             description = "drifted description",
             isEnabled = false
         )
@@ -123,8 +127,9 @@ class OperatorToolDefinitionServiceTest {
         val result = service.resetOperatorToolsToDefaults(TestDefaults.user1.id)
 
         assertTrue(result.isRight(), "reset failed: ${result.leftOrNull()}")
-        val after = result.getOrNull()!!.single()
-        assertEquals(OperatorToolCatalog.allTools.single().description, after.description)
+        val after = result.getOrNull()!!.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
+        val spawnSpec = OperatorToolCatalog.allTools.first { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
+        assertEquals(spawnSpec.description, after.description)
         // Enabled choice is preserved across a reset.
         assertTrue(!after.isEnabled)
     }

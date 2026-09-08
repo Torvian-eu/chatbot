@@ -31,7 +31,9 @@ import eu.torvian.chatbot.server.service.builtin.tools.UpdateAgentRoleTool
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.agent.AgentSpawnRequestBuilder
 import eu.torvian.chatbot.server.service.core.agent.DefaultAgentSpawnRequestBuilder
+import eu.torvian.chatbot.server.service.core.agent.DefaultSendMessageRequestBuilder
 import eu.torvian.chatbot.server.service.core.agent.DefaultSystemPromptComposer
+import eu.torvian.chatbot.server.service.core.agent.SendMessageRequestBuilder
 import eu.torvian.chatbot.server.service.core.agent.SystemPromptComposer
 import eu.torvian.chatbot.server.service.core.chat.compaction.ApproximateChatInputTokenCounter
 import eu.torvian.chatbot.server.service.core.chat.compaction.ChatInputTokenCounter
@@ -203,7 +205,8 @@ fun serviceModule() = module {
 
     // --- Operator tool services (server-relayed, operator-executed) ---
     single<AgentSpawnRequestBuilder> { DefaultAgentSpawnRequestBuilder(get(), get()) }
-    single<OperatorToolExecutor> { DefaultOperatorToolExecutor(get(), get()) }
+    single<SendMessageRequestBuilder> { DefaultSendMessageRequestBuilder(get(), get()) }
+    single<OperatorToolExecutor> { DefaultOperatorToolExecutor(get(), get(), get()) }
     single<OperatorToolDefinitionSeeder> { OperatorToolDefinitionSeeder(get(), get(), get()) }
     single<OperatorToolDefinitionService> {
         OperatorToolDefinitionServiceImpl(

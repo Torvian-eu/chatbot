@@ -22,9 +22,10 @@ import kotlin.test.assertTrue
 /**
  * Tests for [OperatorToolDefinitionSeeder].
  *
- * Verifies that one `spawn_agent` instance is seeded per user, that seeding is idempotent (re-runs
- * neither duplicate rows nor clobber user edits), and that the startup [isInitialized] reconciliation
- * covers every existing user.
+ * Verifies that one operator tool instance per catalog spec is seeded per user, that seeding is
+ * idempotent (re-runs neither duplicate rows nor clobber user edits), and that the startup
+ * [isInitialized] reconciliation covers every existing user. With the current two-spec catalog
+ * (`spawn_agent` + `send_message`) the per-user tools are keyed by name in the assertions.
  */
 class OperatorToolDefinitionSeederTest {
 
@@ -61,6 +62,11 @@ class OperatorToolDefinitionSeederTest {
         container.close()
     }
 
+    /**
+     * Returns the spawn spec from the catalog, used to assert the persisted schema fields.
+     */
+    private fun spawnSpec() = OperatorToolCatalog.allTools.first { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
+
     @Test
     fun `ensureForUser seeds one operator tool per catalog spec`() = runTest {
         val result = seeder.ensureForUser(TestDefaults.user1.id)
@@ -68,14 +74,14 @@ class OperatorToolDefinitionSeederTest {
         assertTrue(result.isRight(), "seeding failed: ${result.leftOrNull()}")
         val tools = result.getOrNull()!!
         assertEquals(OperatorToolCatalog.allTools.size, tools.size)
-        val tool = tools.single()
+        val tool = tools.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
         assertEquals(OperatorToolCatalog.SPAWN_AGENT_NAME, tool.name)
         assertIs<OperatorToolDefinition>(tool)
         assertEquals(ToolType.OPERATOR, tool.type)
         assertEquals(TestDefaults.user1.id, tool.userId)
         assertTrue(tool.isEnabled)
         // The persisted schema must be the real catalog schema so the LLM can call the tool.
-        assertEquals(OperatorToolCatalog.allTools.single().inputSchema, tool.inputSchema)
+        assertEquals(spawnSpec().inputSchema, tool.inputSchema)
     }
 
     @Test
@@ -83,13 +89,14 @@ class OperatorToolDefinitionSeederTest {
         val first = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
 
         // Simulate a user edit (e.g. disabled the tool); re-seeding must not clobber it.
-        val edited = first.single().copy(isEnabled = false, description = "custom description")
+        val edited = first.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
+            .copy(isEnabled = false, description = "custom description")
         container.get<eu.torvian.chatbot.server.service.core.ToolService>().updateTool(edited)
 
         val second = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
 
         assertEquals(first.map { it.id }.toSet(), second.map { it.id }.toSet())
-        val after = second.single()
+        val after = second.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
         assertEquals(false, after.isEnabled)
         assertEquals("custom description", after.description)
     }
@@ -99,9 +106,11 @@ class OperatorToolDefinitionSeederTest {
         val user1Tools = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
         val user2Tools = seeder.ensureForUser(TestDefaults.user2.id).getOrNull()!!
 
-        assertEquals(TestDefaults.user1.id, user1Tools.single().userId)
-        assertEquals(TestDefaults.user2.id, user2Tools.single().userId)
-        assertTrue(user1Tools.single().id != user2Tools.single().id)
+        val user1Spawn = user1Tools.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
+        val user2Spawn = user2Tools.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
+        assertEquals(TestDefaults.user1.id, user1Spawn.userId)
+        assertEquals(TestDefaults.user2.id, user2Spawn.userId)
+        assertTrue(user1Spawn.id != user2Spawn.id)
     }
 
     @Test
@@ -136,20 +145,20 @@ class OperatorToolDefinitionSeederTest {
         assertTrue(result.isRight(), "reset failed: ${result.leftOrNull()}")
         val tools = result.getOrNull()!!
         assertEquals(OperatorToolCatalog.allTools.size, tools.size)
-        val tool = tools.single()
+        val tool = tools.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
         assertEquals(OperatorToolCatalog.SPAWN_AGENT_NAME, tool.name)
-        assertEquals(OperatorToolCatalog.allTools.single().description, tool.description)
-        assertEquals(OperatorToolCatalog.allTools.single().inputSchema, tool.inputSchema)
+        assertEquals(spawnSpec().description, tool.description)
+        assertEquals(spawnSpec().inputSchema, tool.inputSchema)
         assertTrue(tool.isEnabled)
     }
 
     @Test
     fun `resetToDefaults repairs catalog fields but preserves enabled state`() = runTest {
         val seeded = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
-        val seededId = seeded.single().id
+        val seededId = seeded.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }.id
 
         // Simulate a user edit that drifts from the catalog: custom description and disabled.
-        val edited = seeded.single().copy(
+        val edited = seeded.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }.copy(
             description = "custom description",
             isEnabled = false
         )
@@ -159,11 +168,11 @@ class OperatorToolDefinitionSeederTest {
 
         assertTrue(result.isRight(), "reset failed: ${result.leftOrNull()}")
         val tools = result.getOrNull()!!
-        assertEquals(1, tools.size)
-        val after = tools.single()
+        assertEquals(OperatorToolCatalog.allTools.size, tools.size)
+        val after = tools.single { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
         // Catalog-derived fields are repaired...
-        assertEquals(OperatorToolCatalog.allTools.single().description, after.description)
-        assertEquals(OperatorToolCatalog.allTools.single().inputSchema, after.inputSchema)
+        assertEquals(spawnSpec().description, after.description)
+        assertEquals(spawnSpec().inputSchema, after.inputSchema)
         // ...but the user's enabled/disabled choice survives and no duplicate row is created.
         assertEquals(seededId, after.id)
         assertTrue(!after.isEnabled)
@@ -176,6 +185,6 @@ class OperatorToolDefinitionSeederTest {
         val second = seeder.resetToDefaults(TestDefaults.user1.id).getOrNull()!!
 
         assertEquals(first.map { it.id }.toSet(), second.map { it.id }.toSet())
-        assertEquals(1, second.size)
+        assertEquals(OperatorToolCatalog.allTools.size, second.size)
     }
 }

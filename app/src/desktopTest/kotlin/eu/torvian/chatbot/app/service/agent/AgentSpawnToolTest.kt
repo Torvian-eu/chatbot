@@ -12,12 +12,12 @@ import eu.torvian.chatbot.app.viewmodel.chat.SpawnedChatViewModelResolver
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.agent.AgentSpawnMessage
 import eu.torvian.chatbot.common.models.agent.AgentSpawnRequest
+import eu.torvian.chatbot.common.models.agent.OperatorToolMode
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -37,14 +37,17 @@ import kotlin.test.*
 import kotlin.time.Instant
 
 /**
- * Tests for [DefaultAgentSpawnExecutor].
+ * Tests for [AgentSpawnTool] (the per-tool [OperatorTool] for `spawn_agent`).
  *
- * Covers tool-type dispatch, session creation + role attach, driving the spawned session's own
- * [ChatViewModel] (load → input → send, awaiting each step), result aggregation from the last
- * assistant message, error reporting for decode/session/role-resolution/send-refusal failures, and
- * cancellation of the spawned send when the primary turn closes mid-spawn.
+ * Covers session creation + role attach, driving the spawned session's own [ChatViewModel]
+ * (load → input → send), per-mode result shaping (wait = session-id-prefixed summary;
+ * fire-and-forget = immediate session id without joining or force-cancelling the background turn),
+ * error reporting for decode/session/role-resolution/send-refusal failures, and the mode-aware
+ * cleanup on mid-spawn executor cancellation. The per-tool implementation is exercised through its
+ * [OperatorTool.execute] contract; the router that dispatches to it (and to the `send_message`
+ * tool) is covered by [DefaultOperatorToolExecutorTest].
  */
-class DefaultAgentSpawnExecutorTest {
+class AgentSpawnToolTest {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val now = Instant.fromEpochMilliseconds(1_700_000_000_000L)
@@ -79,21 +82,21 @@ class DefaultAgentSpawnExecutorTest {
      *
      * @param toolCallId Correlation identifier carried by the request.
      * @param prompt User message sent to the spawned agent.
-     * @param interactive Whether the request selects interactive (handoff) spawn mode. Defaults to
-     *            `false` so the existing default-mode tests stay pinned to summary-return behavior.
+     * @param mode Execution mode carried by the request (defaults to wait-for-response so the
+     *            default-mode tests stay pinned to summary-return behavior).
      * @return JSON payload accepted by the app-side executor.
      */
     private fun spawnPayload(
         toolCallId: Long = 42L,
         prompt: String = "Do the thing",
-        interactive: Boolean = false
+        mode: OperatorToolMode = OperatorToolMode.WAIT_FOR_RESPONSE
     ): String =
         json.encodeToString(
             AgentSpawnRequest.serializer(),
             AgentSpawnRequest(
                 agentRoleToSpawn = role,
                 subject = "Implementation task",
-                interactive = interactive,
+                mode = mode,
                 conversation = listOf(AgentSpawnMessage.User(prompt)),
                 toolCallId = toolCallId
             )
@@ -132,7 +135,7 @@ class DefaultAgentSpawnExecutorTest {
         sessionRepository: SessionRepository = mockk(),
         authRepository: AuthRepository = authenticatedAuthRepository(),
         resolver: SpawnedChatViewModelResolver = mockk(),
-    ) = DefaultAgentSpawnExecutor(sessionRepository, authRepository, resolver)
+    ) = AgentSpawnTool(sessionRepository, authRepository, resolver)
 
     private fun authenticatedAuthRepository(): AuthRepository {
         val authRepository = mockk<AuthRepository>()
@@ -151,24 +154,34 @@ class DefaultAgentSpawnExecutorTest {
     /**
      * Builds a mocked [SpawnedChatViewModelResolver] returning a [ChatViewModel] configured to run a
      * complete successful turn: a resolved role and settings, load/send jobs that complete
-     * immediately, and [summary] as the aggregated last assistant message.
+     * immediately, and a branch whose assistant message appears only **after** the send starts
+     * (modeling the real turn pipeline; the wait-mode newness guard depends on the post-send
+     * message being new).
+     *
+     * @param summary Content of the assistant message appended when the send completes; `null`
+     *            yields a blank message (exercise of the wait-mode blank check).
+     * @param sendJob Job returned from `sendMessage()`; `null` makes the send be refused.
+     * @param message The exact message the executor is expected to inject via `updateInput`.
      */
     private fun successfulViewModel(
         summary: String? = "FINAL SUMMARY",
         sendJob: Job? = completedJob(),
+        message: String = "Do the thing",
     ): Pair<SpawnedChatViewModelResolver, ChatViewModel> {
         val viewModel = mockk<ChatViewModel>()
+        val displayedMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
         every { viewModel.sessionDataState } returns MutableStateFlow(DataState.Success(session))
         every { viewModel.currentAgentRole } returns MutableStateFlow(role)
         every { viewModel.currentModel } returns MutableStateFlow(model)
         every { viewModel.currentSettings } returns MutableStateFlow(settings)
-        every { viewModel.displayedMessages } returns MutableStateFlow(
-            listOf(assistantMessage(1L, summary ?: ""))
-        )
+        every { viewModel.displayedMessages } returns displayedMessages
         every { viewModel.loadSession(session.id, userId) } returns completedJob()
-        every { viewModel.updateInput("Do the thing") } just runs
-        every { viewModel.sendMessage() } returns sendJob
-        every { viewModel.lastAssistantMessageContent() } returns summary
+        every { viewModel.updateInput(message) } just runs
+        every { viewModel.sendMessage() } answers {
+            // The turn completes by appending the new assistant message to the displayed branch.
+            displayedMessages.value = listOf(assistantMessage(1L, summary ?: ""))
+            sendJob
+        }
         every { viewModel.forceCancelSend() } just runs
 
         val resolver = mockk<SpawnedChatViewModelResolver>()
@@ -177,30 +190,12 @@ class DefaultAgentSpawnExecutorTest {
     }
 
     @Test
-    fun `execute reports an unknown tool type as an error result`() = runTest {
+    fun `execute reports a spawn decode failure as an error result`() = runTest {
         val executor = newExecutor()
         var result: ChatClientEvent.ToolExecutionResult? = null
 
         executor.execute(
             toolCallId = 1L,
-            toolName = "future_tool",
-            payload = "{}",
-            clientEvents = { result = it }
-        )
-
-        assertEquals(1L, result?.toolCallId)
-        assertEquals(true, result?.isError)
-        assertEquals(true, result?.errorMessage?.contains("future_tool"))
-    }
-
-    @Test
-    fun `execute reports a decode failure as an error result`() = runTest {
-        val executor = newExecutor()
-        var result: ChatClientEvent.ToolExecutionResult? = null
-
-        executor.execute(
-            toolCallId = 1L,
-            toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
             payload = "not-json",
             clientEvents = { result = it }
         )
@@ -228,7 +223,6 @@ class DefaultAgentSpawnExecutorTest {
 
         executor.execute(
             toolCallId = 42L,
-            toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
             payload = payload,
             clientEvents = { result = it }
         )
@@ -238,7 +232,8 @@ class DefaultAgentSpawnExecutorTest {
     }
 
     /**
-     * Verifies that the supplied subject becomes the prefixed session name before the turn runs.
+     * Verifies that the supplied subject becomes the prefixed session name before the turn runs and
+     * that the wait-mode result is the summary prefixed with the spawned session id.
      */
     @Test
     fun `execute drives the spawned session viewmodel and aggregates its summary`() = runTest {
@@ -252,13 +247,16 @@ class DefaultAgentSpawnExecutorTest {
 
         executor.execute(
             toolCallId = 42L,
-            toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
             payload = spawnPayload(),
             clientEvents = { result = it }
         )
 
-        assertEquals("FINAL SUMMARY", result?.output)
-        assertNotEquals(result?.isError, true)
+        // Wait success: spawn-id label, then the labeled assistant response.
+        assertEquals(
+            "**Spawned chat session id:** 99\n\n**Response:**\n\nFINAL SUMMARY",
+            result?.output
+        )
+        assertEquals(false, result?.isError)
         coVerify { sessionRepository.createSession("Spawned: Implementation task") }
         coVerify { sessionRepository.updateSessionAgentRole(session.id, role.id) }
         // The spawned conversation is driven through the session's own ViewModel with user-facing
@@ -266,49 +264,48 @@ class DefaultAgentSpawnExecutorTest {
         verify { viewModel.loadSession(session.id, userId) }
         verify { viewModel.updateInput("Do the thing") }
         verify { viewModel.sendMessage() }
-        verify { viewModel.lastAssistantMessageContent() }
     }
 
     /**
-     * Verifies interactive (handoff) mode: the session is created with the role attached and the
-     * first turn is still driven headlessly, but the spawned summary is never aggregated — the tool
-     * completes with an empty SUCCESS result as soon as the send job finishes, leaving the session
-     * for the user to continue in the app.
+     * Verifies fire-and-forget spawn mode: the session is created with the role attached, the first
+     * turn is still started through the ViewModel (load → input → send), but the tool returns the
+     * spawned session id **without awaiting the send job** and without force-cancelling the
+     * background turn.
      */
     @Test
-    fun `execute in interactive handoff mode emits an empty success result and skips aggregation`() = runTest {
+    fun `execute in fire and forget spawn mode returns the session id without awaiting the send`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
         coEvery { sessionRepository.createSession("Spawned: Implementation task") } returns session.right()
         coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
-        // The summary is present, so aggregation would succeed if consulted — proving it is skipped.
-        val (resolver, viewModel) = successfulViewModel(summary = "FINAL SUMMARY")
+        // A send job that never completes proves the executor returned without joining it.
+        val pendingSend = CompletableDeferred<Unit>()
+        val (resolver, viewModel) = successfulViewModel(sendJob = pendingSend)
         val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
         var result: ChatClientEvent.ToolExecutionResult? = null
 
         executor.execute(
             toolCallId = 42L,
-            toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
-            payload = spawnPayload(interactive = true),
+            payload = spawnPayload(mode = OperatorToolMode.FIRE_AND_FORGET),
             clientEvents = { result = it }
         )
 
-        // Handoff mode: empty SUCCESS result (all ToolExecutionResult defaults) after the spawned
-        // first turn's send job completed naturally.
-        assertEquals(42L, result?.toolCallId)
-        assertNull(result?.output)
+        // Instant success carries the spawn-id label plus a status line (no summary yet: the turn
+        // continues in the background).
+        assertEquals(
+            "**Spawned chat session id:** 99\n\n" +
+                "The spawned conversation started; its first turn continues in the background.",
+            result?.output
+        )
         assertEquals(false, result?.isError)
-        assertNull(result?.errorMessage)
-        coVerify { sessionRepository.createSession("Spawned: Implementation task") }
-        coVerify { sessionRepository.updateSessionAgentRole(session.id, role.id) }
-        // The spawned conversation is still driven headlessly: load → input → send.
+        // The tool returned while the spawned turn's send job is still pending.
+        assertTrue(pendingSend.isActive)
+        // The first turn still started with the prompt through the session's own ViewModel.
         verify { viewModel.loadSession(session.id, userId) }
         verify { viewModel.updateInput("Do the thing") }
         verify { viewModel.sendMessage() }
-        // Handoff mode never consults the spawned summary.
-        verify(exactly = 0) { viewModel.lastAssistantMessageContent() }
-        // The finally block still runs the lifecycle no-op after natural completion.
-        verify { viewModel.forceCancelSend() }
+        // Fire-and-forget never force-cancels the background turn it just started.
+        verify(exactly = 0) { viewModel.forceCancelSend() }
     }
 
     @Test
@@ -321,18 +318,22 @@ class DefaultAgentSpawnExecutorTest {
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
-            toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
             payload = spawnPayload(),
             clientEvents = { result = it }
         )
 
         assertEquals(true, result?.isError)
         assertEquals(true, result?.errorMessage?.contains("cannot create"))
+        // Pre-session failure: no valid session id exists, so the error carries no id.
         assertNull(result?.output)
     }
 
+    /**
+     * Verifies that a role-attach failure (after the session was created) reports a readable error
+     * and — in wait mode — still carries the spawned session id so the caller can reach it.
+     */
     @Test
-    fun `execute reports a role attach failure as an error result`() = runTest {
+    fun `execute reports a role attach failure as an error result with the session id`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
         coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns
@@ -342,15 +343,20 @@ class DefaultAgentSpawnExecutorTest {
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
-            toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
             payload = spawnPayload(),
             clientEvents = { result = it }
         )
 
         assertEquals(true, result?.isError)
         assertEquals(true, result?.errorMessage?.contains("cannot attach"))
+        // A valid session id exists at this point: wait-mode failures carry it.
+        assertEquals("**Spawned chat session id:** 99", result?.output)
     }
 
+    /**
+     * Verifies that an unauthenticated spawn (after the session was created) reports a readable
+     * error that — in wait mode — still carries the spawned session id.
+     */
     @Test
     fun `execute reports when the user is not authenticated`() = runTest {
         val authRepository = mockk<AuthRepository>()
@@ -366,13 +372,13 @@ class DefaultAgentSpawnExecutorTest {
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
-            toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
             payload = spawnPayload(),
             clientEvents = { result = it }
         )
 
         assertEquals(true, result?.isError)
         assertEquals(true, result?.errorMessage?.contains("not authenticated"))
+        assertEquals("**Spawned chat session id:** 99", result?.output)
     }
 
     @Test
@@ -397,17 +403,17 @@ class DefaultAgentSpawnExecutorTest {
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
-            toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
             payload = spawnPayload(),
             clientEvents = { result = it }
         )
 
         assertEquals(true, result?.isError)
         assertEquals(true, result?.errorMessage?.contains("could not resolve"))
+        assertEquals("**Spawned chat session id:** 99", result?.output)
     }
 
     @Test
-    fun `execute reports a refused send as an error result`() = runTest {
+    fun `execute reports a refused send as an error result with the session id`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
         coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
@@ -417,17 +423,21 @@ class DefaultAgentSpawnExecutorTest {
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
-            toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
             payload = spawnPayload(),
             clientEvents = { result = it }
         )
 
         assertEquals(true, result?.isError)
         assertEquals(true, result?.errorMessage?.contains("refused"))
+        assertEquals("**Spawned chat session id:** 99", result?.output)
     }
 
+    /**
+     * Verifies that a wait-mode spawn whose first turn produced no assistant summary reports an
+     * error that still carries the spawned session id.
+     */
     @Test
-    fun `execute reports an empty summary as an error result`() = runTest {
+    fun `execute reports an empty summary as an error result with the session id`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
         coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
@@ -437,13 +447,13 @@ class DefaultAgentSpawnExecutorTest {
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
-            toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
             payload = spawnPayload(),
             clientEvents = { result = it }
         )
 
         assertEquals(true, result?.isError)
         assertEquals(true, result?.errorMessage?.contains("without an assistant summary"))
+        assertEquals("**Spawned chat session id:** 99", result?.output)
     }
 
     @Test
@@ -461,8 +471,7 @@ class DefaultAgentSpawnExecutorTest {
         val executorJob = launch {
             executor.execute(
                 toolCallId = 42L,
-                toolName = OperatorToolCatalog.SPAWN_AGENT_NAME,
-                payload = spawnPayload(),
+                    payload = spawnPayload(),
                 clientEvents = {}
             )
         }
@@ -473,5 +482,41 @@ class DefaultAgentSpawnExecutorTest {
         // The spawned send runs in the spawned ViewModel's own scope, so it must be force-cancelled
         // when the primary turn is cancelled instead of being orphaned.
         verify { viewModel.forceCancelSend() }
+    }
+
+    /**
+     * Verifies that even when the executor coroutine is cancelled mid-flight, fire-and-forget mode
+     * never force-cancels the background turn (the mode-aware `finally` deliberately skips
+     * `forceCancelSend` unconditionally for immediate mode).
+     */
+    @Test
+    fun `execute in fire and forget mode never force-cancels the spawned turn on executor cancellation`() = runTest {
+        val sessionRepository = mockk<SessionRepository>()
+        coEvery { sessionRepository.createSession(any()) } returns session.right()
+        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+
+        val (resolver, viewModel) = successfulViewModel()
+        // A load that never completes keeps the executor coroutine suspended until it is cancelled,
+        // giving the test a deterministic mid-execution cancellation point.
+        val neverCompletingLoad = CompletableDeferred<Unit>()
+        every { viewModel.loadSession(session.id, userId) } returns neverCompletingLoad
+        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+
+        val executorJob = launch {
+            executor.execute(
+                toolCallId = 42L,
+                    payload = spawnPayload(mode = OperatorToolMode.FIRE_AND_FORGET),
+                clientEvents = {}
+            )
+        }
+        yield()
+        testScheduler.runCurrent()
+        executorJob.cancelAndJoin()
+
+        // Immediate mode must not force-cancel, even on executor-coroutine cancellation (and the
+        // send never started here because the load did not complete — the point is the cleanup is
+        // skipped unconditionally).
+        verify(exactly = 0) { viewModel.forceCancelSend() }
+        verify(exactly = 0) { viewModel.sendMessage() }
     }
 }

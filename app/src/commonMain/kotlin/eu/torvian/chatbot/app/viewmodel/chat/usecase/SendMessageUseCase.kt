@@ -5,7 +5,7 @@ import eu.torvian.chatbot.app.generated.resources.error_sending_message_short
 import eu.torvian.chatbot.app.generated.resources.warning_no_agent_role_selected
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.repository.ToolRepository
-import eu.torvian.chatbot.app.service.agent.AgentSpawnExecutor
+import eu.torvian.chatbot.app.service.agent.OperatorToolExecutor
 import eu.torvian.chatbot.app.service.security.RequestSigningService
 import eu.torvian.chatbot.app.utils.misc.isStreamingEnabled
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
@@ -34,8 +34,10 @@ import kotlinx.coroutines.launch
  * @property sessionRepository Repository responsible for chat message transport and session updates.
  * @property toolRepository Repository used to resolve tool definitions and cached approval preferences.
  * @property requestSigningService Service that signs Local MCP authorization payloads on-device.
- * @property agentSpawnExecutor Executor that runs `spawn_agent` operator-tool requests headlessly on a
- *            second WebSocket and reports the result back on the original socket.
+ * @property operatorToolExecutor General operator-tool executor that runs `spawn_agent` /
+ *            `send_message` requests headlessly on a second WebSocket and reports the result back
+ *            on the original socket (a central router that dispatches to the per-tool operator
+ *            tools).
  * @property state Shared chat UI state observed and updated during message sending.
  * @property notificationService Notification sink for repository, API, and signing errors.
  */
@@ -43,7 +45,7 @@ class SendMessageUseCase(
     private val sessionRepository: SessionRepository,
     private val toolRepository: ToolRepository,
     private val requestSigningService: RequestSigningService,
-    private val agentSpawnExecutor: AgentSpawnExecutor,
+    private val operatorToolExecutor: OperatorToolExecutor,
     private val state: ChatState,
     private val notificationService: NotificationService
 ) {
@@ -534,7 +536,7 @@ class SendMessageUseCase(
 
                             is ChatStreamEvent.OperatorToolExecutionRequested -> {
                                 this@coroutineScope.launch {
-                                    agentSpawnExecutor.execute(
+                                    operatorToolExecutor.execute(
                                         toolCallId = chatUpdate.toolCallId,
                                         toolName = chatUpdate.toolName,
                                         payload = chatUpdate.payload,
@@ -617,7 +619,7 @@ class SendMessageUseCase(
 
                             is ChatEvent.OperatorToolExecutionRequested -> {
                                 this@coroutineScope.launch {
-                                    agentSpawnExecutor.execute(
+                                    operatorToolExecutor.execute(
                                         toolCallId = event.toolCallId,
                                         toolName = event.toolName,
                                         payload = event.payload,

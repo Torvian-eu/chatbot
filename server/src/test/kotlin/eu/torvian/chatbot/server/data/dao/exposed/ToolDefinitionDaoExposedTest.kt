@@ -449,7 +449,9 @@ class ToolDefinitionDaoExposedTest {
             description = "Spawns an agent",
             type = ToolType.OPERATOR,
             config = buildJsonObject { },
-            inputSchema = OperatorToolCatalog.allTools.single().inputSchema,
+            inputSchema = OperatorToolCatalog.allTools
+                .first { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
+                .inputSchema,
             outputSchema = null,
             isEnabled = true
         )

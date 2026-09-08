@@ -70,7 +70,9 @@ class SendMessageUseCaseOperatorApprovalTest {
         name = OperatorToolCatalog.SPAWN_AGENT_NAME,
         description = "Spawns an agent",
         config = buildJsonObject { },
-        inputSchema = OperatorToolCatalog.allTools.single().inputSchema,
+        inputSchema = OperatorToolCatalog.allTools
+            .first { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
+            .inputSchema,
         outputSchema = null,
         isEnabled = true,
         createdAt = now,
@@ -156,7 +158,7 @@ class SendMessageUseCaseOperatorApprovalTest {
             sessionRepository = harness.sessionRepository,
             toolRepository = harness.toolRepository,
             requestSigningService = mockk<RequestSigningService>(),
-            agentSpawnExecutor = mockk(),
+            operatorToolExecutor = mockk(),
             state = harness.state,
             notificationService = mockk<NotificationService>()
         )
