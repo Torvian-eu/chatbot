@@ -529,7 +529,10 @@ class ResponsesStrategy(
                 add(buildJsonObject {
                     put("type", JsonPrimitive("function_call"))
                     put("call_id", JsonPrimitive(toolCall.id ?: ""))
-                    put("name", JsonPrimitive(toolCall.name))
+                    // Model-provided names may contain characters (spaces, punctuation, non-ASCII
+                    // letters) that the Responses API rejects with a 400 on the `name` field, so the
+                    // name is sanitized before it is written into the request.
+                    put("name", JsonPrimitive(sanitizeToolName(toolCall.name)))
                     toolCall.arguments?.let { put("arguments", JsonPrimitive(it)) }
                 })
             }
@@ -542,6 +545,35 @@ class ResponsesStrategy(
                 put("output", JsonPrimitive(content))
             }
         )
+    }
+
+    /**
+     * Sanitizes a model-supplied tool name so it satisfies the Responses API's `name` contract.
+     *
+     * OpenAI's Responses API rejects `function_call` items whose `name` does not match
+     * `^[a-zA-Z0-9_-]+$` (HTTP 400 `Invalid 'input[2].name'`). Models occasionally hallucinate tool
+     * identities containing spaces, punctuation, or non-ASCII letters; those names are persisted and
+     * replayed into later requests, so every character outside the allowed ASCII set is replaced with
+     * `_`. A name made solely of illegal characters would collapse to an empty string, which also
+     * violates the pattern, so the empty result falls back to `"unknown_tool"`. The matching
+     * `function_call_output` item is correlated via `call_id`, so the fallback name does not affect
+     * tool-output matching.
+     *
+     * @param name The raw tool name produced by the model.
+     * @return A non-empty name matching `^[a-zA-Z0-9_-]+$`.
+     */
+    private fun sanitizeToolName(name: String): String {
+        val sanitized = name.map { character ->
+            val allowed = character in 'a'..'z' ||
+                character in 'A'..'Z' ||
+                character in '0'..'9' ||
+                character == '-' || character == '_'
+            if (allowed) character else '_'
+        }.joinToString("")
+        // A name consisting only of illegal characters sanitizes to "", which is still invalid for
+        // the pattern; use a stable placeholder so the request remains well-formed. Char ranges
+        // compare by UTF-16 code unit, so non-ASCII letters are also replaced.
+        return sanitized.ifEmpty { "unknown_tool" }
     }
 
     /**
