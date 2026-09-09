@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.app.domain.contracts.ProjectDialogState
 import eu.torvian.chatbot.app.domain.contracts.ProjectFormState
 import eu.torvian.chatbot.app.domain.contracts.createEmptyProjectForm
@@ -14,6 +15,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -135,13 +137,31 @@ class ProjectsViewModel(
     }
 
     /**
-     * Applies an update function to the active form draft (add or edit dialog).
+     * Opens the clone-project dialog for [project].
+     *
+     * The name is prefilled with `Copy of <name>` and the description with the source's description
+     * (Q4-A), so confirming without edits clones under a sibling name; the user may adjust either.
+     */
+    fun startCloningProject(project: ProjectDto) {
+        _dialogState.value = ProjectDialogState.CloneProject(
+            project = project,
+            formState = ProjectFormState(
+                mode = FormMode.NEW,
+                name = "Copy of ${project.name}",
+                description = project.description
+            )
+        )
+    }
+
+    /**
+     * Applies an update function to the active form draft (add, edit or clone dialog).
      */
     fun updateProjectForm(update: (ProjectFormState) -> ProjectFormState) {
         _dialogState.update { dialogState ->
             when (dialogState) {
                 is ProjectDialogState.AddProject -> dialogState.copy(formState = update(dialogState.formState))
                 is ProjectDialogState.EditProject -> dialogState.copy(formState = update(dialogState.formState))
+                is ProjectDialogState.CloneProject -> dialogState.copy(formState = update(dialogState.formState))
                 else -> dialogState
             }
         }
@@ -192,6 +212,50 @@ class ProjectsViewModel(
      */
     fun cancelDialog() {
         _dialogState.value = ProjectDialogState.None
+    }
+
+    /**
+     * Clones the source project of the active clone dialog under the dialog's name.
+     *
+     * Validates the name (same rule as create/edit via [ProjectFormState.validate]), then calls the
+     * repository. After a successful clone the role stream is refreshed (the clone created new role
+     * rows whose `projectId` and `disabled` state must be visible client-side), the dialog closes and
+     * the cloned project is selected, mirroring the create-project refresh behavior.
+     */
+    fun cloneProject() {
+        val dialogState = _dialogState.value
+        if (dialogState !is ProjectDialogState.CloneProject) return
+
+        val formState = dialogState.formState
+        val validationError = formState.validate()
+        if (validationError != null) {
+            updateProjectForm { it.withError(validationError) }
+            return
+        }
+        viewModelScope.launch(uiDispatcher) {
+            projectRepository.cloneProject(
+                projectId = dialogState.project.id,
+                request = CloneProjectRequest(
+                    name = formState.name.trim(),
+                    description = formState.description.trim()
+                )
+            ).fold(
+                ifLeft = { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to clone project"
+                    )
+                    updateProjectForm { it.withError("Error cloning project: ${error.message}") }
+                },
+                ifRight = { clonedProject ->
+                    // The clone created new role rows server-side; refresh the role side of the cache
+                    // so AgentRoleDto.projectId and the per-user disabled flags stay consistent.
+                    agentRoleRepository.loadRoles()
+                    cancelDialog()
+                    selectProject(clonedProject)
+                }
+            )
+        }
     }
 
     private fun saveNewProject(formState: ProjectFormState) {

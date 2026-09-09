@@ -16,6 +16,7 @@ import eu.torvian.chatbot.server.service.builtin.DefaultServerBuiltInToolExecuto
 import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolExecutor
+import eu.torvian.chatbot.server.service.builtin.tools.CloneProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.CreateAgentRoleTool
 import eu.torvian.chatbot.server.service.builtin.tools.CreateProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.DeleteAgentRoleTool
@@ -246,6 +247,7 @@ fun serviceModule() = module {
             CreateProjectTool(projectService = get(), json = get()),
             UpdateProjectTool(projectService = get()),
             DeleteProjectTool(projectService = get()),
+            CloneProjectTool(projectService = get(), json = get()),
             DeleteAgentRoleTool(agentRoleService = get()),
         ).associateBy { it.name }
     }
@@ -300,7 +302,20 @@ fun serviceModule() = module {
             sessionDao = get()
         )
     }
-    single<ProjectService> { ProjectServiceImpl(get(), get(), get(), get(), get(), get()) }
+    single<ProjectService> {
+        ProjectServiceImpl(
+            projectDao = get(),
+            projectOwnershipDao = get(),
+            projectAgentRoleDao = get(),
+            agentRoleDao = get(),
+            agentRoleToolDao = get(),
+            agentRoleSpawnableRoleDao = get(),
+            agentRoleOwnershipDao = get(),
+            agentRoleDisabledDao = get(),
+            sessionDao = get(),
+            transactionScope = get()
+        )
+    }
     single<SystemPromptComposer> { DefaultSystemPromptComposer() }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
     single<UserPreferenceService> { UserPreferenceServiceImpl(get(), get(), get()) }

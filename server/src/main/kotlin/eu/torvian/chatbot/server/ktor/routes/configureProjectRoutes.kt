@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.ktor.routes
 import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.resources.ProjectResource
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
@@ -33,6 +34,7 @@ import io.ktor.server.routing.*
  * - GET /api/v1/projects/{projectId} - Get a specific project
  * - PUT /api/v1/projects/{projectId} - Update a specific project
  * - DELETE /api/v1/projects/{projectId} - Delete a specific project
+ * - POST /api/v1/projects/{projectId}/clone - Clone a specific project (deep-copies its member roles)
  *
  * @param projectService Service backing the project CRUD operations.
  * @param authorizationService Authorization service retained for parity with the other resource routes;
@@ -84,6 +86,21 @@ fun Route.configureProjectRoutes(
                 }
             }
             call.respondEither(result)
+        }
+
+        // POST /api/v1/projects/{projectId}/clone - Clone project under a new, per-owner-unique name
+        // (ownership checked; the member roles are deep-copied as new role rows bound to the clone and
+        // the source is left untouched)
+        post<ProjectResource.ById.Clone> { resource ->
+            val userId = call.getUserId()
+            val request = call.receive<CloneProjectRequest>()
+
+            val result = either {
+                withError({ e: CloneProjectError -> e.toApiError() }) {
+                    projectService.cloneProject(userId, resource.parent.projectId, request).bind()
+                }
+            }
+            call.respondEither(result, HttpStatusCode.Created)
         }
 
         // DELETE /api/v1/projects/{projectId} - Delete project (ownership checked; roles survive, the

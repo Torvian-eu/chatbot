@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ProjectApi
 import eu.torvian.chatbot.common.api.resources.ProjectResource
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
@@ -45,6 +46,13 @@ class KtorProjectApiClient(
     override suspend fun updateProject(projectId: Long, request: UpdateProjectRequest): Either<ApiResourceError, ProjectDto> =
         safeApiCall {
             client.put(ProjectResource.ById(projectId = projectId)) {
+                setBody(request)
+            }.body<ProjectDto>()
+        }
+
+    override suspend fun cloneProject(projectId: Long, request: CloneProjectRequest): Either<ApiResourceError, ProjectDto> =
+        safeApiCall {
+            client.post(ProjectResource.ById.Clone(parent = ProjectResource.ById(projectId = projectId))) {
                 setBody(request)
             }.body<ProjectDto>()
         }

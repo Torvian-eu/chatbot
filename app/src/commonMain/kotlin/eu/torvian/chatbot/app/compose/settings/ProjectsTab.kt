@@ -50,6 +50,12 @@ interface ProjectsTabActions {
     /** Opens the edit-project form dialog for [project]. */
     fun onStartEditingProject(project: ProjectDto)
 
+    /** Opens the clone-project dialog for [project]. */
+    fun onStartCloningProject(project: ProjectDto)
+
+    /** Clones the source project of the active clone dialog. */
+    fun onCloneProject()
+
     /** Opens the delete-project confirmation dialog for [project]. */
     fun onStartDeletingProject(project: ProjectDto)
 
@@ -114,6 +120,7 @@ fun ProjectsTab(
                         rolesById = state.rolesById,
                         onBackToList = onBackToProjectList,
                         onEdit = { actions.onStartEditingProject(it) },
+                        onClone = { actions.onStartCloningProject(it) },
                         onDelete = { actions.onStartDeletingProject(it) },
                         modifier = Modifier.fillMaxSize()
                     )

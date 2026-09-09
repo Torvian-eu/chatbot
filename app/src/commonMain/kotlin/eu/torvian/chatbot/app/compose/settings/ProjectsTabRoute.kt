@@ -87,6 +87,8 @@ fun ProjectsTabRoute(
         override fun onSelectProject(project: ProjectDto?) = viewModel.selectProject(project)
         override fun onStartAddingNewProject() = viewModel.startAddingNewProject()
         override fun onStartEditingProject(project: ProjectDto) = viewModel.startEditingProject(project)
+        override fun onStartCloningProject(project: ProjectDto) = viewModel.startCloningProject(project)
+        override fun onCloneProject() = viewModel.cloneProject()
         override fun onStartDeletingProject(project: ProjectDto) = viewModel.startDeletingProject(project)
         override fun onUpdateProjectForm(update: (ProjectFormState) -> ProjectFormState) =
             viewModel.updateProjectForm(update)

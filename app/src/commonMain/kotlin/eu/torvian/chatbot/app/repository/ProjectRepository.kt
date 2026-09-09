@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
@@ -72,6 +73,20 @@ interface ProjectRepository {
      *         [RepositoryError] on failure.
      */
     suspend fun updateProject(projectId: Long, request: UpdateProjectRequest): Either<RepositoryError, ProjectDto>
+
+    /**
+     * Clones an existing project under a new, server-unique name.
+     *
+     * The server deep-copies the source project's member agent roles as new role rows bound to the
+     * clone (the source is left untouched); this repository only maps API errors to [RepositoryError]
+     * and upserts the cloned project into [projects] (replace-if-present, else append).
+     *
+     * @param projectId The unique identifier of the source project to clone.
+     * @param request The clone payload: new name (required) and optional description override.
+     * @return [Either.Right] with the cloned [ProjectDto] on success, or [Either.Left] with
+     *         [RepositoryError] on failure.
+     */
+    suspend fun cloneProject(projectId: Long, request: CloneProjectRequest): Either<RepositoryError, ProjectDto>
 
     /**
      * Deletes a project and removes it from [projects].
