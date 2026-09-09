@@ -168,24 +168,24 @@ class ServerBuiltInToolSerializationTest {
         val names = ServerBuiltInToolCatalog.allTools.map { it.name }
         assertEquals(
             listOf(
+                ServerBuiltInToolCatalog.LIST_PROJECTS_NAME,
+                ServerBuiltInToolCatalog.READ_PROJECT_NAME,
+                ServerBuiltInToolCatalog.CREATE_PROJECT_NAME,
+                ServerBuiltInToolCatalog.UPDATE_PROJECT_NAME,
+                ServerBuiltInToolCatalog.DELETE_PROJECT_NAME,
                 ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME,
                 ServerBuiltInToolCatalog.READ_AGENT_ROLE_NAME,
                 ServerBuiltInToolCatalog.CREATE_AGENT_ROLE_NAME,
                 ServerBuiltInToolCatalog.UPDATE_AGENT_ROLE_NAME,
                 ServerBuiltInToolCatalog.DELETE_AGENT_ROLE_NAME,
+                ServerBuiltInToolCatalog.INSERT_AGENT_ROLE_INSTRUCTION_NAME,
+                ServerBuiltInToolCatalog.EDIT_AGENT_ROLE_INSTRUCTIONS_NAME,
+                ServerBuiltInToolCatalog.REMOVE_AGENT_ROLE_INSTRUCTION_NAME,
                 ServerBuiltInToolCatalog.LIST_MODELS_NAME,
                 ServerBuiltInToolCatalog.LIST_MODEL_SETTINGS_NAME,
                 ServerBuiltInToolCatalog.LIST_TOOLS_NAME,
                 ServerBuiltInToolCatalog.READ_TOOL_NAME,
-                ServerBuiltInToolCatalog.INSERT_AGENT_ROLE_INSTRUCTION_NAME,
-                ServerBuiltInToolCatalog.EDIT_AGENT_ROLE_INSTRUCTIONS_NAME,
-                ServerBuiltInToolCatalog.REMOVE_AGENT_ROLE_INSTRUCTION_NAME,
-                ServerBuiltInToolCatalog.GET_CURRENT_SESSION_INFO_NAME,
-                ServerBuiltInToolCatalog.LIST_PROJECTS_NAME,
-                ServerBuiltInToolCatalog.READ_PROJECT_NAME,
-                ServerBuiltInToolCatalog.CREATE_PROJECT_NAME,
-                ServerBuiltInToolCatalog.UPDATE_PROJECT_NAME,
-                ServerBuiltInToolCatalog.DELETE_PROJECT_NAME
+                ServerBuiltInToolCatalog.GET_CURRENT_SESSION_INFO_NAME
             ),
             names
         )

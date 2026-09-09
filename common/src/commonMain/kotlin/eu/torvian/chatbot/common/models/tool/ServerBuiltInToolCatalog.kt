@@ -370,6 +370,103 @@ object ServerBuiltInToolCatalog {
      */
     val allTools: List<ServerBuiltInToolSpec> = listOf(
         ServerBuiltInToolSpec(
+            name = LIST_PROJECTS_NAME,
+            description = "Lists all projects owned by the current user, returning each project's id, " +
+                "name, description, creation time, and member agent role ids. Use read_project with " +
+                "a project id to inspect a single project in detail.",
+            inputSchema = emptyObjectSchema()
+        ),
+        ServerBuiltInToolSpec(
+            name = READ_PROJECT_NAME,
+            description = "Reads one project owned by the current user by its id, returning the full " +
+                "project with its name, description, creation time, and member agent role ids.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(
+                        PROJECT_ID_PROPERTY,
+                        integerProperty("Id of the project to read. The project must be owned by the current user.")
+                    )
+                })
+                put("required", buildJsonArray {
+                    add(PROJECT_ID_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
+            name = CREATE_PROJECT_NAME,
+            description = "Creates a new project owned by the current user. A project is a named " +
+                "collection of agent roles; the new project starts empty unless agent_role_ids is " +
+                "provided (every listed role must be owned by the current user and must not already " +
+                "belong to another project). Returns the created project's full JSON with its id, " +
+                "name, description, creation time, and attached member agent role ids.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(NAME_PROPERTY, stringProperty("Unique (per user) project name."))
+                    put(DESCRIPTION_PROPERTY, stringProperty("Free-form description of the project."))
+                    put(
+                        AGENT_ROLE_IDS_PROPERTY,
+                        integerArrayProperty(
+                            "Optional agent role ids to attach to the project. Each role must be " +
+                                "owned by the current user and must not already belong to another project."
+                        )
+                    )
+                })
+                put("required", buildJsonArray {
+                    add(NAME_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
+            name = UPDATE_PROJECT_NAME,
+            description = "Updates one project owned by the current user (patch semantics): provide " +
+                "only the fields to change; every omitted or null field keeps its persisted value. " +
+                "Pass an explicit empty string for description or an empty array for agent_role_ids " +
+                "to clear the field; name cannot be cleared (it must stay non-blank and unique per " +
+                "user). Returns a concise one-line summary of the operation.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(
+                        PROJECT_ID_PROPERTY,
+                        integerProperty("Id of the project to update. The project must be owned by the current user.")
+                    )
+                    put(NAME_PROPERTY, stringProperty("New unique (per user) project name."))
+                    put(DESCRIPTION_PROPERTY, stringProperty("New free-form description of the project."))
+                    put(
+                        AGENT_ROLE_IDS_PROPERTY,
+                        integerArrayProperty(
+                            "New member agent role ids (full replacement of the project's " +
+                                "membership). Each role must be owned by the current user and must " +
+                                "not already belong to another project."
+                        )
+                    )
+                })
+                put("required", buildJsonArray {
+                    add(PROJECT_ID_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
+            name = DELETE_PROJECT_NAME,
+            description = "Deletes one project owned by the current user by its id. The project's " +
+                "member agent roles are not deleted: their project membership is removed, so they " +
+                "become unassociated. Returns a concise one-line summary of the operation.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(
+                        PROJECT_ID_PROPERTY,
+                        integerProperty("Id of the project to delete. The project must be owned by the current user.")
+                    )
+                })
+                put("required", buildJsonArray {
+                    add(PROJECT_ID_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
             name = LIST_AGENT_ROLES_NAME,
             description = "Lists all agent roles owned by the current user, returning each role's id, " +
                 "name, display name, description, model id, model settings id, attached tool ids, " +
@@ -513,54 +610,6 @@ object ServerBuiltInToolCatalog {
             }
         ),
         ServerBuiltInToolSpec(
-            name = LIST_MODELS_NAME,
-            description = "Lists all LLM models accessible by the current user (models the user owns " +
-                "or that are shared with a group the user belongs to).",
-            inputSchema = emptyObjectSchema()
-        ),
-        ServerBuiltInToolSpec(
-            name = LIST_MODEL_SETTINGS_NAME,
-            description = "Lists the settings profiles accessible by the current user for one model " +
-                "the user can access. Returns the full settings object including its subtype " +
-                "(chat, responses, completion, etc.).",
-            inputSchema = buildJsonObject {
-                put("type", "object")
-                put("properties", buildJsonObject {
-                    put(
-                        MODEL_ID_PROPERTY,
-                        integerProperty("Id of the model whose settings to list. The model must be accessible by the current user.")
-                    )
-                })
-                put("required", buildJsonArray {
-                    add(MODEL_ID_PROPERTY)
-                })
-            }
-        ),
-        ServerBuiltInToolSpec(
-            name = LIST_TOOLS_NAME,
-            description = "Lists all tools accessible by the current user (own MCP tools, built-in " +
-                "tools of owned workers, own operator tools, and own server built-in tools), " +
-                "returning each tool's id, name, description, type, and enabled flag.",
-            inputSchema = emptyObjectSchema()
-        ),
-        ServerBuiltInToolSpec(
-            name = READ_TOOL_NAME,
-            description = "Reads one tool accessible by the current user by its id, returning the " +
-                "full tool definition including its subtype-specific fields.",
-            inputSchema = buildJsonObject {
-                put("type", "object")
-                put("properties", buildJsonObject {
-                    put(
-                        TOOL_ID_PROPERTY,
-                        integerProperty("Id of the tool to read. The tool must be accessible by the current user.")
-                    )
-                })
-                put("required", buildJsonArray {
-                    add(TOOL_ID_PROPERTY)
-                })
-            }
-        ),
-        ServerBuiltInToolSpec(
             name = INSERT_AGENT_ROLE_INSTRUCTION_NAME,
             description = "Inserts one instruction into an agent role owned by the current user at " +
                 "the given position, without rewriting the other instructions. The instruction " +
@@ -640,6 +689,54 @@ object ServerBuiltInToolCatalog {
             }
         ),
         ServerBuiltInToolSpec(
+            name = LIST_MODELS_NAME,
+            description = "Lists all LLM models accessible by the current user (models the user owns " +
+                "or that are shared with a group the user belongs to).",
+            inputSchema = emptyObjectSchema()
+        ),
+        ServerBuiltInToolSpec(
+            name = LIST_MODEL_SETTINGS_NAME,
+            description = "Lists the settings profiles accessible by the current user for one model " +
+                "the user can access. Returns the full settings object including its subtype " +
+                "(chat, responses, completion, etc.).",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(
+                        MODEL_ID_PROPERTY,
+                        integerProperty("Id of the model whose settings to list. The model must be accessible by the current user.")
+                    )
+                })
+                put("required", buildJsonArray {
+                    add(MODEL_ID_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
+            name = LIST_TOOLS_NAME,
+            description = "Lists all tools accessible by the current user (own MCP tools, built-in " +
+                "tools of owned workers, own operator tools, and own server built-in tools), " +
+                "returning each tool's id, name, description, type, and enabled flag.",
+            inputSchema = emptyObjectSchema()
+        ),
+        ServerBuiltInToolSpec(
+            name = READ_TOOL_NAME,
+            description = "Reads one tool accessible by the current user by its id, returning the " +
+                "full tool definition including its subtype-specific fields.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(
+                        TOOL_ID_PROPERTY,
+                        integerProperty("Id of the tool to read. The tool must be accessible by the current user.")
+                    )
+                })
+                put("required", buildJsonArray {
+                    add(TOOL_ID_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
             name = GET_CURRENT_SESSION_INFO_NAME,
             description = "Returns the current chat session's id and name together with the id, " +
                 "name, and (when set) display name of the agent role selected for that session, " +
@@ -647,103 +744,6 @@ object ServerBuiltInToolCatalog {
                 "selected). The session is the one the current conversation belongs to and is " +
                 "always owned by the current user, so no other user's data is ever exposed.",
             inputSchema = emptyObjectSchema()
-        ),
-        ServerBuiltInToolSpec(
-            name = LIST_PROJECTS_NAME,
-            description = "Lists all projects owned by the current user, returning each project's id, " +
-                "name, description, creation time, and member agent role ids. Use read_project with " +
-                "a project id to inspect a single project in detail.",
-            inputSchema = emptyObjectSchema()
-        ),
-        ServerBuiltInToolSpec(
-            name = READ_PROJECT_NAME,
-            description = "Reads one project owned by the current user by its id, returning the full " +
-                "project with its name, description, creation time, and member agent role ids.",
-            inputSchema = buildJsonObject {
-                put("type", "object")
-                put("properties", buildJsonObject {
-                    put(
-                        PROJECT_ID_PROPERTY,
-                        integerProperty("Id of the project to read. The project must be owned by the current user.")
-                    )
-                })
-                put("required", buildJsonArray {
-                    add(PROJECT_ID_PROPERTY)
-                })
-            }
-        ),
-        ServerBuiltInToolSpec(
-            name = CREATE_PROJECT_NAME,
-            description = "Creates a new project owned by the current user. A project is a named " +
-                "collection of agent roles; the new project starts empty unless agent_role_ids is " +
-                "provided (every listed role must be owned by the current user and must not already " +
-                "belong to another project). Returns the created project's full JSON with its id, " +
-                "name, description, creation time, and attached member agent role ids.",
-            inputSchema = buildJsonObject {
-                put("type", "object")
-                put("properties", buildJsonObject {
-                    put(NAME_PROPERTY, stringProperty("Unique (per user) project name."))
-                    put(DESCRIPTION_PROPERTY, stringProperty("Free-form description of the project."))
-                    put(
-                        AGENT_ROLE_IDS_PROPERTY,
-                        integerArrayProperty(
-                            "Optional agent role ids to attach to the project. Each role must be " +
-                                "owned by the current user and must not already belong to another project."
-                        )
-                    )
-                })
-                put("required", buildJsonArray {
-                    add(NAME_PROPERTY)
-                })
-            }
-        ),
-        ServerBuiltInToolSpec(
-            name = UPDATE_PROJECT_NAME,
-            description = "Updates one project owned by the current user (patch semantics): provide " +
-                "only the fields to change; every omitted or null field keeps its persisted value. " +
-                "Pass an explicit empty string for description or an empty array for agent_role_ids " +
-                "to clear the field; name cannot be cleared (it must stay non-blank and unique per " +
-                "user). Returns a concise one-line summary of the operation.",
-            inputSchema = buildJsonObject {
-                put("type", "object")
-                put("properties", buildJsonObject {
-                    put(
-                        PROJECT_ID_PROPERTY,
-                        integerProperty("Id of the project to update. The project must be owned by the current user.")
-                    )
-                    put(NAME_PROPERTY, stringProperty("New unique (per user) project name."))
-                    put(DESCRIPTION_PROPERTY, stringProperty("New free-form description of the project."))
-                    put(
-                        AGENT_ROLE_IDS_PROPERTY,
-                        integerArrayProperty(
-                            "New member agent role ids (full replacement of the project's " +
-                                "membership). Each role must be owned by the current user and must " +
-                                "not already belong to another project."
-                        )
-                    )
-                })
-                put("required", buildJsonArray {
-                    add(PROJECT_ID_PROPERTY)
-                })
-            }
-        ),
-        ServerBuiltInToolSpec(
-            name = DELETE_PROJECT_NAME,
-            description = "Deletes one project owned by the current user by its id. The project's " +
-                "member agent roles are not deleted: their project membership is removed, so they " +
-                "become unassociated. Returns a concise one-line summary of the operation.",
-            inputSchema = buildJsonObject {
-                put("type", "object")
-                put("properties", buildJsonObject {
-                    put(
-                        PROJECT_ID_PROPERTY,
-                        integerProperty("Id of the project to delete. The project must be owned by the current user.")
-                    )
-                })
-                put("required", buildJsonArray {
-                    add(PROJECT_ID_PROPERTY)
-                })
-            }
         )
     )
 }
