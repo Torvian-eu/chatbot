@@ -12,6 +12,9 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
+import eu.torvian.chatbot.server.data.dao.SessionProjectPair
+import eu.torvian.chatbot.server.data.dao.SessionProjectSelection
+import eu.torvian.chatbot.server.data.dao.SessionRolePair
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.data.tables.ChatGroupTable
 import eu.torvian.chatbot.server.data.tables.ChatSessionTable
@@ -22,6 +25,7 @@ import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.*
 import kotlin.time.Instant
@@ -74,7 +78,8 @@ class SessionDaoExposed(
     override suspend fun insertSession(
         name: String,
         groupId: Long?,
-        agentRoleId: Long?
+        agentRoleId: Long?,
+        projectId: Long?
     ): Either<SessionError.ForeignKeyViolation, ChatSession> =
         transactionScope.transaction {
             either {
@@ -86,12 +91,13 @@ class SessionDaoExposed(
                         it[ChatSessionTable.updatedAt] = now
                         it[ChatSessionTable.groupId] = groupId
                         it[ChatSessionTable.agentRoleId] = agentRoleId
+                        it[ChatSessionTable.projectId] = projectId
                     }
                     insertStatement.resultedValues?.first()?.toChatSession(emptyList())
                         ?: throw IllegalStateException("Failed to retrieve newly inserted session")
                 }) { e: ExposedSQLException ->
                     val message =
-                        "Failed to insert session with name $name, group $groupId, agent role $agentRoleId"
+                        "Failed to insert session with name $name, group $groupId, agent role $agentRoleId, project $projectId"
                     logger.error(message, e)
                     ensure(!e.isForeignKeyViolation()) { SessionError.ForeignKeyViolation(message) }
                     throw e
@@ -144,6 +150,108 @@ class SessionDaoExposed(
                     throw e
                 }
             }
+        }
+
+    override suspend fun updateSessionProjectId(id: Long, projectId: Long?): Either<SessionError, Unit> =
+        transactionScope.transaction {
+            either {
+                catch({
+                    val updatedRowCount = ChatSessionTable.update({ ChatSessionTable.id eq id }) {
+                        it[ChatSessionTable.projectId] = projectId
+                        it[ChatSessionTable.updatedAt] = System.currentTimeMillis()
+                    }
+                    ensure(updatedRowCount != 0) { SessionError.SessionNotFound(id) }
+                }) { e: ExposedSQLException ->
+                    val message = "Failed to update session project ID $projectId for session $id"
+                    logger.error(message, e)
+                    ensure(!e.isForeignKeyViolation()) { SessionError.ForeignKeyViolation(message) }
+                    throw e
+                }
+            }
+        }
+
+    override suspend fun getSessionProjectSelection(
+        id: Long
+    ): Either<SessionError.SessionNotFound, SessionProjectSelection> =
+        transactionScope.transaction {
+            ChatSessionTable
+                .selectAll()
+                .where { ChatSessionTable.id eq id }
+                .singleOrNull()
+                ?.let { row ->
+                    SessionProjectSelection(
+                        projectId = row[ChatSessionTable.projectId]?.value,
+                        agentRoleId = row[ChatSessionTable.agentRoleId]?.value
+                    )
+                }
+                ?.right()
+                ?: SessionError.SessionNotFound(id).left()
+        }
+
+    override suspend fun getSessionProjectPairsForRole(roleId: Long): List<SessionProjectPair> =
+        transactionScope.transaction {
+            ChatSessionTable
+                .selectAll()
+                .where { ChatSessionTable.agentRoleId eq roleId }
+                .map { row ->
+                    SessionProjectPair(
+                        sessionId = row[ChatSessionTable.id].value,
+                        projectId = row[ChatSessionTable.projectId]?.value
+                    )
+                }
+        }
+
+    override suspend fun getSessionProjectPairsForRoles(roleIds: List<Long>): List<SessionProjectPair> =
+        transactionScope.transaction {
+            if (roleIds.isEmpty()) {
+                // No roles to sweep: an in-list over an empty collection is invalid SQL, and the
+                // caller's attach-sweep is a no-op by definition when the membership is empty.
+                return@transaction emptyList()
+            }
+            ChatSessionTable
+                .selectAll()
+                .where { ChatSessionTable.agentRoleId inList roleIds }
+                .map { row ->
+                    SessionProjectPair(
+                        sessionId = row[ChatSessionTable.id].value,
+                        projectId = row[ChatSessionTable.projectId]?.value
+                    )
+                }
+        }
+
+    override suspend fun clearAgentRoleForSessions(sessionIds: List<Long>) {
+        transactionScope.transaction {
+            if (sessionIds.isEmpty()) {
+                // The service may pass an empty affected set (no session used the role / project);
+                // nothing to sweep and no SQL must run (an in-list over an empty collection is invalid).
+                return@transaction
+            }
+            ChatSessionTable.update({ ChatSessionTable.id inList sessionIds }) {
+                it[ChatSessionTable.agentRoleId] = null
+                it[ChatSessionTable.updatedAt] = System.currentTimeMillis()
+            }
+        }
+    }
+
+    override suspend fun getSessionIdsByProject(projectId: Long): List<Long> =
+        transactionScope.transaction {
+            ChatSessionTable
+                .selectAll()
+                .where { ChatSessionTable.projectId eq projectId }
+                .map { it[ChatSessionTable.id].value }
+        }
+
+    override suspend fun getSessionRolePairsForProject(projectId: Long): List<SessionRolePair> =
+        transactionScope.transaction {
+            ChatSessionTable
+                .selectAll()
+                .where { ChatSessionTable.projectId eq projectId }
+                .map { row ->
+                    SessionRolePair(
+                        sessionId = row[ChatSessionTable.id].value,
+                        agentRoleId = row[ChatSessionTable.agentRoleId]?.value
+                    )
+                }
         }
 
     override suspend fun updateSessionLeafMessageId(id: Long, messageId: Long?): Either<SessionError, Unit> =
@@ -216,6 +324,7 @@ class SessionDaoExposed(
         updatedAt = Instant.fromEpochMilliseconds(this[ChatSessionTable.updatedAt]),
         groupId = this[ChatSessionTable.groupId]?.value,
         agentRoleId = this[ChatSessionTable.agentRoleId]?.value,
+        projectId = this[ChatSessionTable.projectId]?.value,
         currentLeafMessageId = this.getOrNull(SessionCurrentLeafTable.messageId)?.value,
         messages = messages
     )

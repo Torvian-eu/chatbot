@@ -13,6 +13,10 @@ import kotlin.time.Instant
  * @property groupId Optional group ID for organizing chat sessions together.
  * @property agentRoleId Optional reference to the user-defined agent role selected for this session.
  *            Model/settings/tools are resolved from the role at turn time; null means no role selected.
+ * @property projectId Optional reference to the user-owned project selected for this session; null
+ *            means no project selected. The pair `(agent_role_id, project_id)` must always stay legal
+ *            (the Session Legality Invariant); the default keeps existing call sites compiling as
+ *            project-less.
  */
 data class ChatSessionEntity(
     val id: Long,
@@ -20,5 +24,6 @@ data class ChatSessionEntity(
     val createdAt: Instant,
     val updatedAt: Instant,
     val groupId: Long?,
-    val agentRoleId: Long?
+    val agentRoleId: Long?,
+    val projectId: Long? = null
 )
