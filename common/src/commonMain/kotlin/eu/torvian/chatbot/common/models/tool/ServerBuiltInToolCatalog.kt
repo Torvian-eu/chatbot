@@ -44,6 +44,9 @@ object ServerBuiltInToolCatalog {
     /** Canonical, unprefixed catalog name of the `update_agent_role` tool. */
     const val UPDATE_AGENT_ROLE_NAME = "update_agent_role"
 
+    /** Canonical, unprefixed catalog name of the `delete_agent_role` tool. */
+    const val DELETE_AGENT_ROLE_NAME = "delete_agent_role"
+
     /** Canonical, unprefixed catalog name of the `list_models` tool. */
     const val LIST_MODELS_NAME = "list_models"
 
@@ -484,6 +487,25 @@ object ServerBuiltInToolCatalog {
                         )
                     )
                     put(INSTRUCTIONS_PROPERTY, instructionsProperty(create = false))
+                })
+                put("required", buildJsonArray {
+                    add(ROLE_ID_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
+            name = DELETE_AGENT_ROLE_NAME,
+            description = "Deletes one agent role owned by the current user by its id. Deleting is " +
+                "non-destructive for sessions: chat sessions and messages that referenced the role " +
+                "keep their history and become inert until another role is selected (no 'role in " +
+                "use' rejection applies). Returns a concise one-line summary of the operation.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(
+                        ROLE_ID_PROPERTY,
+                        integerProperty("Id of the agent role to delete. The role must be owned by the current user.")
+                    )
                 })
                 put("required", buildJsonArray {
                     add(ROLE_ID_PROPERTY)

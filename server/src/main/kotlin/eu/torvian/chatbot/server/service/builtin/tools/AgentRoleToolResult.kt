@@ -7,7 +7,8 @@ import eu.torvian.chatbot.common.models.agent.AgentRoleDto
  * Formats the concise, non-JSON operation summaries returned by the mutating agent-role tools.
  *
  * Mutating tools (`create_agent_role`, `update_agent_role`, `insert_agent_role_instruction`,
- * `edit_agent_role_instructions`, `remove_agent_role_instruction`) deliberately do **not** return
+ * `edit_agent_role_instructions`, `remove_agent_role_instruction`, `delete_agent_role`)
+ * deliberately do **not** return
  * the full [AgentRoleDto] JSON: instruction lists can be large, and echoing the whole role after
  * every mutation wastes tokens. Instead each tool returns a one-line plain-text description of the
  * operation it just completed: the action, the affected role's identity (name and id), and — for
@@ -67,3 +68,13 @@ internal fun formatRemovedInstruction(
 ): String =
     "Removed instruction (type=${instruction.type}, name=${instruction.name}) at 0-based " +
         "position $position from agent role '${role.name}' (id: ${role.id})."
+
+/**
+ * Formats the summary for a completed `delete_agent_role` operation.
+ *
+ * @param roleId The id of the deleted role (the delete service returns no payload, so the message
+ *            carries the id the caller supplied).
+ * @return Plain text like `Deleted agent role (id: 1).` (never JSON).
+ */
+internal fun formatDeletedAgentRole(roleId: Long): String =
+    "Deleted agent role (id: $roleId)."

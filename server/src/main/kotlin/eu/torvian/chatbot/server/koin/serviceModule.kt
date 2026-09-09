@@ -18,6 +18,7 @@ import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolExecutor
 import eu.torvian.chatbot.server.service.builtin.tools.CreateAgentRoleTool
 import eu.torvian.chatbot.server.service.builtin.tools.CreateProjectTool
+import eu.torvian.chatbot.server.service.builtin.tools.DeleteAgentRoleTool
 import eu.torvian.chatbot.server.service.builtin.tools.DeleteProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.EditAgentRoleInstructionsTool
 import eu.torvian.chatbot.server.service.builtin.tools.GetCurrentSessionInfoTool
@@ -245,6 +246,7 @@ fun serviceModule() = module {
             CreateProjectTool(projectService = get(), json = get()),
             UpdateProjectTool(projectService = get()),
             DeleteProjectTool(projectService = get()),
+            DeleteAgentRoleTool(agentRoleService = get()),
         ).associateBy { it.name }
     }
     single<ServerBuiltInToolExecutor> {
