@@ -11,6 +11,7 @@ import eu.torvian.chatbot.app.domain.contracts.toEditFormState
 import eu.torvian.chatbot.app.repository.AgentRoleRepository
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.ModelSettingsRepository
+import eu.torvian.chatbot.app.repository.ProjectRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
@@ -19,6 +20,7 @@ import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +38,8 @@ import kotlinx.coroutines.launch
  * @property modelRepository Repository of LLM models (filtered to chat-capable for the form).
  * @property modelSettingsRepository Repository of settings profiles (filtered to chat-capable).
  * @property toolRepository Repository of tool definitions (filtered to enabled tools).
+ * @property projectRepository Repository of user-owned projects (used by the role form's single
+ *            project selector and loaded together with the role catalog).
  * @property notificationService Service for error/success notifications.
  * @property uiDispatcher Dispatcher used for UI coroutines. Defaults to Main.
  */
@@ -44,6 +48,7 @@ class AgentRolesViewModel(
     private val modelRepository: ModelRepository,
     private val modelSettingsRepository: ModelSettingsRepository,
     private val toolRepository: ToolRepository,
+    private val projectRepository: ProjectRepository,
     private val notificationService: NotificationService,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
@@ -98,6 +103,9 @@ class AgentRolesViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), DataState.Idle)
 
+    /** Reactive stream of the user's projects, fed to the role form's single project selector. */
+    val projectsState: StateFlow<DataState<RepositoryError, List<ProjectDto>>> = projectRepository.projects
+
     /** Model lookup map for the role detail page. */
     val modelsById: StateFlow<Map<Long, LLMModel>> =
         modelRepository.models.map { it.dataOrNull?.associateBy { model -> model.id } ?: emptyMap() }
@@ -141,8 +149,9 @@ class AgentRolesViewModel(
                 { agentRoleRepository.loadRoles() },
                 { modelRepository.loadModels() },
                 { modelSettingsRepository.loadAllSettings() },
-                { toolRepository.loadTools() }
-            ) { rolesResult, modelsResult, settingsResult, toolsResult ->
+                { toolRepository.loadTools() },
+                { projectRepository.loadProjects() }
+            ) { rolesResult, modelsResult, settingsResult, toolsResult, projectsResult ->
                 rolesResult.mapLeft { error ->
                     notificationService.repositoryError(
                         error = error,
@@ -165,6 +174,12 @@ class AgentRolesViewModel(
                     notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load tools"
+                    )
+                }
+                projectsResult.mapLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load projects"
                     )
                 }
             }

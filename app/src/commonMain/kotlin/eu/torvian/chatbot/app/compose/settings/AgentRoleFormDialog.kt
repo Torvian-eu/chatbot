@@ -23,6 +23,7 @@ import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.agent.modelSpecificId
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -58,6 +59,8 @@ private val EDITABLE_INSTRUCTION_TYPES = listOf(
  * @param tools Enabled tool definitions available for the multi-select.
  * @param roles Same-user roles available as spawn targets, including the edited role (self-spawn is
  *            allowed).
+ * @param projects Same-user projects available for the single-project selector. A role belongs to
+ *            at most one project; "No project" (null) means unassociated.
  * @param onFormUpdate Applies an update function to the form draft.
  * @param onSave Saves the form.
  * @param onCancel Cancels the dialog.
@@ -70,6 +73,7 @@ fun AgentRoleFormDialog(
     settingsForModel: List<ModelSettings>,
     tools: List<ToolDefinition>,
     roles: List<AgentRoleDto>,
+    projects: List<ProjectDto>,
     onFormUpdate: ((AgentRoleFormState) -> AgentRoleFormState) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit
@@ -174,10 +178,22 @@ fun AgentRoleFormDialog(
 
                         // Spawn permissions are an unordered set: toggling a chip simply adds or
                         // removes the target, and self-spawn is allowed (the edited role is included).
+                        // Spawn targets are an unordered set, but only same-project roles are legal:
+                        // the server rejects a target whose single project differs from the role's
+                        // ([projectId]), so the form only offers roles sharing the chosen project scope
+                        // (plus self — the role being edited is always same-scope after save).
                         Text("Spawnable agent roles", style = MaterialTheme.typography.titleSmall)
-                        if (roles.isEmpty()) {
+                        val eligibleSpawnTargets = roles.filter { target ->
+                            target.id == formState.roleId || target.projectId == formState.projectId
+                        }
+                        val hiddenSpawnTargets = roles.size - eligibleSpawnTargets.size
+                        if (eligibleSpawnTargets.isEmpty()) {
                             Text(
-                                text = "No agent roles are available.",
+                                text = if (roles.isEmpty()) {
+                                    "No agent roles are available."
+                                } else {
+                                    "No spawnable roles share this role's project scope."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -186,7 +202,7 @@ fun AgentRoleFormDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                roles.forEach { target ->
+                                eligibleSpawnTargets.forEach { target ->
                                     val selected = target.id in formState.spawnableAgentRoleIds
                                     FilterChip(
                                         selected = selected,
@@ -208,6 +224,52 @@ fun AgentRoleFormDialog(
                                     )
                                 }
                             }
+                            if (hiddenSpawnTargets > 0) {
+                                Text(
+                                    text = "$hiddenSpawnTargets role(s) in other projects are not shown (spawn targets must share the role's project).",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // Project membership is now a SINGLE selection: a role belongs to at most one
+                        // project, and null means unassociated (offered only to project-less sessions).
+                        // The "No project" chip plus one chip per project form a radio-style group:
+                        // clicking a chip selects that scope (re-selecting keeps it).
+                        Text("Project", style = MaterialTheme.typography.titleSmall)
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = formState.projectId == null,
+                                onClick = {
+                                    // Project scope change: spawn targets of the old scope would stay
+                                    // selected in the draft but fail the server's same-project rule on
+                                    // save, so the scope switch prunes them (self stays eligible).
+                                    onFormUpdate { current -> current.withProjectScope(null, roles) }
+                                },
+                                label = { Text("No project", maxLines = 1) }
+                            )
+                            projects.forEach { project ->
+                                FilterChip(
+                                    selected = project.id == formState.projectId,
+                                    onClick = {
+                                        // See the "No project" chip: the project switch keeps only
+                                        // spawn targets that share the newly selected project scope.
+                                        onFormUpdate { current -> current.withProjectScope(project.id, roles) }
+                                    },
+                                    label = { Text(project.name, maxLines = 1) }
+                                )
+                            }
+                        }
+                        if (projects.isEmpty()) {
+                            Text(
+                                text = "No projects are available yet; the role stays unassociated.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
 
                         // Instruction list editor.

@@ -99,6 +99,8 @@ fun ChatScreen(
     val chatSessionUiState by chatViewModel.sessionDataState.collectAsState()
     val availableAgentRoles by chatViewModel.availableAgentRoles.collectAsState()
     val currentAgentRole by chatViewModel.currentAgentRole.collectAsState()
+    val availableProjects by chatViewModel.availableProjects.collectAsState()
+    val currentProject by chatViewModel.currentProject.collectAsState()
     val currentModel by chatViewModel.currentModel.collectAsState()
     val currentSettings by chatViewModel.currentSettings.collectAsState()
     val modelsById by chatViewModel.modelsById.collectAsState()
@@ -121,6 +123,7 @@ fun ChatScreen(
     val agentRoleSettingsForForm by agentRoleManagementViewModel.settingsForFormModel.collectAsState()
     val agentRoleToolsState by agentRoleManagementViewModel.toolsState.collectAsState()
     val agentRoleCatalogState by agentRoleManagementViewModel.rolesState.collectAsState()
+    val agentRoleProjectsState by agentRoleManagementViewModel.projectsState.collectAsState()
 
     // --- Collect states for cross-session search ---
     val crossSessionSearchState by crossSessionSearchViewModel.uiState.collectAsState()
@@ -159,6 +162,10 @@ fun ChatScreen(
                     agentRoleManagementViewModel.loadRolesAndCatalogs()
                     chatViewModel.currentAgentRole.value?.let(agentRoleManagementViewModel::startEditingRole)
                 },
+                currentProject = currentProject,
+                availableProjects = availableProjects,
+                onSelectProject = { chatViewModel.selectProject(it) },
+                onRetryLoadProjects = { chatViewModel.loadProjects() },
                 isSessionListCollapsed = isSessionListCollapsed,
                 onToggleSessionList = { isSessionListCollapsed = !isSessionListCollapsed },
                 onCopyThread = { chatViewModel.copyThreadToClipboard() },
@@ -242,7 +249,7 @@ fun ChatScreen(
 
     // --- ChatArea Contract Construction ---
     val chatAreaState = remember(
-        chatSessionUiState, availableAgentRoles, currentAgentRole, canSend, modelsById,
+        chatSessionUiState, availableAgentRoles, currentAgentRole, availableProjects, currentProject, canSend, modelsById,
         chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
         chatEditingFileReferences, chatEditingBasePathOverride, chatDisplayedMessages, chatCollapsedMessageIds,
         chatTurnExecutionState, chatDialogState, toolCallsMap, pendingFileReferences,
@@ -252,6 +259,8 @@ fun ChatScreen(
             sessionUiState = chatSessionUiState,
             availableAgentRoles = availableAgentRoles,
             currentAgentRole = currentAgentRole,
+            availableProjects = availableProjects,
+            currentProject = currentProject,
             canSend = canSend,
             modelsById = modelsById,
             inputContent = chatInputContent,
@@ -303,6 +312,8 @@ fun ChatScreen(
             override fun onToggleMessageCollapsed(messageId: Long) = chatViewModel.toggleMessageCollapsed(messageId)
             override fun onSelectAgentRole(agentRoleId: Long?) = chatViewModel.selectAgentRole(agentRoleId)
             override fun onRetryLoadRoles() = chatViewModel.loadAgentRoles()
+            override fun onSelectProject(projectId: Long?) = chatViewModel.selectProject(projectId)
+            override fun onRetryLoadProjects() = chatViewModel.loadProjects()
             override fun onAddRole() {
                 agentRoleManagementViewModel.loadRolesAndCatalogs()
                 agentRoleManagementViewModel.startAddingNewRole()
@@ -414,6 +425,7 @@ fun ChatScreen(
         models = agentRoleModelsState.dataOrNull.orEmpty(),
         settingsForModel = agentRoleSettingsForForm,
         tools = agentRoleToolsState.dataOrNull.orEmpty(),
-        roles = agentRoleCatalogState.dataOrNull.orEmpty()
+        roles = agentRoleCatalogState.dataOrNull.orEmpty(),
+        projects = agentRoleProjectsState.dataOrNull.orEmpty()
     )
 }

@@ -50,7 +50,8 @@ import kotlinx.coroutines.CancellationException
  *
  * Pre-session failures (decode, missing prompt, create failure) are reported without any id.
  *
- * @property sessionRepository Repository used to create the spawned session and attach the role.
+ * @property sessionRepository Repository used to create the spawned session, scope its project when
+ *            the spawned role is project-associated, and attach the role.
  * @property authRepository Source of the authenticated user id required by [ChatViewModel.loadSession]
  *            when loading the spawned session.
  * @property spawnedViewModelResolver Resolves the spawned session's [ChatViewModel], reusing the same
@@ -96,9 +97,10 @@ class AgentSpawnTool(
             return
         }
 
-        // Create the spawned session and attach the requested role (two round-trips; the server
-        // offers no create-with-role variant). A create failure is a pre-session failure: no valid
-        // session id exists yet, so the error carries no id.
+        // Create the spawned session and apply the requested role afterwards (the server offers no
+        // create-with-role variant; when the role is project-scoped, the project is applied too). A
+        // create failure is a pre-session failure: no valid session id exists yet, so the error
+        // carries no id.
         val session = sessionRepository.createSession(
             // Keep the subject recognizable while retaining a stable marker for spawned sessions.
             name = "$SPAWNED_SESSION_NAME_PREFIX${request.subject}"
@@ -107,12 +109,67 @@ class AgentSpawnTool(
             ifRight = { it }
         )
 
-        // From this point a valid spawned session id exists: wait-mode failures (attach, auth, VM
-        // resolution, refused turn, blank summary) carry it in the error output, whereas
+        // From this point a valid spawned session id exists: wait-mode failures (scope, attach,
+        // auth, VM resolution, refused turn, blank summary) carry it in the error output, whereas
         // fire-and-forget reports the id only on success. Cleanup is likewise mode-aware.
         var forceCancelOnExit = false
         var spawnedChatViewModel: ChatViewModel? = null
         try {
+            // The Session Legality Invariant forbids attaching a project-scoped role to a session
+            // whose project selection does not contain it, and `createSession` produces a
+            // project-less session. Spawns are strictly same-scope: the request's project always
+            // equals the calling session's project and equals the role's single project (null only
+            // for unassociated roles from project-less sessions), so mirror it before attaching the
+            // role. Anything else is a contract violation — the tool refuses instead of guessing a
+            // different project of the role.
+            val targetProjectId = request.projectId
+            if (targetProjectId != null && role.projectId != targetProjectId) {
+                logger.error(
+                    "Cannot spawn role ${role.id} for session ${session.id}: " +
+                        "role does not belong to project $targetProjectId"
+                )
+                clientEvents(
+                    spawnFailure(
+                        toolCallId, session.id,
+                        "Failed to spawn: role does not belong to the requested project",
+                        request.mode
+                    )
+                )
+                return
+            }
+            if (targetProjectId == null && role.projectId != null) {
+                logger.error(
+                    "Cannot spawn role ${role.id} for session ${session.id}: " +
+                        "project-scoped role arrived without a project scope"
+                )
+                clientEvents(
+                    spawnFailure(
+                        toolCallId, session.id,
+                        "Failed to spawn: project-scoped role carries no project scope",
+                        request.mode
+                    )
+                )
+                return
+            }
+            if (targetProjectId != null && session.projectId != targetProjectId) {
+                sessionRepository.updateSessionProject(session.id, targetProjectId).fold(
+                    ifLeft = { error ->
+                        logger.error(
+                            "Failed to scope spawned session ${session.id} to project $targetProjectId: $error"
+                        )
+                        clientEvents(
+                            spawnFailure(
+                                toolCallId, session.id,
+                                "Failed to scope spawned session to a project: ${error.message}",
+                                request.mode
+                            )
+                        )
+                        return
+                    },
+                    ifRight = { }
+                )
+            }
+
             sessionRepository.updateSessionAgentRole(session.id, role.id).fold(
                 ifLeft = { error ->
                     logger.error("Failed to attach role to spawned session ${session.id}: $error")

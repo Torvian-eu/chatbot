@@ -83,6 +83,8 @@ fun ChatAreaPreview() {
             override fun onToggleMessageCollapsed(messageId: Long) {}
             override fun onSelectAgentRole(agentRoleId: Long?) {}
             override fun onRetryLoadRoles() {}
+            override fun onSelectProject(projectId: Long?) {}
+            override fun onRetryLoadProjects() {}
             override fun onAddRole() {}
             override fun onEditRole() {}
             override fun onRetryLoadingSession() {}

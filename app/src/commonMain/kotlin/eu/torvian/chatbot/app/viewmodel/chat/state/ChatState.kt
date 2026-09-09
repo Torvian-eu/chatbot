@@ -12,6 +12,7 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.StateFlow
 
@@ -43,13 +44,21 @@ interface ChatState {
     val availableModels: StateFlow<DataState<RepositoryError, List<LLMModel>>>
 
     /**
-     * The list of agent roles available for session selection, used by the top-bar role selector.
-     * Filtered to roles that are **not disabled for the current user**: disabled roles drop out of
-     * the selector and of the [currentAgentRole] derivation, so a session attached to a disabled
-     * role resolves as inert ("No role", composer gated). This is a filtered view of the repository
-     * stream; the settings tab reads the unfiltered stream so disabled roles stay re-enableable.
+     * Agent roles offered by the top-bar role selector: roles that are **not disabled** for the
+     * current user AND legal for the session's selected project. With a project selected only that
+     * project's roles are offered; with no project selected — or a session project that cannot be
+     * resolved from [projectsById] — only unassociated roles (`projectId == null`) are offered.
+     * The reactive drop-out/inert-drift behavior for sessions attached to a role that is no longer
+     * legal or enabled lives in the derivation ([ChatStateImpl]).
      */
     val availableAgentRoles: StateFlow<DataState<RepositoryError, List<AgentRoleDto>>>
+
+    /**
+     * The list of user-owned projects available for the top-bar project selector.
+     * This is a repository passthrough (unfiltered): all projects a user owns are selectable, and
+     * the project-level legality filtering is applied to the role list instead.
+     */
+    val availableProjects: StateFlow<DataState<RepositoryError, List<ProjectDto>>>
 
     /**
      * The list of all available tool definitions.
@@ -84,12 +93,26 @@ interface ChatState {
      */
     val settingsById: StateFlow<Map<Long, ModelSettings>>
 
+    /**
+     * A map of project IDs to [ProjectDto] objects, derived from [availableProjects].
+     * Optimized for quick lookups (e.g., resolving the session's selected project for the top bar).
+     * It will be an empty map if projects are loading or failed to load.
+     */
+    val projectsById: StateFlow<Map<Long, ProjectDto>>
+
     // --- Derived "Current Item" States (for UI convenience) ---
     /**
      * The currently active ChatSession object, or null if not loaded.
      * Derived from sessionDataState.
      */
     val currentSession: StateFlow<ChatSession?>
+
+    /**
+     * The project currently selected for the active session, or null when no project is selected or
+     * the referenced project cannot be resolved from [projectsById].
+     * Derived from `currentSession.projectId` and the project list.
+     */
+    val currentProject: StateFlow<ProjectDto?>
 
     /**
      * The agent role currently selected for the active session, or null when no role is attached

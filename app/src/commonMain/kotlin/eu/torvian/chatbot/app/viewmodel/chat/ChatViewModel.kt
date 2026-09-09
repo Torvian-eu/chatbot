@@ -20,6 +20,7 @@ import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import kotlinx.coroutines.CoroutineScope
@@ -49,6 +50,8 @@ import kotlin.time.Duration.Companion.milliseconds
  * @param switchBranchUC Use case for switching branches
  * @param selectAgentRoleUC Use case for selecting agent roles
  * @param loadAgentRolesUC Use case for loading the user's agent roles
+ * @param selectProjectUC Use case for selecting projects
+ * @param loadProjectsUC Use case for loading the user's projects
  * @param updateInputUC Use case for updating input content
  * @param copyToClipboardUC Use case for copying content to clipboard
  * @param fileReferenceUC Use case for managing file references
@@ -67,6 +70,8 @@ class ChatViewModel(
     private val switchBranchUC: SwitchBranchUseCase,
     private val selectAgentRoleUC: SelectAgentRoleUseCase,
     private val loadAgentRolesUC: LoadAgentRolesUseCase,
+    private val selectProjectUC: SelectProjectUseCase,
+    private val loadProjectsUC: LoadProjectsUseCase,
     private val updateInputUC: UpdateInputUseCase,
     private val copyToClipboardUC: CopyToClipboardUseCase,
     private val fileReferenceUC: FileReferenceUseCase,
@@ -122,6 +127,21 @@ class ChatViewModel(
      * The list of agent roles owned by the current user, for the top-bar role selector.
      */
     val availableAgentRoles: StateFlow<DataState<RepositoryError, List<AgentRoleDto>>> = state.availableAgentRoles
+
+    /**
+     * The list of user-owned projects for the top-bar project selector.
+     */
+    val availableProjects: StateFlow<DataState<RepositoryError, List<ProjectDto>>> = state.availableProjects
+
+    /**
+     * A map of project IDs to ProjectDto objects for quick lookups.
+     */
+    val projectsById: StateFlow<Map<Long, ProjectDto>> = state.projectsById
+
+    /**
+     * The project currently selected for the active session, or null when no project is selected.
+     */
+    val currentProject: StateFlow<ProjectDto?> = state.currentProject
 
     /**
      * Tool calls for the current session, organized by message ID.
@@ -600,6 +620,24 @@ class ChatViewModel(
     fun loadAgentRoles() {
         normalScope.launch {
             loadAgentRolesUC.execute()
+        }
+    }
+
+    /**
+     * Selects a project for the current session, or deselects it when null.
+     */
+    fun selectProject(projectId: Long?) {
+        normalScope.launch {
+            selectProjectUC.execute(projectId)
+        }
+    }
+
+    /**
+     * Loads the current user's projects (used by the top-bar retry action).
+     */
+    fun loadProjects() {
+        normalScope.launch {
+            loadProjectsUC.execute()
         }
     }
 

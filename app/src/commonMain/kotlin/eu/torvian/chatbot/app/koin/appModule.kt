@@ -213,6 +213,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<AgentRoleApi> {
         KtorAgentRoleApiClient(get())
     }
+    single<ProjectApi> {
+        KtorProjectApiClient(get())
+    }
     single<UserGroupApi> {
         KtorUserGroupApiClient(get())
     }
@@ -277,7 +280,13 @@ fun appModule(config: AppConfiguration): Module = module {
         DefaultRoleRepository(get())
     }
     single<AgentRoleRepository> {
-        DefaultAgentRoleRepository(get())
+        DefaultAgentRoleRepository(
+            agentRoleApi = get(),
+            projectRepository = get()
+        )
+    }
+    single<ProjectRepository> {
+        DefaultProjectRepository(get())
     }
     single<UserGroupRepository> {
         DefaultUserGroupRepository(get())
@@ -385,6 +394,7 @@ fun appModule(config: AppConfiguration): Module = module {
             toolRepository = get(),
             mcpServerRepository = get(),
             agentRoleRepository = get(),
+            projectRepository = get(),
             threadBuilder = get(),
             backgroundScope = backgroundScope
         )
@@ -399,6 +409,7 @@ fun appModule(config: AppConfiguration): Module = module {
             get<ToolRepository>(),
             get<LocalMCPServerRepository>(),
             get<AgentRoleRepository>(),
+            get<ProjectRepository>(),
             chatState,
             get(),
             get(),
@@ -420,6 +431,14 @@ fun appModule(config: AppConfiguration): Module = module {
 
     factory<LoadAgentRolesUseCase> { (_: ChatState) ->
         LoadAgentRolesUseCase(get<AgentRoleRepository>(), get())
+    }
+
+    factory<SelectProjectUseCase> { (chatState: ChatState) ->
+        SelectProjectUseCase(get<SessionRepository>(), chatState, get())
+    }
+
+    factory<LoadProjectsUseCase> { (_: ChatState) ->
+        LoadProjectsUseCase(get<ProjectRepository>(), get())
     }
 
     factory<SwitchBranchUseCase> { (chatState: ChatState) ->
@@ -478,6 +497,8 @@ fun appModule(config: AppConfiguration): Module = module {
             switchBranchUC = get { parametersOf(chatState) },
             selectAgentRoleUC = get { parametersOf(chatState) },
             loadAgentRolesUC = get { parametersOf(chatState) },
+            selectProjectUC = get { parametersOf(chatState) },
+            loadProjectsUC = get { parametersOf(chatState) },
             updateInputUC = get { parametersOf(chatState) },
             copyToClipboardUC = get { parametersOf(chatState) },
             fileReferenceUC = get { parametersOf(chatState, normalScope) },
@@ -572,6 +593,14 @@ fun appModule(config: AppConfiguration): Module = module {
             modelRepository = get(),
             modelSettingsRepository = get(),
             toolRepository = get(),
+            projectRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
+        ProjectsViewModel(
+            projectRepository = get(),
+            agentRoleRepository = get(),
             notificationService = get()
         )
     }

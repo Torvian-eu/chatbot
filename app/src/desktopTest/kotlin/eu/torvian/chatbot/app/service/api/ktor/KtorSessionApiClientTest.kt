@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
+import eu.torvian.chatbot.common.models.api.project.UpdateSessionProjectResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -17,6 +18,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Clock
@@ -735,6 +737,110 @@ class KtorSessionApiClientTest {
         }
         val apiClient = createTestClient(mockEngine)
         when (val result = apiClient.updateSessionGroup(sessionId, 40L)) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+                assertEquals("Session not found", error.apiError.message)
+            }
+        }
+    }
+
+    // --- Tests for updateSessionProject ---
+
+    @Test
+    fun `updateSessionProject - success selects project and carries resulting agent role`() = runTest {
+        val sessionId = 123L
+        val projectId = 77L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals(
+                href(SessionResource.ById.Project(SessionResource.ById(sessionId = sessionId))),
+                request.url.fullPath
+            )
+            val requestBody = request.body.toByteArray().decodeToString()
+            assertTrue(requestBody.contains("77"), "Request body should contain projectId")
+            respond(
+                content = json.encodeToString(UpdateSessionProjectResponse(projectId = 77L, agentRoleId = null)),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.updateSessionProject(sessionId, projectId)) {
+            is Either.Right -> {
+                assertEquals(77L, result.value.projectId)
+                assertNull(result.value.agentRoleId)
+            }
+
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `updateSessionProject - success deselects project`() = runTest {
+        val sessionId = 123L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals(
+                href(SessionResource.ById.Project(SessionResource.ById(sessionId = sessionId))),
+                request.url.fullPath
+            )
+            val requestBody = request.body.toByteArray().decodeToString()
+            assertTrue(requestBody.contains("null"), "Request body should contain null projectId")
+            respond(
+                content = json.encodeToString(UpdateSessionProjectResponse(projectId = null, agentRoleId = null)),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.updateSessionProject(sessionId, null)) {
+            is Either.Right -> {
+                assertNull(result.value.projectId)
+                assertNull(result.value.agentRoleId)
+            }
+
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `updateSessionProject - server clears an illegal role and the response reflects it`() = runTest {
+        val sessionId = 123L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            respond(
+                content = json.encodeToString(UpdateSessionProjectResponse(projectId = 77L, agentRoleId = null)),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.updateSessionProject(sessionId, 77L)) {
+            is Either.Right -> {
+                assertEquals(77L, result.value.projectId)
+                assertNull(result.value.agentRoleId)
+            }
+
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `updateSessionProject - failure - 404 Not Found (Session)`() = runTest {
+        val sessionId = 999L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found")),
+                status = HttpStatusCode.NotFound,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.updateSessionProject(sessionId, 77L)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError

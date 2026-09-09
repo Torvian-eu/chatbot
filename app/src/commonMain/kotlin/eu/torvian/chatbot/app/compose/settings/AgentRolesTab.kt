@@ -106,6 +106,7 @@ fun AgentRolesTab(
         models = state.models,
         settingsForModel = state.settingsForFormModel,
         tools = state.tools,
-        roles = state.rolesUiState.dataOrNull.orEmpty()
+        roles = state.rolesUiState.dataOrNull.orEmpty(),
+        projects = state.projects
     )
 }

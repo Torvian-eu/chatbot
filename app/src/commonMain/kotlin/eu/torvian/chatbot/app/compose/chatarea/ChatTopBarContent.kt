@@ -16,11 +16,12 @@ import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.common.models.project.ProjectDto
 
 
 /**
  * Top bar content for the Chat screen.
- * Displays the agent-role selector, and in-session search.
+ * Displays the project selector, the agent-role selector, and in-session search.
  *
  * This composable is designed to work within a RowScope (app bar actions).
  *
@@ -32,6 +33,10 @@ import eu.torvian.chatbot.common.models.agent.AgentRoleDto
  * @param onRetryLoadRoles retries loading agent roles after a failure.
  * @param onAddRole opens the add-role dialog for the current session.
  * @param onEditRole opens the edit-role dialog for the currently selected role.
+ * @param currentProject currently selected project for the session, or null when none is selected.
+ * @param availableProjects load state for the user's projects.
+ * @param onSelectProject selects a project for the current session (null deselects).
+ * @param onRetryLoadProjects retries loading projects after a failure.
  * @param isSessionListCollapsed whether the session list panel is collapsed.
  * @param onToggleSessionList toggles the session list panel.
  * @param onCopyThread copies the current displayed thread to the clipboard.
@@ -57,6 +62,10 @@ fun RowScope.ChatTopBarContent(
     onRetryLoadRoles: () -> Unit,
     onAddRole: () -> Unit,
     onEditRole: () -> Unit,
+    currentProject: ProjectDto?,
+    availableProjects: DataState<RepositoryError, List<ProjectDto>>,
+    onSelectProject: (Long?) -> Unit,
+    onRetryLoadProjects: () -> Unit,
     isSessionListCollapsed: Boolean,
     onToggleSessionList: () -> Unit,
     onCopyThread: () -> Unit,
@@ -120,6 +129,19 @@ fun RowScope.ChatTopBarContent(
                 modifier = Modifier.weight(1f),
             )
         } else {
+            // Project selector — filters the role dropdown to the selected project's roles. Shown
+            // first (left of the role selector) so the project acts as the narrowing scope for it.
+            PlainTooltipBox(text = "Select Project") {
+                CompactProjectSelector(
+                    currentProject = currentProject,
+                    availableProjects = availableProjects,
+                    onSelectProject = onSelectProject,
+                    onRetryLoadProjects = onRetryLoadProjects
+                )
+            }
+
+            Spacer(Modifier.width(8.dp))
+
             // Agent role selector — replaces the old model/settings/tool-config controls.
             PlainTooltipBox(text = "Select Agent Role") {
                 CompactAgentRoleSelector(
@@ -244,6 +266,80 @@ private fun CompactAgentRoleSelector(
         is DataState.Error -> {
             IconButton(onClick = onRetryLoadRoles) {
                 Icon(Icons.Default.Refresh, contentDescription = "Retry loading agent roles")
+            }
+        }
+
+        is DataState.Idle -> {
+            // Show nothing or placeholder
+        }
+    }
+}
+
+/**
+ * Compact project selector for the top bar.
+ *
+ * Shows a text button with the currently selected project, or the "No project" placeholder when none
+ * is selected. The dropdown lists the user's projects plus a "No project" entry (which passes `null`)
+ * so the user can deselect the project and return the role dropdown to unassociated roles. Unlike the
+ * role selector there is deliberately no "Manage projects…" quick action: project management lives in
+ * the Settings → Projects tab and its deep link is a later stage.
+ *
+ * @param currentProject The project currently selected for the active session, or null when none is selected.
+ * @param availableProjects Load state for the user's project catalog.
+ * @param onSelectProject Callback invoked with the selected project id, or null to deselect.
+ * @param onRetryLoadProjects Callback invoked to retry a failed project load.
+ */
+@Composable
+private fun CompactProjectSelector(
+    currentProject: ProjectDto?,
+    availableProjects: DataState<RepositoryError, List<ProjectDto>>,
+    onSelectProject: (Long?) -> Unit,
+    onRetryLoadProjects: () -> Unit
+) {
+    when (availableProjects) {
+        is DataState.Success -> {
+            var expanded by remember { mutableStateOf(false) }
+            Box {
+                TextButton(onClick = { expanded = true }) {
+                    Text(
+                        text = currentProject?.name ?: "No project",
+                        maxLines = 1
+                    )
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    // "No project" deselects: the session's role dropdown falls back to unassociated
+                    // roles (the role dropdown re-derives this reactively from the cached session).
+                    DropdownMenuItem(
+                        text = { Text("No project") },
+                        onClick = {
+                            onSelectProject(null)
+                            expanded = false
+                        }
+                    )
+                    HorizontalDivider()
+                    availableProjects.data.forEach { project ->
+                        DropdownMenuItem(
+                            text = { Text(project.name, maxLines = 1) },
+                            onClick = {
+                                onSelectProject(project.id)
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        is DataState.Loading -> {
+            LoadingOverlay(Modifier.size(24.dp))
+        }
+
+        is DataState.Error -> {
+            IconButton(onClick = onRetryLoadProjects) {
+                Icon(Icons.Default.Refresh, contentDescription = "Retry loading projects")
             }
         }
 

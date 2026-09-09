@@ -157,6 +157,23 @@ interface SessionRepository {
     ): Either<RepositoryError, Unit>
 
     /**
+     * Selects (or deselects) the project attached to a chat session.
+     *
+     * Corresponds to `PUT /api/v1/sessions/{sessionId}/project`. The server may clear the session's
+     * agent role atomically when the new project selection makes the pair illegal; the cached
+     * session is updated in one round-trip from the response, so this repository never re-derives
+     * the clear rule locally.
+     *
+     * @param sessionId The unique identifier of the session
+     * @param projectId The new optional project ID for the session, or null to deselect.
+     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
+     */
+    suspend fun updateSessionProject(
+        sessionId: Long,
+        projectId: Long?
+    ): Either<RepositoryError, Unit>
+
+    /**
      * Sets the current "active" leaf message for a session, affecting which branch is displayed.
      *
      * Upon successful update, the modified session's details flow in the cache

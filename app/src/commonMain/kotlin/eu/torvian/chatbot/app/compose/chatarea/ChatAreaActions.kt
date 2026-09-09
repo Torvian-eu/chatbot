@@ -120,6 +120,17 @@ interface ChatAreaActions {
     fun onRetryLoadRoles()
 
     /**
+     * Callback for when the user selects (or deselects) a project for the session.
+     * @param projectId The ID of the project to select, or null to clear the selection ("No project").
+     */
+    fun onSelectProject(projectId: Long?)
+
+    /**
+     * Callback for when the user requests to retry loading projects after a failure.
+     */
+    fun onRetryLoadProjects()
+
+    /**
      * Callback for when the user requests to open the add-role dialog on the chat screen.
      */
     fun onAddRole()
