@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
@@ -21,6 +22,7 @@ import eu.torvian.chatbot.common.models.project.ProjectDto
  * @param rolesById Role lookup for the project's member role ids.
  * @param onBackToList Callback invoked when the user returns to the project list.
  * @param onEdit Callback invoked when the user starts editing the project.
+ * @param onClone Callback invoked when the user starts cloning the project (opens the clone dialog).
  * @param onDelete Callback invoked when the user starts deleting the project.
  * @param modifier Modifier applied to the page container.
  */
@@ -30,6 +32,7 @@ fun ProjectDetailPage(
     rolesById: Map<Long, AgentRoleDto>,
     onBackToList: () -> Unit,
     onEdit: (ProjectDto) -> Unit,
+    onClone: (ProjectDto) -> Unit,
     onDelete: (ProjectDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -44,6 +47,11 @@ fun ProjectDetailPage(
                 Icon(imageVector = Icons.Default.Edit, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Edit")
+            }
+            TextButton(onClick = { onClone(project) }) {
+                Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Clone")
             }
             TextButton(
                 onClick = { onDelete(project) },

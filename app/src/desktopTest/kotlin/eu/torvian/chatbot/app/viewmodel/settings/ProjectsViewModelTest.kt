@@ -8,6 +8,7 @@ import eu.torvian.chatbot.app.repository.AgentRoleRepository
 import eu.torvian.chatbot.app.repository.ProjectRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
@@ -149,6 +150,69 @@ class ProjectsViewModelTest {
         }
         assertTrue(viewModel.dialogState.value is ProjectDialogState.AddProject)
         // No role refresh happens when the mutation failed.
+        coVerify(exactly = 0) { agentRoleRepository.loadRoles() }
+    }
+
+    @Test
+    fun `startCloningProject - opens the clone dialog prefilled with Copy of name and source description`() {
+        val existing = project(7, "Research").copy(description = "Research group")
+        viewModel.startCloningProject(existing)
+
+        val dialogState = viewModel.dialogState.value
+        assertTrue(dialogState is ProjectDialogState.CloneProject)
+        assertEquals("Copy of Research", dialogState.formState.name)
+        assertEquals("Research group", dialogState.formState.description)
+    }
+
+    @Test
+    fun `cloneProject - success - reloads roles, closes dialog and selects the clone`() = runTest(dispatcher) {
+        val existing = project(7, "Research", setOf(1L))
+        coEvery { projectRepository.cloneProject(7L, any()) } returns
+            Either.Right(project(11, "Copy of Research", setOf(4L)))
+        viewModel.startCloningProject(existing)
+
+        viewModel.cloneProject()
+
+        coVerify(exactly = 1) {
+            projectRepository.cloneProject(
+                eq(7L),
+                match<CloneProjectRequest> { request -> request.name == "Copy of Research" }
+            )
+        }
+        // The clone created new role rows; the role side of the cache is refreshed so
+        // AgentRoleDto.projectId and the disabled flags stay consistent.
+        coVerify(exactly = 1) { agentRoleRepository.loadRoles() }
+        assertEquals(ProjectDialogState.None, viewModel.dialogState.value)
+    }
+
+    @Test
+    fun `cloneProject - blank name - validates without calling api`() = runTest(dispatcher) {
+        val existing = project(7, "Research")
+        viewModel.startCloningProject(existing)
+        viewModel.updateProjectForm { form -> form.copy(name = "   ") }
+
+        viewModel.cloneProject()
+
+        coVerify(exactly = 0) { projectRepository.cloneProject(any(), any()) }
+        val dialogState = viewModel.dialogState.value
+        assertTrue(dialogState is ProjectDialogState.CloneProject)
+        assertNotNull(dialogState.formState.errorMessage)
+    }
+
+    @Test
+    fun `cloneProject - failure - notifies and keeps dialog open`() = runTest(dispatcher) {
+        coEvery { projectRepository.cloneProject(7L, any()) } returns Either.Left(
+            RepositoryError.OtherError("clone failed")
+        )
+        viewModel.startCloningProject(project(7, "Research"))
+
+        viewModel.cloneProject()
+
+        coVerify {
+            notificationService.repositoryError(any<RepositoryError>(), any<String>())
+        }
+        assertTrue(viewModel.dialogState.value is ProjectDialogState.CloneProject)
+        // No role refresh happens when the clone failed.
         coVerify(exactly = 0) { agentRoleRepository.loadRoles() }
     }
 

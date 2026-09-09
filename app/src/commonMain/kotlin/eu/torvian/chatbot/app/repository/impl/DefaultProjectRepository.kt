@@ -9,6 +9,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.ProjectApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
@@ -109,6 +110,31 @@ class DefaultProjectRepository(
                     list.map { if (it.id == updatedProject.id) updatedProject else it }
                 }
                 updatedProject.right()
+            }
+        )
+    }
+
+    override suspend fun cloneProject(projectId: Long, request: CloneProjectRequest): Either<RepositoryError, ProjectDto> {
+        logger.info("Cloning project ID: $projectId as '${request.name}'")
+
+        return projectApi.cloneProject(projectId, request).fold(
+            ifLeft = { error ->
+                val repoError = error.toRepositoryError("Failed to clone project ID: $projectId")
+                logger.warn("Failed to clone project ID: $projectId: ${repoError.message}")
+                repoError.left()
+            },
+            ifRight = { clonedProject ->
+                logger.info("Successfully cloned project '${clonedProject.name}' with ID: ${clonedProject.id}")
+                // Upsert: a clone always produces a brand-new id, so append normally; the replace
+                // branch only guards against a stale stream containing the id already.
+                updateProjectsState { list ->
+                    if (list.any { it.id == clonedProject.id }) {
+                        list.map { if (it.id == clonedProject.id) clonedProject else it }
+                    } else {
+                        list + clonedProject
+                    }
+                }
+                clonedProject.right()
             }
         )
     }

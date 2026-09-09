@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
@@ -60,6 +61,21 @@ interface ProjectApi {
      *         [Either.Left] containing an [ApiResourceError] on failure.
      */
     suspend fun updateProject(projectId: Long, request: UpdateProjectRequest): Either<ApiResourceError, ProjectDto>
+
+    /**
+     * Clones an existing project owned by the current user under a new name.
+     *
+     * Corresponds to `POST /api/v1/projects/{projectId}/clone`. The server deep-copies the source
+     * project's member agent roles as new role rows bound to the clone; the source project and its
+     * roles are left untouched. The new name must be unique among the user's projects.
+     *
+     * @param projectId The unique identifier of the source project to clone.
+     * @param request The clone payload: new name (required) and optional description override (null
+     *            copies the source's description).
+     * @return [Either.Right] containing the cloned [ProjectDto] on success, or
+     *         [Either.Left] containing an [ApiResourceError] on failure.
+     */
+    suspend fun cloneProject(projectId: Long, request: CloneProjectRequest): Either<ApiResourceError, ProjectDto>
 
     /**
      * Deletes a project and its ownership/role links. Member roles themselves are not deleted;

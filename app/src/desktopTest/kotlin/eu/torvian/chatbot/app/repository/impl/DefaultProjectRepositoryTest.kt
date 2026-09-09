@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ProjectApi
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
@@ -134,6 +135,39 @@ class DefaultProjectRepositoryTest {
         assertTrue(state is DataState.Success)
         assertEquals(1, state.data.size)
         assertEquals("Writing", state.data.single().name)
+    }
+
+    @Test
+    fun `cloneProject - appends the clone to state with the copied role ids`() = runTest {
+        coEvery { api.getAllProjects() } returns Either.Right(listOf(project(1, "Research")))
+        repository.loadProjects()
+
+        val cloned = project(10, "Copy of Research", agentRoleIds = setOf(3L, 4L))
+        coEvery { api.cloneProject(1L, any()) } returns Either.Right(cloned)
+
+        val result = repository.cloneProject(1L, CloneProjectRequest(name = "Copy of Research"))
+
+        assertTrue(result.isRight())
+        val state = repository.projects.value
+        assertTrue(state is DataState.Success)
+        assertEquals(2, state.data.size)
+        assertEquals("Copy of Research", state.data.last().name)
+        assertEquals(setOf(3L, 4L), state.data.last().agentRoleIds)
+    }
+
+    @Test
+    fun `cloneProject - failed clone leaves state unchanged`() = runTest {
+        coEvery { api.getAllProjects() } returns Either.Right(emptyList())
+        repository.loadProjects()
+
+        coEvery { api.cloneProject(1L, any()) } returns Either.Left(
+            ApiResourceError.UnknownError("boom", null)
+        )
+
+        repository.cloneProject(1L, CloneProjectRequest(name = "X"))
+
+        assertTrue(repository.projects.value is DataState.Success)
+        assertEquals(0, repository.projects.value.dataOrNull?.size)
     }
 
     @Test

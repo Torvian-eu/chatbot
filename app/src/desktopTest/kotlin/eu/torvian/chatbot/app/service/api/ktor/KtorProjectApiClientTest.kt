@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.ProjectResource
 import eu.torvian.chatbot.common.api.resources.href
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
@@ -232,6 +233,57 @@ class KtorProjectApiClientTest {
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
                 assertEquals(404, error.apiError.statusCode)
+            }
+        }
+    }
+
+    // --- cloneProject ---
+
+    @Test
+    fun `cloneProject - success`() = runTest {
+        val request = CloneProjectRequest(name = "Copy of Research", description = "Deep copy")
+        val cloned = mockProject(11, "Copy of Research", agentRoleIds = setOf(7L, 8L))
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(
+                href(ProjectResource.ById.Clone(parent = ProjectResource.ById(projectId = 7L))),
+                request.url.fullPath
+            )
+            val body = request.body.toByteArray().decodeToString()
+            assertTrue(body.contains("Copy of Research"), "Request body should contain the project name")
+            respond(
+                content = json.encodeToString(cloned),
+                status = HttpStatusCode.Created,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.cloneProject(7L, request)) {
+            is Either.Right -> {
+                assertEquals("Copy of Research", result.value.name)
+                assertEquals(setOf(7L, 8L), result.value.agentRoleIds)
+            }
+
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `cloneProject - failure - 404 Not Found`() = runTest {
+        val mockEngine = MockEngine { _ ->
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.NOT_FOUND, "Project not found")),
+                status = HttpStatusCode.NotFound,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.cloneProject(999L, CloneProjectRequest(name = "X"))) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
             }
         }
     }

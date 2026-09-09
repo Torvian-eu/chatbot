@@ -110,6 +110,13 @@ sealed class ProjectDialogState {
         val formState: ProjectFormState
     ) : ProjectDialogState()
 
+    /** Clone-project dialog: new name (prefilled `Copy of <name>`) plus an optional description
+     * override prefilled from the source; the member roles are deep-copied server-side. */
+    data class CloneProject(
+        val project: ProjectDto,
+        val formState: ProjectFormState
+    ) : ProjectDialogState()
+
     /** Delete-project confirmation dialog. */
     data class DeleteProject(
         val project: ProjectDto

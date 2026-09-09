@@ -49,6 +49,15 @@ fun ProjectDialogs(
             )
         }
 
+        is ProjectDialogState.CloneProject -> {
+            CloneProjectDialog(
+                formState = dialogState.formState,
+                onFormUpdate = actions::onUpdateProjectForm,
+                onClone = actions::onCloneProject,
+                onCancel = actions::onCancelDialog
+            )
+        }
+
         is ProjectDialogState.DeleteProject -> {
             AlertDialog(
                 onDismissRequest = actions::onCancelDialog,
