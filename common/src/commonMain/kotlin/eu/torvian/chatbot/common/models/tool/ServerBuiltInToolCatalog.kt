@@ -135,6 +135,9 @@ object ServerBuiltInToolCatalog {
     /** Canonical, unprefixed catalog name of the `delete_project` tool. */
     const val DELETE_PROJECT_NAME = "delete_project"
 
+    /** Canonical, unprefixed catalog name of the `clone_project` tool. */
+    const val CLONE_PROJECT_NAME = "clone_project"
+
     /** JSON property holding the user-owned agent-role ids attached to a project. */
     const val AGENT_ROLE_IDS_PROPERTY = "agent_role_ids"
 
@@ -463,6 +466,36 @@ object ServerBuiltInToolCatalog {
                 })
                 put("required", buildJsonArray {
                     add(PROJECT_ID_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
+            name = CLONE_PROJECT_NAME,
+            description = "Clones one project owned by the current user: creates a new project under " +
+                "the caller-provided name, deep-copying every member agent role of the source as a " +
+                "new role row (configuration, tools, spawnable role ids remapped to the clone, and " +
+                "the per-user disabled state). The source project and its roles are left untouched. " +
+                "Returns the cloned project's full JSON with its id, name, description, creation " +
+                "time, and the new member agent role ids.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(
+                        PROJECT_ID_PROPERTY,
+                        integerProperty("Id of the project to clone. The project must be owned by the current user.")
+                    )
+                    put(NAME_PROPERTY, stringProperty("Unique (per user) name for the cloned project."))
+                    put(
+                        DESCRIPTION_PROPERTY,
+                        stringProperty(
+                            "Optional description of the clone. Omit it to copy the source project's " +
+                                "description; pass an explicit value (including an empty string) to override it."
+                        )
+                    )
+                })
+                put("required", buildJsonArray {
+                    add(PROJECT_ID_PROPERTY)
+                    add(NAME_PROPERTY)
                 })
             }
         ),
