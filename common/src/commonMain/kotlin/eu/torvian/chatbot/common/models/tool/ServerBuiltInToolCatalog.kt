@@ -503,7 +503,14 @@ object ServerBuiltInToolCatalog {
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
-                    put(NAME_PROPERTY, stringProperty("Unique (per user) machine-readable role name."))
+                    put(
+                        NAME_PROPERTY,
+                        stringProperty(
+                            "Unique name within the role's project scope for the current user " +
+                                "(unassociated roles share a single no-project scope; roles bound to " +
+                                "a project must be unique within that project)."
+                        )
+                    )
                     put(DISPLAY_NAME_PROPERTY, stringProperty("Optional human-friendly display name."))
                     put(DESCRIPTION_PROPERTY, stringProperty("Free-form description of the role."))
                     put(
@@ -552,7 +559,14 @@ object ServerBuiltInToolCatalog {
                         ROLE_ID_PROPERTY,
                         integerProperty("Id of the agent role to update. The role must be owned by the current user.")
                     )
-                    put(NAME_PROPERTY, stringProperty("New unique (per user) machine-readable role name."))
+                    put(
+                        NAME_PROPERTY,
+                        stringProperty(
+                            "New name for the role. Must be unique within the role's project scope " +
+                                "for the current user, like create_agent_role: same-scope collisions " +
+                                "are rejected (unassociated roles share one no-project scope)."
+                        )
+                    )
                     put(DISPLAY_NAME_PROPERTY, stringProperty("New optional human-friendly display name."))
                     put(DESCRIPTION_PROPERTY, stringProperty("New free-form description of the role."))
                     put(
