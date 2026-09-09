@@ -65,6 +65,13 @@ class AgentSpawnToolTest {
     )
 
     /**
+     * Role fixture with a project association, used to exercise the project-scoping path of the
+     * spawn flow (the Session Legality Invariant forbids attaching such a role to a project-less
+     * session). Roles have single-project membership, so the fixture carries exactly one project.
+     */
+    private val scopedRole = role.copy(projectId = 7L)
+
+    /**
      * Session returned by the repository after applying the spawned-session name.
      */
     private val session = ChatSession(
@@ -84,12 +91,17 @@ class AgentSpawnToolTest {
      * @param prompt User message sent to the spawned agent.
      * @param mode Execution mode carried by the request (defaults to wait-for-response so the
      *            default-mode tests stay pinned to summary-return behavior).
+     * @param role Role payload carried as the spawn target; defaults to the unassociated fixture.
+     * @param projectId Server-derived project scope for the spawned session; `null` (default)
+     *            keeps the project-less spawn path, mirroring a server that predates the property.
      * @return JSON payload accepted by the app-side executor.
      */
     private fun spawnPayload(
         toolCallId: Long = 42L,
         prompt: String = "Do the thing",
-        mode: OperatorToolMode = OperatorToolMode.WAIT_FOR_RESPONSE
+        mode: OperatorToolMode = OperatorToolMode.WAIT_FOR_RESPONSE,
+        role: AgentRoleDto = this.role,
+        projectId: Long? = null
     ): String =
         json.encodeToString(
             AgentSpawnRequest.serializer(),
@@ -97,6 +109,7 @@ class AgentSpawnToolTest {
                 agentRoleToSpawn = role,
                 subject = "Implementation task",
                 mode = mode,
+                projectId = projectId,
                 conversation = listOf(AgentSpawnMessage.User(prompt)),
                 toolCallId = toolCallId
             )
@@ -351,6 +364,137 @@ class AgentSpawnToolTest {
         assertEquals(true, result?.errorMessage?.contains("cannot attach"))
         // A valid session id exists at this point: wait-mode failures carry it.
         assertEquals("**Spawned chat session id:** 99", result?.output)
+    }
+
+    /**
+     * Verifies that a project-scoped spawn uses the server-provided project id: the spawned
+     * session is scoped to it **before** the role is attached, so the (project-less) created
+     * session never violates the Session Legality Invariant.
+     */
+    @Test
+    fun `execute scopes the spawned session to the server-provided project before attaching the role`() = runTest {
+        val sessionRepository = mockk<SessionRepository>()
+        coEvery { sessionRepository.createSession(any()) } returns session.right()
+        coEvery { sessionRepository.updateSessionProject(session.id, 7L) } returns Unit.right()
+        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+
+        val (resolver, _) = successfulViewModel(summary = "FINAL SUMMARY")
+        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        var result: ChatClientEvent.ToolExecutionResult? = null
+
+        executor.execute(
+            toolCallId = 42L,
+            payload = spawnPayload(role = scopedRole, projectId = 7L),
+            clientEvents = { result = it }
+        )
+
+        assertEquals(false, result?.isError)
+        coVerify { sessionRepository.updateSessionProject(session.id, 7L) }
+        coVerify { sessionRepository.updateSessionAgentRole(session.id, role.id) }
+    }
+
+    /**
+     * Verifies that the tool refuses a project-scoped role whose request carries no project scope
+     * (a contract violation for a server that predates the `projectId` property): spawning is
+     * strictly same-scope, so the tool never guesses a project for the role.
+     */
+    @Test
+    fun `execute refuses a project-scoped role when the request carries no project`() = runTest {
+        val sessionRepository = mockk<SessionRepository>()
+        coEvery { sessionRepository.createSession(any()) } returns session.right()
+
+        val executor = newExecutor(sessionRepository = sessionRepository)
+        var result: ChatClientEvent.ToolExecutionResult? = null
+
+        executor.execute(
+            toolCallId = 42L,
+            payload = spawnPayload(role = scopedRole),
+            clientEvents = { result = it }
+        )
+
+        assertEquals(true, result?.isError)
+        assertEquals(true, result?.errorMessage?.contains("project-scoped role carries no project scope"))
+        assertEquals("**Spawned chat session id:** 99", result?.output)
+        coVerify(exactly = 0) { sessionRepository.updateSessionProject(any(), any()) }
+        coVerify(exactly = 0) { sessionRepository.updateSessionAgentRole(any(), any()) }
+    }
+
+    /**
+     * Verifies that the tool refuses a role that does not belong to the project carried by the
+     * request: spawns are strictly same-scope, so the tool never attaches a role outside its
+     * project (defense in depth — a matched server never produces such a payload).
+     */
+    @Test
+    fun `execute refuses a role that does not belong to the requested project`() = runTest {
+        val foreignRole = role.copy(projectId = 5L)
+        val sessionRepository = mockk<SessionRepository>()
+        coEvery { sessionRepository.createSession(any()) } returns session.right()
+
+        val executor = newExecutor(sessionRepository = sessionRepository)
+        var result: ChatClientEvent.ToolExecutionResult? = null
+
+        executor.execute(
+            toolCallId = 42L,
+            payload = spawnPayload(role = foreignRole, projectId = 7L),
+            clientEvents = { result = it }
+        )
+
+        assertEquals(true, result?.isError)
+        assertEquals(true, result?.errorMessage?.contains("role does not belong to the requested project"))
+        assertEquals("**Spawned chat session id:** 99", result?.output)
+        coVerify(exactly = 0) { sessionRepository.updateSessionProject(any(), any()) }
+        coVerify(exactly = 0) { sessionRepository.updateSessionAgentRole(any(), any()) }
+    }
+
+    /**
+     * Verifies that an unassociated role (no projectId) spawns without any project scoping: the
+     * created project-less session already satisfies the Session Legality Invariant for such roles.
+     */
+    @Test
+    fun `execute attaches an unassociated role without project scoping`() = runTest {
+        val sessionRepository = mockk<SessionRepository>()
+        coEvery { sessionRepository.createSession(any()) } returns session.right()
+        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+
+        val (resolver, _) = successfulViewModel()
+        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        var result: ChatClientEvent.ToolExecutionResult? = null
+
+        executor.execute(
+            toolCallId = 42L,
+            payload = spawnPayload(),
+            clientEvents = { result = it }
+        )
+
+        assertEquals(false, result?.isError)
+        coVerify(exactly = 0) { sessionRepository.updateSessionProject(any(), any()) }
+        coVerify { sessionRepository.updateSessionAgentRole(session.id, role.id) }
+    }
+
+    /**
+     * Verifies that a project-scoping failure (after the session was created but before the role
+     * attach) reports a readable error and — in wait mode — still carries the spawned session id;
+     * the role attach is never attempted on an unverified scope.
+     */
+    @Test
+    fun `execute reports a project scoping failure as an error result with the session id`() = runTest {
+        val sessionRepository = mockk<SessionRepository>()
+        coEvery { sessionRepository.createSession(any()) } returns session.right()
+        coEvery { sessionRepository.updateSessionProject(session.id, 7L) } returns
+                RepositoryError.OtherError("cannot scope").left()
+
+        val executor = newExecutor(sessionRepository = sessionRepository)
+        var result: ChatClientEvent.ToolExecutionResult? = null
+        executor.execute(
+            toolCallId = 42L,
+            payload = spawnPayload(role = scopedRole, projectId = 7L),
+            clientEvents = { result = it }
+        )
+
+        assertEquals(true, result?.isError)
+        assertEquals(true, result?.errorMessage?.contains("scope"))
+        assertEquals("**Spawned chat session id:** 99", result?.output)
+        coVerify(exactly = 0) { sessionRepository.updateSessionAgentRole(any(), any()) }
     }
 
     /**

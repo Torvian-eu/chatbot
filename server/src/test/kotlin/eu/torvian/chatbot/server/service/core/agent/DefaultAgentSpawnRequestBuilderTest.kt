@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.agent.OperatorToolMode
 import eu.torvian.chatbot.common.models.agent.OperatorType
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.SpawnRequestBuildError
@@ -19,14 +20,15 @@ import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 /**
  * Tests for [DefaultAgentSpawnRequestBuilder].
  *
- * Covers the happy path (role-by-name + ownership), typed errors for unknown roles, and malformed or
- * missing `spawn_agent` arguments.
+ * Covers the happy path (role-by-name + ownership, both unassociated and project-scoped), typed
+ * errors for unknown roles, and malformed or missing `spawn_agent` arguments.
  */
 class DefaultAgentSpawnRequestBuilderTest {
 
@@ -54,6 +56,26 @@ class DefaultAgentSpawnRequestBuilderTest {
     )
 
     /**
+     * Builds the execution context consumed by [DefaultAgentSpawnRequestBuilder.build].
+     *
+     * @param userId Caller identity; forwarded to the role service.
+     * @param agentRoleId Source role id from the validated session; forwarded to the role service.
+     * @param projectId Session project scope; `null` (default) selects the unassociated scope.
+     * @return A fully-populated context for builder tests.
+     */
+    private fun context(
+        userId: Long = 1L,
+        agentRoleId: Long = 1L,
+        projectId: Long? = null
+    ): ToolCallExecutionContext = ToolCallExecutionContext(
+        userId = userId,
+        sessionId = 10L,
+        sessionName = "Session",
+        agentRoleId = agentRoleId,
+        projectId = projectId
+    )
+
+    /**
      * Creates a persisted spawn-tool call with valid subject, role, and prompt arguments by default.
      *
      * @param id Identifier copied to the eventual spawn request.
@@ -76,10 +98,10 @@ class DefaultAgentSpawnRequestBuilderTest {
      */
     @Test
     fun `build resolves the role by name and assembles the request`() = runTest {
-        coEvery { agentRoleService.getRoleByName(1L, "implementer") } returns role.right()
+        coEvery { agentRoleService.getRoleByName(1L, "implementer", null) } returns role.right()
         coEvery { agentRoleService.getRoleById(1L, 1L) } returns sourceRole.right()
 
-        val result = builder.build(1L, 1L, toolCall())
+        val result = builder.build(context(), toolCall())
 
         assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
         val request = result.getOrNull()!!
@@ -90,6 +112,82 @@ class DefaultAgentSpawnRequestBuilderTest {
         assertEquals(OperatorType.CLIENT_APP, request.operatorType)
         assertEquals(42L, request.toolCallId)
         assertEquals(listOf(AgentSpawnMessage.User("Do the thing")), request.conversation)
+        // An unassociated role spawned from a project-less session stays project-less (null).
+        assertNull(request.projectId)
+    }
+
+    /**
+     * Verifies that the built request carries the calling session's project when the target role
+     * belongs to it: a sub-agent spawned from a project-scoped conversation stays in the same
+     * project, which the operator applies before attaching the role (Session Legality Invariant).
+     */
+    @Test
+    fun `build inherits the session project when the target role belongs to it`() = runTest {
+        val projectRole = role.copy(projectId = 7L)
+        coEvery { agentRoleService.getRoleByName(1L, "implementer", 7L) } returns projectRole.right()
+        coEvery { agentRoleService.getRoleById(1L, 1L) } returns sourceRole.right()
+
+        val result = builder.build(context(projectId = 7L), toolCall())
+
+        assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
+        assertEquals(projectRole, result.getOrNull()!!.agentRoleToSpawn)
+        assertEquals(7L, result.getOrNull()!!.projectId)
+    }
+
+    /**
+     * Verifies that a project-scoped target is rejected for a project-less session: spawns are
+     * strictly same-scope, so the builder reports [SpawnRequestBuildError.RoleNotInProject] instead
+     * of falling back to a different project of the role.
+     */
+    @Test
+    fun `build rejects a project-scoped role for a project-less session`() = runTest {
+        val projectRole = role.copy(projectId = 9L)
+        coEvery { agentRoleService.getRoleByName(1L, "implementer", null) } returns projectRole.right()
+        coEvery { agentRoleService.getRoleById(1L, 1L) } returns sourceRole.right()
+
+        val result = builder.build(context(), toolCall())
+
+        val error = assertIs<SpawnRequestBuildError.RoleNotInProject>(result.leftOrNull())
+        assertEquals("implementer", error.roleName)
+        assertNull(error.projectId)
+    }
+
+    /**
+     * Verifies that a target role outside the calling session's project is rejected: the builder
+     * never spawns a role into a project it does not belong to (defense in depth — the
+     * project-scoped name lookup normally never returns such a role).
+     */
+    @Test
+    fun `build rejects a role outside the session project`() = runTest {
+        val foreignRole = role.copy(projectId = 9L)
+        coEvery { agentRoleService.getRoleByName(1L, "implementer", 7L) } returns foreignRole.right()
+        coEvery { agentRoleService.getRoleById(1L, 1L) } returns sourceRole.right()
+
+        val result = builder.build(context(projectId = 7L), toolCall())
+
+        val error = assertIs<SpawnRequestBuildError.RoleNotInProject>(result.leftOrNull())
+        assertEquals("implementer", error.roleName)
+        assertEquals(7L, error.projectId)
+    }
+
+    /**
+     * Verifies that the name lookup is scoped to the session's project and the found role stays
+     * within it: a project-attached session must resolve the role within that project (never the
+     * unassociated scope) and the request carries that same project for the spawned session.
+     */
+    @Test
+    fun `build resolves the role within the session project scope`() = runTest {
+        val projectRole = role.copy(projectId = 7L)
+        coEvery { agentRoleService.getRoleByName(1L, "implementer", 7L) } returns projectRole.right()
+        coEvery { agentRoleService.getRoleById(1L, 1L) } returns sourceRole.right()
+
+        val result = builder.build(context(projectId = 7L), toolCall())
+
+        assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
+        assertEquals(projectRole, result.getOrNull()!!.agentRoleToSpawn)
+        assertEquals(7L, result.getOrNull()!!.projectId)
+        // The project scope from the context must reach the user-scoped lookup.
+        coVerify(exactly = 1) { agentRoleService.getRoleByName(1L, "implementer", 7L) }
     }
 
     /**
@@ -98,12 +196,11 @@ class DefaultAgentSpawnRequestBuilderTest {
      */
     @Test
     fun `build carries fire and forget mode into the request`() = runTest {
-        coEvery { agentRoleService.getRoleByName(1L, "implementer") } returns role.right()
+        coEvery { agentRoleService.getRoleByName(1L, "implementer", null) } returns role.right()
         coEvery { agentRoleService.getRoleById(1L, 1L) } returns sourceRole.right()
 
         val result = builder.build(
-            1L,
-            1L,
+            context(),
             toolCall(
                 input = """{"subject":"Implementation task","agent_role_name":"implementer","prompt":"Do the thing","mode":"fire_and_forget"}"""
             )
@@ -117,6 +214,8 @@ class DefaultAgentSpawnRequestBuilderTest {
         assertEquals(OperatorType.CLIENT_APP, request.operatorType)
         assertEquals(42L, request.toolCallId)
         assertEquals(listOf(AgentSpawnMessage.User("Do the thing")), request.conversation)
+        // An unassociated role spawned from a project-less session stays project-less (null).
+        assertNull(request.projectId)
     }
 
     /**
@@ -136,12 +235,12 @@ class DefaultAgentSpawnRequestBuilderTest {
         )
 
         malformedModes.forEach { input ->
-            val result = builder.build(1L, 1L, toolCall(input = input))
+            val result = builder.build(context(), toolCall(input = input))
 
             assertIs<SpawnRequestBuildError.InvalidInput>(result.leftOrNull())
         }
         // Validation precedes I/O: neither role lookup may have been reached for malformed input.
-        coVerify(exactly = 0) { agentRoleService.getRoleByName(any(), any()) }
+        coVerify(exactly = 0) { agentRoleService.getRoleByName(any(), any(), any()) }
         coVerify(exactly = 0) { agentRoleService.getRoleById(any(), any()) }
     }
 
@@ -152,12 +251,11 @@ class DefaultAgentSpawnRequestBuilderTest {
      */
     @Test
     fun `build ignores a legacy interactive key and defaults to wait mode`() = runTest {
-        coEvery { agentRoleService.getRoleByName(1L, "implementer") } returns role.right()
+        coEvery { agentRoleService.getRoleByName(1L, "implementer", null) } returns role.right()
         coEvery { agentRoleService.getRoleById(1L, 1L) } returns sourceRole.right()
 
         val result = builder.build(
-            1L,
-            1L,
+            context(),
             toolCall(
                 input = """{"subject":"Implementation task","agent_role_name":"implementer","prompt":"Do the thing","interactive":true}"""
             )
@@ -173,11 +271,11 @@ class DefaultAgentSpawnRequestBuilderTest {
      */
     @Test
     fun `build denies a target outside the source role allow-list`() = runTest {
-        coEvery { agentRoleService.getRoleByName(1L, "implementer") } returns role.right()
+        coEvery { agentRoleService.getRoleByName(1L, "implementer", null) } returns role.right()
         coEvery { agentRoleService.getRoleById(1L, 1L) } returns
             sourceRole.copy(spawnableAgentRoleIds = emptySet()).right()
 
-        val result = builder.build(1L, 1L, toolCall())
+        val result = builder.build(context(), toolCall())
 
         val error = assertIs<SpawnRequestBuildError.RoleNotAllowed>(result.leftOrNull())
         assertEquals("implementer", error.roleName)
@@ -188,9 +286,9 @@ class DefaultAgentSpawnRequestBuilderTest {
      */
     @Test
     fun `build maps a missing role to RoleNotFound`() = runTest {
-        coEvery { agentRoleService.getRoleByName(1L, "ghost") } returns AgentRoleError.NotFoundByName("ghost").left()
+        coEvery { agentRoleService.getRoleByName(1L, "ghost", null) } returns AgentRoleError.NotFoundByName("ghost").left()
 
-        val result = builder.build(1L, 1L, toolCall(input = """{"subject":"Ghost task","agent_role_name":"ghost","prompt":"hi"}"""))
+        val result = builder.build(context(), toolCall(input = """{"subject":"Ghost task","agent_role_name":"ghost","prompt":"hi"}"""))
 
         val error = assertIs<SpawnRequestBuildError.RoleNotFound>(result.leftOrNull())
         assertEquals("ghost", error.roleName)
@@ -202,25 +300,25 @@ class DefaultAgentSpawnRequestBuilderTest {
     @Test
     fun `build rejects missing or blank parameters`() = runTest {
         assertIs<SpawnRequestBuildError.InvalidInput>(
-            builder.build(1L, 1L, toolCall(input = """{"agent_role_name":"x","prompt":"hi"}""")).leftOrNull()
+            builder.build(context(), toolCall(input = """{"agent_role_name":"x","prompt":"hi"}""")).leftOrNull()
         )
         assertIs<SpawnRequestBuildError.InvalidInput>(
-            builder.build(1L, 1L, toolCall(input = """{"subject":"","agent_role_name":"x","prompt":"hi"}""")).leftOrNull()
+            builder.build(context(), toolCall(input = """{"subject":"","agent_role_name":"x","prompt":"hi"}""")).leftOrNull()
         )
         assertIs<SpawnRequestBuildError.InvalidInput>(
-            builder.build(1L, 1L, toolCall(input = """{"subject":"Task","agent_role_name":"","prompt":"hi"}""")).leftOrNull()
+            builder.build(context(), toolCall(input = """{"subject":"Task","agent_role_name":"","prompt":"hi"}""")).leftOrNull()
         )
         assertIs<SpawnRequestBuildError.InvalidInput>(
-            builder.build(1L, 1L, toolCall(input = """{"subject":"Task","agent_role_name":"x"}""")).leftOrNull()
+            builder.build(context(), toolCall(input = """{"subject":"Task","agent_role_name":"x"}""")).leftOrNull()
         )
         assertIs<SpawnRequestBuildError.InvalidInput>(
-            builder.build(1L, 1L, toolCall(input = null)).leftOrNull()
+            builder.build(context(), toolCall(input = null)).leftOrNull()
         )
     }
 
     @Test
     fun `build rejects malformed input JSON`() = runTest {
-        val result = builder.build(1L, 1L, toolCall(input = "not json"))
+        val result = builder.build(context(), toolCall(input = "not json"))
 
         assertIs<SpawnRequestBuildError.InvalidInput>(result.leftOrNull())
     }
@@ -238,7 +336,7 @@ class DefaultAgentSpawnRequestBuilderTest {
         )
 
         invalidInputs.forEach { input ->
-            val result = builder.build(1L, 1L, toolCall(input = input))
+            val result = builder.build(context(), toolCall(input = input))
 
             assertIs<SpawnRequestBuildError.InvalidInput>(result.leftOrNull())
         }

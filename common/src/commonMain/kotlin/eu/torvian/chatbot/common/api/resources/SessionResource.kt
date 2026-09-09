@@ -25,6 +25,12 @@ class SessionResource(val parent: Api = Api()) {
         class AgentRole(val parent: ById)
 
         /**
+         * Resource for selecting the project of a session: /api/v1/sessions/{sessionId}/project
+         */
+        @Resource("project")
+        class Project(val parent: ById)
+
+        /**
          * Resource for updating a session's leaf message: /api/v1/sessions/{sessionId}/leafMessage
          */
         @Resource("leafMessage")

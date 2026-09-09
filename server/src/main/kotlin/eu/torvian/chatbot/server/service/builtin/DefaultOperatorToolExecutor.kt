@@ -27,8 +27,9 @@ import kotlin.time.Instant
  * Dispatches on the tool call's name — the discriminator carried in the relay envelope — to the
  * matching payload builder:
  *
- *  - `spawn_agent` → [AgentSpawnRequestBuilder] (input parsing, user-scoped role lookup, and the
- *    source role's spawn allow-list) producing an [AgentSpawnRequest];
+ *  - `spawn_agent` → [AgentSpawnRequestBuilder] (input parsing plus a user- and
+ *    project-scoped role lookup, and the source role's spawn allow-list) producing an
+ *    [AgentSpawnRequest];
  *  - `send_message` → [SendMessageRequestBuilder] (input parsing + target-session existence and
  *    same-user ownership validation) producing a [SendMessageRequest];
  *  - any other name → fail-fast unsupported-tool error.
@@ -65,8 +66,7 @@ class DefaultOperatorToolExecutor(
     }
 
     override suspend fun executeTool(
-        userId: Long,
-        requestingAgentRoleId: Long,
+        context: ToolCallExecutionContext,
         toolCall: ToolCall,
         emitEvent: suspend (ToolCallExecutionEvent) -> Unit,
         operatorToolResultFlow: Flow<OperatorToolExecutionResult>
@@ -78,7 +78,7 @@ class DefaultOperatorToolExecutor(
         // map tail below is shared by both supported tools.
         val payloadJson = when (toolCall.toolName) {
             OperatorToolCatalog.SPAWN_AGENT_NAME -> {
-                val payload = agentSpawnRequestBuilder.build(userId, requestingAgentRoleId, toolCall)
+                val payload = agentSpawnRequestBuilder.build(context, toolCall)
                     .getOrElse { buildError ->
                         logger.warn("spawn_agent payload build failed for tool call ${toolCall.id}: $buildError")
                         return toolCall.toErrorResult(
@@ -98,7 +98,7 @@ class DefaultOperatorToolExecutor(
             }
 
             OperatorToolCatalog.SEND_MESSAGE_NAME -> {
-                val payload = sendMessageRequestBuilder.build(userId, toolCall)
+                val payload = sendMessageRequestBuilder.build(context.userId, toolCall)
                     .getOrElse { buildError ->
                         logger.warn("send_message payload build failed for tool call ${toolCall.id}: $buildError")
                         return toolCall.toErrorResult(
@@ -190,6 +190,8 @@ class DefaultOperatorToolExecutor(
             "Role '$roleName' not found. You may only spawn agent roles owned by the current user."
         is SpawnRequestBuildError.RoleNotAllowed ->
             "The current agent role is not permitted to spawn role '$roleName'."
+        is SpawnRequestBuildError.RoleNotInProject ->
+            "Role '$roleName' does not belong to the selected project and cannot be spawned."
     }
 
     /**

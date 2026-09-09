@@ -36,6 +36,7 @@ class AgentRolesViewModelTest {
     private lateinit var modelRepository: ModelRepository
     private lateinit var settingsRepository: ModelSettingsRepository
     private lateinit var toolRepository: ToolRepository
+    private lateinit var projectRepository: ProjectRepository
     private lateinit var notificationService: NotificationService
     private lateinit var viewModel: AgentRolesViewModel
 
@@ -59,18 +60,21 @@ class AgentRolesViewModelTest {
         modelRepository = mockk(relaxed = true)
         settingsRepository = mockk(relaxed = true)
         toolRepository = mockk(relaxed = true)
+        projectRepository = mockk(relaxed = true)
         notificationService = mockk(relaxed = true)
 
         every { repository.roles } returns MutableStateFlow(DataState.Success(emptyList()))
         every { modelRepository.models } returns MutableStateFlow(DataState.Success(emptyList()))
         every { settingsRepository.allSettings } returns MutableStateFlow(DataState.Success(emptyList()))
         every { toolRepository.tools } returns MutableStateFlow(DataState.Success(emptyList()))
+        every { projectRepository.projects } returns MutableStateFlow(DataState.Success(emptyList()))
 
         viewModel = AgentRolesViewModel(
             agentRoleRepository = repository,
             modelRepository = modelRepository,
             modelSettingsRepository = settingsRepository,
             toolRepository = toolRepository,
+            projectRepository = projectRepository,
             notificationService = notificationService,
             uiDispatcher = dispatcher
         )
@@ -204,6 +208,36 @@ class AgentRolesViewModelTest {
         coVerify {
             notificationService.repositoryError(any<RepositoryError>(), any<String>())
         }
+    }
+
+    @Test
+    fun `saveRole - add - carries projectId in the create request`() = runTest(dispatcher) {
+        coEvery { repository.createRole(any()) } returns Either.Right(role(10, "writer"))
+        viewModel.startAddingNewRole()
+
+        viewModel.updateRoleForm { form ->
+            form.copy(
+                name = "writer",
+                modelId = 1L,
+                modelSettingsId = 2L,
+                projectId = 50L
+            )
+        }
+
+        viewModel.saveRole()
+
+        coVerify(exactly = 1) {
+            repository.createRole(
+                match<CreateAgentRoleRequest> { request -> request.projectId == 50L }
+            )
+        }
+    }
+
+    @Test
+    fun `startAddingNewRole - fresh form has no project membership`() = runTest(dispatcher) {
+        viewModel.startAddingNewRole()
+        val form = (viewModel.dialogState.value as AgentRoleDialogState.AddRole).formState
+        assertEquals(null, form.projectId)
     }
 
     @Test

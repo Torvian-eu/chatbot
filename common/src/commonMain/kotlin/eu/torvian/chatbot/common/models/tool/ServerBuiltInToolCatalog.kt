@@ -83,6 +83,10 @@ object ServerBuiltInToolCatalog {
     /** JSON property holding the spawn allow-list (role ids a role may spawn). */
     const val SPAWNABLE_AGENT_ROLE_IDS_PROPERTY = "spawnable_agent_role_ids"
 
+    /** JSON property holding the id of the user-owned project a role belongs to (create/update
+     * role; absent or null means an unassociated role). */
+    const val PROJECT_ID_PROPERTY = "project_id"
+
     /** JSON property holding the flat instruction list of a role (advanced; see AgentInstructionDto). */
     const val INSTRUCTIONS_PROPERTY = "instructions"
 
@@ -348,9 +352,10 @@ object ServerBuiltInToolCatalog {
             name = LIST_AGENT_ROLES_NAME,
             description = "Lists all agent roles owned by the current user, returning each role's id, " +
                 "name, display name, description, model id, model settings id, attached tool ids, " +
-                "spawnable role ids, instruction types only, and its disabled flag (roles disabled by " +
-                "the current user are hidden from session selection). Use read_agent_role with a role " +
-                "id to inspect full instruction contents.",
+                "spawnable role ids, instruction types only, its project id (null when the role is " +
+                "unassociated), and its disabled flag (roles disabled by the current user are hidden " +
+                "from session selection). Use read_agent_role with a role id to inspect full " +
+                "instruction contents.",
             inputSchema = emptyObjectSchema()
         ),
         ServerBuiltInToolSpec(
@@ -399,6 +404,14 @@ object ServerBuiltInToolCatalog {
                         SPAWNABLE_AGENT_ROLE_IDS_PROPERTY,
                         integerArrayProperty("Optional same-user role ids this role may spawn.")
                     )
+                    put(
+                        PROJECT_ID_PROPERTY,
+                        integerProperty(
+                            "Optional id of the user-owned project the role belongs to. Omit or " +
+                                "pass null to create an unassociated role (no project). The project " +
+                                "must be owned by the current user."
+                        )
+                    )
                     put(INSTRUCTIONS_PROPERTY, instructionsProperty(create = true))
                 })
                 put("required", buildJsonArray {
@@ -412,7 +425,8 @@ object ServerBuiltInToolCatalog {
                 "provide only the fields to change; every omitted field is preserved, including the " +
                 "attached tools, spawnable roles and instructions. Passing null is treated as omitted " +
                 "— fields cannot be cleared with null; pass an empty string or an empty array to " +
-                "clear a field. Returns a concise one-line summary of the operation.",
+                "clear a field (project_id is the exception: pass 0 to clear it, which moves the " +
+                "role to unassociated). Returns a concise one-line summary of the operation.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -438,6 +452,18 @@ object ServerBuiltInToolCatalog {
                     put(
                         SPAWNABLE_AGENT_ROLE_IDS_PROPERTY,
                         integerArrayProperty("New same-user role ids this role may spawn (full replacement).")
+                    )
+                    put(
+                        PROJECT_ID_PROPERTY,
+                        integerProperty(
+                            "Optional id of the user-owned project the role belongs to. The " +
+                                "project must be owned by the current user. When not changing the " +
+                                "role's project, pass the current project_id from " +
+                                "read_agent_role or list_agent_roles (an omitted or null value " +
+                                "preserves the persisted project). Pass 0 to explicitly move the " +
+                                "role to unassociated (clear the project membership; 0 is never a " +
+                                "valid project id)."
+                        )
                     )
                     put(INSTRUCTIONS_PROPERTY, instructionsProperty(create = false))
                 })
@@ -576,9 +602,10 @@ object ServerBuiltInToolCatalog {
         ServerBuiltInToolSpec(
             name = GET_CURRENT_SESSION_INFO_NAME,
             description = "Returns the current chat session's id and name together with the id, " +
-                "name, and (when set) display name of the agent role selected for that session. The " +
-                "session is the one the current conversation belongs to and is always owned by the " +
-                "current user, so no other user's data is ever exposed.",
+                "name, and (when set) display name of the agent role selected for that session, " +
+                "and the session's project id (present only when the session has a project " +
+                "selected). The session is the one the current conversation belongs to and is " +
+                "always owned by the current user, so no other user's data is ever exposed.",
             inputSchema = emptyObjectSchema()
         )
     )

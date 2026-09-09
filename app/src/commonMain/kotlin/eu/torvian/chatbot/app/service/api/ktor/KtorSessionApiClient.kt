@@ -6,6 +6,8 @@ import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.api.agent.UpdateSessionAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.core.*
+import eu.torvian.chatbot.common.models.api.project.UpdateSessionProjectRequest
+import eu.torvian.chatbot.common.models.api.project.UpdateSessionProjectResponse
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -83,6 +85,19 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiResourceClient(client), 
             client.put(SessionResource.ById.AgentRole(SessionResource.ById(sessionId = sessionId))) {
                 setBody(UpdateSessionAgentRoleRequest(agentRoleId = agentRoleId))
             }.body<Unit>() // Expect Unit body (HTTP 200/204)
+        }
+    }
+
+    override suspend fun updateSessionProject(
+        sessionId: Long,
+        projectId: Long?
+    ): Either<ApiResourceError, UpdateSessionProjectResponse> {
+        // Use safeApiCall to wrap the Ktor request
+        return safeApiCall {
+            // Use Ktor resources: /api/v1/sessions/{sessionId}/project
+            client.put(SessionResource.ById.Project(SessionResource.ById(sessionId = sessionId))) {
+                setBody(UpdateSessionProjectRequest(projectId = projectId))
+            }.body<UpdateSessionProjectResponse>() // The response carries the resulting (projectId, agentRoleId)
         }
     }
 

@@ -101,7 +101,8 @@ class InsertAgentRoleInstructionTool(
             modelSettingsId = persisted.modelSettingsId,
             toolIds = persisted.tools,
             spawnableAgentRoleIds = persisted.spawnableAgentRoleIds,
-            instructions = newInstructions
+            instructions = newInstructions,
+            projectId = persisted.projectId
         )
 
         val role = agentRoleService.updateRole(context.userId, roleId, request)

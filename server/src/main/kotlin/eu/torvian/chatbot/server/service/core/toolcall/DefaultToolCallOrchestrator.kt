@@ -143,8 +143,7 @@ class DefaultToolCallOrchestrator(
 
                     is OperatorToolDefinition -> {
                         executeOperatorTool(
-                            userId = context.userId,
-                            requestingAgentRoleId = context.agentRoleId,
+                            context = context,
                             toolCall = pendingToolCall,
                             operatorToolResultFlow = operatorToolResultFlow
                         )
@@ -458,15 +457,17 @@ class DefaultToolCallOrchestrator(
 
     /**
      * Executes an operator tool by relaying execution to the operator and awaiting the result.
+     *
+     * The fully-populated [ToolCallExecutionContext] (caller identity plus turn session/role/project
+     * context) is forwarded so the operator executor's payload builders (e.g. spawn-by-name role
+     * lookup) can resolve the turn's project scope without re-deriving it.
      */
     private suspend fun ProducerScope<ToolCallExecutionEvent>.executeOperatorTool(
-        userId: Long,
-        requestingAgentRoleId: Long,
+        context: ToolCallExecutionContext,
         toolCall: ToolCall,
         operatorToolResultFlow: Flow<OperatorToolExecutionResult>
     ): ToolCall = operatorToolExecutor.executeTool(
-        userId = userId,
-        requestingAgentRoleId = requestingAgentRoleId,
+        context = context,
         toolCall = toolCall,
         emitEvent = { event -> send(event) },
         operatorToolResultFlow = operatorToolResultFlow

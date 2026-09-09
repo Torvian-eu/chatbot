@@ -150,7 +150,8 @@ class KtorAgentRoleApiClientTest {
             name = "translator",
             modelId = 1L,
             modelSettingsId = 2L,
-            toolIds = setOf(5L)
+            toolIds = setOf(5L),
+            projectId = 100L
         )
         val created = mockRole(10, "translator")
         val mockEngine = MockEngine { request ->
@@ -159,6 +160,7 @@ class KtorAgentRoleApiClientTest {
             val body = request.body.toByteArray().decodeToString()
             assertTrue(body.contains("translator"), "Request body should contain the role name")
             assertTrue(body.contains("toolIds"), "Request body should contain toolIds")
+            assertTrue(body.contains("projectId"), "Request body should contain projectId")
             respond(
                 content = json.encodeToString(created),
                 status = HttpStatusCode.Created,
@@ -168,6 +170,29 @@ class KtorAgentRoleApiClientTest {
         val apiClient = createTestClient(mockEngine)
         when (val result = apiClient.createRole(request)) {
             is Either.Right -> assertEquals("translator", result.value.name)
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `getAllRoles - decodes projectId from the wire`() = runTest {
+        val roleWithProjects = mockRole(1, "writer").copy(projectId = 100L)
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(href(AgentRoleResource()), request.url.fullPath)
+            respond(
+                content = json.encodeToString(listOf(roleWithProjects)),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.getAllRoles()) {
+            is Either.Right -> {
+                assertEquals(1, result.value.size)
+                assertEquals(100L, result.value[0].projectId)
+            }
+
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
     }

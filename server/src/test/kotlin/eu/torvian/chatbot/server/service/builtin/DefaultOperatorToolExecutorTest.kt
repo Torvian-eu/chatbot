@@ -41,6 +41,26 @@ class DefaultOperatorToolExecutorTest {
     private val json = Json
     private val now = Instant.fromEpochMilliseconds(1_700_000_000_000L)
 
+    /**
+     * Builds the execution context forwarded to [OperatorToolExecutor.executeTool].
+     *
+     * @param userId Caller identity; forwarded to the payload builders.
+     * @param agentRoleId Source role id from the validated session.
+     * @param projectId Session project scope (unassociated when `null`).
+     * @return A fully-populated context for executor tests.
+     */
+    private fun context(
+        userId: Long = 1L,
+        agentRoleId: Long = 5L,
+        projectId: Long? = null
+    ): ToolCallExecutionContext = ToolCallExecutionContext(
+        userId = userId,
+        sessionId = 10L,
+        sessionName = "Session",
+        agentRoleId = agentRoleId,
+        projectId = projectId
+    )
+
     private fun toolCall(
         id: Long = 1L,
         toolName: String = OperatorToolCatalog.SPAWN_AGENT_NAME,
@@ -69,8 +89,7 @@ class DefaultOperatorToolExecutorTest {
 
         var relayed: ToolCallExecutionEvent.OperatorToolExecutionRequested? = null
         val result = executor.executeTool(
-            userId = 1L,
-            requestingAgentRoleId = 1L,
+            context = context(),
             toolCall = unsupported,
             emitEvent = { event ->
                 if (event is ToolCallExecutionEvent.OperatorToolExecutionRequested) relayed = event
@@ -86,32 +105,33 @@ class DefaultOperatorToolExecutorTest {
         assertTrue(message.contains(OperatorToolCatalog.SPAWN_AGENT_NAME))
         assertTrue(message.contains(OperatorToolCatalog.SEND_MESSAGE_NAME))
         // No payload was built and no relay event was emitted for the unsupported name.
-        coVerify(exactly = 0) { spawnBuilder.build(any(), any(), any()) }
+        coVerify(exactly = 0) { spawnBuilder.build(any(), any()) }
         coVerify(exactly = 0) { sendBuilder.build(any(), any()) }
         assertEquals(null, relayed)
     }
 
     /**
-     * Verifies that a built request, including its subject, is serialized unchanged through the relay.
+     * Verifies that a built request, including its subject and spawn project, is serialized
+     * unchanged through the relay.
      */
     @Test
     fun `supported spawn tool name builds payload, relays and awaits the result`() = runTest {
         val request = AgentSpawnRequest(
             agentRoleToSpawn = AgentRoleDto(id = 5L, name = "writer", modelId = 1L, modelSettingsId = 2L),
             subject = "Summary task",
+            projectId = 7L,
             conversation = listOf(AgentSpawnMessage.User("Write a summary")),
             toolCallId = 1L
         )
         val spawnBuilder = mockk<AgentSpawnRequestBuilder>()
-        coEvery { spawnBuilder.build(1L, any(), any()) } returns request.right()
+        coEvery { spawnBuilder.build(any(), any()) } returns request.right()
 
         val executor = DefaultOperatorToolExecutor(spawnBuilder, mockk(), json)
         val supported = toolCall()
 
         var relayed: ToolCallExecutionEvent.OperatorToolExecutionRequested? = null
         val result = executor.executeTool(
-            userId = 1L,
-            requestingAgentRoleId = 5L,
+            context = context(),
             toolCall = supported,
             emitEvent = { event ->
                 if (event is ToolCallExecutionEvent.OperatorToolExecutionRequested) relayed = event
@@ -138,15 +158,51 @@ class DefaultOperatorToolExecutorTest {
         assertEquals(request, decoded)
     }
 
+    /**
+     * Verifies that the turn's project scope is forwarded to the spawn builder, so a
+     * project-attached session resolves its target role within the project.
+     */
+    @Test
+    fun `spawn dispatch forwards the session project scope to the builder`() = runTest {
+        val request = AgentSpawnRequest(
+            agentRoleToSpawn = AgentRoleDto(id = 5L, name = "writer", modelId = 1L, modelSettingsId = 2L),
+            subject = "Summary task",
+            conversation = listOf(AgentSpawnMessage.User("Write a summary")),
+            toolCallId = 1L
+        )
+        val spawnBuilder = mockk<AgentSpawnRequestBuilder>()
+        val projectContext = context(projectId = 7L)
+        coEvery { spawnBuilder.build(projectContext, any()) } returns request.right()
+
+        val executor = DefaultOperatorToolExecutor(spawnBuilder, mockk(), json)
+
+        val result = executor.executeTool(
+            context = projectContext,
+            toolCall = toolCall(),
+            emitEvent = {},
+            operatorToolResultFlow = flowOf(
+                OperatorToolExecutionResult(
+                    toolCallId = 1L,
+                    output = "OK",
+                    isError = false,
+                    errorMessage = null
+                )
+            )
+        )
+
+        assertEquals(ToolCallStatus.SUCCESS, result.status)
+        // The exact context instance (carrying the project scope) must reach the spawn builder.
+        coVerify(exactly = 1) { spawnBuilder.build(projectContext, any()) }
+    }
+
     @Test
     fun `spawn payload build failure maps to a readable tool error`() = runTest {
         val spawnBuilder = mockk<AgentSpawnRequestBuilder>()
-        coEvery { spawnBuilder.build(1L, any(), any()) } returns SpawnRequestBuildError.RoleNotFound("writer").left()
+        coEvery { spawnBuilder.build(any(), any()) } returns SpawnRequestBuildError.RoleNotFound("writer").left()
 
         val executor = DefaultOperatorToolExecutor(spawnBuilder, mockk(), json)
         val result = executor.executeTool(
-            userId = 1L,
-            requestingAgentRoleId = 5L,
+            context = context(),
             toolCall = toolCall(),
             emitEvent = {},
             operatorToolResultFlow = flowOf()
@@ -171,15 +227,14 @@ class DefaultOperatorToolExecutorTest {
             toolCallId = 1L
         )
         val spawnBuilder = mockk<AgentSpawnRequestBuilder>()
-        coEvery { spawnBuilder.build(1L, any(), any()) } returns request.right()
+        coEvery { spawnBuilder.build(any(), any()) } returns request.right()
 
         val executor = DefaultOperatorToolExecutor(spawnBuilder, mockk(), json)
         val supported = toolCall()
 
         var relayed: ToolCallExecutionEvent.OperatorToolExecutionRequested? = null
         val result = executor.executeTool(
-            userId = 1L,
-            requestingAgentRoleId = 5L,
+            context = context(),
             toolCall = supported,
             emitEvent = { event ->
                 if (event is ToolCallExecutionEvent.OperatorToolExecutionRequested) relayed = event
@@ -232,8 +287,7 @@ class DefaultOperatorToolExecutorTest {
 
         var relayed: ToolCallExecutionEvent.OperatorToolExecutionRequested? = null
         val result = executor.executeTool(
-            userId = 1L,
-            requestingAgentRoleId = 5L,
+            context = context(),
             toolCall = sendCall,
             emitEvent = { event ->
                 if (event is ToolCallExecutionEvent.OperatorToolExecutionRequested) relayed = event
@@ -257,7 +311,7 @@ class DefaultOperatorToolExecutorTest {
         val decoded = json.decodeFromString(SendMessageRequest.serializer(), relay.payloadJson)
         assertEquals(sendRequest, decoded)
         // The send branch must not reach the spawn builder.
-        coVerify(exactly = 0) { spawnBuilder.build(any(), any(), any()) }
+        coVerify(exactly = 0) { spawnBuilder.build(any(), any()) }
     }
 
     /**
@@ -279,8 +333,7 @@ class DefaultOperatorToolExecutorTest {
 
         var relayed: ToolCallExecutionEvent.OperatorToolExecutionRequested? = null
         val result = executor.executeTool(
-            userId = 1L,
-            requestingAgentRoleId = 5L,
+            context = context(),
             toolCall = sendCall,
             emitEvent = { event ->
                 if (event is ToolCallExecutionEvent.OperatorToolExecutionRequested) relayed = event

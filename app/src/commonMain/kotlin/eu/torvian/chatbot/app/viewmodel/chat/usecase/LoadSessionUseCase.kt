@@ -29,6 +29,7 @@ class LoadSessionUseCase(
     private val toolRepository: ToolRepository,
     private val mcpServerRepository: LocalMCPServerRepository,
     private val agentRoleRepository: AgentRoleRepository,
+    private val projectRepository: ProjectRepository,
     private val state: ChatState,
     private val notificationService: NotificationService,
     private val eventBus: EventBus,
@@ -76,8 +77,8 @@ class LoadSessionUseCase(
         lastFailedLoadEventId = null
         lastUserId = userId
 
-        // Load all dependencies in parallel. Agent roles, models, settings and tools feed the
-        // top-bar role selector and the role-derived current model/settings derivations.
+        // Load all dependencies in parallel. Agent roles, projects, models, settings and tools feed
+        // the top-bar role/project selectors and the role-derived current model/settings derivations.
         parZip(
             { sessionRepository.loadSessionDetails(sessionId) },
             { sessionRepository.loadSessionToolCalls(sessionId) },
@@ -85,9 +86,10 @@ class LoadSessionUseCase(
             { modelSettingsRepository.loadAllSettings() },
             { toolRepository.loadTools() },
             { agentRoleRepository.loadRoles() },
+            { projectRepository.loadProjects() },
             { mcpServerRepository.loadServers(userId) },
             { toolRepository.loadUserToolApprovalPreferences() }
-        ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, agentRolesResult, _, preferencesResult ->
+        ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, agentRolesResult, projectsResult, _, preferencesResult ->
             sessionResult
                 .onLeft { error ->
                     val eventId = notificationService.repositoryError(
@@ -134,6 +136,13 @@ class LoadSessionUseCase(
                 notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to load agent roles"
+                )
+                return@parZip
+            }
+            projectsResult.onLeft { error ->
+                notificationService.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load projects"
                 )
                 return@parZip
             }

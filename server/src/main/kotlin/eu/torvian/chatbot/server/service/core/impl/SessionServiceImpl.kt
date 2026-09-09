@@ -123,10 +123,22 @@ class SessionServiceImpl(
                 // When a role is selected, verify the role row exists so a session cannot be pointed at a
                 // deleted role (ownership is enforced by the route layer).
                 if (agentRoleId != null) {
-                    withError({ _: AgentRoleError.NotFound ->
+                    val role = withError({ _: AgentRoleError.NotFound ->
                         UpdateSessionAgentRoleIdError.AgentRoleNotFound(agentRoleId)
                     }) {
                         agentRoleDao.getRoleById(agentRoleId).bind()
+                    }
+
+                    // The Session Legality Invariant is enforced inside the same transaction that writes
+                    // the role id, not in the route handler, so there is no cross-request race window.
+                    val sessionProjectId = withError({ daoError: SessionError.SessionNotFound ->
+                        UpdateSessionAgentRoleIdError.SessionNotFound(daoError.id)
+                    }) {
+                        sessionDao.getSessionProjectSelection(id).bind()
+                    }.projectId
+                    val pairIllegal = role.projectId != sessionProjectId
+                    ensure(!pairIllegal) {
+                        UpdateSessionAgentRoleIdError.AgentRoleNotInProject(agentRoleId, sessionProjectId)
                     }
                 }
 
@@ -140,6 +152,66 @@ class SessionServiceImpl(
                 }) {
                     sessionDao.updateSessionAgentRoleId(id, agentRoleId).bind()
                 }
+            }
+        }
+
+    override suspend fun updateSessionProjectId(
+        id: Long,
+        projectId: Long?
+    ): Either<UpdateSessionProjectIdError, SessionProjectSelection> =
+        transactionScope.transaction {
+            either {
+                // Read the current selection atomically: the legality evaluation, the project write and
+                // the (possible) role clear observe and mutate the same state (single SQLite writer).
+                val selection = withError({ daoError: SessionError.SessionNotFound ->
+                    UpdateSessionProjectIdError.SessionNotFound(daoError.id)
+                }) {
+                    sessionDao.getSessionProjectSelection(id).bind()
+                }
+
+                // Determine whether the currently attached role stays legal under the new selection:
+                // switching to a project the role does not belong to, or to "No project" while
+                // the role belongs to any project, clears the role. Keeping a legal role leaves it
+                // attached; the response carries the resulting state in one round-trip. A role that no
+                // longer loads (deleted) is treated as if it occupied the unassociated scope for the
+                // comparison, preserving the historical empty-membership behavior.
+                var newAgentRoleId = selection.agentRoleId
+                if (selection.agentRoleId != null) {
+                    val roleProjectId = agentRoleDao.getRoleById(selection.agentRoleId)
+                        .fold(
+                            ifLeft = { null },
+                            ifRight = { it.projectId }
+                        )
+                    if (roleProjectId != projectId) newAgentRoleId = null
+                }
+
+                withError({ daoError: SessionError ->
+                    when (daoError) {
+                        is SessionError.SessionNotFound -> UpdateSessionProjectIdError.SessionNotFound(daoError.id)
+                        is SessionError.ForeignKeyViolation -> UpdateSessionProjectIdError.ProjectNotFound(
+                            projectId ?: 0L
+                        )
+                    }
+                }) {
+                    sessionDao.updateSessionProjectId(id, projectId).bind()
+                }
+
+                // Clear the role in the same transaction when the new selection made it illegal; the
+                // write also bumps `updated_at`, so the mutation is externally observable as one change.
+                if (newAgentRoleId == null && selection.agentRoleId != null) {
+                    withError({ daoError: SessionError ->
+                        when (daoError) {
+                            is SessionError.SessionNotFound -> UpdateSessionProjectIdError.SessionNotFound(daoError.id)
+                            is SessionError.ForeignKeyViolation -> UpdateSessionProjectIdError.ProjectNotFound(
+                                projectId ?: 0L
+                            )
+                        }
+                    }) {
+                        sessionDao.updateSessionAgentRoleId(id, null).bind()
+                    }
+                }
+
+                SessionProjectSelection(projectId, newAgentRoleId)
             }
         }
 
@@ -207,7 +279,10 @@ class SessionServiceImpl(
                     sessionDao.insertSession(
                         name = normalizedName,
                         groupId = originalSession.groupId,
-                        agentRoleId = originalSession.agentRoleId
+                        agentRoleId = originalSession.agentRoleId,
+                        // The project selection is copied alongside the role, so a cloned legal session
+                        // is born legal (the same legality rule applies to the clone).
+                        projectId = originalSession.projectId
                     ).bind()
                 }
 

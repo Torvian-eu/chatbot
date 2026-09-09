@@ -173,7 +173,8 @@ class SessionServiceImplCloneTest {
             sessionDao.insertSession(
                 cloneName,
                 testGroupId,
-                testAgentRoleId
+                testAgentRoleId,
+                null
             )
         } returns clonedSession.copy(
             name = cloneName,
@@ -256,7 +257,7 @@ class SessionServiceImplCloneTest {
         // Verify all DAOs were called correctly
         coVerify { sessionDao.getSessionById(testSessionId) }
         coVerify { sessionOwnershipDao.getOwner(testSessionId) }
-        coVerify { sessionDao.insertSession(cloneName, testGroupId, testAgentRoleId) }
+        coVerify { sessionDao.insertSession(cloneName, testGroupId, testAgentRoleId, null) }
         coVerify { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) }
         coVerify { messageDao.getMessagesBySessionId(testSessionId) }
         coVerify(exactly = 3) {
@@ -287,7 +288,7 @@ class SessionServiceImplCloneTest {
         val cloneName = "Cloned Session"
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any()) } returns clonedSession.copy(
+        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns clonedSession.copy(
             name = cloneName,
             currentLeafMessageId = null
         ).right()
@@ -371,7 +372,7 @@ class SessionServiceImplCloneTest {
         val cloneName = "Cloned Session"
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any()) } returns clonedSession.copy(
+        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns clonedSession.copy(
             name = cloneName,
             currentLeafMessageId = null
         ).right()
@@ -440,7 +441,7 @@ class SessionServiceImplCloneTest {
 
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any()) } returns clonedSession.copy(
+        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns clonedSession.copy(
             name = cloneName,
             currentLeafMessageId = null
         ).right()
@@ -509,7 +510,7 @@ class SessionServiceImplCloneTest {
 
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any()) } returns clonedSession.copy(
+        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns clonedSession.copy(
             name = cloneName,
             currentLeafMessageId = null
         ).right()
@@ -548,6 +549,40 @@ class SessionServiceImplCloneTest {
         coVerify { sessionToolConfigDao.setToolsEnabledForSession(testClonedSessionId, listOf(50L), true) }
     }
 
+    @Test
+    fun `cloneSession should copy the original session's project selection`() = runTest {
+        // Arrange
+        val cloneName = "Cloned Session"
+        val testProjectId = 55L
+        // The original session carries a project selection; the clone must be born with the same
+        // project so a cloned legal session stays legal (the same legality rule applies to the clone).
+        val originalWithProject = originalSession.copy(projectId = testProjectId)
+        val clonedWithProject = clonedSession.copy(projectId = testProjectId)
+
+        coEvery { sessionDao.getSessionById(testSessionId) } returns originalWithProject.right()
+        coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
+        // The project id rides the insertSession call alongside the role id.
+        coEvery {
+            sessionDao.insertSession(cloneName, testGroupId, testAgentRoleId, testProjectId)
+        } returns clonedWithProject.copy(currentLeafMessageId = null).right()
+        coEvery { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) } returns Unit.right()
+        coEvery { messageDao.getMessagesBySessionId(testSessionId) } returns emptyList()
+        coEvery { toolCallDao.getToolCallsBySessionId(testSessionId) } returns emptyList()
+        coEvery { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) } returns emptyList()
+        coEvery { sessionDao.updateSessionLeafMessageId(any(), any()) } returns Unit.right()
+        coEvery { sessionDao.getSessionById(testClonedSessionId) } returns clonedWithProject.right()
+
+        // Act
+        val result = sessionService.cloneSession(testSessionId, cloneName)
+
+        // Assert
+        assertTrue(result.isRight())
+        assertEquals(testProjectId, result.getOrNull()?.projectId)
+        coVerify(exactly = 1) {
+            sessionDao.insertSession(cloneName, testGroupId, testAgentRoleId, testProjectId)
+        }
+    }
+
     // --- Error Tests ---
 
     @Test
@@ -558,7 +593,7 @@ class SessionServiceImplCloneTest {
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
         coEvery {
-            sessionDao.insertSession(normalizedName, testGroupId, testAgentRoleId)
+            sessionDao.insertSession(normalizedName, testGroupId, testAgentRoleId, null)
         } returns clonedSession.copy(
             name = normalizedName,
             currentLeafMessageId = null
@@ -578,7 +613,7 @@ class SessionServiceImplCloneTest {
         // Assert
         assertTrue(result.isRight())
         assertEquals(normalizedName, result.getOrNull()?.name)
-        coVerify(exactly = 1) { sessionDao.insertSession(normalizedName, testGroupId, testAgentRoleId) }
+        coVerify(exactly = 1) { sessionDao.insertSession(normalizedName, testGroupId, testAgentRoleId, null) }
     }
 
     @Test
@@ -651,7 +686,7 @@ class SessionServiceImplCloneTest {
         // Arrange
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any()) } returns
+        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns
                 SessionError.ForeignKeyViolation("Invalid groupId").left()
 
         // Act
@@ -669,7 +704,7 @@ class SessionServiceImplCloneTest {
         // Arrange
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any()) } returns clonedSession.copy(
+        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns clonedSession.copy(
             currentLeafMessageId = null
         ).right()
         coEvery { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) } returns

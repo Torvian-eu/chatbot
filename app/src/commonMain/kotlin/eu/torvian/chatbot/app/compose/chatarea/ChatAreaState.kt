@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
 
@@ -20,6 +21,9 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @property availableAgentRoles The state of agent roles available for the top-bar selector; filtered to
  *            roles not disabled for the current user (disabled roles are hidden from the selector).
  * @property currentAgentRole The agent role currently selected for the session, or null when none is attached.
+ * @property availableProjects The state of user-owned projects available for the top-bar project selector
+ *            (unfiltered; the legality scoping is applied to the role list instead).
+ * @property currentProject The project currently selected for the session, or null when none is selected.
  * @property canSend Whether the composer is enabled: a resolvable agent role with a model and settings is required.
  * @property modelsById A map of all available models indexed by their ID for quick lookup.
  * @property displayedMessages The list of messages to display in the UI, representing the currently selected thread branch.
@@ -43,6 +47,8 @@ data class ChatAreaState(
     val sessionUiState: DataState<RepositoryError, ChatSession> = DataState.Idle,
     val availableAgentRoles: DataState<RepositoryError, List<AgentRoleDto>> = DataState.Idle,
     val currentAgentRole: AgentRoleDto? = null,
+    val availableProjects: DataState<RepositoryError, List<ProjectDto>> = DataState.Idle,
+    val currentProject: ProjectDto? = null,
     val canSend: Boolean = false,
     val modelsById: Map<Long, LLMModel> = emptyMap(),
     val displayedMessages: List<ChatMessage> = emptyList(),

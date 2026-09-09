@@ -93,7 +93,8 @@ class EditAgentRoleInstructionsTool(
             modelSettingsId = persisted.modelSettingsId,
             toolIds = persisted.tools,
             spawnableAgentRoleIds = persisted.spawnableAgentRoleIds,
-            instructions = outcome.newInstructions
+            instructions = outcome.newInstructions,
+            projectId = persisted.projectId
         )
 
         agentRoleService.updateRole(context.userId, roleId, request)

@@ -30,6 +30,11 @@ const val MAX_SESSION_NAME_LENGTH = 255
  * @property currentLeafMessageId The current leaf message in the session, used for displaying the
  *                                correct branch in the UI. (Null only when no messages exist)
  * @property messages List of messages within this session (included when loading full details).
+ * @property projectId Optional ID of the user-owned project selected for this session. `null` means
+ *            the session has no project selected, which filters the offered agent roles to roles with
+ *            no project association. The value is server-persisted on `chat_sessions.project_id`
+ *            (nullable FK with `ON DELETE SET NULL`) via `PUT /sessions/{sessionId}/project`; the
+ *            default keeps payloads produced before this property existed decoding as project-less.
  */
 @Serializable
 data class ChatSession(
@@ -40,5 +45,6 @@ data class ChatSession(
     val groupId: Long?,
     val agentRoleId: Long?,
     val currentLeafMessageId: Long?,
-    val messages: List<ChatMessage> = emptyList()
+    val messages: List<ChatMessage> = emptyList(),
+    val projectId: Long? = null
 )

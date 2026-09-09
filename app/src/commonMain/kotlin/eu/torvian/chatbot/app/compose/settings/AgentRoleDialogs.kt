@@ -11,6 +11,7 @@ import eu.torvian.chatbot.app.domain.contracts.AgentRoleDialogState
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 
 /**
@@ -25,6 +26,8 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  * @param settingsForModel Chat-capable settings for the model currently chosen in the form.
  * @param tools Enabled tools available for the form's multi-select.
  * @param roles Same-user roles available as spawn targets.
+ * @param projects Same-user projects available for the form's single project selector (a role
+ *            belongs to at most one project; null = unassociated).
  */
 @Composable
 fun AgentRoleDialogs(
@@ -33,7 +36,8 @@ fun AgentRoleDialogs(
     models: List<LLMModel>,
     settingsForModel: List<ModelSettings>?,
     tools: List<ToolDefinition>,
-    roles: List<AgentRoleDto>
+    roles: List<AgentRoleDto>,
+    projects: List<ProjectDto>
 ) {
     when (dialogState) {
         is AgentRoleDialogState.AddRole -> {
@@ -44,6 +48,7 @@ fun AgentRoleDialogs(
                 settingsForModel = settingsForModel.orEmpty(),
                 tools = tools,
                 roles = roles,
+                projects = projects,
                 onFormUpdate = actions::onUpdateRoleForm,
                 onSave = actions::onSaveRole,
                 onCancel = actions::onCancelDialog
@@ -58,6 +63,7 @@ fun AgentRoleDialogs(
                 settingsForModel = settingsForModel.orEmpty(),
                 tools = tools,
                 roles = roles,
+                projects = projects,
                 onFormUpdate = actions::onUpdateRoleForm,
                 onSave = actions::onSaveRole,
                 onCancel = actions::onCancelDialog

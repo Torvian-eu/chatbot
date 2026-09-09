@@ -57,6 +57,17 @@ internal fun UpdateAgentRoleError.toHandlerError(): ServerBuiltInToolHandlerErro
             "spawnable_role_not_found",
             "Spawnable agent role $roleId not found or not owned by the current user."
         )
+    is UpdateAgentRoleError.SpawnableRoleNotInProject ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "spawnable_role_not_in_project",
+            "Spawnable agent role $roleId does not belong to the role's project " +
+                "(project id: ${projectId ?: "none"}) — spawn targets must share the role's project scope."
+        )
+    is UpdateAgentRoleError.ProjectNotFound ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "project_not_found",
+            "Project $projectId not found or not owned by the current user."
+        )
     is UpdateAgentRoleError.InstructionValidationFailed ->
         ServerBuiltInToolHandlerError.OperationFailed("instruction_validation_failed", reason)
 }

@@ -4,6 +4,8 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.server.data.dao.GroupDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
+import eu.torvian.chatbot.server.data.dao.SessionProjectPair
+import eu.torvian.chatbot.server.data.dao.SessionRolePair
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
@@ -62,7 +64,19 @@ class SessionDaoExposedTest {
                 modelSettings = listOf(TestDefaults.modelSettings1, TestDefaults.modelSettings2),
             )
         )
-        testDataManager.createTables(setOf(Table.CHAT_MESSAGES, Table.CHAT_SESSIONS, Table.SESSION_CURRENT_LEAF))
+        testDataManager.createTables(
+            setOf(
+                Table.CHAT_MESSAGES,
+                Table.ASSISTANT_MESSAGES,
+                Table.CHAT_SESSIONS,
+                Table.SESSION_CURRENT_LEAF,
+                // project_id on chat_sessions and agent_role_id reference these tables; the project
+                // tests below seed project/role rows through the manager, so both tables must exist
+                // (creation order is handled by the manager's mapping list: projects before sessions).
+                Table.PROJECTS,
+                Table.AGENT_ROLES
+            )
+        )
     }
 
     @AfterEach
@@ -365,5 +379,251 @@ class SessionDaoExposedTest {
         val getResult2After = testDataManager.getChatSession(testSession2.id)
         assertNull(getResult1After?.groupId, "Session 1 should be ungrouped")
         assertNull(getResult2After?.groupId, "Session 2 should be ungrouped")
+    }
+
+    // --- Project selection (V28 / Sessions feature) ---
+
+    // Role fixture with null model/settings so the session tests below need no llm seeding.
+    private val sessionTestRole = TestDefaults.agentRole1.copy(
+        id = 50L,
+        modelId = null,
+        modelSettingsId = null,
+        instructionsJson = "[]"
+    )
+
+    @Test
+    fun `insertSession persists a project selection on the session`() = runTest {
+        val project = TestDefaults.project1
+        testDataManager.insertProject(project)
+
+        val result = sessionDao.insertSession(
+            name = "Project session",
+            projectId = project.id
+        )
+
+        val session = result.getOrNull()
+        assertNotNull(session, "Expected Right result for successful insertion")
+        assertEquals(project.id, session.projectId, "Expected the persisted project id")
+    }
+
+    @Test
+    fun `getSessionById returns the persisted projectId`() = runTest {
+        val project = TestDefaults.project1
+        testDataManager.insertProject(project)
+        testDataManager.insertChatSession(testSession1.copy(projectId = project.id))
+
+        val result = sessionDao.getSessionById(testSession1.id)
+
+        assertTrue(result.isRight())
+        assertEquals(project.id, result.getOrNull()?.projectId, "Expected the persisted project id")
+    }
+
+    @Test
+    fun `updateSessionProjectId sets and clears the project selection`() = runTest {
+        val project = TestDefaults.project1
+        testDataManager.insertProject(project)
+        testDataManager.insertChatSession(testSession1)
+
+        val setResult = sessionDao.updateSessionProjectId(testSession1.id, project.id)
+        assertTrue(setResult.isRight())
+        assertEquals(
+            project.id,
+            testDataManager.getChatSession(testSession1.id)?.projectId,
+            "project id must be persisted"
+        )
+
+        val clearResult = sessionDao.updateSessionProjectId(testSession1.id, null)
+        assertTrue(clearResult.isRight())
+        assertNull(
+            testDataManager.getChatSession(testSession1.id)?.projectId,
+            "null project id must clear the selection"
+        )
+    }
+
+    @Test
+    fun `updateSessionProjectId returns SessionNotFound for a missing session`() = runTest {
+        testDataManager.insertChatSession(testSession1)
+
+        val result = sessionDao.updateSessionProjectId(999, TestDefaults.project1.id)
+
+        val error = result.leftOrNull()
+        assertNotNull(error, "Expected Left result for non-existent session")
+        assertIs<SessionError.SessionNotFound>(error, "Expected SessionNotFound error")
+    }
+
+    @Test
+    fun `updateSessionProjectId returns ForeignKeyViolation for a foreign project`() = runTest {
+        testDataManager.insertChatSession(testSession1)
+
+        val result = sessionDao.updateSessionProjectId(testSession1.id, 999)
+
+        val error = result.leftOrNull()
+        assertNotNull(error, "Expected Left result for a foreign project id")
+        assertIs<SessionError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error")
+    }
+
+    @Test
+    fun `getSessionProjectSelection reads the project and agent role without messages`() = runTest {
+        val project = TestDefaults.project1
+        testDataManager.insertProject(project)
+        testDataManager.insertAgentRole(sessionTestRole)
+        testDataManager.insertChatSession(
+            testSession1.copy(agentRoleId = sessionTestRole.id, projectId = project.id)
+        )
+
+        val result = sessionDao.getSessionProjectSelection(testSession1.id)
+
+        assertTrue(result.isRight())
+        val selection = result.getOrNull()
+        assertNotNull(selection, "Expected non-null selection")
+        assertEquals(project.id, selection.projectId)
+        assertEquals(sessionTestRole.id, selection.agentRoleId)
+    }
+
+    @Test
+    fun `getSessionProjectSelection returns SessionNotFound for a missing session`() = runTest {
+        val result = sessionDao.getSessionProjectSelection(999)
+
+        assertIs<SessionError.SessionNotFound>(result.leftOrNull())
+    }
+
+    @Test
+    fun `getSessionProjectPairsForRole returns sessions using the role with their project ids`() = runTest {
+        val project = TestDefaults.project1
+        testDataManager.insertProject(project)
+        testDataManager.insertAgentRole(sessionTestRole)
+        testDataManager.insertChatSession(
+            testSession1.copy(agentRoleId = sessionTestRole.id, projectId = project.id)
+        )
+        // A project-less session using the same role (illegal under the legality rule, but the DAO read must
+        // still surface the pair so the service sweep can detect it).
+        testDataManager.insertChatSession(
+            testSession2.copy(agentRoleId = sessionTestRole.id, projectId = null)
+        )
+
+        val pairs = sessionDao.getSessionProjectPairsForRole(sessionTestRole.id)
+
+        assertEquals(2, pairs.size)
+        assertEquals(
+            setOf(SessionProjectPair(testSession1.id, project.id), SessionProjectPair(testSession2.id, null)),
+            pairs.toSet()
+        )
+    }
+
+    @Test
+    fun `getSessionProjectPairsForRoles batch-reads sessions using any of the roles`() = runTest {
+        val project = TestDefaults.project1
+        val roleA = sessionTestRole.copy(id = 70L)
+        val roleB = sessionTestRole.copy(id = 71L)
+        val roleUnused = sessionTestRole.copy(id = 72L)
+        testDataManager.insertProject(project)
+        testDataManager.insertAgentRole(roleA)
+        testDataManager.insertAgentRole(roleB)
+        testDataManager.insertAgentRole(roleUnused)
+        testDataManager.insertChatSession(
+            testSession1.copy(agentRoleId = roleA.id, projectId = project.id)
+        )
+        // A project-less session using role B surfaces with a null project id (the project-side
+        // attach sweep must clear exactly this kind of pair).
+        testDataManager.insertChatSession(
+            testSession2.copy(agentRoleId = roleB.id, projectId = null)
+        )
+        // A session using a role OUTSIDE the queried set must not be returned.
+        testDataManager.insertChatSession(
+            TestDefaults.chatSession1.copy(id = 77L, agentRoleId = roleUnused.id, projectId = null)
+        )
+
+        // The batch read covers both queried roles in one call; each session appears at most once.
+        val pairs = sessionDao.getSessionProjectPairsForRoles(listOf(roleA.id, roleB.id))
+
+        assertEquals(2, pairs.size)
+        assertEquals(
+            setOf(SessionProjectPair(testSession1.id, project.id), SessionProjectPair(testSession2.id, null)),
+            pairs.toSet()
+        )
+    }
+
+    @Test
+    fun `getSessionProjectPairsForRoles returns an empty list for an empty role set`() = runTest {
+        testDataManager.insertChatSession(testSession1)
+
+        val pairs = sessionDao.getSessionProjectPairsForRoles(emptyList())
+
+        assertTrue(pairs.isEmpty(), "an empty role set must produce no pairs and no SQL")
+    }
+
+    @Test
+    fun `clearAgentRoleForSessions clears the role and bumps updatedAt`() = runTest {
+        testDataManager.insertAgentRole(sessionTestRole)
+        testDataManager.insertChatSession(testSession1.copy(agentRoleId = sessionTestRole.id))
+        testDataManager.insertChatSession(testSession2.copy(agentRoleId = sessionTestRole.id))
+
+        sessionDao.clearAgentRoleForSessions(listOf(testSession1.id, testSession2.id))
+
+        val session1After = testDataManager.getChatSession(testSession1.id)
+        val session2After = testDataManager.getChatSession(testSession2.id)
+        assertNull(session1After?.agentRoleId, "Session 1 role must be cleared")
+        assertNull(session2After?.agentRoleId, "Session 2 role must be cleared")
+        assertNotEquals(testSession1.updatedAt, session1After?.updatedAt, "updatedAt must be bumped")
+    }
+
+    @Test
+    fun `clearAgentRoleForSessions is a no-op on an empty list`() = runTest {
+        testDataManager.insertChatSession(testSession1.copy(agentRoleId = null))
+
+        // Must not throw and must not touch any session.
+        sessionDao.clearAgentRoleForSessions(emptyList())
+
+        assertEquals(
+            testSession1.updatedAt,
+            testDataManager.getChatSession(testSession1.id)?.updatedAt,
+            "no session may be touched by an empty sweep"
+        )
+    }
+
+    @Test
+    fun `getSessionIdsByProject returns sessions selecting the project`() = runTest {
+        val project = TestDefaults.project1
+        testDataManager.insertProject(project)
+        testDataManager.insertChatSession(testSession1.copy(projectId = project.id))
+        testDataManager.insertChatSession(testSession2.copy(projectId = project.id))
+        testDataManager.insertChatSession(TestDefaults.chatSession1.copy(id = 77L, projectId = null))
+
+        val ids = sessionDao.getSessionIdsByProject(project.id)
+
+        assertEquals(setOf(testSession1.id, testSession2.id), ids.toSet())
+    }
+
+    @Test
+    fun `getSessionRolePairsForProject returns sessions with their attached roles`() = runTest {
+        val project = TestDefaults.project1
+        val otherProject = TestDefaults.project2
+        val roleA = sessionTestRole.copy(id = 60L)
+        val roleB = sessionTestRole.copy(id = 61L)
+        testDataManager.insertProject(project)
+        testDataManager.insertProject(otherProject)
+        testDataManager.insertAgentRole(roleA)
+        testDataManager.insertAgentRole(roleB)
+        testDataManager.insertChatSession(testSession1.copy(projectId = project.id, agentRoleId = roleA.id))
+        testDataManager.insertChatSession(testSession2.copy(projectId = project.id, agentRoleId = roleB.id))
+        // A role-less session selecting the project must surface with a null role.
+        testDataManager.insertChatSession(
+            TestDefaults.chatSession1.copy(id = 77L, projectId = project.id, agentRoleId = null)
+        )
+        // A session selecting a DIFFERENT project must not be returned.
+        testDataManager.insertChatSession(
+            TestDefaults.chatSession1.copy(id = 78L, projectId = otherProject.id, agentRoleId = roleA.id)
+        )
+
+        val pairs = sessionDao.getSessionRolePairsForProject(project.id)
+
+        assertEquals(
+            setOf(
+                SessionRolePair(testSession1.id, roleA.id),
+                SessionRolePair(testSession2.id, roleB.id),
+                SessionRolePair(77L, null)
+            ),
+            pairs.toSet()
+        )
     }
 }

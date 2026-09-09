@@ -498,14 +498,17 @@ class DefaultConversationTurnOrchestrator(
                 "Cannot execute tool calls for session ${request.session.id}: no agent role selected"
             )
         // Bundle the caller identity with the turn's session context into the single execution
-        // context consumed by the whole approval/execution chain. Every field is non-null: the
-        // session and the validated agent role are guaranteed above, and server built-in tool
-        // handlers receive this object to resolve session/role identity.
+        // context consumed by the whole approval/execution chain. The session and the validated
+        // agent role are guaranteed above (the role is non-null; the project is nullable because a
+        // session may have no project selected). Server built-in tool handlers and the operator
+        // tool executor receive this object to resolve session/role/project identity — the project
+        // scope in particular lets spawn_agent resolve its target role within the session's project.
         val sessionContext = ToolCallExecutionContext(
             userId = request.userId,
             sessionId = request.session.id,
             sessionName = request.session.name,
-            agentRoleId = requestingAgentRoleId
+            agentRoleId = requestingAgentRoleId,
+            projectId = request.session.projectId
         )
         val executionEvents = toolCallOrchestrator.executeAndUpdateToolCalls(
             sessionContext,

@@ -13,6 +13,7 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
@@ -97,6 +98,14 @@ class SessionServiceImplTest {
             agentRoleDao,
             transactionScope
         )
+
+        // Default the legality-related reads so existing tests observe a legal pair by default: a session
+        // without a project and a role without memberships, plus successful read/write paths for the
+        // project-selection flow (specific stubs in individual tests win over these wildcards).
+        coEvery { sessionDao.getSessionProjectSelection(any()) } returns
+            SessionProjectSelection(projectId = null, agentRoleId = null).right()
+        coEvery { sessionDao.updateSessionProjectId(any(), any()) } returns Unit.right()
+        coEvery { sessionDao.updateSessionAgentRoleId(any(), any()) } returns Unit.right()
 
         // Mock the transaction scope to execute blocks directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
@@ -647,5 +656,170 @@ class SessionServiceImplTest {
         assertEquals(sessionId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.deleteSession(sessionId) }
+    }
+
+    // --- Session Legality Invariant on role attach ---
+
+    @Test
+    fun `updateSessionAgentRoleId rejects a role not in the session's project`() = runTest {
+        // Session selects project 10; the role belongs only to project 20, so the attach would leave
+        // an illegal pair.
+        val sessionId = 1L
+        val roleId = 2L
+        val projectId = 10L
+        coEvery { agentRoleDao.getRoleById(roleId) } returns TestDefaults.agentRole1.copy(projectId = 20L).right()
+        coEvery { sessionDao.getSessionProjectSelection(sessionId) } returns
+            SessionProjectSelection(projectId = projectId, agentRoleId = null).right()
+
+        val result = sessionService.updateSessionAgentRoleId(sessionId, roleId)
+
+        val error = assertIs<UpdateSessionAgentRoleIdError.AgentRoleNotInProject>(result.leftOrNull())
+        assertEquals(roleId, error.agentRoleId)
+        assertEquals(projectId, error.projectId)
+        // The legality check runs BEFORE the write: no role may be attached.
+        coVerify(exactly = 0) { sessionDao.updateSessionAgentRoleId(any(), any()) }
+    }
+
+    @Test
+    fun `updateSessionAgentRoleId rejects a project-associated role on a project-less session`() = runTest {
+        val sessionId = 1L
+        val roleId = 2L
+        coEvery { agentRoleDao.getRoleById(roleId) } returns TestDefaults.agentRole1.copy(projectId = 10L).right()
+        // Session has no project; the role belongs to one — attaching it would be illegal.
+        coEvery { sessionDao.getSessionProjectSelection(sessionId) } returns
+            SessionProjectSelection(projectId = null, agentRoleId = null).right()
+
+        val result = sessionService.updateSessionAgentRoleId(sessionId, roleId)
+
+        val error = assertIs<UpdateSessionAgentRoleIdError.AgentRoleNotInProject>(result.leftOrNull())
+        assertEquals(roleId, error.agentRoleId)
+        assertEquals(null, error.projectId)
+        coVerify(exactly = 0) { sessionDao.updateSessionAgentRoleId(any(), any()) }
+    }
+
+    @Test
+    fun `updateSessionAgentRoleId allows a role that belongs to the session's project`() = runTest {
+        val sessionId = 1L
+        val roleId = 2L
+        val projectId = 10L
+        coEvery { agentRoleDao.getRoleById(roleId) } returns TestDefaults.agentRole1.copy(projectId = projectId).right()
+        coEvery { sessionDao.getSessionProjectSelection(sessionId) } returns
+            SessionProjectSelection(projectId = projectId, agentRoleId = null).right()
+        coEvery { sessionDao.updateSessionAgentRoleId(sessionId, roleId) } returns Unit.right()
+
+        val result = sessionService.updateSessionAgentRoleId(sessionId, roleId)
+
+        assertTrue(result.isRight())
+        coVerify(exactly = 1) { sessionDao.updateSessionAgentRoleId(sessionId, roleId) }
+    }
+
+    // --- project selection clears illegal roles atomically ---
+
+    @Test
+    fun `updateSessionProjectId clears the role when the new project excludes it`() = runTest {
+        val sessionId = 1L
+        val roleId = 2L
+        val projectId = 10L
+        coEvery { sessionDao.getSessionProjectSelection(sessionId) } returns
+            SessionProjectSelection(projectId = null, agentRoleId = roleId).right()
+        // The role belongs to project 20 only; switching to 10 makes the pair illegal.
+        coEvery { agentRoleDao.getRoleById(roleId) } returns TestDefaults.agentRole1.copy(projectId = 20L).right()
+        coEvery { sessionDao.updateSessionProjectId(sessionId, projectId) } returns Unit.right()
+        coEvery { sessionDao.updateSessionAgentRoleId(sessionId, null) } returns Unit.right()
+
+        val result = sessionService.updateSessionProjectId(sessionId, projectId)
+
+        assertTrue(result.isRight())
+        val selection = result.getOrNull()
+        assertNotNull(selection)
+        assertEquals(projectId, selection.projectId)
+        assertEquals(null, selection.agentRoleId, "the illegal role must be cleared")
+        // Project write first, then the role clear, inside the same transaction.
+        coVerifyOrder {
+            sessionDao.updateSessionProjectId(sessionId, projectId)
+            sessionDao.updateSessionAgentRoleId(sessionId, null)
+        }
+    }
+
+    @Test
+    fun `updateSessionProjectId clears the role when deselecting while it has projects`() = runTest {
+        val sessionId = 1L
+        val roleId = 2L
+        coEvery { sessionDao.getSessionProjectSelection(sessionId) } returns
+            SessionProjectSelection(projectId = 10L, agentRoleId = roleId).right()
+        // The role belongs to project 10; deselecting to null leaves it illegal (role has a project).
+        coEvery { agentRoleDao.getRoleById(roleId) } returns TestDefaults.agentRole1.copy(projectId = 10L).right()
+        coEvery { sessionDao.updateSessionProjectId(sessionId, null) } returns Unit.right()
+        coEvery { sessionDao.updateSessionAgentRoleId(sessionId, null) } returns Unit.right()
+
+        val result = sessionService.updateSessionProjectId(sessionId, null)
+
+        assertTrue(result.isRight())
+        assertEquals(null, result.getOrNull()?.projectId)
+        assertEquals(null, result.getOrNull()?.agentRoleId)
+        coVerify(exactly = 1) { sessionDao.updateSessionAgentRoleId(sessionId, null) }
+    }
+
+    @Test
+    fun `updateSessionProjectId keeps a role that belongs to the new project`() = runTest {
+        val sessionId = 1L
+        val roleId = 2L
+        val projectId = 10L
+        coEvery { sessionDao.getSessionProjectSelection(sessionId) } returns
+            SessionProjectSelection(projectId = null, agentRoleId = roleId).right()
+        coEvery { agentRoleDao.getRoleById(roleId) } returns TestDefaults.agentRole1.copy(projectId = projectId).right()
+        coEvery { sessionDao.updateSessionProjectId(sessionId, projectId) } returns Unit.right()
+
+        val result = sessionService.updateSessionProjectId(sessionId, projectId)
+
+        assertTrue(result.isRight())
+        assertEquals(projectId, result.getOrNull()?.projectId)
+        assertEquals(roleId, result.getOrNull()?.agentRoleId, "a legal role stays attached")
+        // No clear ran: the role remains legal under the new selection.
+        coVerify(exactly = 0) { sessionDao.updateSessionAgentRoleId(sessionId, null) }
+    }
+
+    @Test
+    fun `updateSessionProjectId assigns a project without touching a role-less session`() = runTest {
+        val sessionId = 1L
+        val projectId = 10L
+        coEvery { sessionDao.getSessionProjectSelection(sessionId) } returns
+            SessionProjectSelection(projectId = null, agentRoleId = null).right()
+        coEvery { sessionDao.updateSessionProjectId(sessionId, projectId) } returns Unit.right()
+
+        val result = sessionService.updateSessionProjectId(sessionId, projectId)
+
+        assertTrue(result.isRight())
+        assertEquals(projectId, result.getOrNull()?.projectId)
+        assertEquals(null, result.getOrNull()?.agentRoleId)
+        coVerify(exactly = 0) { sessionDao.updateSessionAgentRoleId(any(), any()) }
+    }
+
+    @Test
+    fun `updateSessionProjectId returns SessionNotFound when the session is missing`() = runTest {
+        val sessionId = 999L
+        coEvery { sessionDao.getSessionProjectSelection(sessionId) } returns
+            SessionError.SessionNotFound(sessionId).left()
+
+        val result = sessionService.updateSessionProjectId(sessionId, 10L)
+
+        val error = assertIs<UpdateSessionProjectIdError.SessionNotFound>(result.leftOrNull())
+        assertEquals(sessionId, error.id)
+        coVerify(exactly = 0) { sessionDao.updateSessionProjectId(any(), any()) }
+    }
+
+    @Test
+    fun `updateSessionProjectId maps a foreign key violation to ProjectNotFound`() = runTest {
+        val sessionId = 1L
+        coEvery { sessionDao.getSessionProjectSelection(sessionId) } returns
+            SessionProjectSelection(projectId = null, agentRoleId = null).right()
+        // The project was deleted concurrently between the route's ownership check and this write.
+        coEvery { sessionDao.updateSessionProjectId(sessionId, 10L) } returns
+            SessionError.ForeignKeyViolation("no such project 10").left()
+
+        val result = sessionService.updateSessionProjectId(sessionId, 10L)
+
+        val error = assertIs<UpdateSessionProjectIdError.ProjectNotFound>(result.leftOrNull())
+        assertEquals(10L, error.projectId)
     }
 }

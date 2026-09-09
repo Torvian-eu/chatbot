@@ -176,6 +176,36 @@ class CreateAgentRoleToolTest {
     }
 
     @Test
+    fun `parses project_id and forwards it into the create request`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        coEvery { agentRoleService.createRole(userId, any()) } returns createdRole().right()
+        val tool = CreateAgentRoleTool(agentRoleService)
+
+        tool.execute(buildJsonObject { put("name", "writer"); put("project_id", 42L) }, context())
+
+        coVerify(exactly = 1) {
+            agentRoleService.createRole(
+                userId,
+                match<CreateAgentRoleRequest> { request -> request.projectId == 42L }
+            )
+        }
+    }
+
+    @Test
+    fun `maps a project-not-found failure to a readable error`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        coEvery { agentRoleService.createRole(userId, any()) } returns
+                CreateAgentRoleError.ProjectNotFound(42L).left()
+        val tool = CreateAgentRoleTool(agentRoleService)
+
+        val result = tool.execute(buildJsonObject { put("name", "x"); put("project_id", 42L) }, context())
+
+        val error = assertIs<ServerBuiltInToolHandlerError.OperationFailed>(result.leftOrNull())
+        assertEquals("project_not_found", error.code)
+        assertTrue(error.message.contains("Project 42"))
+    }
+
+    @Test
     fun `accumulates every validation error before failing`() = runTest {
         val tool = CreateAgentRoleTool(mockk())
 

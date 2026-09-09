@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.repository.impl
 import arrow.core.Either
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.ProjectRepository
 import eu.torvian.chatbot.app.service.api.AgentRoleApi
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
@@ -25,6 +26,7 @@ import kotlin.test.assertTrue
 class DefaultAgentRoleRepositoryTest {
 
     private lateinit var api: AgentRoleApi
+    private lateinit var projectRepository: ProjectRepository
     private lateinit var repository: DefaultAgentRoleRepository
 
     private fun role(id: Long, name: String) = AgentRoleDto(
@@ -41,7 +43,9 @@ class DefaultAgentRoleRepositoryTest {
     @BeforeTest
     fun setup() {
         api = mockk()
-        repository = DefaultAgentRoleRepository(api)
+        projectRepository = mockk()
+        coEvery { projectRepository.loadProjects() } returns Either.Right(Unit)
+        repository = DefaultAgentRoleRepository(api, projectRepository)
     }
 
     @Test
@@ -154,6 +158,61 @@ class DefaultAgentRoleRepositoryTest {
         assertTrue(state is DataState.Success)
         assertEquals(1, state.data.size)
         assertEquals("coder", state.data.single().name)
+    }
+
+    @Test
+    fun `createRole - refreshes the project stream after success`() = runTest {
+        coEvery { api.getAllRoles() } returns Either.Right(emptyList())
+        repository.loadRoles()
+
+        coEvery { api.createRole(any()) } returns Either.Right(role(10, "translator"))
+
+        val result = repository.createRole(
+            CreateAgentRoleRequest(name = "translator", modelId = 1L, modelSettingsId = 2L)
+        )
+
+        assertTrue(result.isRight())
+        // The role may carry project membership; the project side of the cache is refreshed so
+        // ProjectDto.agentRoleIds stays consistent.
+        coVerify(exactly = 1) { projectRepository.loadProjects() }
+    }
+
+    @Test
+    fun `updateRole - refreshes the project stream after success`() = runTest {
+        coEvery { api.getAllRoles() } returns Either.Right(listOf(role(1, "writer")))
+        repository.loadRoles()
+
+        coEvery { api.updateRole(1L, any()) } returns Either.Right(role(1, "writer-v2"))
+
+        repository.updateRole(1L, UpdateAgentRoleRequest(name = "writer-v2", modelId = 1L, modelSettingsId = 2L))
+
+        coVerify(exactly = 1) { projectRepository.loadProjects() }
+    }
+
+    @Test
+    fun `deleteRole - refreshes the project stream after success`() = runTest {
+        coEvery { api.getAllRoles() } returns Either.Right(listOf(role(1, "writer")))
+        repository.loadRoles()
+
+        coEvery { api.deleteRole(1L) } returns Either.Right(Unit)
+
+        repository.deleteRole(1L)
+
+        coVerify(exactly = 1) { projectRepository.loadProjects() }
+    }
+
+    @Test
+    fun `role failure does not trigger a project refresh`() = runTest {
+        coEvery { api.getAllRoles() } returns Either.Right(emptyList())
+        repository.loadRoles()
+
+        coEvery { api.createRole(any()) } returns Either.Left(
+            eu.torvian.chatbot.app.service.api.ApiResourceError.UnknownError("boom", null)
+        )
+
+        repository.createRole(CreateAgentRoleRequest(name = "x", modelId = 1L, modelSettingsId = 2L))
+
+        coVerify(exactly = 0) { projectRepository.loadProjects() }
     }
 
     @Test

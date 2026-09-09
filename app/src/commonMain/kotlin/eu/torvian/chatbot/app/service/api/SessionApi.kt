@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.project.UpdateSessionProjectResponse
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -91,6 +92,22 @@ interface SessionApi {
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
     suspend fun updateSessionAgentRole(sessionId: Long, agentRoleId: Long?): Either<ApiResourceError, Unit>
+
+    /**
+     * Selects (or deselects) the project attached to a chat session.
+     *
+     * Corresponds to `PUT /api/v1/sessions/{sessionId}/project`. Selecting a project filters the
+     * offered agent roles to the project's roles; passing `null` deselects the project. When the
+     * new selection makes the session's attached role illegal, the server clears the role in the
+     * same transaction and the response carries the resulting `(projectId, agentRoleId)` pair so
+     * the client can update its cached session in one round-trip.
+     *
+     * @param sessionId The ID of the session.
+     * @param projectId The new optional project ID for the session, or `null` to deselect.
+     * @return [Either.Right] containing the resulting session selection on success, or
+     *         [Either.Left] containing an [ApiResourceError] on failure.
+     */
+    suspend fun updateSessionProject(sessionId: Long, projectId: Long?): Either<ApiResourceError, UpdateSessionProjectResponse>
 
     /**
      * Sets the current "active" leaf message for a session, affecting which branch is displayed.

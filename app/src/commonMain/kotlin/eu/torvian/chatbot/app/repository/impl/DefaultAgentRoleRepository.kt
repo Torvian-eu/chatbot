@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.AgentRoleRepository
+import eu.torvian.chatbot.app.repository.ProjectRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.AgentRoleApi
@@ -24,9 +25,13 @@ import kotlinx.coroutines.flow.update
  * successful CRUD operation so chat state and the management tab stay in sync automatically.
  *
  * @property agentRoleApi The API client used for all agent-role requests.
+ * @property projectRepository Repository used to refresh ProjectDto.agentRoleIds after role CRUD
+ *            (roles and projects share the membership relation). This is the only cross-repository
+ *            dependency, keeping the refresh cycle-free.
  */
 class DefaultAgentRoleRepository(
-    private val agentRoleApi: AgentRoleApi
+    private val agentRoleApi: AgentRoleApi,
+    private val projectRepository: ProjectRepository
 ) : AgentRoleRepository {
 
     companion object {
@@ -87,6 +92,9 @@ class DefaultAgentRoleRepository(
             ifRight = { newRole ->
                 logger.info("Successfully created agent role: ${newRole.name} with ID: ${newRole.id}")
                 updateRolesState { list -> list + newRole }
+                // The new role may carry project membership; refresh the project side of the cache
+                // so ProjectDto.agentRoleIds stays consistent.
+                projectRepository.loadProjects()
                 newRole.right()
             }
         )
@@ -106,6 +114,9 @@ class DefaultAgentRoleRepository(
                 updateRolesState { list ->
                     list.map { if (it.id == updatedRole.id) updatedRole else it }
                 }
+                // The update may have changed the role's project membership; keep
+                // ProjectDto.agentRoleIds consistent.
+                projectRepository.loadProjects()
                 updatedRole.right()
             }
         )
@@ -142,6 +153,9 @@ class DefaultAgentRoleRepository(
             ifRight = {
                 logger.info("Successfully deleted agent role ID: $roleId")
                 updateRolesState { list -> list.filterNot { it.id == roleId } }
+                // The deleted role's project links cascade server-side; refresh the project stream
+                // so ProjectDto.agentRoleIds no longer references the removed role.
+                projectRepository.loadProjects()
                 Unit.right()
             }
         )

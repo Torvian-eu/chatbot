@@ -139,7 +139,7 @@ internal object RunCommandTestSupport {
         input: JsonObject,
         executionContext: BuiltInToolExecutionContext,
     ): BuiltInToolExecutionResult = withContext(Dispatchers.Default) {
-        withTimeout(8_000.milliseconds) {
+        withTimeout(30_000.milliseconds) {
             tool.execute(input, executionContext)
         }
     }

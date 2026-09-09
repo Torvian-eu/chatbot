@@ -173,6 +173,22 @@ object TestDefaults {
         updatedAt = DEFAULT_INSTANT
     )
 
+    val project1 = ProjectEntity(
+        id = 1L,
+        name = "Acme Web App",
+        description = "The flagship web application project",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT
+    )
+
+    val project2 = ProjectEntity(
+        id = 2L,
+        name = "Acme Mobile App",
+        description = "The mobile companion project",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT
+    )
+
     val chatSession1 = ChatSessionEntity(
         id = 1L,
         name = "First Chat Session",

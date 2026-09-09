@@ -20,7 +20,8 @@ import kotlinx.serialization.json.put
  *
  * Returns the identity of the turn's chat session (`session_id`, `session_name`) together with the
  * identity of the agent role selected for that session (`agent_role_id`, `agent_role_name`, and —
- * only when set and non-blank — `agent_role_display_name`). The session is the one the current
+ * only when set and non-blank — `agent_role_display_name`) and the session's project scope
+ * (`project_id`, emitted only when a project is selected). The session is the one the current
  * conversation belongs to and is strictly user-scoped, so no other user's data is ever surfaced.
  * The tool accepts no input parameters; any supplied argument is rejected as invalid input.
  *
@@ -30,9 +31,9 @@ import kotlinx.serialization.json.put
  * [ServerBuiltInToolHandlerError.NotFoundOrNotAccessible] instead of reporting incomplete role
  * identity — this tool is only meaningful inside a real session with a resolvable role.
  *
- * The output is assembled as a [JsonObject] so the optional `agent_role_display_name` is
- * structurally omitted (never emitted as an explicit `null`) regardless of the shared codec's
- * `encodeDefaults`/`explicitNulls` settings; `session_id`/`session_name` and
+ * The output is assembled as a [JsonObject] so the optional `agent_role_display_name` and
+ * `project_id` are structurally omitted (never emitted as an explicit `null`) regardless of the
+ * shared codec's `encodeDefaults`/`explicitNulls` settings; `session_id`/`session_name` and
  * `agent_role_id`/`agent_role_name` are always present, and the deferred
  * `message_turn_count`/`token_count` keys are never produced.
  *
@@ -86,6 +87,12 @@ class GetCurrentSessionInfoTool(
             // always fall back to the machine-readable name, keeping the output token-lean.
             if (!role.displayName.isNullOrBlank()) {
                 put("agent_role_display_name", role.displayName)
+            }
+            // The session's project scope: emitted only when a project is selected so consumers
+            // can treat absence as "no project" (structural omission, mirroring the display name).
+            val sessionProjectId = context.projectId
+            if (sessionProjectId != null) {
+                put("project_id", sessionProjectId)
             }
         }
         encodeJsonElement(json, output).bind()

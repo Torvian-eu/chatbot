@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.worker.WorkerDto
 
@@ -60,5 +61,6 @@ data class AgentRolesTabState(
     val tools: List<ToolDefinition>,
     val modelsById: Map<Long, LLMModel> = emptyMap(),
     val settingsById: Map<Long, ModelSettings> = emptyMap(),
-    val toolsById: Map<Long, ToolDefinition> = emptyMap()
+    val toolsById: Map<Long, ToolDefinition> = emptyMap(),
+    val projects: List<ProjectDto> = emptyList()
 )

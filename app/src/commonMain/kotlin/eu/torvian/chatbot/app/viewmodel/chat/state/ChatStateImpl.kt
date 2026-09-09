@@ -16,6 +16,7 @@ import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +43,7 @@ class ChatStateImpl(
     private val toolRepository: ToolRepository,
     mcpServerRepository: LocalMCPServerRepository,
     private val agentRoleRepository: AgentRoleRepository,
+    private val projectRepository: ProjectRepository,
     private val threadBuilder: ThreadBuilder,
     backgroundScope: CoroutineScope
 ) : ChatState {
@@ -162,17 +164,46 @@ class ChatStateImpl(
             initialValue = DataState.Idle
         )
 
-    // Agent roles available for the chat top-bar selector: a filtered view of the repository stream
-    // keeping only roles that are not disabled for the current user. Roles disabled for the user drop
-    // out of `rolesById`/`currentAgentRole` immediately (reactive, no manual reload), which makes a
-    // session still attached to such a role inert ("No role" + composer gated) until an enabled role
-    // is selected. The settings tab reads the unfiltered repository stream instead, so disabled roles
-    // stay visible and re-enableable there. Only `Success` is rewritten; the other DataState variants
-    // pass through unchanged.
+    // The session currently loaded into the chat area, or null before any session is active.
+    override val currentSession: StateFlow<ChatSession?> =
+        sessionDataState.map { it.dataOrNull }
+            .stateIn(scope = backgroundScope, started = SharingStarted.WhileSubscribed(5000), initialValue = null)
+
+    // Projects indexed by id from the repository stream for O(1) lookups. Declared before
+    // [availableAgentRoles] because the role filter references it (a forward reference to the public
+    // [projectsById] property would not compile); [projectsById] aliases this map.
+    private val projectsByIdMap: StateFlow<Map<Long, ProjectDto>> =
+        projectRepository.projects.map { it.dataOrNull?.associateBy { project -> project.id } ?: emptyMap() }
+            .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    // Filtered view of the repository role stream for the chat top-bar selector: roles that are
+    // (a) not disabled for the current user and (b) legal for the session's project scope (the
+    // filter rule is documented on the interface). An illegal or disabled attachment drops out of
+    // `rolesById`/`currentAgentRole` reactively (no manual reload), rendering the session inert
+    // until a legal, enabled role is selected; only `Success` is rewritten, the other DataState
+    // variants pass through unchanged.
     override val availableAgentRoles: StateFlow<DataState<RepositoryError, List<AgentRoleDto>>> =
-        agentRoleRepository.roles.map { dataState ->
+        combine(
+            agentRoleRepository.roles,
+            currentSession,
+            projectsByIdMap
+        ) { dataState, session, projectsMap ->
+            // The session's project id is used for the role filter only when it resolves in the
+            // project list; an unresolvable id means the project no longer exists on the server, and
+            // the session behaves like a project-less one (matches currentProject's null resolution).
+            val sessionProjectId = session?.projectId
+            val filterProjectId = sessionProjectId?.takeIf { projectId -> projectsMap.containsKey(projectId) }
             when (dataState) {
-                is DataState.Success -> DataState.Success(dataState.data.filter { !it.disabled })
+                is DataState.Success -> DataState.Success(
+                    dataState.data.filter { role ->
+                        !role.disabled && (if (filterProjectId == null) {
+                            role.projectId == null
+                        } else {
+                            role.projectId == filterProjectId
+                        })
+                    }
+                )
+
                 is DataState.Error -> dataState
                 is DataState.Loading -> dataState
                 is DataState.Idle -> dataState
@@ -182,6 +213,12 @@ class ChatStateImpl(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = DataState.Idle
         )
+
+    // Projects owned by the current user, exposed for the top-bar project selector: a plain
+    // repository passthrough (unfiltered). The project-level legality filter is applied to
+    // [availableAgentRoles] instead, so every user project is always selectable.
+    override val availableProjects: StateFlow<DataState<RepositoryError, List<ProjectDto>>> =
+        projectRepository.projects
 
     private val allModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> = modelRepository.models
 
@@ -194,6 +231,11 @@ class ChatStateImpl(
         allSettings.map { it.dataOrNull?.associateBy { settings -> settings.id } ?: emptyMap() }
             .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    // Projects indexed by id, derived from the reactive project list for O(1) lookups when resolving
+    // the session's selected project in the top bar. Aliases [projectsByIdMap] so the role filter
+    // and the project derivation share one identical lookup map.
+    override val projectsById: StateFlow<Map<Long, ProjectDto>> = projectsByIdMap
+
     // Agent roles indexed by id, derived from the reactive role list for O(1) lookups when
     // resolving the session's selected role.
     private val rolesById: StateFlow<Map<Long, AgentRoleDto>> =
@@ -201,13 +243,20 @@ class ChatStateImpl(
             .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     // --- Derived "Current Item" States ---
-    override val currentSession: StateFlow<ChatSession?> =
-        sessionDataState.map { it.dataOrNull }
-            .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
+    // The project attached to the active session. When the session references a project that is
+    // missing from the project list (deleted server-side) or no project is selected, this resolves
+    // to null and the top bar shows "No project".
+    override val currentProject: StateFlow<ProjectDto?> = currentSession
+        .map { session -> session?.projectId }
+        .distinctUntilChanged()
+        .combine(projectsById) { projectId, projectsMap ->
+            projectId?.let { projectsMap[it] }
+        }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
 
     // The role attached to the active session. When the session references a role that is missing
-    // from the role list (deleted server-side) or no role is selected, this resolves to null and
-    // the session becomes inert until a role is selected.
+    // from the role list (deleted server-side), no role is selected, or the role is not legal for
+    // the session's project (drift), this resolves to null and the session becomes inert until a
+    // role is selected.
     override val currentAgentRole: StateFlow<AgentRoleDto?> = currentSession
         .map { session -> session?.agentRoleId }
         .distinctUntilChanged()

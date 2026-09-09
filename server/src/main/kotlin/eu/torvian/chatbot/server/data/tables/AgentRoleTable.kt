@@ -17,6 +17,11 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  * @property modelId Optional reference to the LLM model used by the role (`SET NULL` on delete).
  * @property modelSettingsId Optional reference to the settings profile (CHAT/RESPONSES) used by the
  *            role (`SET NULL` on delete).
+ * @property projectId Optional reference to the single project the role belongs to (`SET NULL` on
+ *            delete). Null means the role is **unassociated** (offered only for project-less
+ *            sessions). Membership was reduced from a set to a single column so same-project
+ *            rules (spawn allow-list targets, name-uniqueness scope, Session Legality Invariant)
+ *            are exact comparisons.
  * @property instructionsJson JSON array of the flat [eu.torvian.chatbot.common.models.agent.AgentInstructionDto]
  *            list (the same encoding used on the wire).
  * @property createdAt Timestamp when the role was created.
@@ -29,6 +34,7 @@ object AgentRoleTable : LongIdTable("agent_roles") {
     val modelId = reference("model_id", LLMModelTable, onDelete = ReferenceOption.SET_NULL).nullable()
     val modelSettingsId =
         reference("model_settings_id", ModelSettingsTable, onDelete = ReferenceOption.SET_NULL).nullable()
+    val projectId = reference("project_id", ProjectTable, onDelete = ReferenceOption.SET_NULL).nullable()
     val instructionsJson = text("instructions_json").default("[]")
     val createdAt = long("created_at")
     val updatedAt = long("updated_at")
@@ -38,5 +44,6 @@ object AgentRoleTable : LongIdTable("agent_roles") {
         // DB cannot express a per-user unique constraint because ownership lives in a separate table).
         index(isUnique = false, name)
         index(isUnique = false, modelSettingsId)
+        index(isUnique = false, projectId)
     }
 }

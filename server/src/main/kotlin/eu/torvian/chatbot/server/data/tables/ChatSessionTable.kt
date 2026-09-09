@@ -15,6 +15,11 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  * @property agentRoleId Optional reference to the user-defined agent role selected for this session.
  *            Model/settings/tools are resolved from the role at turn time; `SET NULL` when the role is
  *            deleted so sessions become inert (non-sendable) until a role is re-selected.
+ * @property projectId Optional reference to the user-owned project selected for this session.
+ *            `SET NULL` when the project is deleted (sessions keep their messages and become inert
+ *            until a role is re-selected). The pair `(agent_role_id, project_id)` must always be
+ *            legal — the Session Legality Invariant — and is restored by the service in the same
+ *            transaction for every mutation that could break it.
  */
 object ChatSessionTable : LongIdTable("chat_sessions") {
     val name = varchar("name", 255)
@@ -22,10 +27,12 @@ object ChatSessionTable : LongIdTable("chat_sessions") {
     val updatedAt = long("updated_at")
     val groupId = reference("group_id", ChatGroupTable, onDelete = ReferenceOption.SET_NULL).nullable()
     val agentRoleId = reference("agent_role_id", AgentRoleTable, onDelete = ReferenceOption.SET_NULL).nullable()
+    val projectId = reference("project_id", ProjectTable, onDelete = ReferenceOption.SET_NULL).nullable()
 
     // Add index for groupId to speed up grouped session queries (E6.S2)
     init {
         index(false, groupId)
         index(false, agentRoleId)
+        index(false, projectId)
     }
 }

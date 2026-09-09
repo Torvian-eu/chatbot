@@ -109,6 +109,36 @@ class AgentSpawnTypesSerializationTest {
         assertEquals(OperatorToolMode.WAIT_FOR_RESPONSE, decoded.mode)
     }
 
+    /**
+     * Verifies that an explicit `projectId` survives the encode → decode round-trip (so the
+     * server-derived spawn project reaches the operator unchanged) and that payloads without the
+     * key decode as a project-less spawn (forward compatibility for older builders).
+     */
+    @Test
+    fun `AgentSpawnRequest round-trips an explicit project id and defaults to null on the wire`() {
+        val scoped = AgentSpawnRequest(
+            agentRoleToSpawn = sampleRole,
+            subject = "Feature implementation",
+            projectId = 7L,
+            conversation = listOf(AgentSpawnMessage.User("Implement the feature")),
+            toolCallId = 42L
+        )
+        val encodedScoped = json.encodeToString(AgentSpawnRequest.serializer(), scoped)
+        assertTrue(encodedScoped.contains("\"projectId\":7"))
+        assertEquals(scoped, json.decodeFromString(AgentSpawnRequest.serializer(), encodedScoped))
+
+        // A project-less request omits the defaulted key from the wire and decodes back to null.
+        val unscoped = AgentSpawnRequest(
+            agentRoleToSpawn = sampleRole,
+            subject = "Feature implementation",
+            conversation = listOf(AgentSpawnMessage.User("Implement the feature")),
+            toolCallId = 42L
+        )
+        val encodedUnscoped = json.encodeToString(AgentSpawnRequest.serializer(), unscoped)
+        assertFalse(encodedUnscoped.contains("\"projectId\""))
+        assertEquals(unscoped, json.decodeFromString(AgentSpawnRequest.serializer(), encodedUnscoped))
+    }
+
     @Test
     fun `AgentSpawnMessage variants round-trip with class discriminator`() {
         val user = AgentSpawnMessage.User("prompt")

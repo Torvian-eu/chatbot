@@ -230,6 +230,27 @@ class DefaultSessionRepository(
             }
     }
 
+    override suspend fun updateSessionProject(
+        sessionId: Long,
+        projectId: Long?
+    ): Either<RepositoryError, Unit> {
+        return sessionApi.updateSessionProject(sessionId, projectId)
+            .map { response ->
+                // The response carries the server-computed result of the mutation, including the
+                // role clear when the selected project made the pair illegal; the cache is updated
+                // in one round-trip and no clear-rule logic is re-derived locally.
+                updateSessionDetailsInCache(sessionId) { session ->
+                    session.copy(
+                        projectId = response.projectId,
+                        agentRoleId = response.agentRoleId
+                    )
+                }
+            }
+            .mapLeft { apiResourceError ->
+                apiResourceError.toRepositoryError("Failed to update session project")
+            }
+    }
+
     override suspend fun updateSessionLeafMessage(
         sessionId: Long,
         leafMessageId: Long?

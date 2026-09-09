@@ -78,6 +78,8 @@ class ChatViewModelTurnGuardTest {
             switchBranchUC = mockk(relaxed = true),
             selectAgentRoleUC = mockk(relaxed = true),
             loadAgentRolesUC = mockk(relaxed = true),
+            selectProjectUC = mockk(relaxed = true),
+            loadProjectsUC = mockk(relaxed = true),
             updateInputUC = mockk(relaxed = true),
             copyToClipboardUC = mockk(relaxed = true),
             fileReferenceUC = mockk(relaxed = true),

@@ -29,6 +29,8 @@
     <string name="error_creating_agent_role">Failed to create agent role</string>
     <string name="error_updating_agent_role">Failed to update agent role</string>
     <string name="error_deleting_agent_role">Failed to delete agent role</string>
+    <string name="error_loading_projects">Failed to load projects</string>
+    <string name="error_updating_session_project">Failed to update session project</string>
 
     <!-- Warning Messages -->
     <string name="warning_model_or_settings_unavailable">Cannot send message: model or settings are not available</string>
