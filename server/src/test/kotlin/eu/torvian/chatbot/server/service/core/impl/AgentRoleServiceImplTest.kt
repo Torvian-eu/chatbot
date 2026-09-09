@@ -16,6 +16,7 @@ import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao.AgentRoleNameScope
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
+import eu.torvian.chatbot.server.service.core.error.agent.DeleteAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.UpdateAgentRoleError
 import eu.torvian.chatbot.server.service.core.agent.ModelSpecificInstruction
 import eu.torvian.chatbot.server.service.core.agent.RoleInstruction
@@ -548,7 +549,6 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `deleteRole should delete an owned role`() = runTest {
-        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
         coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
         coEvery { agentRoleDao.deleteRole(1L) } returns Unit.right()
 
@@ -556,6 +556,31 @@ class AgentRoleServiceImplTest {
 
         assertTrue(result.isRight())
         coVerify(exactly = 1) { agentRoleDao.deleteRole(1L) }
+    }
+
+    @Test
+    fun `deleteRole should reject a role owned by another user`() = runTest {
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns 99L.right()
+
+        val result = service.deleteRole(userId, 1L)
+
+        // A foreign role collapses into NotFound (no existence leak) and is never deleted.
+        val error = assertIs<DeleteAgentRoleError.NotFound>(result.leftOrNull())
+        assertEquals(1L, error.id)
+        coVerify(exactly = 0) { agentRoleDao.deleteRole(any()) }
+    }
+
+    @Test
+    fun `deleteRole should reject a nonexistent role`() = runTest {
+        coEvery {
+            agentRoleOwnershipDao.getOwner(1L)
+        } returns GetOwnerError.ResourceNotFound("1").left()
+
+        val result = service.deleteRole(userId, 1L)
+
+        val error = assertIs<DeleteAgentRoleError.NotFound>(result.leftOrNull())
+        assertEquals(1L, error.id)
+        coVerify(exactly = 0) { agentRoleDao.deleteRole(any()) }
     }
 
     @Test

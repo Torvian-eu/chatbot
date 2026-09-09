@@ -125,6 +125,11 @@ interface AgentRoleService {
     /**
      * Deletes an agent role owned by the user.
      *
+     * The implementation enforces ownership in the same transaction as the delete and collapses a
+     * foreign role (owned by another user) with a nonexistent role into
+     * [DeleteAgentRoleError.NotFound] so the caller cannot distinguish "someone else's role" from
+     * "no such role".
+     *
      * Deleting a role is non-destructive for sessions: `chat_sessions.agent_role_id` and
      * `assistant_messages.agent_role_id` use `ON DELETE SET NULL`, so affected sessions become inert
      * until a role is re-selected.

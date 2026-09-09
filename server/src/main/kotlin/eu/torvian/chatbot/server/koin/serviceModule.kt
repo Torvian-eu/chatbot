@@ -17,17 +17,23 @@ import eu.torvian.chatbot.server.service.builtin.OperatorToolExecutor
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolExecutor
 import eu.torvian.chatbot.server.service.builtin.tools.CreateAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.CreateProjectTool
+import eu.torvian.chatbot.server.service.builtin.tools.DeleteAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.DeleteProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.EditAgentRoleInstructionsTool
 import eu.torvian.chatbot.server.service.builtin.tools.GetCurrentSessionInfoTool
 import eu.torvian.chatbot.server.service.builtin.tools.InsertAgentRoleInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListAgentRolesTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListModelSettingsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListModelsTool
+import eu.torvian.chatbot.server.service.builtin.tools.ListProjectsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListToolsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ReadAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.ReadProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.ReadToolTool
 import eu.torvian.chatbot.server.service.builtin.tools.RemoveAgentRoleInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.UpdateAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.UpdateProjectTool
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.agent.AgentSpawnRequestBuilder
 import eu.torvian.chatbot.server.service.core.agent.DefaultAgentSpawnRequestBuilder
@@ -235,6 +241,12 @@ fun serviceModule() = module {
             ListToolsTool(toolService = get(), json = get()),
             ReadToolTool(toolService = get(), json = get()),
             GetCurrentSessionInfoTool(agentRoleService = get(), json = get()),
+            ListProjectsTool(projectService = get(), json = get()),
+            ReadProjectTool(projectService = get(), json = get()),
+            CreateProjectTool(projectService = get(), json = get()),
+            UpdateProjectTool(projectService = get()),
+            DeleteProjectTool(projectService = get()),
+            DeleteAgentRoleTool(agentRoleService = get()),
         ).associateBy { it.name }
     }
     single<ServerBuiltInToolExecutor> {

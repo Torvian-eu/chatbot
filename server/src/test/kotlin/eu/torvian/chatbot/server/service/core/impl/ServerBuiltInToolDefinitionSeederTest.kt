@@ -115,7 +115,7 @@ class ServerBuiltInToolDefinitionSeederTest {
 
         // Simulate a user edit (e.g. disabled one tool); re-seeding must not clobber it.
         val edited = first.first().copy(isEnabled = false, description = "custom description")
-        container.get<eu.torvian.chatbot.server.service.core.ToolService>().updateTool(edited)
+        container.get<ToolService>().updateTool(edited)
 
         val second = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
 
@@ -366,8 +366,11 @@ class ServerBuiltInToolDefinitionSeederTest {
         assertEquals(ServerBuiltInToolCatalog.allTools.size, tools.size)
         val tool = tools.first { it.builtInToolName == ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME }
         assertEquals("chatbot-" + ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME, tool.name)
-        assertEquals(ServerBuiltInToolCatalog.allTools.first().description, tool.description)
-        assertEquals(ServerBuiltInToolCatalog.allTools.first().inputSchema, tool.inputSchema)
+        // Match the catalog spec by name rather than by position: catalog order is not guaranteed
+        // to start with list_agent_roles, and the persisted row must mirror its own spec.
+        val spec = requireNotNull(ServerBuiltInToolCatalog.specFor(ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME))
+        assertEquals(spec.description, tool.description)
+        assertEquals(spec.inputSchema, tool.inputSchema)
         assertTrue(tool.isEnabled)
     }
 
@@ -381,7 +384,7 @@ class ServerBuiltInToolDefinitionSeederTest {
             description = "custom description",
             isEnabled = false
         )
-        container.get<eu.torvian.chatbot.server.service.core.ToolService>().updateTool(edited)
+        container.get<ToolService>().updateTool(edited)
 
         val result = seeder.resetToDefaults(TestDefaults.user1.id)
 
@@ -389,9 +392,11 @@ class ServerBuiltInToolDefinitionSeederTest {
         val tools = result.getOrNull()!!
         assertEquals(ServerBuiltInToolCatalog.allTools.size, tools.size)
         val after = tools.first { it.id == seededTool.id }
-        // Catalog-derived fields are repaired...
-        assertEquals(ServerBuiltInToolCatalog.allTools.first().description, after.description)
-        assertEquals(ServerBuiltInToolCatalog.allTools.first().inputSchema, after.inputSchema)
+        // Catalog-derived fields are repaired (spec matched by name; catalog order is not
+        // guaranteed to start with list_agent_roles)...
+        val spec = requireNotNull(ServerBuiltInToolCatalog.specFor(ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME))
+        assertEquals(spec.description, after.description)
+        assertEquals(spec.inputSchema, after.inputSchema)
         // ...but the user's enabled/disabled choice survives and no duplicate row is created.
         assertTrue(!after.isEnabled)
         assertEquals(seededTool.id, after.id)
@@ -402,7 +407,7 @@ class ServerBuiltInToolDefinitionSeederTest {
         val seeded = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
         val seededTool = seeded.first { it.builtInToolName == ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME }
         val disabled = seededTool.copy(isEnabled = false)
-        container.get<eu.torvian.chatbot.server.service.core.ToolService>().updateTool(disabled)
+        container.get<ToolService>().updateTool(disabled)
 
         // Change the prefix, then reset: rows must be renamed to the new prefix.
         userPreferenceDao.upsertPreference(
@@ -444,7 +449,7 @@ class ServerBuiltInToolDefinitionSeederTest {
 
         // Simulate a catalog entry removed in a later version: an extra per-user instance whose
         // canonical name is not part of the current catalog. It must be pruned by the reset.
-        val toolService = container.get<eu.torvian.chatbot.server.service.core.ToolService>()
+        val toolService = container.get<ToolService>()
         val stale = toolService.createTool(
             name = "obsolete_tool",
             description = "Removed from the catalog",

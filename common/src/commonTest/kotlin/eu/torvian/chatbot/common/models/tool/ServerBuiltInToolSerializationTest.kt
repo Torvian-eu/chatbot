@@ -159,26 +159,32 @@ class ServerBuiltInToolSerializationTest {
 
     /**
      * Verifies the catalog defines every tool in stable order (the eight v1 tools, the three
-     * targeted instruction-edit tools, and the get_current_session_info session-identity tool) and
-     * that every parameterless schema passes the empty-object shape (so seeding validation never
-     * rejects it).
+     * targeted instruction-edit tools, the get_current_session_info session-identity tool, the
+     * five project-management tools, and the delete_agent_role delete tool) and that every
+     * parameterless schema passes the empty-object shape (so seeding validation never rejects it).
      */
     @Test
     fun `catalog defines every tool in stable order`() {
         val names = ServerBuiltInToolCatalog.allTools.map { it.name }
         assertEquals(
             listOf(
+                ServerBuiltInToolCatalog.LIST_PROJECTS_NAME,
+                ServerBuiltInToolCatalog.READ_PROJECT_NAME,
+                ServerBuiltInToolCatalog.CREATE_PROJECT_NAME,
+                ServerBuiltInToolCatalog.UPDATE_PROJECT_NAME,
+                ServerBuiltInToolCatalog.DELETE_PROJECT_NAME,
                 ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME,
                 ServerBuiltInToolCatalog.READ_AGENT_ROLE_NAME,
                 ServerBuiltInToolCatalog.CREATE_AGENT_ROLE_NAME,
                 ServerBuiltInToolCatalog.UPDATE_AGENT_ROLE_NAME,
+                ServerBuiltInToolCatalog.DELETE_AGENT_ROLE_NAME,
+                ServerBuiltInToolCatalog.INSERT_AGENT_ROLE_INSTRUCTION_NAME,
+                ServerBuiltInToolCatalog.EDIT_AGENT_ROLE_INSTRUCTIONS_NAME,
+                ServerBuiltInToolCatalog.REMOVE_AGENT_ROLE_INSTRUCTION_NAME,
                 ServerBuiltInToolCatalog.LIST_MODELS_NAME,
                 ServerBuiltInToolCatalog.LIST_MODEL_SETTINGS_NAME,
                 ServerBuiltInToolCatalog.LIST_TOOLS_NAME,
                 ServerBuiltInToolCatalog.READ_TOOL_NAME,
-                ServerBuiltInToolCatalog.INSERT_AGENT_ROLE_INSTRUCTION_NAME,
-                ServerBuiltInToolCatalog.EDIT_AGENT_ROLE_INSTRUCTIONS_NAME,
-                ServerBuiltInToolCatalog.REMOVE_AGENT_ROLE_INSTRUCTION_NAME,
                 ServerBuiltInToolCatalog.GET_CURRENT_SESSION_INFO_NAME
             ),
             names
