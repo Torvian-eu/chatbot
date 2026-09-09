@@ -33,6 +33,14 @@ import kotlinx.serialization.Serializable
  *            [OperatorType.CLIENT_APP], kept for forward compatibility with the background operator.
  * @property conversation The conversation to run in the spawned session. In practice a single
  *            [AgentSpawnMessage.User] item carrying the prompt.
+ * @property projectId Optional identifier of the user-owned project the spawned session must be
+ *            scoped to **before** [agentRoleToSpawn] is attached, or null for a project-less spawn.
+ *            It always equals the calling session's project: the server only ever spawns a role
+ *            within the caller's own project scope (a project-attached session spawns roles within
+ *            that project, a project-less session only unassociated roles), so a project-scoped role
+ *            attached to a project-less session — or to a session of another project — can never be
+ *            produced. The default keeps payloads produced before this property existed decoding as
+ *            project-less, which is only legal for unassociated roles.
  * @property toolCallId The persisted `ToolCall.id`; the correlation key echoed back in
  *            `ToolExecutionResult`.
  */
@@ -43,5 +51,6 @@ data class AgentSpawnRequest(
     val mode: OperatorToolMode = OperatorToolMode.WAIT_FOR_RESPONSE,
     val operatorType: OperatorType = OperatorType.CLIENT_APP,
     val conversation: List<AgentSpawnMessage> = emptyList(),
+    val projectId: Long? = null,
     val toolCallId: Long
 )
