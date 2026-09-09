@@ -283,9 +283,12 @@ fun serviceModule() = module {
             settingsDao = get(),
             toolDefinitionDao = get(),
             json = get(),
-            transactionScope = get()
+            transactionScope = get(),
+            projectDao = get(),
+            sessionDao = get()
         )
     }
+    single<ProjectService> { ProjectServiceImpl(get(), get(), get(), get(), get(), get()) }
     single<SystemPromptComposer> { DefaultSystemPromptComposer() }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
     single<UserPreferenceService> { UserPreferenceServiceImpl(get(), get(), get()) }

@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.models.agent.OperatorToolMode
 import eu.torvian.chatbot.common.models.agent.OperatorType
 import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.SpawnRequestBuildError
@@ -35,6 +36,14 @@ import kotlinx.serialization.json.*
  * @property agentRoleService User-scoped agent-role lookup used to resolve the spawn target and the
  *            source role's allow-list.
  * @property json JSON codec used to decode the tool-call arguments.
+ *
+ * The built request also carries the project the spawned session must be scoped to before the role
+ * is attached — the calling session's project. Spawns are strictly same-scope: a project-attached
+ * session may only spawn roles within that project (the request's `projectId` carries it), a
+ * project-less session only unassociated roles (`projectId` = null). A role that does not belong to
+ * the session's scope is rejected with [SpawnRequestBuildError.RoleNotInProject] instead of the
+ * builder guessing a different project, because attaching such a role would violate the Session
+ * Legality Invariant.
  */
 class DefaultAgentSpawnRequestBuilder(
     private val agentRoleService: AgentRoleService,
@@ -42,11 +51,10 @@ class DefaultAgentSpawnRequestBuilder(
 ) : AgentSpawnRequestBuilder {
 
     override suspend fun build(
-        userId: Long,
-        requestingAgentRoleId: Long,
+        context: ToolCallExecutionContext,
         toolCall: ToolCall
     ): Either<SpawnRequestBuildError, AgentSpawnRequest> =
-        buildInternal(userId, requestingAgentRoleId, toolCall)
+        buildInternal(context, toolCall)
 
     /**
      * Parses and resolves a spawn call and applies source-role authorization.
@@ -58,14 +66,13 @@ class DefaultAgentSpawnRequestBuilder(
      * tool input must not touch I/O or leak whether a role exists). A legacy `interactive` key is
      * ignored by property-name lookup and therefore falls back to wait mode.
      *
-     * @param userId Ownership scope for role lookup.
-     * @param requestingAgentRoleId Source role id from the validated session.
+     * @param context Caller identity plus the turn's session/role/project context; see
+     *            [ToolCallExecutionContext]. The project scope of the lookup comes from here.
      * @param toolCall Persisted call to parse.
      * @return Validated spawn payload or a logical build failure.
      */
     private suspend fun buildInternal(
-        userId: Long,
-        requestingAgentRoleId: Long,
+        context: ToolCallExecutionContext,
         toolCall: ToolCall
     ): Either<SpawnRequestBuildError, AgentSpawnRequest> = either {
             val arguments = parseArguments(toolCall.input).bind()
@@ -127,12 +134,17 @@ class DefaultAgentSpawnRequestBuilder(
                 )
             }
 
-            // The lookup is user-scoped (names are only unique per owner), so a NotFoundByName result
-            // means the role does not exist or belongs to another user — both are reported identically.
+            // The lookup is user-scoped (names are only unique per owner within one scope), so a
+            // NotFoundByName result means the role does not exist in the requested scope or belongs
+            // to another user — both are reported identically. The scope follows the session: a
+            // project-attached session resolves only roles within that project (context.projectId),
+            // an unassociated session only unassociated roles (null). Using the session scope here
+            // is what makes spawn-by-name work when a project is selected — resolving with a fixed
+            // null would always miss project-associated roles.
             val role = withError({ _: AgentRoleError.NotFoundByName ->
                 SpawnRequestBuildError.RoleNotFound(roleName)
             }) {
-                agentRoleService.getRoleByName(userId, roleName).bind()
+                agentRoleService.getRoleByName(context.userId, roleName, context.projectId).bind()
             }
 
             // The source role comes from the validated session, never from model-controlled arguments.
@@ -141,10 +153,24 @@ class DefaultAgentSpawnRequestBuilder(
             val sourceRole = withError({ _: AgentRoleError.NotFound ->
                 SpawnRequestBuildError.RoleNotAllowed(roleName)
             }) {
-                agentRoleService.getRoleById(userId, requestingAgentRoleId).bind()
+                agentRoleService.getRoleById(context.userId, context.agentRoleId).bind()
             }
             ensure(role.id in sourceRole.spawnableAgentRoleIds) {
                 SpawnRequestBuildError.RoleNotAllowed(roleName)
+            }
+
+            // Spawns are strictly same-scope: a project-attached session may only spawn roles within
+            // that project, a project-less session only unassociated roles. The scoped name lookup
+            // above already guarantees this, but enforce it explicitly so a role that ever escapes
+            // the lookup still cannot be spawned outside its own scope — the builder never falls
+            // back to a different project of the role (Session Legality Invariant). Roles have
+            // single-project membership, so the check is an exact comparison.
+            val projectScopeLegal = when (context.projectId) {
+                null -> role.projectId == null
+                else -> role.projectId == context.projectId
+            }
+            ensure(projectScopeLegal) {
+                SpawnRequestBuildError.RoleNotInProject(roleName, context.projectId)
             }
 
             AgentSpawnRequest(
@@ -152,6 +178,7 @@ class DefaultAgentSpawnRequestBuilder(
                 subject = subject,
                 mode = mode,
                 operatorType = OperatorType.CLIENT_APP,
+                projectId = context.projectId,
                 conversation = listOf(AgentSpawnMessage.User(prompt)),
                 toolCallId = toolCall.id
             )

@@ -7,12 +7,16 @@ import eu.torvian.chatbot.common.api.CommonWebSocketProtocols
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.api.agent.UpdateSessionAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.core.*
+import eu.torvian.chatbot.common.models.api.project.UpdateSessionProjectRequest
+import eu.torvian.chatbot.common.models.api.project.UpdateSessionProjectResponse
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.ktor.websocket.session.SessionMessagesWebSocketHandler
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.toApiError
+import eu.torvian.chatbot.server.service.core.error.project.ProjectError
+import eu.torvian.chatbot.server.service.core.error.project.toApiError
 import eu.torvian.chatbot.server.service.core.error.session.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.http.*
@@ -31,6 +35,7 @@ fun Route.configureSessionRoutes(
     chatService: ChatService,
     toolCallService: ToolCallService,
     agentRoleService: AgentRoleService,
+    projectService: ProjectService,
     authorizationService: AuthorizationService,
     json: Json
 ) {
@@ -121,6 +126,35 @@ fun Route.configureSessionRoutes(
                 withError({ e: UpdateSessionAgentRoleIdError -> e.toApiError() }) {
                     sessionService.updateSessionAgentRoleId(sessionId, request.agentRoleId).bind()
                 }
+            }
+            call.respondEither(result)
+        }
+
+        // PUT /api/v1/sessions/{sessionId}/project - Select or deselect the project of a session
+        put<SessionResource.ById.Project> { resource ->
+            val sessionId = resource.parent.sessionId
+            val userId = call.getUserId()
+            val request = call.receive<UpdateSessionProjectRequest>()
+            val result = either {
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+                // Ownership of the target project is verified up front: a foreign or nonexistent
+                // project collapses to the same not-found error (no existence leak). The legality
+                // evaluation and the write (plus the role clear when the pair becomes illegal) happen
+                // inside the service in one transaction.
+                request.projectId?.let { projectId ->
+                    withError({ e: ProjectError -> e.toApiError() }) {
+                        projectService.getProjectById(userId, projectId).bind()
+                    }
+                }
+                val selection = withError({ e: UpdateSessionProjectIdError -> e.toApiError() }) {
+                    sessionService.updateSessionProjectId(sessionId, request.projectId).bind()
+                }
+                // Lightweight response carrying the resulting state so the client updates its cache
+                // in one round-trip.
+                UpdateSessionProjectResponse(
+                    projectId = selection.projectId,
+                    agentRoleId = selection.agentRoleId
+                )
             }
             call.respondEither(result)
         }

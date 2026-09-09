@@ -62,6 +62,7 @@ class UpdateAgentRoleTool(
                 ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY,
                 ServerBuiltInToolCatalog.TOOL_IDS_PROPERTY,
                 ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY,
+                ServerBuiltInToolCatalog.PROJECT_ID_PROPERTY,
                 ServerBuiltInToolCatalog.INSTRUCTIONS_PROPERTY
             ),
             validationErrors
@@ -76,6 +77,7 @@ class UpdateAgentRoleTool(
         val toolIds = parseOptionalLongSet(input, ServerBuiltInToolCatalog.TOOL_IDS_PROPERTY, validationErrors)
         val spawnableAgentRoleIds =
             parseOptionalLongSet(input, ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY, validationErrors)
+        val projectId = parseOptionalLong(input, ServerBuiltInToolCatalog.PROJECT_ID_PROPERTY, validationErrors)
         val instructions =
             parseOptionalInstructions(input, ServerBuiltInToolCatalog.INSTRUCTIONS_PROPERTY, validationErrors)
         if (validationErrors.isNotEmpty()) {
@@ -92,6 +94,17 @@ class UpdateAgentRoleTool(
             }
             .bind()
 
+        // The project id follows the patch merge for absent/null inputs, with one LLM-facing
+        // extension: the sentinel 0 explicitly clears the membership (project ids are always
+        // positive AUTOINCREMENT database ids, so 0 can never collide with a real project).
+        // Without the sentinel a caller could never unassociate a role through this tool, since
+        // an omitted or explicitly-null project_id must preserve the persisted value.
+        val targetProjectId = when (projectId) {
+            null -> persisted.projectId
+            0L -> null
+            else -> projectId
+        }
+
         val request = UpdateAgentRoleRequest(
             name = name ?: persisted.name,
             displayName = displayName ?: persisted.displayName,
@@ -100,7 +113,8 @@ class UpdateAgentRoleTool(
             modelSettingsId = modelSettingsId ?: persisted.modelSettingsId,
             toolIds = toolIds ?: persisted.tools,
             spawnableAgentRoleIds = spawnableAgentRoleIds ?: persisted.spawnableAgentRoleIds,
-            instructions = instructions ?: persisted.instructions
+            instructions = instructions ?: persisted.instructions,
+            projectId = targetProjectId
         )
 
         val role = agentRoleService.updateRole(context.userId, roleId, request)

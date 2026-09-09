@@ -45,22 +45,26 @@ class GetCurrentSessionInfoToolTest {
 
     /**
      * Fully-populated execution context carrying the session and role identity; tests override the
-     * agent role id to exercise the not-found/not-accessible failure path.
+     * agent role id to exercise the not-found/not-accessible failure path and the project id to
+     * exercise the `project_id` emission rule.
      *
      * @param sessionId Session id to place in the context.
      * @param sessionName Session name to place in the context.
      * @param agentRoleId Agent role id to place in the context.
+     * @param projectId Session's selected project id, or null when no project is selected.
      * @return The context passed to [GetCurrentSessionInfoTool.execute].
      */
     private fun context(
         sessionId: Long = 1L,
         sessionName: String = "Session",
-        agentRoleId: Long = 7L
+        agentRoleId: Long = 7L,
+        projectId: Long? = null
     ) = ToolCallExecutionContext(
         userId = userId,
         sessionId = sessionId,
         sessionName = sessionName,
-        agentRoleId = agentRoleId
+        agentRoleId = agentRoleId,
+        projectId = projectId
     )
 
     private fun sampleRole(
@@ -102,7 +106,7 @@ class GetCurrentSessionInfoToolTest {
         coEvery { agentRoleService.getRoleById(userId, 7L) } returns sampleRole().right()
         val tool = GetCurrentSessionInfoTool(agentRoleService, json)
 
-        val output = assertSuccess(tool.execute(buildJsonObject { }, context()))
+        val output = assertSuccess(tool.execute(buildJsonObject { }, context(projectId = 50L)))
         val decoded = json.parseToJsonElement(output).jsonObject
 
         assertEquals(1L, decoded.getValue("session_id").jsonPrimitive.long)
@@ -110,7 +114,23 @@ class GetCurrentSessionInfoToolTest {
         assertEquals(7L, decoded.getValue("agent_role_id").jsonPrimitive.long)
         assertEquals("writer", decoded.getValue("agent_role_name").jsonPrimitive.content)
         assertEquals("Writer", decoded.getValue("agent_role_display_name").jsonPrimitive.content)
+        // The session's project id is emitted whenever a project is selected.
+        assertEquals(50L, decoded.getValue("project_id").jsonPrimitive.long)
         coVerify(exactly = 1) { agentRoleService.getRoleById(userId, 7L) }
+    }
+
+    @Test
+    fun `omits the project id when the session has no project selected`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        coEvery { agentRoleService.getRoleById(userId, 7L) } returns sampleRole().right()
+        val tool = GetCurrentSessionInfoTool(agentRoleService, json)
+
+        val output = assertSuccess(tool.execute(buildJsonObject { }, context(projectId = null)))
+        val decoded = json.parseToJsonElement(output).jsonObject
+
+        assertEquals(7L, decoded.getValue("agent_role_id").jsonPrimitive.long)
+        assertEquals("writer", decoded.getValue("agent_role_name").jsonPrimitive.content)
+        assertTrue(!decoded.containsKey("project_id"), "null project id must be omitted")
     }
 
     @Test

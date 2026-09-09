@@ -66,6 +66,7 @@ class ListAgentRolesToolTest {
      * @param modelSettingsId Optional model-settings identifier.
      * @param tools Attached tool identifiers.
      * @param spawnableAgentRoleIds Roles this role may spawn.
+     * @param projectId Single user-owned project the role belongs to (null = unassociated).
      * @param instructions Ordered instructions belonging to the role.
      * @return A role DTO suitable for list-tool assertions.
      */
@@ -78,6 +79,7 @@ class ListAgentRolesToolTest {
         modelSettingsId: Long? = 4L,
         tools: Set<Long> = setOf(5L, 6L),
         spawnableAgentRoleIds: Set<Long> = setOf(2L),
+        projectId: Long? = null,
         instructions: List<AgentInstructionDto> = listOf(
             AgentInstructionDto(
                 type = AgentInstructionTypes.ROLE,
@@ -102,7 +104,8 @@ class ListAgentRolesToolTest {
         modelSettingsId = modelSettingsId,
         tools = tools,
         spawnableAgentRoleIds = spawnableAgentRoleIds,
-        instructions = instructions
+        instructions = instructions,
+        projectId = projectId
     )
 
     private fun assertSuccess(result: Either<ServerBuiltInToolHandlerError, String>): String {
@@ -117,7 +120,8 @@ class ListAgentRolesToolTest {
     fun `returns all role properties with type-only instruction summaries`() = runTest {
         val agentRoleService = mockk<AgentRoleService>()
         coEvery { agentRoleService.getAllRolesForUser(userId) } returns listOf(
-            sampleRole(),
+            // Project-bound role: membership is emitted as the numeric project id.
+            sampleRole(projectId = 50L),
             sampleRole(
                 id = 2L,
                 name = "editor",
@@ -127,6 +131,7 @@ class ListAgentRolesToolTest {
                 modelSettingsId = null,
                 tools = emptySet(),
                 spawnableAgentRoleIds = emptySet(),
+                projectId = null,
                 instructions = emptyList()
             )
         )
@@ -144,7 +149,8 @@ class ListAgentRolesToolTest {
             "tools",
             "spawnableAgentRoleIds",
             "instructions",
-            "disabled"
+            "disabled",
+            "projectId"
         )
 
         assertEquals(2, roles.size)
@@ -159,6 +165,8 @@ class ListAgentRolesToolTest {
         assertEquals(4L, writer.getValue("modelSettingsId").jsonPrimitive.long)
         // The per-user flag is always present (boolean, never omitted).
         assertEquals(false, writer.getValue("disabled").jsonPrimitive.boolean)
+        // Project membership for the project-bound role is the numeric project id.
+        assertEquals(50L, writer.getValue("projectId").jsonPrimitive.long)
         assertEquals(
             setOf(5L, 6L),
             writer.getValue("tools").jsonArray.map { it.jsonPrimitive.long }.toSet()
@@ -177,6 +185,7 @@ class ListAgentRolesToolTest {
         assertEquals(JsonNull, editor.getValue("displayName"))
         assertEquals(JsonNull, editor.getValue("modelId"))
         assertEquals(JsonNull, editor.getValue("modelSettingsId"))
+        assertEquals(JsonNull, editor.getValue("projectId"))
         assertEquals(emptyList(), editor.getValue("tools").jsonArray)
         assertEquals(emptyList(), editor.getValue("spawnableAgentRoleIds").jsonArray)
         assertEquals(emptyList(), editor.getValue("instructions").jsonArray)

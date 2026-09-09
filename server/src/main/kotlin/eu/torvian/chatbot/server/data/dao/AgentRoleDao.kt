@@ -12,12 +12,33 @@ import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
  * owns (de)serialization via the shared JSON codec. The role's tool ids are stored separately in the
  * `agent_role_tools` join table and are managed through [AgentRoleToolDao].
  *
- * Role names are unique **per user**, not globally: different users may reuse the same name. The DB
- * cannot express that constraint (ownership lives in the separate `agent_role_owners` table), so the
- * per-user uniqueness checks live at the service layer; the DAO exposes [roleNameExistsForUser] and
- * user-scoped name lookups to support them.
+ * Role names are unique **per user and project scope**, not globally: different users may reuse the
+ * same name, and the same user may reuse a name in disjoint scopes (same-named roles conflict only
+ * when they share the same scope — the same project id, or both unassociated). The DB cannot express
+ * that constraint (ownership lives in the separate `agent_role_owners` table), so the uniqueness
+ * checks live at the service layer; the DAO exposes [getRoleNameScopesForUser] and
+ * scope-parameterized name lookups to support them.
+ *
+ * Project membership is a single nullable `project_id` column on the role row: a role belongs to at
+ * most one project, and the membership is written together with the row in [insertRole]/[updateRole].
  */
 interface AgentRoleDao {
+
+    /**
+     * The name-uniqueness scope of a single role: its id and its single project id.
+     *
+     * A null [projectId] means the role occupies the **unassociated scope** (it is offered only for
+     * project-less sessions). Two same-named roles of the same user conflict iff their scopes are
+     * identical: the same project id, or both null (both unassociated).
+     *
+     * @property roleId The role identifier.
+     * @property projectId The single project id the role belongs to; null means unassociated.
+     */
+    data class AgentRoleNameScope(
+        val roleId: Long,
+        val projectId: Long?
+    )
+
     /**
      * Retrieves all agent roles in the system.
      *
@@ -42,17 +63,27 @@ interface AgentRoleDao {
     suspend fun getRoleById(id: Long): Either<AgentRoleError.NotFound, AgentRoleEntity>
 
     /**
-     * Retrieves an agent role by name, scoped to a single owner.
+     * Retrieves an agent role by name, scoped to a single owner and a single project scope.
      *
-     * Names are unique per user, so a (user, name) pair identifies at most one role; this replaces the
-     * old global name lookup, which became ambiguous once names could repeat across users.
+     * Names are no longer unique per user alone: the same user may own same-named roles in disjoint
+     * project scopes. The scope parameter disambiguates the lookup:
+     *
+     * - `projectId == null` resolves the role with **no** project association (the unassociated
+     *   scope) — at most one such role exists per user per name;
+     * - `projectId == P` resolves the role whose single project is P (at most one such role exists).
      *
      * @param userId ID of the owner user.
      * @param name The machine-readable name of the role.
-     * @return Either [AgentRoleError.NotFoundByName] if no role of that name is owned by the user, or
-     *         the [AgentRoleEntity].
+     * @param projectId The project scope to resolve within: `null` for the unassociated scope, a
+     *            project id for membership in that project.
+     * @return Either [AgentRoleError.NotFoundByName] if no role of that name is owned by the user in
+     *         the given scope, or the [AgentRoleEntity].
      */
-    suspend fun getRoleByNameForUser(userId: Long, name: String): Either<AgentRoleError.NotFoundByName, AgentRoleEntity>
+    suspend fun getRoleByNameForUser(
+        userId: Long,
+        name: String,
+        projectId: Long?
+    ): Either<AgentRoleError.NotFoundByName, AgentRoleEntity>
 
     /**
      * Loads the requested roles that are owned by [userId], preserving the order of [roleIds].
@@ -65,28 +96,34 @@ interface AgentRoleDao {
     suspend fun getRolesByIdsForUser(userId: Long, roleIds: List<Long>): List<AgentRoleEntity>
 
     /**
-     * Whether the user already owns an agent role with the given name.
+     * Loads every role of [userId] carrying [name] together with its project scope.
      *
-     * Used by the service layer to enforce per-user name uniqueness.
+     * Used by the service layer to enforce the per-(user, scope) name-uniqueness rule: the caller
+     * computes the candidate role's project scope and rejects the create/update when it equals any
+     * other same-name role's scope (same project id, or both unassociated). Returns an empty list
+     * when the user owns no role with that name.
      *
      * @param userId ID of the owner user.
-     * @param name The machine-readable role name to check.
-     * @return `true` if the user owns a role with that name, `false` otherwise.
+     * @param name The machine-readable role name to look up.
+     * @return The same-name roles of the user with their project scopes.
      */
-    suspend fun roleNameExistsForUser(userId: Long, name: String): Boolean
+    suspend fun getRoleNameScopesForUser(userId: Long, name: String): List<AgentRoleNameScope>
 
     /**
      * Creates a new agent role row.
      *
      * Name uniqueness is NOT enforced here (the column is not unique); the caller is responsible for
-     * checking [roleNameExistsForUser] first. Technical persistence failures propagate as exceptions.
+     * checking [getRoleNameScopesForUser] first. Technical persistence failures propagate as
+     * exceptions. The membership column is written atomically with the row (a role belongs to at most
+     * one project).
      *
-     * @param name Machine-readable role name (unique per user; checked by the caller).
+     * @param name Machine-readable role name (unique per user and project scope; checked by the caller).
      * @param displayName Optional human-friendly display name.
      * @param description Free-form description.
      * @param modelId Optional identifier of the LLM model used by the role.
      * @param modelSettingsId Optional identifier of the settings profile used by the role.
      * @param instructionsJson Raw JSON array of the flat `AgentInstructionDto` list.
+     * @param projectId The single project id the role belongs to, or null for an unassociated role.
      * @return The newly created [AgentRoleEntity].
      */
     suspend fun insertRole(
@@ -95,13 +132,14 @@ interface AgentRoleDao {
         description: String,
         modelId: Long?,
         modelSettingsId: Long?,
-        instructionsJson: String
+        instructionsJson: String,
+        projectId: Long?
     ): AgentRoleEntity
 
     /**
      * Updates an existing agent role row (a full replacement, including the `instructions_json`
-     * column). The role's tool set is a full replacement too, but it is handled by
-     * [AgentRoleToolDao.replaceToolsForRole] separately.
+     * column and the single `project_id` membership column). The role's tool set is a full
+     * replacement too, but it is handled by [AgentRoleToolDao.replaceToolsForRole] separately.
      *
      * @param role The [AgentRoleEntity] with updated values. The ID must match an existing role.
      * @return Either [AgentRoleError.NotFound] if the role does not exist, or Unit on success.

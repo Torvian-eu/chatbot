@@ -22,6 +22,8 @@ import eu.torvian.chatbot.server.data.dao.AgentRoleToolDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleSpawnableRoleDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleDisabledDao
 import eu.torvian.chatbot.server.data.dao.ModelDao
+import eu.torvian.chatbot.server.data.dao.ProjectDao
+import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.AgentRoleError as AgentRoleDaoError
@@ -68,8 +70,15 @@ import org.apache.logging.log4j.Logger
  * @property modelDao DAO used to validate model references.
  * @property settingsDao DAO used to validate settings references (existence, chat-capability, and model match).
  * @property toolDefinitionDao DAO used to validate tool references.
+ * @property projectDao DAO used to validate project references (ownership and existence).
+ * @property sessionDao DAO used to restore the Session Legality Invariant when a role update changes
+ *            its project membership (role-update legality sweep).
  * @property json Shared JSON codec used to (de)serialize the `instructions_json` column.
  * @property transactionScope Transaction wrapper that keeps validation + persistence atomic.
+ *
+ * Project membership is a single nullable `project_id` column on the role row (a role belongs to at
+ * most one project), so the membership is written together with the row in `insertRole`/`updateRole`
+ * and read from the loaded entity — no separate membership DAO is needed for roles.
  */
 class AgentRoleServiceImpl(
     private val agentRoleDao: AgentRoleDao,
@@ -81,7 +90,9 @@ class AgentRoleServiceImpl(
     private val toolDefinitionDao: ToolDefinitionDao,
     private val json: Json,
     private val transactionScope: TransactionScope,
-    private val agentRoleSpawnableRoleDao: AgentRoleSpawnableRoleDao
+    private val agentRoleSpawnableRoleDao: AgentRoleSpawnableRoleDao,
+    private val projectDao: ProjectDao,
+    private val sessionDao: SessionDao
 ) : AgentRoleService {
 
     companion object {
@@ -104,6 +115,10 @@ class AgentRoleServiceImpl(
             },
             toolNotFound = { toolId -> CreateAgentRoleError.ToolNotFound(toolId) },
             spawnableRoleNotFound = { roleId -> CreateAgentRoleError.SpawnableRoleNotFound(roleId) },
+            spawnableRoleNotInProject = { roleId, projectId ->
+                CreateAgentRoleError.SpawnableRoleNotInProject(roleId, projectId)
+            },
+            projectNotFound = { projectId -> CreateAgentRoleError.ProjectNotFound(projectId) },
             instructionValidationFailed = { reason -> CreateAgentRoleError.InstructionValidationFailed(reason) }
         )
 
@@ -120,6 +135,10 @@ class AgentRoleServiceImpl(
             },
             toolNotFound = { toolId -> UpdateAgentRoleError.ToolNotFound(toolId) },
             spawnableRoleNotFound = { roleId -> UpdateAgentRoleError.SpawnableRoleNotFound(roleId) },
+            spawnableRoleNotInProject = { roleId, projectId ->
+                UpdateAgentRoleError.SpawnableRoleNotInProject(roleId, projectId)
+            },
+            projectNotFound = { projectId -> UpdateAgentRoleError.ProjectNotFound(projectId) },
             instructionValidationFailed = { reason -> UpdateAgentRoleError.InstructionValidationFailed(reason) }
         )
     }
@@ -127,8 +146,9 @@ class AgentRoleServiceImpl(
     override suspend fun getAllRolesForUser(userId: Long): List<AgentRoleDto> = transactionScope.transaction {
         logger.debug("Retrieving agent roles for user $userId")
         val entities = agentRoleDao.getAllRolesForUser(userId)
-        // Batch-load every role's tool ids and the user's disabled ids in one query each so the
-        // list endpoint avoids an N+1 read (mirrors the spawn allow-list batch pattern).
+        // Batch-load every role's tool ids, spawn allow-list ids, project ids and the user's disabled
+        // ids in one query each so the list endpoint avoids an N+1 read (mirrors the spawn allow-list
+        // batch pattern).
         val roleIds = entities.map { it.id }
         val toolsByRole = agentRoleToolDao.getToolsForRoles(roleIds)
         val spawnableByRole = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(roleIds)
@@ -137,6 +157,7 @@ class AgentRoleServiceImpl(
             it.toAgentRole(
                 tools = toolsByRole[it.id].orEmpty(),
                 spawnableRoleIds = spawnableByRole[it.id].orEmpty(),
+                projectId = it.projectId,
                 ownerId = userId,
                 disabled = it.id in disabledRoleIds
             ).toDto()
@@ -152,25 +173,32 @@ class AgentRoleServiceImpl(
                 entity.toAgentRole(
                     tools = agentRoleToolDao.getToolsForRole(entity.id),
                     spawnableRoleIds = spawnableRoleIds,
+                    projectId = entity.projectId,
                     ownerId = userId,
                     disabled = disabled
                 ).toDto()
             }
         }
 
-    override suspend fun getRoleByName(userId: Long, name: String): Either<AgentRoleError.NotFoundByName, AgentRoleDto> =
+    override suspend fun getRoleByName(
+        userId: Long,
+        name: String,
+        projectId: Long?
+    ): Either<AgentRoleError.NotFoundByName, AgentRoleDto> =
         transactionScope.transaction {
             either {
-                // The lookup is already user-scoped (names are only unique per user), so no separate
-                // ownership verification is needed.
+                // The lookup is user-scoped and project-scope-parameterized (names are only unique per
+                // user and project scope), so no separate ownership verification is needed. `null`
+                // resolves the unassociated scope; a project id resolves membership in that project.
                 val entity = withError({ _: AgentRoleDaoError.NotFoundByName -> AgentRoleError.NotFoundByName(name) }) {
-                    agentRoleDao.getRoleByNameForUser(userId, name).bind()
+                    agentRoleDao.getRoleByNameForUser(userId, name, projectId).bind()
                 }
                 val disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id)
                 val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
                 entity.toAgentRole(
                     tools = agentRoleToolDao.getToolsForRole(entity.id),
                     spawnableRoleIds = spawnableRoleIds,
+                    projectId = entity.projectId,
                     ownerId = userId,
                     disabled = disabled
                 ).toDto()
@@ -211,6 +239,7 @@ class AgentRoleServiceImpl(
                 entity.toAgentRole(
                     tools = agentRoleToolDao.getToolsForRole(entity.id),
                     spawnableRoleIds = spawnableRoleIds,
+                    projectId = entity.projectId,
                     ownerId = userId,
                     // The DTO must echo the requested state even if the row pre-existed: the write is
                     // idempotent, so the new value equals the requested value by construction.
@@ -233,13 +262,17 @@ class AgentRoleServiceImpl(
                 modelSettingsId = request.modelSettingsId,
                 toolIds = request.toolIds,
                 spawnableAgentRoleIds = request.spawnableAgentRoleIds,
+                projectId = request.projectId,
+                roleId = null,
                 instructions = request.instructions,
                 userId = userId
             )
 
-            // Names are unique per user (not globally): only the requesting user's roles matter, so
-            // different users may freely reuse the same name.
-            ensure(!agentRoleDao.roleNameExistsForUser(userId, request.name)) {
+            // Names are unique per (user, project scope), not globally or per user alone: the new
+            // role's project scope (null = unassociated scope) must not equal any other same-name
+            // role's scope — the same project id, or both unassociated.
+            val sameNameScopes = agentRoleDao.getRoleNameScopesForUser(userId, request.name)
+            ensure(sameNameScopes.none { scopesConflict(request.projectId, it.projectId) }) {
                 CreateAgentRoleError.NameAlreadyExists(request.name)
             }
 
@@ -251,13 +284,15 @@ class AgentRoleServiceImpl(
                 description = request.description,
                 modelId = request.modelId,
                 modelSettingsId = request.modelSettingsId,
-                instructionsJson = instructionsJson
+                instructionsJson = instructionsJson,
+                projectId = request.projectId
             )
 
             // Persist the tool set in the join table (a full replacement of the new role's empty set),
             // atomically with the role row and its ownership inside the same transaction.
             agentRoleToolDao.replaceToolsForRole(entity.id, request.toolIds)
             agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(entity.id, request.spawnableAgentRoleIds)
+            // The project membership is written together with the row (no separate membership table).
 
             withError({ ownershipError: SetOwnerError ->
                 CreateAgentRoleError.OwnerInsertFailed(ownershipError.toString())
@@ -269,6 +304,7 @@ class AgentRoleServiceImpl(
             entity.toAgentRole(
                 tools = request.toolIds,
                 spawnableRoleIds = request.spawnableAgentRoleIds,
+                projectId = request.projectId,
                 ownerId = userId,
                 // No side-table row is ever inserted on create: a fresh role is enabled for its owner.
                 disabled = false
@@ -285,6 +321,9 @@ class AgentRoleServiceImpl(
             logger.info("Updating agent role $roleId for user $userId")
 
             val existing = loadOwnedRole(userId, roleId, UpdateAgentRoleError.NotFound(roleId))
+            // The current membership rides the loaded entity (single project column); it is needed by
+            // the scope-sensitive uniqueness check below and to compare against the request's value.
+            val currentProjectId = existing.projectId
 
             validateRoleRequest(
                 errors = updateValidationErrors,
@@ -293,15 +332,23 @@ class AgentRoleServiceImpl(
                 modelSettingsId = request.modelSettingsId,
                 toolIds = request.toolIds,
                 spawnableAgentRoleIds = request.spawnableAgentRoleIds,
+                projectId = request.projectId,
+                roleId = roleId,
                 instructions = request.instructions,
                 userId = userId
             )
 
-            // Name uniqueness is scoped per user (not globally). The role being updated is excluded
-            // implicitly: it still carries its old name here, so a conflict means a DIFFERENT role of
-            // the same user owns the requested name.
-            if (request.name != existing.name) {
-                ensure(!agentRoleDao.roleNameExistsForUser(userId, request.name)) {
+            // Name uniqueness is scoped per (user, project scope). The check is scope-sensitive: it
+            // runs whenever the update changes the name and/or the project. The role being updated is
+            // excluded from the same-name set (its new scope is the candidate scope, so it can never
+            // conflict with itself).
+            if (request.name != existing.name || request.projectId != currentProjectId) {
+                val sameNameScopes = agentRoleDao.getRoleNameScopesForUser(userId, request.name)
+                ensure(
+                    sameNameScopes.none {
+                        it.roleId != roleId && scopesConflict(request.projectId, it.projectId)
+                    }
+                ) {
                     UpdateAgentRoleError.NameAlreadyExists(request.name)
                 }
             }
@@ -312,7 +359,8 @@ class AgentRoleServiceImpl(
                 description = request.description,
                 modelId = request.modelId,
                 modelSettingsId = request.modelSettingsId,
-                instructionsJson = encodeInstructions(request.instructions)
+                instructionsJson = encodeInstructions(request.instructions),
+                projectId = request.projectId
             )
 
             withError({ _: AgentRoleDaoError.NotFound -> UpdateAgentRoleError.NotFound(roleId) }) {
@@ -323,6 +371,18 @@ class AgentRoleServiceImpl(
             // row (delete + insert) inside the same transaction.
             agentRoleToolDao.replaceToolsForRole(roleId, request.toolIds)
             agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(roleId, request.spawnableAgentRoleIds)
+            // The project membership is written together with the row (a full replacement via the
+            // `project_id` column on the role row).
+
+            // Legality sweep: clear the role on every session using it whose pair became illegal under the
+            // new membership — a session whose project differs from the role's single project (a
+            // project-bound role with a project-less session, or the session's project no longer
+            // matching). Same transaction as the membership write.
+            val sessionPairs = sessionDao.getSessionProjectPairsForRole(roleId)
+            val illegalSessionIds = sessionPairs
+                .filter { (_, sessionProjectId) -> sessionProjectId != request.projectId }
+                .map { it.sessionId }
+            sessionDao.clearAgentRoleForSessions(illegalSessionIds)
 
             logger.info("Updated agent role $roleId for user $userId")
             // The side-table disabled marker is untouched by the full-replacement row update, so the
@@ -331,6 +391,7 @@ class AgentRoleServiceImpl(
             updated.toAgentRole(
                 tools = request.toolIds,
                 spawnableRoleIds = request.spawnableAgentRoleIds,
+                projectId = request.projectId,
                 ownerId = userId,
                 disabled = agentRoleDisabledDao.isRoleDisabled(userId, roleId)
             ).toDto()
@@ -371,7 +432,13 @@ class AgentRoleServiceImpl(
      *            same not-found error, so an attach attempt cannot be told apart from a plain
      *            non-existent id.
      * @param spawnableAgentRoleIds Target role identifiers to validate; duplicates are impossible at
-     *            the wire level (a set) and self-referencing is allowed.
+     *            the wire level (a set) and self-referencing is allowed. Every target must exist,
+     *            belong to [userId], and have the **same project scope** as the role ([projectId]):
+     *            the same project id, or both unassociated.
+     * @param projectId The single project id the role belongs to; a non-null id must reference a
+     *            user-owned project. A missing or foreign id raises the same not-found error.
+     * @param roleId The role's own id while editing, used to exempt self-spawn from the persisted
+     *            (stale) membership comparison; null on create.
      * @param instructions The instruction DTOs to validate.
      * @param userId User whose role and tool ownership is required.
      * @return `null` on success or an error of type `E` via the raise scope.
@@ -383,6 +450,8 @@ class AgentRoleServiceImpl(
         modelSettingsId: Long?,
         toolIds: Set<Long>,
         spawnableAgentRoleIds: Set<Long>,
+        projectId: Long?,
+        roleId: Long?,
         instructions: List<AgentInstructionDto>,
         userId: Long
     ) {
@@ -430,15 +499,39 @@ class AgentRoleServiceImpl(
             }
         }
 
-        // Targets must exist and belong to the requesting user; the set wire shape already rules out
-        // duplicates and self-referencing is intentionally allowed, so only ownership is checked here.
+        // Targets must exist, belong to the requesting user, and share the role's project scope:
+        // an in-project role may only spawn roles of the same project, an unassociated role only
+        // unassociated roles. The set wire shape already rules out duplicates and self-referencing
+        // is intentionally allowed (a role spawned from itself is trivially same-scope because the
+        // role's own membership is written with the same [projectId] in this transaction). The
+        // owned-target load doubles as the membership source (the single `project_id` column rides
+        // the loaded entities), so no separate project read is needed.
         if (spawnableAgentRoleIds.isNotEmpty()) {
-            val ownedTargetIds = agentRoleDao
-                .getRolesByIdsForUser(userId, spawnableAgentRoleIds.toList())
-                .map { it.id }
-                .toSet()
+            val ownedTargets = agentRoleDao.getRolesByIdsForUser(userId, spawnableAgentRoleIds.toList())
+            val ownedTargetIds = ownedTargets.map { it.id }.toSet()
             spawnableAgentRoleIds.firstOrNull { it !in ownedTargetIds }?.let { missingId ->
                 raise(errors.spawnableRoleNotFound(missingId))
+            }
+            // Same-project enforcement: every target must occupy exactly the role's project scope —
+            // the same project id, or both null. Self-spawn is exempt from the persisted comparison:
+            // the target IS the role being written, and its stored (stale) membership may legally
+            // differ from [projectId] until this transaction writes the new one.
+            ownedTargets
+                .filterNot { it.id == roleId }
+                .firstOrNull { it.projectId != projectId }
+                ?.let { target -> raise(errors.spawnableRoleNotInProject(target.id, projectId)) }
+        }
+
+        // The role's project must be user-owned; a missing or foreign id collapses to the same
+        // not-found error as a plain non-existent id (mirrors the tool/spawnable checks, no existence
+        // leak). Null (unassociated) has nothing to check.
+        if (projectId != null) {
+            val ownedProjectIds = projectDao
+                .getProjectsByIdsForUser(userId, listOf(projectId))
+                .map { it.id }
+                .toSet()
+            if (projectId !in ownedProjectIds) {
+                raise(errors.projectNotFound(projectId))
             }
         }
 
@@ -501,6 +594,9 @@ class AgentRoleServiceImpl(
      * @property settingsModelMismatch Builds a settings/model mismatch error.
      * @property toolNotFound Builds a tool-not-found error.
      * @property spawnableRoleNotFound Builds an inaccessible-target error.
+     * @property spawnableRoleNotInProject Builds a same-project-spawn enforcement error (a target
+     *            role does not occupy the source role's project scope).
+     * @property projectNotFound Builds a project-not-found error.
      * @property instructionValidationFailed Builds an instruction-validation error.
      */
     private data class RoleValidationErrors<E>(
@@ -511,8 +607,24 @@ class AgentRoleServiceImpl(
         val settingsModelMismatch: (settingsId: Long, settingsModelId: Long, roleModelId: Long) -> E,
         val toolNotFound: (toolId: Long) -> E,
         val spawnableRoleNotFound: (roleId: Long) -> E,
+        val spawnableRoleNotInProject: (roleId: Long, projectId: Long?) -> E,
+        val projectNotFound: (projectId: Long) -> E,
         val instructionValidationFailed: (reason: String) -> E
     )
+
+    /**
+     * Whether two same-name roles' project scopes are identical (the scope-equality conflict rule).
+     *
+     * A role occupies exactly one scope: its single project id, or the singleton **unassociated
+     * scope** when the id is null. Two scopes conflict exactly when they are equal — the same project
+     * id, or both null (both unassociated). Different scopes never conflict, so a name may be reused
+     * across projects (and by an unassociated role next to in-project roles).
+     *
+     * @param projectIdA The first role's project id (null = unassociated).
+     * @param projectIdB The second role's project id (null = unassociated).
+     * @return `true` if the scopes are identical, `false` otherwise.
+     */
+    private fun scopesConflict(projectIdA: Long?, projectIdB: Long?): Boolean = projectIdA == projectIdB
 
     // --- Ownership helpers ---
 
@@ -566,6 +678,7 @@ class AgentRoleServiceImpl(
         return entity.toAgentRole(
             tools = agentRoleToolDao.getToolsForRole(entity.id),
             spawnableRoleIds = spawnableRoleIds,
+            projectId = entity.projectId,
             ownerId = ownerId,
             disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id)
         )
@@ -578,6 +691,7 @@ class AgentRoleServiceImpl(
      * @receiver Stored role row to convert.
      * @param tools Attached tool ids.
      * @param spawnableRoleIds Unordered target role ids.
+     * @param projectId The single project id the role belongs to (null = unassociated).
      * @param ownerId Owner used to scope dynamic target-summary queries.
      * @param disabled Whether the role is disabled for the requesting user (side-table derived).
      * @return Domain role with lazy instruction sources.
@@ -585,6 +699,7 @@ class AgentRoleServiceImpl(
     private fun AgentRoleEntity.toAgentRole(
         tools: Set<Long>,
         spawnableRoleIds: Set<Long>,
+        projectId: Long?,
         ownerId: Long,
         disabled: Boolean
     ): AgentRole = AgentRole(
@@ -596,6 +711,7 @@ class AgentRoleServiceImpl(
         modelSettingsId = modelSettingsId,
         tools = tools,
         spawnableAgentRoleIds = spawnableRoleIds,
+        projectId = projectId,
         instructions = decodeInstructions(instructionsJson).mapNotNull {
             it.toDomain(
                 ownerId = ownerId,
@@ -623,7 +739,8 @@ class AgentRoleServiceImpl(
         tools = tools,
         spawnableAgentRoleIds = spawnableAgentRoleIds,
         instructions = instructions.map { it.toDto() },
-        disabled = disabled
+        disabled = disabled,
+        projectId = projectId
     )
 
     /**

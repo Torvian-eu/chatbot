@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
+import eu.torvian.chatbot.server.data.entities.ProjectEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
@@ -239,6 +240,38 @@ interface TestDataManager {
      * @param toolId The ID of the tool definition to attach.
      */
     suspend fun insertAgentRoleTool(roleId: Long, toolId: Long)
+
+    /**
+     * Inserts a project into the database. Creates the table if it does not exist.
+     *
+     * @param project The project entity to insert (including its ID).
+     */
+    suspend fun insertProject(project: ProjectEntity)
+
+    /**
+     * Retrieves a project from the database.
+     *
+     * @param id The ID of the project to retrieve.
+     * @return The project entity if found, null otherwise.
+     */
+    suspend fun getProject(id: Long): ProjectEntity?
+
+    /**
+     * Inserts a project ownership record into the database. Creates the table if it does not exist.
+     *
+     * @param projectId The ID of the project.
+     * @param userId The ID of the user who owns the project.
+     */
+    suspend fun insertProjectOwnership(projectId: Long, userId: Long)
+
+    /**
+     * Assigns a role to a project by setting its single `project_id` column (a role belongs to at
+     * most one project; assigning again moves it). Creates the roles table if needed.
+     *
+     * @param roleId The ID of the role to assign.
+     * @param projectId The ID of the project to assign the role to.
+     */
+    suspend fun assignRoleToProject(roleId: Long, projectId: Long)
 
     /**
      * Inserts an LLM provider into the database. Creates the table if it does not exist.

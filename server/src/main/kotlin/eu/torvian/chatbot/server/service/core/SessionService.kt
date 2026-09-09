@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.server.data.dao.SessionProjectSelection
 import eu.torvian.chatbot.server.service.core.error.session.*
 
 /**
@@ -57,19 +58,41 @@ interface SessionService {
 
     /**
      * Updates the agent role selected for an existing chat session.
-     * Model/settings/tools are resolved from the role at turn time; selecting or deselecting a role
-     * only updates the session's `agent_role_id`.
      * Verifies that the user owns the session before updating.
+     *
+     * Enforces the **Session Legality Invariant** inside the same transaction as the write: a
+     * non-null role whose project scope does not match the session's current project selection is
+     * rejected with [UpdateSessionAgentRoleIdError.AgentRoleNotInProject]; null (deselect) is always
+     * legal.
      *
      * @param id The ID of the session to update.
      * @param agentRoleId The new optional agent role ID for the session. Null deselects the role.
      * @return Either an [UpdateSessionAgentRoleIdError] if the session is not found, access is denied,
-     *         or the referenced role is invalid, or Unit if successful.
+     *         the referenced role is invalid, or the attach would violate the legality invariant, or
+     *         Unit if successful.
      */
     suspend fun updateSessionAgentRoleId(
         id: Long,
         agentRoleId: Long?
     ): Either<UpdateSessionAgentRoleIdError, Unit>
+
+    /**
+     * Updates the project selected for an existing chat session, restoring the Session Legality
+     * Invariant atomically.
+     *
+     * Sets `project_id`; when the new selection makes the currently attached role illegal (a project
+     * the role does not belong to, or "No project" while the role belongs to one), the role is
+     * cleared in the same transaction. The returned selection carries the resulting state so the
+     * client can update its cache in one round-trip.
+     *
+     * @param id The ID of the session to update.
+     * @param projectId The new optional project ID for the session. Null deselects the project.
+     * @return Either an [UpdateSessionProjectIdError] or the resulting [SessionProjectSelection].
+     */
+    suspend fun updateSessionProjectId(
+        id: Long,
+        projectId: Long?
+    ): Either<UpdateSessionProjectIdError, SessionProjectSelection>
 
     /**
      * Updates the current leaf message ID of an existing chat session.

@@ -19,7 +19,15 @@ package eu.torvian.chatbot.server.service.core.agent
  * @property tools Set of tool-definition identifiers attached to the role. Unordered; duplicates are
  *            impossible (the `agent_role_tools` primary key and the wire `Set` both reject them).
  * @property spawnableAgentRoleIds Unordered same-user role identifiers this role may spawn; may
- *            include the role's own id (self-spawn).
+ *            include the role's own id (self-spawn). Every target must belong to the **same project
+ *            scope** as this role: the same [projectId], or both unassociated. The server validates
+ *            this on create/update.
+ * @property projectId Single user-owned project identifier the role belongs to, or `null` for the
+ *            **unassociated** scope. The relation is deliberately one-column (a role belongs to at
+ *            most one project) so same-project rules — the spawn allow-list targets, the
+ *            role-name-uniqueness scope, and the Session Legality Invariant — are exact
+ *            comparisons: an unassociated role is offered only for project-less sessions, and
+ *            same-named roles of the same user conflict only when their scopes are identical.
  * @property instructions Domain instruction objects composing the role's system prompt.
  * @property disabled Whether the role is disabled **for the requesting/acting user** (not globally
  *            and not for the owner in a future shared-role stage). Derived from the per-user
@@ -35,6 +43,7 @@ data class AgentRole(
     val modelSettingsId: Long?,
     val tools: Set<Long> = emptySet(),
     val spawnableAgentRoleIds: Set<Long> = emptySet(),
+    val projectId: Long? = null,
     val instructions: List<AgentInstruction> = emptyList(),
     val disabled: Boolean = false
 )

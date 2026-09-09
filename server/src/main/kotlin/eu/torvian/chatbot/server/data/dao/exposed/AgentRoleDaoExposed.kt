@@ -7,6 +7,7 @@ import arrow.core.raise.ensure
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleDao.AgentRoleNameScope
 import eu.torvian.chatbot.server.data.dao.AgentRoleToolDao
 import eu.torvian.chatbot.server.data.dao.error.AgentRoleError
 import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
@@ -17,6 +18,7 @@ import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -27,7 +29,9 @@ import org.jetbrains.exposed.v1.jdbc.update
  *
  * All operations are single-row reads/writes; the JSON `instructions_json` column is passed through
  * verbatim so serialization stays at the service boundary. The role's tool ids live in the separate
- * `agent_role_tools` join table and are managed through [AgentRoleToolDao].
+ * `agent_role_tools` join table and are managed through [AgentRoleToolDao]. The single project
+ * membership lives on the role row (`project_id` column) and is therefore read/written with every
+ * row operation.
  *
  * @property transactionScope Transaction wrapper used for the DAO operations.
  */
@@ -65,9 +69,18 @@ class AgentRoleDaoExposed(
 
     override suspend fun getRoleByNameForUser(
         userId: Long,
-        name: String
+        name: String,
+        projectId: Long?
     ): Either<AgentRoleError.NotFoundByName, AgentRoleEntity> =
         transactionScope.transaction {
+            // The scope is a single nullable column, so the filter is a direct predicate: `null`
+            // resolves the unassociated scope (IS NULL), a project id resolves membership in that
+            // project. Per the per-(user, name, scope) uniqueness rule at most one row matches.
+            val scopePredicate = if (projectId == null) {
+                AgentRoleTable.projectId.isNull()
+            } else {
+                AgentRoleTable.projectId eq projectId
+            }
             AgentRoleTable
                 .join(
                     AgentRoleOwnersTable,
@@ -75,9 +88,9 @@ class AgentRoleDaoExposed(
                     additionalConstraint = { AgentRoleTable.id eq AgentRoleOwnersTable.roleId }
                 )
                 .selectAll()
-                .where { (AgentRoleOwnersTable.userId eq userId) and (AgentRoleTable.name eq name) }
+                .where { (AgentRoleOwnersTable.userId eq userId) and (AgentRoleTable.name eq name) and scopePredicate }
+                .map { it.toAgentRoleEntity() }
                 .singleOrNull()
-                ?.toAgentRoleEntity()
                 ?.right()
                 ?: AgentRoleError.NotFoundByName(name).left()
         }
@@ -101,7 +114,10 @@ class AgentRoleDaoExposed(
             roleIds.mapNotNull { entitiesById[it] }
         }
 
-    override suspend fun roleNameExistsForUser(userId: Long, name: String): Boolean =
+    override suspend fun getRoleNameScopesForUser(
+        userId: Long,
+        name: String
+    ): List<AgentRoleNameScope> =
         transactionScope.transaction {
             AgentRoleTable
                 .join(
@@ -111,7 +127,12 @@ class AgentRoleDaoExposed(
                 )
                 .selectAll()
                 .where { (AgentRoleOwnersTable.userId eq userId) and (AgentRoleTable.name eq name) }
-                .count() > 0
+                .map { row ->
+                    AgentRoleNameScope(
+                        roleId = row[AgentRoleTable.id].value,
+                        projectId = row[AgentRoleTable.projectId]?.value
+                    )
+                }
         }
 
     override suspend fun insertRole(
@@ -120,7 +141,8 @@ class AgentRoleDaoExposed(
         description: String,
         modelId: Long?,
         modelSettingsId: Long?,
-        instructionsJson: String
+        instructionsJson: String,
+        projectId: Long?
     ): AgentRoleEntity =
         transactionScope.transaction {
             val now = System.currentTimeMillis()
@@ -130,6 +152,7 @@ class AgentRoleDaoExposed(
                 it[AgentRoleTable.description] = description
                 it[AgentRoleTable.modelId] = modelId
                 it[AgentRoleTable.modelSettingsId] = modelSettingsId
+                it[AgentRoleTable.projectId] = projectId
                 it[AgentRoleTable.instructionsJson] = instructionsJson
                 it[AgentRoleTable.createdAt] = now
                 it[AgentRoleTable.updatedAt] = now
@@ -147,6 +170,7 @@ class AgentRoleDaoExposed(
                     it[AgentRoleTable.description] = role.description
                     it[AgentRoleTable.modelId] = role.modelId
                     it[AgentRoleTable.modelSettingsId] = role.modelSettingsId
+                    it[AgentRoleTable.projectId] = role.projectId
                     it[AgentRoleTable.instructionsJson] = role.instructionsJson
                     it[AgentRoleTable.updatedAt] = System.currentTimeMillis()
                 }

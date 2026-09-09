@@ -18,6 +18,7 @@ import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 
 /**
  * Implementation of [TestDataManager] for Exposed ORM.
@@ -65,6 +66,12 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             Table.LLM_MODELS to LLMModelTable,
             Table.MODEL_SETTINGS to ModelSettingsTable,
             Table.AGENT_ROLES to AgentRoleTable,
+            // Project tables: projects and its two link tables reference users/agent_roles, and
+            // chat_sessions references projects (project_id), so they must be created AFTER
+            // users/agent_roles and BEFORE chat_sessions (reverse-order cleanup drops chat_sessions
+            // and the link tables before projects/agent_roles, keeping FK constraints satisfied).
+            Table.PROJECTS to ProjectTable,
+            Table.PROJECT_OWNERS to ProjectOwnersTable,
             Table.CHAT_GROUPS to ChatGroupTable,
             Table.CHAT_SESSIONS to ChatSessionTable,
             Table.CHAT_MESSAGES to ChatMessageTable,
@@ -147,6 +154,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         dataSet.modelSettings.forEach { insertModelSettings(it) }
         dataSet.chatGroups.forEach { insertChatGroup(it) }
         dataSet.agentRoles.forEach { insertAgentRole(it) }
+        dataSet.projects.forEach { insertProject(it) }
         dataSet.chatSessions.forEach { insertChatSession(it) }
         dataSet.chatMessages.forEach { insertChatMessage(it) }
         dataSet.sessionCurrentLeaves.forEach { insertSessionCurrentLeaf(it) }
@@ -287,6 +295,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 it[updatedAt] = chatSession.updatedAt.toEpochMilliseconds()
                 it[groupId] = chatSession.groupId
                 it[agentRoleId] = chatSession.agentRoleId
+                it[projectId] = chatSession.projectId
             }
             return@transaction
         }
@@ -443,6 +452,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 it[instructionsJson] = agentRole.instructionsJson
                 it[createdAt] = agentRole.createdAt.toEpochMilliseconds()
                 it[updatedAt] = agentRole.updatedAt.toEpochMilliseconds()
+                it[projectId] = agentRole.projectId
             }
             return@transaction
         }
@@ -461,6 +471,48 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             AgentRoleToolsTable.insert {
                 it[AgentRoleToolsTable.roleId] = roleId
                 it[AgentRoleToolsTable.toolDefinitionId] = toolId
+            }
+            return@transaction
+        }
+
+    override suspend fun insertProject(project: ProjectEntity) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.PROJECTS)
+            ProjectTable.insert {
+                it[id] = project.id
+                it[name] = project.name
+                it[description] = project.description
+                it[createdAt] = project.createdAt.toEpochMilliseconds()
+                it[updatedAt] = project.updatedAt.toEpochMilliseconds()
+            }
+            return@transaction
+        }
+
+    override suspend fun getProject(id: Long): ProjectEntity? =
+        transactionScope.transaction {
+            ensureTableCreated(Table.PROJECTS)
+            ProjectTable.selectAll().where { ProjectTable.id eq id }
+                .map { it.toProjectEntity() }
+                .singleOrNull()
+        }
+
+    override suspend fun insertProjectOwnership(projectId: Long, userId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.PROJECT_OWNERS)
+            ProjectOwnersTable.insert {
+                it[ProjectOwnersTable.projectId] = projectId
+                it[ProjectOwnersTable.userId] = userId
+            }
+            return@transaction
+        }
+
+    override suspend fun assignRoleToProject(roleId: Long, projectId: Long) =
+        transactionScope.transaction {
+            // The membership is a single nullable column on the role row; creating the roles table
+            // also creates the column, so no separate join table is needed.
+            ensureTableCreated(Table.AGENT_ROLES)
+            AgentRoleTable.update({ AgentRoleTable.id eq roleId }) {
+                it[AgentRoleTable.projectId] = projectId
             }
             return@transaction
         }
@@ -789,6 +841,12 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         // Every role read also resolves the per-user disabled flag from `agent_role_disabled`, so that
         // table must exist whenever roles are set up as well.
         if (data.agentRoles.isNotEmpty()) required += Table.AGENT_ROLE_DISABLED
+        // The single-project membership rides the `agent_roles` row itself (the `project_id` column),
+        // so no extra table is needed for role reads.
+        // Project tables: `projects` and its owner table must exist whenever projects are seeded (and
+        // before chat_sessions, which references projects via the nullable project_id column).
+        if (data.projects.isNotEmpty()) required += Table.PROJECTS
+        if (data.projects.isNotEmpty()) required += Table.PROJECT_OWNERS
         if (data.sessionCurrentLeaves.isNotEmpty()) required += Table.SESSION_CURRENT_LEAF
 
         return required

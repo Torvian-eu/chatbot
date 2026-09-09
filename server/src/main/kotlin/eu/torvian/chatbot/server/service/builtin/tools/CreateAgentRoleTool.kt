@@ -60,6 +60,7 @@ class CreateAgentRoleTool(
                 ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY,
                 ServerBuiltInToolCatalog.TOOL_IDS_PROPERTY,
                 ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY,
+                ServerBuiltInToolCatalog.PROJECT_ID_PROPERTY,
                 ServerBuiltInToolCatalog.INSTRUCTIONS_PROPERTY
             ),
             validationErrors
@@ -73,6 +74,7 @@ class CreateAgentRoleTool(
         val toolIds = parseOptionalLongSet(input, ServerBuiltInToolCatalog.TOOL_IDS_PROPERTY, validationErrors)
         val spawnableAgentRoleIds =
             parseOptionalLongSet(input, ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY, validationErrors)
+        val projectId = parseOptionalLong(input, ServerBuiltInToolCatalog.PROJECT_ID_PROPERTY, validationErrors)
         val instructions =
             parseOptionalInstructions(input, ServerBuiltInToolCatalog.INSTRUCTIONS_PROPERTY, validationErrors)
         if (validationErrors.isNotEmpty()) {
@@ -87,6 +89,7 @@ class CreateAgentRoleTool(
             modelSettingsId = modelSettingsId,
             toolIds = toolIds ?: emptySet(),
             spawnableAgentRoleIds = spawnableAgentRoleIds ?: emptySet(),
+            projectId = projectId,
             instructions = instructions ?: emptyList()
         )
         val role = agentRoleService.createRole(context.userId, request)
@@ -140,6 +143,17 @@ private fun CreateAgentRoleError.toHandlerError(): ServerBuiltInToolHandlerError
         ServerBuiltInToolHandlerError.OperationFailed(
             "spawnable_role_not_found",
             "Spawnable agent role $roleId not found or not owned by the current user."
+        )
+    is CreateAgentRoleError.SpawnableRoleNotInProject ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "spawnable_role_not_in_project",
+            "Spawnable agent role $roleId does not belong to the role's project " +
+                "(project id: ${projectId ?: "none"}) — spawn targets must share the role's project scope."
+        )
+    is CreateAgentRoleError.ProjectNotFound ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "project_not_found",
+            "Project $projectId not found or not owned by the current user."
         )
     is CreateAgentRoleError.InstructionValidationFailed ->
         ServerBuiltInToolHandlerError.OperationFailed("instruction_validation_failed", reason)

@@ -18,6 +18,9 @@ import kotlin.time.Instant
  *            deleted (`SET NULL`).
  * @property modelSettingsId Optional identifier of the settings profile used by the role; null after
  *            the settings are deleted (`SET NULL`).
+ * @property projectId Optional identifier of the single project the role belongs to; null means
+ *            **unassociated**. Set via the membership column on create/update (a role belongs to at
+ *            most one project) and nulled by `ON DELETE SET NULL` when the project is deleted.
  * @property instructionsJson Raw JSON array of the flat `AgentInstructionDto` list.
  * @property createdAt Timestamp when the role was created.
  * @property updatedAt Timestamp when the role was last updated.
@@ -31,5 +34,6 @@ data class AgentRoleEntity(
     val modelSettingsId: Long?,
     val instructionsJson: String,
     val createdAt: Instant,
-    val updatedAt: Instant
+    val updatedAt: Instant,
+    val projectId: Long? = null
 )

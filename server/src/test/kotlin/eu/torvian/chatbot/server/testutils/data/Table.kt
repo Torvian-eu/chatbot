@@ -60,6 +60,16 @@ enum class Table {
     AGENT_ROLE_DISABLED,
 
     /**
+     * Table for storing user-owned projects.
+     */
+    PROJECTS,
+
+    /**
+     * Table for linking projects to their single owner.
+     */
+    PROJECT_OWNERS,
+
+    /**
      * Table for storing API secrets.
      */
     API_SECRETS,

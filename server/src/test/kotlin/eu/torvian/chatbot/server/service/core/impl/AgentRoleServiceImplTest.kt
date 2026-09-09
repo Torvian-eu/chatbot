@@ -13,6 +13,7 @@ import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition
 import eu.torvian.chatbot.server.data.dao.*
+import eu.torvian.chatbot.server.data.dao.AgentRoleDao.AgentRoleNameScope
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.UpdateAgentRoleError
@@ -47,6 +48,8 @@ class AgentRoleServiceImplTest {
     private lateinit var agentRoleOwnershipDao: AgentRoleOwnershipDao
     private lateinit var agentRoleSpawnableRoleDao: AgentRoleSpawnableRoleDao
     private lateinit var agentRoleDisabledDao: AgentRoleDisabledDao
+    private lateinit var projectDao: ProjectDao
+    private lateinit var sessionDao: SessionDao
     private lateinit var modelDao: ModelDao
     private lateinit var settingsDao: SettingsDao
     private lateinit var toolDefinitionDao: ToolDefinitionDao
@@ -82,6 +85,8 @@ class AgentRoleServiceImplTest {
         agentRoleOwnershipDao = mockk()
         agentRoleSpawnableRoleDao = mockk()
         agentRoleDisabledDao = mockk()
+        projectDao = mockk()
+        sessionDao = mockk()
         modelDao = mockk()
         settingsDao = mockk()
         toolDefinitionDao = mockk()
@@ -97,7 +102,9 @@ class AgentRoleServiceImplTest {
             settingsDao = settingsDao,
             toolDefinitionDao = toolDefinitionDao,
             json = json,
-            transactionScope = transactionScope
+            transactionScope = transactionScope,
+            projectDao = projectDao,
+            sessionDao = sessionDao
         )
 
         // The spawn allow-list DAO is always consulted (non-nullable dependency); default its reads
@@ -113,6 +120,14 @@ class AgentRoleServiceImplTest {
         coEvery { agentRoleDisabledDao.isRoleDisabled(any(), any()) } returns false
         coEvery { agentRoleDisabledDao.setRoleDisabled(any(), any(), any()) } returns Unit
 
+        // Project-membership DAO: the role side of the membership rides the role entity (single
+        // `project_id` column), so only the ownership/existence reads are defaulted here.
+        coEvery { projectDao.getProjectsByIdsForUser(any(), any()) } returns emptyList()
+        // The role-update sweep reads and writes; default the read to "no sessions use the role" and the
+        // write to a no-op so existing update tests stay focused.
+        coEvery { sessionDao.getSessionProjectPairsForRole(any()) } returns emptyList()
+        coEvery { sessionDao.clearAgentRoleForSessions(any()) } returns Unit
+
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
             block()
@@ -127,6 +142,8 @@ class AgentRoleServiceImplTest {
             agentRoleOwnershipDao,
             agentRoleSpawnableRoleDao,
             agentRoleDisabledDao,
+            projectDao,
+            sessionDao,
             modelDao,
             settingsDao,
             toolDefinitionDao,
@@ -148,11 +165,11 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should persist the role and set ownership on success`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         // The returned DTO loads the role's tools from the join table.
@@ -177,14 +194,17 @@ class AgentRoleServiceImplTest {
     fun `createRole should reject a duplicate name for the same user`() = runTest {
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
-        // The user already owns a role with this name (per-user uniqueness, enforced by the service).
-        coEvery { agentRoleDao.roleNameExistsForUser(userId, "Senior Architect") } returns true
+        // The user already owns a same-named role in the unassociated scope (empty project set), which
+        // overlaps the candidate's unassociated scope under the scope-intersection rule.
+        coEvery { agentRoleDao.getRoleNameScopesForUser(userId, "Senior Architect") } returns listOf(
+            AgentRoleNameScope(roleId = 9L, projectId = null)
+        )
 
         val result = service.createRole(userId, validRequest())
 
         assertTrue(result.isLeft())
         assertIs<CreateAgentRoleError.NameAlreadyExists>(result.leftOrNull())
-        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { agentRoleToolDao.replaceToolsForRole(any(), any()) }
     }
 
@@ -193,9 +213,9 @@ class AgentRoleServiceImplTest {
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         // Another user owns "Senior Architect"; the requesting user does not, so the name is free.
-        coEvery { agentRoleDao.roleNameExistsForUser(userId, "Senior Architect") } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(userId, "Senior Architect") } returns emptyList()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -208,7 +228,7 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should reject non-chat-capable settings`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(5L) } returns completionSettings.right()
 
@@ -221,7 +241,7 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should reject settings belonging to a different model`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(2L) } returns TestDefaults.modelSettings2.right()
 
@@ -234,7 +254,7 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should reject duplicate singleton instructions`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
 
@@ -254,9 +274,9 @@ class AgentRoleServiceImplTest {
     fun `createRole should succeed with null modelId and modelSettingsId`() = runTest {
         // A model-less role is intentionally allowed (completed later via update). No model/settings
         // DAO lookups may run when both references are null.
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1.copy(modelId = null, modelSettingsId = null)
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -274,10 +294,10 @@ class AgentRoleServiceImplTest {
     fun `createRole should validate a provided settings reference even without a model`() = runTest {
         // Settings may be provided while the model is still unset; the settings must exist and be
         // chat-capable, but no model↔settings consistency check runs (there is no model to match).
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1.copy(modelId = null, modelSettingsId = 1L)
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -293,7 +313,7 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should reject a missing settings reference when provided`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { settingsDao.getSettingsById(99L) } returns
             eu.torvian.chatbot.server.data.dao.error.SettingsError.SettingsNotFound(99L).left()
 
@@ -308,7 +328,7 @@ class AgentRoleServiceImplTest {
     fun `updateRole should succeed with null modelId and modelSettingsId`() = runTest {
         coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
         coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { agentRoleDao.updateRole(any()) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
         coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
@@ -333,7 +353,7 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should reject a tool id that does not exist`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         // The caller owns no tools at all, so any attached id is missing/foreign.
@@ -348,7 +368,7 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should reject a server built-in tool owned by another user`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         // The caller owns their own server built-in row (54L) but not the foreign 55L.
@@ -377,7 +397,7 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should reject an MCP tool of another user's server`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         // The caller owns MCP tool 1L (their own server); 2L belongs to another user's server.
@@ -406,7 +426,7 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should reject a built-in tool of another user's worker`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         // The caller owns worker built-in 3L (their own worker); 4L belongs to another user's worker.
@@ -453,7 +473,7 @@ class AgentRoleServiceImplTest {
             mcpToolName = "tool"
         )
         coEvery { toolDefinitionDao.getToolsForUser(userId) } returns listOf(tool, tool.copy(id = 2L))
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { agentRoleDao.updateRole(any()) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
         coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
@@ -540,11 +560,11 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should preserve model_specific instructions with their model ids`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1.copy(
             instructionsJson = """
                 [
@@ -577,11 +597,11 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should accept multiple model_specific instructions with distinct models`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -602,7 +622,7 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should reject duplicate model_specific target models`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
 
@@ -622,7 +642,7 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole should reject a model_specific instruction without a model id`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
 
@@ -638,7 +658,7 @@ class AgentRoleServiceImplTest {
         assertTrue(result.isLeft())
         val error = assertIs<CreateAgentRoleError.InstructionValidationFailed>(result.leftOrNull())
         assertTrue(error.reason.contains("custom.modelId"))
-        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -708,7 +728,7 @@ class AgentRoleServiceImplTest {
         val userB = 8L
         coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
         coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userA.right()
-        coEvery { agentRoleDao.getRoleByNameForUser(userA, "Senior Architect") } returns TestDefaults.agentRole1.right()
+        coEvery { agentRoleDao.getRoleByNameForUser(userA, "Senior Architect", null) } returns TestDefaults.agentRole1.right()
         coEvery { agentRoleToolDao.getToolsForRole(1L) } returns emptySet()
         coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(1L) } returns emptySet()
         coEvery { agentRoleDisabledDao.isRoleDisabled(userA, 1L) } returns true
@@ -742,11 +762,11 @@ class AgentRoleServiceImplTest {
 
     @Test
     fun `createRole returns a role enabled for the new owner`() = runTest {
-        coEvery { agentRoleDao.roleNameExistsForUser(any(), any()) } returns false
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -801,5 +821,435 @@ class AgentRoleServiceImplTest {
         assertTrue(result.isLeft())
         assertIs<eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError.NotFound>(result.leftOrNull())
         coVerify(exactly = 0) { agentRoleDisabledDao.setRoleDisabled(any(), any(), any()) }
+    }
+
+    // --- Project membership ---
+
+    @Test
+    fun `createRole persists projectId atomically with the role row and returns it on the DTO`() = runTest {
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The requesting user owns the referenced project.
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(1L)) } returns
+            listOf(TestDefaults.project1)
+        coEvery {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any())
+        } returns TestDefaults.agentRole1
+        coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val result = service.createRole(userId, validRequest().copy(projectId = 1L))
+
+        assertTrue(result.isRight())
+        assertEquals(1L, result.getOrNull()!!.projectId)
+        // The single membership column is written together with the row, atomically with the tools
+        // and ownership writes.
+        coVerify(exactly = 1) {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), eq(1L))
+        }
+    }
+
+    @Test
+    fun `createRole rejects a foreign project id as not found`() = runTest {
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The user owns no project at all, so every attached id is missing/foreign.
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(99L)) } returns emptyList()
+
+        val result = service.createRole(userId, validRequest().copy(projectId = 99L))
+
+        val error = assertIs<CreateAgentRoleError.ProjectNotFound>(result.leftOrNull())
+        assertEquals(99L, error.projectId)
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `createRole rejects a same-name unassociated role (scope-intersection rule)`() = runTest {
+        coEvery { agentRoleDao.getRoleNameScopesForUser(userId, "Senior Architect") } returns listOf(
+            AgentRoleNameScope(roleId = 5L, projectId = null)
+        )
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+
+        val result = service.createRole(userId, validRequest())
+
+        assertIs<CreateAgentRoleError.NameAlreadyExists>(result.leftOrNull())
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `createRole rejects a same-name role sharing a project`() = runTest {
+        coEvery { agentRoleDao.getRoleNameScopesForUser(userId, "Senior Architect") } returns listOf(
+            AgentRoleNameScope(roleId = 5L, projectId = 1L)
+        )
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(1L)) } returns listOf(TestDefaults.project1)
+
+        val result = service.createRole(userId, validRequest().copy(projectId = 1L))
+
+        assertIs<CreateAgentRoleError.NameAlreadyExists>(result.leftOrNull())
+    }
+
+    @Test
+    fun `createRole allows a same-name role in a disjoint project`() = runTest {
+        // The existing "Senior Architect" lives in project 1 only; the candidate joins project 2 only
+        // — non-overlapping scopes, same user, same name: allowed.
+        coEvery { agentRoleDao.getRoleNameScopesForUser(userId, "Senior Architect") } returns listOf(
+            AgentRoleNameScope(roleId = 5L, projectId = 1L)
+        )
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(2L)) } returns listOf(TestDefaults.project2)
+        coEvery {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any())
+        } returns TestDefaults.agentRole1
+        coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val result = service.createRole(userId, validRequest().copy(projectId = 2L))
+
+        assertTrue(result.isRight())
+        // The single membership column is written together with the row.
+        coVerify(exactly = 1) {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), eq(2L))
+        }
+    }
+
+    @Test
+    fun `createRole allows an unassociated role next to a same-name in-project role`() = runTest {
+        // The existing "Senior Architect" belongs to project 1; the candidate is unassociated (empty
+        // set) — unassociated scope vs project scope never conflict.
+        coEvery { agentRoleDao.getRoleNameScopesForUser(userId, "Senior Architect") } returns listOf(
+            AgentRoleNameScope(roleId = 5L, projectId = 1L)
+        )
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        coEvery {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any())
+        } returns TestDefaults.agentRole1
+        coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val result = service.createRole(userId, validRequest())
+
+        assertTrue(result.isRight())
+    }
+
+    @Test
+    fun `updateRole re-checks the name when only the project changed (self excluded)`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.copy(projectId = 1L).right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The role currently belongs to project 1; the update moves it to project 2.
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(2L)) } returns listOf(TestDefaults.project2)
+        // A DIFFERENT role (5L) already occupies project 2 with the same name -> scope overlap, reject.
+        coEvery { agentRoleDao.getRoleNameScopesForUser(userId, "Renamed") } returns listOf(
+            AgentRoleNameScope(roleId = 5L, projectId = 2L)
+        )
+        coEvery { agentRoleDao.updateRole(any()) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val request = UpdateAgentRoleRequest(
+            name = "Renamed",
+            description = "Designs systems",
+            modelId = 1L,
+            modelSettingsId = 1L,
+            toolIds = emptySet(),
+            instructions = listOf(
+                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect.")
+            ),
+            projectId = 2L
+        )
+        val result = service.updateRole(userId, 1L, request)
+
+        assertIs<UpdateAgentRoleError.NameAlreadyExists>(result.leftOrNull())
+        coVerify(exactly = 0) { agentRoleDao.updateRole(any()) }
+    }
+
+    @Test
+    fun `updateRole re-checking the scope excludes the role being updated`() = runTest {
+        // The role currently lives in project 1; the update drops it to the unassociated scope, which
+        // still changes the scope, so the recheck runs; the same-name row returned by the scope query
+        // IS the role itself, which must not conflict with itself.
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.copy(projectId = 1L).right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        coEvery { agentRoleDao.getRoleNameScopesForUser(userId, "Senior Architect") } returns listOf(
+            AgentRoleNameScope(roleId = 1L, projectId = 1L)
+        )
+        coEvery { agentRoleDao.updateRole(any()) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val request = UpdateAgentRoleRequest(
+            name = "Senior Architect",
+            description = "Designs systems",
+            modelId = 1L,
+            modelSettingsId = 1L,
+            toolIds = emptySet(),
+            instructions = listOf(
+                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect.")
+            )
+        )
+        val result = service.updateRole(userId, 1L, request)
+
+        assertTrue(result.isRight())
+        // The row update ran even though the scope query returned the role itself.
+        coVerify(exactly = 1) { agentRoleDao.updateRole(any()) }
+    }
+
+    @Test
+    fun `updateRole persists the new projectId and returns it on the DTO`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.copy(projectId = 1L).right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The role moves from project 1 to project 2; the membership is rewritten with the row.
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(2L)) } returns listOf(TestDefaults.project2)
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { agentRoleDao.updateRole(any()) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val request = UpdateAgentRoleRequest(
+            name = "Renamed",
+            description = "Designs systems",
+            modelId = 1L,
+            modelSettingsId = 1L,
+            toolIds = emptySet(),
+            instructions = listOf(
+                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect.")
+            ),
+            projectId = 2L
+        )
+        val result = service.updateRole(userId, 1L, request)
+
+        assertTrue(result.isRight())
+        assertEquals(2L, result.getOrNull()!!.projectId)
+        coVerify(exactly = 1) { agentRoleDao.updateRole(match { it.projectId == 2L }) }
+    }
+
+    @Test
+    fun `updateRole rejects a foreign project id as not found`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The user owns no project matching id 99.
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(99L)) } returns emptyList()
+
+        val request = UpdateAgentRoleRequest(
+            name = "Renamed",
+            description = "Designs systems",
+            modelId = 1L,
+            modelSettingsId = 1L,
+            toolIds = emptySet(),
+            instructions = emptyList(),
+            projectId = 99L
+        )
+        val result = service.updateRole(userId, 1L, request)
+
+        val error = assertIs<UpdateAgentRoleError.ProjectNotFound>(result.leftOrNull())
+        assertEquals(99L, error.projectId)
+        coVerify(exactly = 0) { agentRoleDao.updateRole(any()) }
+    }
+
+    @Test
+    fun `updateRole clears the role on sessions whose project differs from the new projectId`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.copy(projectId = 1L).right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The role currently belongs to project 1; the update moves it to project 2.
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(2L)) } returns listOf(TestDefaults.project2)
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { agentRoleDao.updateRole(any()) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+        // Session 10 selected the role's OLD project 1 -> now illegal; session 11 selected the new
+        // project 2 -> legal; session 12 has no project but the role is now project-bound -> illegal.
+        coEvery { sessionDao.getSessionProjectPairsForRole(1L) } returns listOf(
+            SessionProjectPair(sessionId = 10L, projectId = 1L),
+            SessionProjectPair(sessionId = 11L, projectId = 2L),
+            SessionProjectPair(sessionId = 12L, projectId = null)
+        )
+
+        val request = UpdateAgentRoleRequest(
+            name = "Renamed",
+            description = "Designs systems",
+            modelId = 1L,
+            modelSettingsId = 1L,
+            toolIds = emptySet(),
+            instructions = emptyList(),
+            projectId = 2L
+        )
+        val result = service.updateRole(userId, 1L, request)
+
+        assertTrue(result.isRight())
+        // Only the sessions whose project differs from the new single project id are cleared.
+        coVerify(exactly = 1) { sessionDao.clearAgentRoleForSessions(listOf(10L, 12L)) }
+    }
+
+    @Test
+    fun `updateRole keeps sessions when the new projectId still covers them`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.copy(projectId = 1L).right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(1L)) } returns listOf(TestDefaults.project1)
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { agentRoleDao.updateRole(any()) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+        coEvery { sessionDao.getSessionProjectPairsForRole(1L) } returns listOf(
+            SessionProjectPair(sessionId = 11L, projectId = 1L)
+        )
+
+        val request = UpdateAgentRoleRequest(
+            name = "Renamed",
+            description = "Designs systems",
+            modelId = 1L,
+            modelSettingsId = 1L,
+            toolIds = emptySet(),
+            instructions = emptyList(),
+            projectId = 1L
+        )
+        val result = service.updateRole(userId, 1L, request)
+
+        assertTrue(result.isRight())
+        // Session 11 occupies exactly the role's project: no sweep clears anything.
+        coVerify(exactly = 1) { sessionDao.clearAgentRoleForSessions(emptyList()) }
+    }
+
+    // --- Spawn allow-list same-project enforcement ---
+
+    @Test
+    fun `createRole rejects a spawnable target in a different project`() = runTest {
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The source role joins project 1; the spawn target lives in project 2.
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(1L)) } returns listOf(TestDefaults.project1)
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L)) } returns
+            listOf(TestDefaults.agentRole1.copy(id = 5L, projectId = 2L))
+
+        val result = service.createRole(userId, validRequest().copy(projectId = 1L, spawnableAgentRoleIds = setOf(5L)))
+
+        val error = assertIs<CreateAgentRoleError.SpawnableRoleNotInProject>(result.leftOrNull())
+        assertEquals(5L, error.roleId)
+        assertEquals(1L, error.projectId)
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `createRole rejects a spawnable target when the source is unassociated and the target is in a project`() = runTest {
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The source role stays unassociated (projectId null); the target belongs to project 1.
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L)) } returns
+            listOf(TestDefaults.agentRole1.copy(id = 5L, projectId = 1L))
+
+        val result = service.createRole(userId, validRequest().copy(spawnableAgentRoleIds = setOf(5L)))
+
+        val error = assertIs<CreateAgentRoleError.SpawnableRoleNotInProject>(result.leftOrNull())
+        assertEquals(5L, error.roleId)
+        assertEquals(null, error.projectId)
+    }
+
+    @Test
+    fun `createRole accepts spawn targets sharing the role's project`() = runTest {
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(1L)) } returns listOf(TestDefaults.project1)
+        // Both targets are unassociated like the source role -> legal.
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L, 6L)) } returns listOf(
+            TestDefaults.agentRole1.copy(id = 5L),
+            TestDefaults.agentRole2.copy(id = 6L)
+        )
+        coEvery {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any())
+        } returns TestDefaults.agentRole1
+        coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val result = service.createRole(userId, validRequest().copy(spawnableAgentRoleIds = setOf(5L, 6L)))
+
+        assertTrue(result.isRight())
+    }
+
+    @Test
+    fun `updateRole exempts self-spawn when the role moves projects`() = runTest {
+        // The role currently lives in project 1 and moves to project 2 while keeping itself in its
+        // spawn allow-list: the persisted (stale) membership of the target IS the role being written,
+        // so the same-project check must exempt it (its row is updated with projectId 2 in the same
+        // transaction).
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.copy(projectId = 1L).right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(2L)) } returns listOf(TestDefaults.project2)
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(1L)) } returns
+            listOf(TestDefaults.agentRole1.copy(projectId = 1L))
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { agentRoleDao.updateRole(any()) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val request = UpdateAgentRoleRequest(
+            name = "Renamed",
+            description = "Designs systems",
+            modelId = 1L,
+            modelSettingsId = 1L,
+            toolIds = emptySet(),
+            spawnableAgentRoleIds = setOf(1L),
+            instructions = emptyList(),
+            projectId = 2L
+        )
+        val result = service.updateRole(userId, 1L, request)
+
+        assertTrue(result.isRight())
+        coVerify(exactly = 1) { agentRoleDao.updateRole(match { it.projectId == 2L }) }
+    }
+
+    @Test
+    fun `updateRole rejects a spawnable target outside the role's new project`() = runTest {
+        coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.copy(projectId = 1L).right()
+        coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
+        coEvery { modelDao.getModelById(1L) } returns TestDefaults.llmModel1.right()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(2L)) } returns listOf(TestDefaults.project2)
+        // The target role stays in project 1 while the source moves to project 2 -> illegal.
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L)) } returns
+            listOf(TestDefaults.agentRole1.copy(id = 5L, projectId = 1L))
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+
+        val request = UpdateAgentRoleRequest(
+            name = "Renamed",
+            description = "Designs systems",
+            modelId = 1L,
+            modelSettingsId = 1L,
+            toolIds = emptySet(),
+            spawnableAgentRoleIds = setOf(5L),
+            instructions = emptyList(),
+            projectId = 2L
+        )
+        val result = service.updateRole(userId, 1L, request)
+
+        val error = assertIs<UpdateAgentRoleError.SpawnableRoleNotInProject>(result.leftOrNull())
+        assertEquals(5L, error.roleId)
+        assertEquals(2L, error.projectId)
+        coVerify(exactly = 0) { agentRoleDao.updateRole(any()) }
     }
 }

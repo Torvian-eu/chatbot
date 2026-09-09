@@ -41,12 +41,24 @@ interface AgentRoleService {
     /**
      * Retrieves a single agent role by name, verifying ownership.
      *
+     * Names are no longer unique per user alone (the same user may own same-named roles in disjoint
+     * project scopes), so the lookup is scope-parameterized: `projectId == null` resolves the
+     * **unassociated scope** (a role with no project association) and `projectId == P` resolves a
+     * member of project P. Per the per-(user, name, scope) uniqueness rule at most one role exists in
+     * each scope, so the result stays unambiguous.
+     *
      * @param userId The ID of the requesting user.
      * @param name The machine-readable name of the role to retrieve.
-     * @return Either [AgentRoleError.NotFoundByName] if the role does not exist or is not owned by the
-     *         user, or the [AgentRoleDto] with resolved instructions.
+     * @param projectId The project scope to resolve within; `null` (the default) means the unassociated
+     *            scope, a project id means membership in that project.
+     * @return Either [AgentRoleError.NotFoundByName] if the role does not exist in that scope or is
+     *         not owned by the user, or the [AgentRoleDto] with resolved instructions.
      */
-    suspend fun getRoleByName(userId: Long, name: String): Either<AgentRoleError.NotFoundByName, AgentRoleDto>
+    suspend fun getRoleByName(
+        userId: Long,
+        name: String,
+        projectId: Long? = null
+    ): Either<AgentRoleError.NotFoundByName, AgentRoleDto>
 
     /**
      * Loads a single agent role by ID as the server domain type, without ownership scoping.

@@ -61,6 +61,7 @@ fun miscModule() = module {
             userGroupService = get(),
             roleService = get(),
             agentRoleService = get(),
+            projectService = get(),
             authorizationService = get(),
             workerService = get(),
             json = get(),

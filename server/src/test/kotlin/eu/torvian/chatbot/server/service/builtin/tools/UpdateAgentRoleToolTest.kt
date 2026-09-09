@@ -15,6 +15,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -45,9 +46,18 @@ class UpdateAgentRoleToolTest {
             agentRoleId = 1L
         )
 
+    /**
+     * Creates a role fixture carrying the persisted state that the PATCH merge is tested against.
+     *
+     * @param modelId Persisted model id.
+     * @param modelSettingsId Persisted settings id.
+     * @param projectId Persisted project membership (null = unassociated).
+     * @return The fixture role.
+     */
     private fun sampleRole(
         modelId: Long? = 3L,
-        modelSettingsId: Long? = 4L
+        modelSettingsId: Long? = 4L,
+        projectId: Long? = null
     ) = AgentRoleDto(
         id = 1L,
         name = "writer",
@@ -57,6 +67,7 @@ class UpdateAgentRoleToolTest {
         modelSettingsId = modelSettingsId,
         tools = setOf(5L, 6L),
         spawnableAgentRoleIds = setOf(2L),
+        projectId = projectId,
         instructions = listOf(
             AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a writer.")
         )
@@ -155,6 +166,101 @@ class UpdateAgentRoleToolTest {
         val error = assertIs<ServerBuiltInToolHandlerError.NotFoundOrNotAccessible>(result.leftOrNull())
         assertTrue(error.message.contains("not found or not accessible by the current user"))
         coVerify(exactly = 0) { agentRoleService.updateRole(any(), any(), any()) }
+    }
+
+    @Test
+    fun `project_id input overrides the persisted project membership`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        val persisted = sampleRole(projectId = 50L)
+        coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
+        coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns
+            persisted.copy(projectId = 60L).right()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        assertSuccess(
+            tool.execute(buildJsonObject { put("role_id", 1L); put("project_id", 60L) }, context())
+        )
+
+        coVerify(exactly = 1) {
+            agentRoleService.updateRole(
+                userId,
+                1L,
+                match<UpdateAgentRoleRequest> { request -> request.projectId == 60L }
+            )
+        }
+    }
+
+    @Test
+    fun `omitted project_id preserves the persisted project membership`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        val persisted = sampleRole(projectId = 50L)
+        coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
+        coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns persisted.right()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        assertSuccess(
+            tool.execute(buildJsonObject { put("role_id", 1L); put("name", "renamed") }, context())
+        )
+
+        coVerify(exactly = 1) {
+            agentRoleService.updateRole(
+                userId,
+                1L,
+                match<UpdateAgentRoleRequest> {
+                    request -> request.projectId == 50L && request.name == "renamed"
+                }
+            )
+        }
+    }
+
+    @Test
+    fun `project_id 0 explicitly unassociates the role`() = runTest {
+        // 0 is the LLM-facing sentinel for "clear the membership": project ids are always positive
+        // database ids, so 0 unambiguously means unassociated rather than a real project.
+        val agentRoleService = mockk<AgentRoleService>()
+        val persisted = sampleRole(projectId = 50L)
+        coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
+        coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns
+            persisted.copy(projectId = null).right()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        assertSuccess(
+            tool.execute(buildJsonObject { put("role_id", 1L); put("project_id", 0L) }, context())
+        )
+
+        coVerify(exactly = 1) {
+            agentRoleService.updateRole(
+                userId,
+                1L,
+                match<UpdateAgentRoleRequest> { request -> request.projectId == null }
+            )
+        }
+    }
+
+    @Test
+    fun `explicit null project_id preserves the persisted project membership`() = runTest {
+        // Like an omitted value, an explicitly-null project_id must not clear the membership; only
+        // the 0 sentinel does. Keeps the patch contract documented alongside the sentinel test.
+        val agentRoleService = mockk<AgentRoleService>()
+        val persisted = sampleRole(projectId = 50L)
+        coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
+        coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns persisted.right()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        assertSuccess(
+            tool.execute(
+                buildJsonObject { put("role_id", 1L); put("project_id", JsonNull) },
+                context()
+            )
+        )
+
+        coVerify(exactly = 1) {
+            agentRoleService.updateRole(
+                userId,
+                1L,
+                match<UpdateAgentRoleRequest> { request -> request.projectId == 50L }
+            )
+        }
     }
 
     @Test

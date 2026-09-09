@@ -31,6 +31,22 @@ sealed interface UpdateSessionAgentRoleIdError {
      * @property agentRoleId The disabled role identifier.
      */
     data class AgentRoleDisabled(val agentRoleId: Long) : UpdateSessionAgentRoleIdError
+
+    /**
+     * Indicates that attaching the role would leave the session in an illegal `(agent_role_id,
+     * project_id)` pair (the Session Legality Invariant): the session has a selected project the role
+     * does not belong to, or the session has no project while the role belongs to one. Reaching this
+     * error means the role exists, is owned/accessible and is enabled; only the project-scope
+     * mismatch blocks the attach. Removing the role (null) is always legal.
+     *
+     * @property agentRoleId The role that would violate the invariant.
+     * @property projectId The session's current project id; `null` when the session has no project
+     *            (and the role belongs to at least one).
+     */
+    data class AgentRoleNotInProject(
+        val agentRoleId: Long,
+        val projectId: Long?
+    ) : UpdateSessionAgentRoleIdError
 }
 
 /**
@@ -53,5 +69,14 @@ fun UpdateSessionAgentRoleIdError.toApiError(): ApiError = when (this) {
         CommonApiErrorCodes.CONFLICT,
         "Agent role is disabled",
         "agentRoleId" to agentRoleId.toString()
+    )
+
+    is UpdateSessionAgentRoleIdError.AgentRoleNotInProject -> apiError(
+        CommonApiErrorCodes.CONFLICT,
+        "Agent role does not match the selected project",
+        "agentRoleId" to agentRoleId.toString(),
+        // The project id is only meaningful when a project is selected; a project-less session makes
+        // the mismatch about the role's own project membership instead.
+        *if (projectId != null) arrayOf("projectId" to projectId.toString()) else emptyArray()
     )
 }
