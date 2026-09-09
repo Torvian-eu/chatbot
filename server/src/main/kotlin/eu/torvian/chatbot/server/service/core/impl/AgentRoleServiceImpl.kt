@@ -403,6 +403,10 @@ class AgentRoleServiceImpl(
             either {
                 logger.info("Deleting agent role $roleId for user $userId")
 
+                // The DAO's delete is id-keyed only, so ownership is checked here (the NotFound
+                // collapse hides the existence of foreign roles).
+                ensureOwnedBy(userId, roleId, DeleteAgentRoleError.NotFound(roleId))
+
                 withError({ _: AgentRoleDaoError.NotFound -> DeleteAgentRoleError.NotFound(roleId) }) {
                     agentRoleDao.deleteRole(roleId).bind()
                 }
