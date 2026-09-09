@@ -1,9 +1,11 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
+import eu.torvian.chatbot.server.service.core.error.project.CloneProjectError
 import eu.torvian.chatbot.server.service.core.error.project.CreateProjectError
 import eu.torvian.chatbot.server.service.core.error.project.DeleteProjectError
 import eu.torvian.chatbot.server.service.core.error.project.ProjectError
@@ -72,6 +74,29 @@ interface ProjectService {
         projectId: Long,
         request: UpdateProjectRequest
     ): Either<UpdateProjectError, ProjectDto>
+
+    /**
+     * Clones an existing project owned by the user under a new, per-owner-unique name.
+     *
+     * Validates the new name (reusing the non-blank/≤255/unique-per-owner rules of create/update),
+     * deep-copies every member agent role of the source as a new role row (configuration, tools,
+     * spawn allow-list remapped to the cloned role ids, per-user disabled markers), and persists the
+     * new project, its ownership, and all role copies atomically in a single transaction. The source
+     * project, its roles, and their disabled state remain untouched. A foreign or nonexistent source
+     * collapses to [CloneProjectError.NotFound] (no existence leak).
+     *
+     * @param userId The ID of the requesting user (must own the source project).
+     * @param sourceProjectId The ID of the project to clone.
+     * @param request The clone payload: new name (required), optional description override (null
+     *            copies the source's description).
+     * @return Either a [CloneProjectError] or the newly created [ProjectDto] carrying the new member
+     *         role ids.
+     */
+    suspend fun cloneProject(
+        userId: Long,
+        sourceProjectId: Long,
+        request: CloneProjectRequest
+    ): Either<CloneProjectError, ProjectDto>
 
     /**
      * Deletes a project owned by the user.

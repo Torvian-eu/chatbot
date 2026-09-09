@@ -6,11 +6,16 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.MAX_PROJECT_NAME_LENGTH
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleDisabledDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleOwnershipDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleSpawnableRoleDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleToolDao
 import eu.torvian.chatbot.server.data.dao.ProjectAgentRoleDao
 import eu.torvian.chatbot.server.data.dao.ProjectDao
 import eu.torvian.chatbot.server.data.dao.ProjectOwnershipDao
@@ -20,6 +25,7 @@ import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.project.ProjectError as ProjectDaoError
 import eu.torvian.chatbot.server.data.entities.ProjectEntity
 import eu.torvian.chatbot.server.service.core.ProjectService
+import eu.torvian.chatbot.server.service.core.error.project.CloneProjectError
 import eu.torvian.chatbot.server.service.core.error.project.CreateProjectError
 import eu.torvian.chatbot.server.service.core.error.project.DeleteProjectError
 import eu.torvian.chatbot.server.service.core.error.project.ProjectError
@@ -39,7 +45,15 @@ import org.apache.logging.log4j.Logger
  * @property projectOwnershipDao DAO for the `project_owners` table (per-user ownership).
  * @property projectAgentRoleDao DAO for the project ↔ role membership relation, stored as the
  *            single nullable `agent_roles.project_id` column (member role ids).
- * @property agentRoleDao DAO used to validate member-role references (existence and ownership).
+ * @property agentRoleDao DAO used to validate member-role references (existence and ownership) and
+ *            to deep-copy source roles into a clone.
+ * @property agentRoleToolDao DAO used to copy each source role's tool set onto its clone (the
+ *            `agent_role_tools` join table).
+ * @property agentRoleSpawnableRoleDao DAO used to copy each source role's spawn allow-list onto its
+ *            clone, remapped to the cloned role ids.
+ * @property agentRoleOwnershipDao DAO used to give every cloned role its own ownership row.
+ * @property agentRoleDisabledDao DAO used to copy each source role's per-user disabled marker onto
+ *            its clone (a source role disabled for the user stays disabled in the clone).
  * @property sessionDao DAO used to restore the Session Legality Invariant when a project is deleted or
  *            its role membership is edited.
  * @property transactionScope Transaction wrapper that keeps validation + persistence atomic.
@@ -49,6 +63,10 @@ class ProjectServiceImpl(
     private val projectOwnershipDao: ProjectOwnershipDao,
     private val projectAgentRoleDao: ProjectAgentRoleDao,
     private val agentRoleDao: AgentRoleDao,
+    private val agentRoleToolDao: AgentRoleToolDao,
+    private val agentRoleSpawnableRoleDao: AgentRoleSpawnableRoleDao,
+    private val agentRoleOwnershipDao: AgentRoleOwnershipDao,
+    private val agentRoleDisabledDao: AgentRoleDisabledDao,
     private val sessionDao: SessionDao,
     private val transactionScope: TransactionScope
 ) : ProjectService {
@@ -205,6 +223,117 @@ class ProjectServiceImpl(
 
             logger.info("Updated project $projectId for user $userId")
             updated.toDto(request.agentRoleIds)
+        }
+    }
+
+    override suspend fun cloneProject(
+        userId: Long,
+        sourceProjectId: Long,
+        request: CloneProjectRequest
+    ): Either<CloneProjectError, ProjectDto> = transactionScope.transaction {
+        either {
+            logger.info("Cloning project $sourceProjectId for user $userId")
+
+            // Ownership-checked source load: a foreign or nonexistent source collapses to the same
+            // not-found error (no existence leak), consistent with every other project operation.
+            val source = loadOwnedProject(
+                userId = userId,
+                projectId = sourceProjectId,
+                notFoundError = CloneProjectError.NotFound(sourceProjectId)
+            )
+
+            validateName(request.name, request.name) { name, reason ->
+                CloneProjectError.InvalidName(name, reason)
+            }
+
+            // Names are unique per owner user (not globally); the clone is a brand-new project whose
+            // name was caller-chosen, so the plain create rule applies unchanged (no self-exclusion).
+            ensure(!projectDao.projectNameExistsForUser(userId, request.name)) {
+                CloneProjectError.NameAlreadyExists(request.name)
+            }
+
+            // Description defaulting (Q4-A): null (omitted) copies the source's description; any
+            // provided value — including an explicit empty string — overrides it.
+            val clonedProject = projectDao.insertProject(
+                name = request.name,
+                description = request.description ?: source.description
+            )
+
+            withError({ ownershipError: SetOwnerError ->
+                CloneProjectError.OwnerInsertFailed(ownershipError.toString())
+            }) {
+                projectOwnershipDao.setOwner(clonedProject.id, userId).bind()
+            }
+
+            // --- Role deep copy (Q1-C/Q2-B) ---
+            // Every member relation of the source roles is loaded batch-wise (one query per relation)
+            // so the clone path avoids an N+1 read, mirroring the list/detail batch reads. All source
+            // roles are owned by the requesting user (membership is user-scoped), so the batch owner
+            // check returns the full member set.
+            val sourceRoleIds = projectAgentRoleDao.getRoleIdsForProject(sourceProjectId)
+            val sourceRoles = agentRoleDao.getRolesByIdsForUser(userId, sourceRoleIds.toList())
+            val sourceToolIdsByRole = agentRoleToolDao.getToolsForRoles(sourceRoleIds.toList())
+            val sourceSpawnableIdsByRole =
+                agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(sourceRoleIds.toList())
+            // A (user, role) row means "disabled for that user"; the batch read mirrors the tool and
+            // spawnable batch loads so the disabled-state copy stays N+1-free too.
+            val disabledSourceRoleIds = agentRoleDisabledDao.getDisabledRoleIds(userId, sourceRoleIds.toList())
+
+            // Phase 1: insert every cloned role row (bound to the clone's project id) and build the
+            // old-id -> new-id map INSIDE this transaction. The map must be complete before any spawn
+            // allow-list is replaced, so the relation phase runs as a separate loop over the same set.
+            val oldToNewRoleIds = mutableMapOf<Long, Long>()
+            val newRoleIds = mutableSetOf<Long>()
+            for (sourceRole in sourceRoles) {
+                val newRole = agentRoleDao.insertRole(
+                    name = sourceRole.name,
+                    displayName = sourceRole.displayName,
+                    description = sourceRole.description,
+                    modelId = sourceRole.modelId,
+                    modelSettingsId = sourceRole.modelSettingsId,
+                    instructionsJson = sourceRole.instructionsJson,
+                    // Membership is established by the row write itself: the clone's member set is
+                    // exactly the roles inserted with the clone's project id.
+                    projectId = clonedProject.id
+                )
+                oldToNewRoleIds[sourceRole.id] = newRole.id
+                newRoleIds += newRole.id
+            }
+
+            // Phase 2: copy each source role's relations onto its clone. The spawn allow-list is
+            // remapped old-id -> new-id: a target in the cloned set maps to the corresponding new role
+            // id (legal under the same-project spawn rule), and any stale target outside the cloned
+            // set is DROPPED rather than copied verbatim (it would be a cross-project grant).
+            for (sourceRole in sourceRoles) {
+                val newRoleId = requireNotNull(oldToNewRoleIds[sourceRole.id])
+                agentRoleToolDao.replaceToolsForRole(newRoleId, sourceToolIdsByRole[sourceRole.id].orEmpty())
+                agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(
+                    newRoleId,
+                    sourceSpawnableIdsByRole[sourceRole.id].orEmpty()
+                        .mapNotNull { targetId -> oldToNewRoleIds[targetId] }
+                        .toSet()
+                )
+                // Deliberate deviation from the create-role path (which never inserts disabled rows):
+                // a source role disabled for the user yields a disabled cloned role (Q1-C/Q2-B); an
+                // enabled source role yields an enabled clone (no row written).
+                if (sourceRole.id in disabledSourceRoleIds) {
+                    agentRoleDisabledDao.setRoleDisabled(userId, newRoleId, true)
+                }
+                // A role-ownership insert failure is a technical persistence failure; mapping it to
+                // OwnerInsertFailed (like the project-ownership write) keeps the clone from returning
+                // a project whose roles have no owner.
+                withError({ ownershipError: SetOwnerError ->
+                    CloneProjectError.OwnerInsertFailed(ownershipError.toString())
+                }) {
+                    agentRoleOwnershipDao.setOwner(newRoleId, userId).bind()
+                }
+            }
+
+            logger.info(
+                "Cloned project '${request.name}' (id ${clonedProject.id}) for user $userId " +
+                    "with ${newRoleIds.size} deep-copied role(s) from project $sourceProjectId"
+            )
+            clonedProject.toDto(newRoleIds)
         }
     }
 

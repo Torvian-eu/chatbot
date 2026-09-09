@@ -3,9 +3,14 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleDisabledDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleOwnershipDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleSpawnableRoleDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleToolDao
 import eu.torvian.chatbot.server.data.dao.ProjectAgentRoleDao
 import eu.torvian.chatbot.server.data.dao.ProjectDao
 import eu.torvian.chatbot.server.data.dao.ProjectOwnershipDao
@@ -14,6 +19,7 @@ import eu.torvian.chatbot.server.data.dao.SessionProjectPair
 import eu.torvian.chatbot.server.data.dao.SessionRolePair
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.project.ProjectError as ProjectDaoError
+import eu.torvian.chatbot.server.service.core.error.project.CloneProjectError
 import eu.torvian.chatbot.server.service.core.error.project.CreateProjectError
 import eu.torvian.chatbot.server.service.core.error.project.DeleteProjectError
 import eu.torvian.chatbot.server.service.core.error.project.ProjectError
@@ -29,6 +35,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -47,6 +54,10 @@ class ProjectServiceImplTest {
     private lateinit var projectOwnershipDao: ProjectOwnershipDao
     private lateinit var projectAgentRoleDao: ProjectAgentRoleDao
     private lateinit var agentRoleDao: AgentRoleDao
+    private lateinit var agentRoleToolDao: AgentRoleToolDao
+    private lateinit var agentRoleSpawnableRoleDao: AgentRoleSpawnableRoleDao
+    private lateinit var agentRoleOwnershipDao: AgentRoleOwnershipDao
+    private lateinit var agentRoleDisabledDao: AgentRoleDisabledDao
     private lateinit var sessionDao: SessionDao
     private lateinit var transactionScope: TransactionScope
 
@@ -61,6 +72,10 @@ class ProjectServiceImplTest {
         projectOwnershipDao = mockk()
         projectAgentRoleDao = mockk()
         agentRoleDao = mockk()
+        agentRoleToolDao = mockk()
+        agentRoleSpawnableRoleDao = mockk()
+        agentRoleOwnershipDao = mockk()
+        agentRoleDisabledDao = mockk()
         sessionDao = mockk()
         transactionScope = mockk()
 
@@ -69,6 +84,10 @@ class ProjectServiceImplTest {
             projectOwnershipDao = projectOwnershipDao,
             projectAgentRoleDao = projectAgentRoleDao,
             agentRoleDao = agentRoleDao,
+            agentRoleToolDao = agentRoleToolDao,
+            agentRoleSpawnableRoleDao = agentRoleSpawnableRoleDao,
+            agentRoleOwnershipDao = agentRoleOwnershipDao,
+            agentRoleDisabledDao = agentRoleDisabledDao,
             sessionDao = sessionDao,
             transactionScope = transactionScope
         )
@@ -87,6 +106,16 @@ class ProjectServiceImplTest {
         // of the member set); default it so focused tests only override when they verify arguments.
         coEvery { projectAgentRoleDao.replaceRolesForProject(any(), any()) } returns Unit
         coEvery { agentRoleDao.getRolesByIdsForUser(any(), any()) } returns emptyList()
+        // Clone-path defaults: an empty member set and per-role relations, so focused clone tests
+        // only stub the batch reads/writes they verify.
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(any()) } returns emptySet()
+        coEvery { agentRoleToolDao.getToolsForRoles(any()) } returns emptyMap()
+        coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(any()) } returns emptyMap()
+        coEvery { agentRoleDisabledDao.getDisabledRoleIds(any(), any()) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+        coEvery { agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(any(), any()) } returns Unit
+        coEvery { agentRoleOwnershipDao.setOwner(any(), any()) } returns Unit.right()
+        coEvery { agentRoleDisabledDao.setRoleDisabled(any(), any(), any()) } returns Unit
 
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
@@ -101,6 +130,10 @@ class ProjectServiceImplTest {
             projectOwnershipDao,
             projectAgentRoleDao,
             agentRoleDao,
+            agentRoleToolDao,
+            agentRoleSpawnableRoleDao,
+            agentRoleOwnershipDao,
+            agentRoleDisabledDao,
             sessionDao,
             transactionScope
         )
@@ -638,6 +671,262 @@ class ProjectServiceImplTest {
         val result = service.updateProject(userId, 5L, UpdateProjectRequest(name = "X"))
 
         assertIs<UpdateProjectError.NotFound>(result.leftOrNull())
+    }
+
+    // --- cloneProject ---
+
+    @Test
+    fun `cloneProject returns NotFound for a nonexistent source`() = runTest {
+        coEvery { projectDao.getProjectById(5L) } returns ProjectDaoError.NotFound(5L).left()
+
+        val result = service.cloneProject(userId, 5L, CloneProjectRequest(name = "Copy"))
+
+        assertIs<CloneProjectError.NotFound>(result.leftOrNull())
+        coVerify(exactly = 0) { projectDao.insertProject(any(), any()) }
+    }
+
+    @Test
+    fun `cloneProject collapses a foreign source to NotFound without leaking ownership`() = runTest {
+        val source = TestDefaults.project1
+        coEvery { projectDao.getProjectById(source.id) } returns source.right()
+        // User 8 owns the source, not the requesting user 7: same not-found shape as a missing project.
+        coEvery { projectOwnershipDao.getOwner(source.id) } returns otherUserId.right()
+
+        val result = service.cloneProject(userId, source.id, CloneProjectRequest(name = "Copy"))
+
+        val error = assertIs<CloneProjectError.NotFound>(result.leftOrNull())
+        assertEquals(source.id, error.id)
+        coVerify(exactly = 0) { projectDao.insertProject(any(), any()) }
+    }
+
+    @Test
+    fun `cloneProject rejects a duplicate name for the same owner`() = runTest {
+        val source = TestDefaults.project1
+        coEvery { projectDao.getProjectById(source.id) } returns source.right()
+        coEvery { projectOwnershipDao.getOwner(source.id) } returns userId.right()
+        // The requesting user already owns a DIFFERENT project with that name.
+        coEvery { projectDao.projectNameExistsForUser(userId, "Taken") } returns true
+
+        val result = service.cloneProject(userId, source.id, CloneProjectRequest(name = "Taken"))
+
+        val error = assertIs<CloneProjectError.NameAlreadyExists>(result.leftOrNull())
+        assertEquals("Taken", error.name)
+        coVerify(exactly = 0) { projectDao.insertProject(any(), any()) }
+    }
+
+    @Test
+    fun `cloneProject rejects a blank name`() = runTest {
+        val source = TestDefaults.project1
+        coEvery { projectDao.getProjectById(source.id) } returns source.right()
+        coEvery { projectOwnershipDao.getOwner(source.id) } returns userId.right()
+
+        val result = service.cloneProject(userId, source.id, CloneProjectRequest(name = "   "))
+
+        assertIs<CloneProjectError.InvalidName>(result.leftOrNull())
+        coVerify(exactly = 0) { projectDao.insertProject(any(), any()) }
+    }
+
+    @Test
+    fun `cloneProject copies the source description when none is provided`() = runTest {
+        val source = TestDefaults.project1
+        coEvery { projectDao.getProjectById(source.id) } returns source.right()
+        coEvery { projectOwnershipDao.getOwner(source.id) } returns userId.right()
+        coEvery { projectDao.projectNameExistsForUser(userId, "Copy of Acme Web App") } returns false
+        // The omitted description defaults to the source's description (Q4-A).
+        coEvery { projectDao.insertProject("Copy of Acme Web App", source.description) } returns
+            TestDefaults.project2.copy(id = 20L, name = "Copy of Acme Web App")
+        coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
+
+        val result = service.cloneProject(userId, source.id, CloneProjectRequest(name = "Copy of Acme Web App"))
+
+        assertTrue(result.isRight())
+        coVerify(exactly = 1) { projectDao.insertProject("Copy of Acme Web App", source.description) }
+        coVerify(exactly = 1) { projectOwnershipDao.setOwner(20L, userId) }
+    }
+
+    @Test
+    fun `cloneProject applies an explicit description override`() = runTest {
+        val source = TestDefaults.project1
+        coEvery { projectDao.getProjectById(source.id) } returns source.right()
+        coEvery { projectOwnershipDao.getOwner(source.id) } returns userId.right()
+        coEvery { projectDao.projectNameExistsForUser(userId, "Copy of Acme Web App") } returns false
+        coEvery { projectDao.insertProject("Copy of Acme Web App", "Fresh description") } returns
+            TestDefaults.project2.copy(id = 20L, name = "Copy of Acme Web App")
+        coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
+
+        val result = service.cloneProject(
+            userId,
+            source.id,
+            CloneProjectRequest(name = "Copy of Acme Web App", description = "Fresh description")
+        )
+
+        assertTrue(result.isRight())
+        coVerify(exactly = 1) { projectDao.insertProject("Copy of Acme Web App", "Fresh description") }
+        coVerify(exactly = 1) { projectOwnershipDao.setOwner(20L, userId) }
+    }
+
+    @Test
+    fun `cloneProject maps a project-ownership insertion failure to OwnerInsertFailed`() = runTest {
+        val source = TestDefaults.project1
+        coEvery { projectDao.getProjectById(source.id) } returns source.right()
+        coEvery { projectOwnershipDao.getOwner(source.id) } returns userId.right()
+        coEvery { projectDao.projectNameExistsForUser(userId, "Copy") } returns false
+        coEvery { projectDao.insertProject("Copy", source.description) } returns TestDefaults.project2.copy(name = "Copy")
+        coEvery { projectOwnershipDao.setOwner(TestDefaults.project2.id, userId) } returns
+            SetOwnerError.ForeignKeyViolation(TestDefaults.project2.id.toString(), userId).left()
+
+        val result = service.cloneProject(userId, source.id, CloneProjectRequest(name = "Copy"))
+
+        assertIs<CloneProjectError.OwnerInsertFailed>(result.leftOrNull())
+    }
+
+    @Test
+    fun `cloneProject deep-copies member roles with configuration, tools and remapped spawn ids`() = runTest {
+        val source = TestDefaults.project1
+        val sourceRoleA = TestDefaults.agentRole1.copy(
+            id = 10L,
+            name = "Architect",
+            displayName = "Senior Architect",
+            description = "role description",
+            modelId = 1L,
+            modelSettingsId = 2L,
+            projectId = source.id
+        )
+        val sourceRoleB = TestDefaults.agentRole2.copy(id = 11L, name = "Reviewer", projectId = source.id)
+        coEvery { projectDao.getProjectById(source.id) } returns source.right()
+        coEvery { projectOwnershipDao.getOwner(source.id) } returns userId.right()
+        coEvery { projectDao.projectNameExistsForUser(userId, "Copy of Acme Web App") } returns false
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(source.id) } returns setOf(10L, 11L)
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(10L, 11L)) } returns listOf(sourceRoleA, sourceRoleB)
+        // Role 10 carries a tool set and a spawn grant to role 11, plus a stale target 99 that is NOT
+        // part of the cloned set — it must be dropped, not copied verbatim.
+        coEvery { agentRoleToolDao.getToolsForRoles(listOf(10L, 11L)) } returns mapOf(10L to setOf(100L, 101L))
+        coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(listOf(10L, 11L)) } returns
+            mapOf(10L to setOf(11L, 99L))
+        coEvery { projectDao.insertProject("Copy of Acme Web App", source.description) } returns
+            TestDefaults.project2.copy(id = 20L, name = "Copy of Acme Web App")
+        coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
+        // New ids 30/31 are assigned in source iteration order (insertRole call order).
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+            TestDefaults.agentRole1.copy(id = 30L),
+            TestDefaults.agentRole2.copy(id = 31L)
+        )
+
+        val result = service.cloneProject(userId, source.id, CloneProjectRequest(name = "Copy of Acme Web App"))
+
+        assertTrue(result.isRight())
+        val dto = result.getOrNull()
+        assertNotNull(dto)
+        assertEquals(20L, dto.id)
+        assertEquals(setOf(30L, 31L), dto.agentRoleIds, "the DTO carries the NEW role ids, not the source's")
+        // Per-role configuration is copied field-for-field, with the membership pointing at the clone.
+        coVerify(exactly = 1) {
+            agentRoleDao.insertRole(
+                name = "Architect",
+                displayName = "Senior Architect",
+                description = "role description",
+                modelId = 1L,
+                modelSettingsId = 2L,
+                instructionsJson = sourceRoleA.instructionsJson,
+                projectId = 20L
+            )
+        }
+        coVerify(exactly = 1) { agentRoleDao.insertRole("Reviewer", "Code Reviewer", sourceRoleB.description, 2L, 2L, sourceRoleB.instructionsJson, 20L) }
+        // The tool set is copied as-is.
+        coVerify(exactly = 1) { agentRoleToolDao.replaceToolsForRole(30L, setOf(100L, 101L)) }
+        // The spawn allow-list is remapped old-id -> new-id (11 -> 31), and the stale target 99 is
+        // dropped rather than copied verbatim (it would be an illegal cross-project grant).
+        coVerify(exactly = 1) { agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(30L, setOf(31L)) }
+        // Every cloned role gets its own ownership row.
+        coVerify(exactly = 1) { agentRoleOwnershipDao.setOwner(30L, userId) }
+        coVerify(exactly = 1) { agentRoleOwnershipDao.setOwner(31L, userId) }
+        // The relations are loaded batch-wise (one query per relation, no N+1).
+        coVerify(exactly = 1) { agentRoleToolDao.getToolsForRoles(listOf(10L, 11L)) }
+        coVerify(exactly = 1) { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(listOf(10L, 11L)) }
+        // Source untouched: no project or role row of the source is mutated by the clone.
+        coVerify(exactly = 0) { projectDao.updateProject(any()) }
+        coVerify(exactly = 0) { projectDao.deleteProject(any()) }
+        coVerify(exactly = 0) { agentRoleDao.updateRole(any()) }
+        coVerify(exactly = 0) { agentRoleDao.deleteRole(any()) }
+    }
+
+    @Test
+    fun `cloneProject deep-copies the per-user disabled markers of the source roles`() = runTest {
+        val source = TestDefaults.project1
+        val sourceRoleA = TestDefaults.agentRole1.copy(id = 10L, projectId = source.id)
+        val sourceRoleB = TestDefaults.agentRole2.copy(id = 11L, projectId = source.id)
+        coEvery { projectDao.getProjectById(source.id) } returns source.right()
+        coEvery { projectOwnershipDao.getOwner(source.id) } returns userId.right()
+        coEvery { projectDao.projectNameExistsForUser(userId, "Copy") } returns false
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(source.id) } returns setOf(10L, 11L)
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(10L, 11L)) } returns listOf(sourceRoleA, sourceRoleB)
+        coEvery { projectDao.insertProject("Copy", source.description) } returns TestDefaults.project2.copy(id = 20L, name = "Copy")
+        coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+            TestDefaults.agentRole1.copy(id = 30L),
+            TestDefaults.agentRole2.copy(id = 31L)
+        )
+        // Role 10 carries a disabled marker for the user; role 11 is enabled.
+        coEvery { agentRoleDisabledDao.getDisabledRoleIds(userId, listOf(10L, 11L)) } returns setOf(10L)
+
+        val result = service.cloneProject(userId, source.id, CloneProjectRequest(name = "Copy"))
+
+        assertTrue(result.isRight())
+        // Deliberate deviation from create-role semantics (which never inserts disabled rows): only
+        // the clone of the disabled source role receives a disabled marker; the enabled source role
+        // yields an enabled clone (no row written).
+        coVerify(exactly = 1) { agentRoleDisabledDao.setRoleDisabled(userId, 30L, true) }
+        coVerify(exactly = 0) { agentRoleDisabledDao.setRoleDisabled(userId, 31L, true) }
+    }
+
+    @Test
+    fun `cloneProject maps a role-ownership failure to OwnerInsertFailed and returns no partial clone`() = runTest {
+        val source = TestDefaults.project1
+        val sourceRoleA = TestDefaults.agentRole1.copy(id = 10L, projectId = source.id)
+        val sourceRoleB = TestDefaults.agentRole2.copy(id = 11L, projectId = source.id)
+        coEvery { projectDao.getProjectById(source.id) } returns source.right()
+        coEvery { projectOwnershipDao.getOwner(source.id) } returns userId.right()
+        coEvery { projectDao.projectNameExistsForUser(userId, "Copy") } returns false
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(source.id) } returns setOf(10L, 11L)
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(10L, 11L)) } returns listOf(sourceRoleA, sourceRoleB)
+        coEvery { projectDao.insertProject("Copy", source.description) } returns TestDefaults.project2.copy(id = 20L, name = "Copy")
+        coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+            TestDefaults.agentRole1.copy(id = 30L),
+            TestDefaults.agentRole2.copy(id = 31L)
+        )
+        // The ownership write of the LAST cloned role fails after the project row, both role rows and
+        // the first role's relations were already written. The typed error is returned (the real
+        // TransactionScope rolls the whole clone back, leaving no project and no orphaned roles).
+        coEvery { agentRoleOwnershipDao.setOwner(30L, userId) } returns Unit.right()
+        coEvery { agentRoleOwnershipDao.setOwner(31L, userId) } returns
+            SetOwnerError.ForeignKeyViolation("31", userId).left()
+
+        val result = service.cloneProject(userId, source.id, CloneProjectRequest(name = "Copy"))
+
+        assertIs<CloneProjectError.OwnerInsertFailed>(result.leftOrNull())
+    }
+
+    @Test
+    fun `cloneProject propagates an unhandled failure during role insertion`() = runTest {
+        val source = TestDefaults.project1
+        val sourceRole = TestDefaults.agentRole1.copy(id = 10L, projectId = source.id)
+        coEvery { projectDao.getProjectById(source.id) } returns source.right()
+        coEvery { projectOwnershipDao.getOwner(source.id) } returns userId.right()
+        coEvery { projectDao.projectNameExistsForUser(userId, "Copy") } returns false
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(source.id) } returns setOf(10L)
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(10L)) } returns listOf(sourceRole)
+        coEvery { projectDao.insertProject("Copy", source.description) } returns TestDefaults.project2.copy(id = 20L, name = "Copy")
+        coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
+        // A forced failure while copying a role, after the new project row was inserted: the exception
+        // escapes the service so the real TransactionScope can roll the whole clone back (no new
+        // project, no orphaned role rows).
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) } throws
+            RuntimeException("injected role insertion failure")
+
+        assertFailsWith<RuntimeException> {
+            service.cloneProject(userId, source.id, CloneProjectRequest(name = "Copy"))
+        }
     }
 
     // --- deleteProject (legality cleanup) ---
