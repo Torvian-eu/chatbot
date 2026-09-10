@@ -280,6 +280,39 @@ class AgentSpawnToolTest {
     }
 
     /**
+     * Regression test against template-induced indentation: a spawned response whose continuation
+     * lines are flush-left must not drag the label lines (and the response's first line) into the
+     * template's indentation. The previous `.trimIndent()`-based template measured the common indent
+     * over the fully interpolated string, where the flush-left continuation lines of a multi-line
+     * summary pinned that indent at zero and left everything indented.
+     */
+    @Test
+    fun `execute keeps a multi-line summary flush-left instead of indenting the labels`() = runTest {
+        val sessionRepository = mockk<SessionRepository>()
+        coEvery { sessionRepository.createSession("Spawned: Implementation task") } returns session.right()
+        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+
+        val multiLineSummary = "I've retrieved the local time.\n\nHere is the report:\n## New York City Time"
+        val (resolver, _) = successfulViewModel(summary = multiLineSummary)
+        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        var result: ChatClientEvent.ToolExecutionResult? = null
+
+        executor.execute(
+            toolCallId = 42L,
+            payload = spawnPayload(),
+            clientEvents = { result = it }
+        )
+
+        // Every result line is flush-left: neither the labels nor the response pick up template
+        // indentation.
+        assertEquals(
+            "**Spawned chat session id:** 99\n\n**Response:**\n\n$multiLineSummary",
+            result?.output
+        )
+        assertEquals(false, result?.isError)
+    }
+
+    /**
      * Verifies fire-and-forget spawn mode: the session is created with the role attached, the first
      * turn is still started through the ViewModel (load → input → send), but the tool returns the
      * spawned session id **without awaiting the send job** and without force-cancelling the
