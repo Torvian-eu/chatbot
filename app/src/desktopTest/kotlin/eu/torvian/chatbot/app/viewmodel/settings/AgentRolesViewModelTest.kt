@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.domain.contracts.AgentRoleDialogState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.app.repository.*
+import eu.torvian.chatbot.app.testutils.viewmodel.awaitLaunchedBy
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
@@ -103,7 +104,9 @@ class AgentRolesViewModelTest {
 
     @Test
     fun `loadRolesAndCatalogs - also loads the preset catalog`() = runTest(dispatcher) {
-        viewModel.loadRolesAndCatalogs()
+        // parZip runs the six loaders on Dispatchers.Default, outside this test's scheduler: await the
+        // launched load so the verifications below observe completed calls instead of racing the pool.
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
 
         coVerify(exactly = 1) { repository.loadRoles() }
         coVerify(exactly = 1) { presetRepository.loadPresets() }

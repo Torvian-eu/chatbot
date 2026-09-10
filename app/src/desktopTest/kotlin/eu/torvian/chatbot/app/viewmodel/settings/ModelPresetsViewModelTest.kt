@@ -8,6 +8,7 @@ import eu.torvian.chatbot.app.repository.ModelPresetRepository
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.ModelSettingsRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.testutils.viewmodel.awaitLaunchedBy
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.llm.CreateModelPresetRequest
 import eu.torvian.chatbot.common.models.api.llm.UpdateModelPresetRequest
@@ -93,7 +94,9 @@ class ModelPresetsViewModelTest {
 
     @Test
     fun `loadPresetsAndCatalogs - loads presets, models and settings`() = runTest(dispatcher) {
-        viewModel.loadPresetsAndCatalogs()
+        // parZip runs the loaders on Dispatchers.Default, outside this test's scheduler: await the
+        // launched load so the verifications below observe completed calls instead of racing the pool.
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadPresetsAndCatalogs() }
 
         coVerify(exactly = 1) { presetRepository.loadPresets() }
         coVerify(exactly = 1) { modelRepository.loadModels() }
@@ -104,8 +107,9 @@ class ModelPresetsViewModelTest {
     fun `loadPresetsAndCatalogs - failure notifies for the failing catalog`() = runTest(dispatcher) {
         coEvery { presetRepository.loadPresets() } returns Either.Left(RepositoryError.OtherError("boom"))
 
-        viewModel.loadPresetsAndCatalogs()
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadPresetsAndCatalogs() }
 
+        // The failure notification is emitted by the parZip combinator once every branch finished.
         coVerify { notificationService.repositoryError(any<RepositoryError>(), any<String>()) }
     }
 
