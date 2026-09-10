@@ -211,6 +211,35 @@ class SendMessageToolTest {
     }
 
     /**
+     * Regression test against template-induced indentation: an assistant response whose continuation
+     * lines are flush-left must not drag the label lines (and the response's first line) into the
+     * template's indentation. The previous `.trimIndent()`-based template measured the common indent
+     * over the fully interpolated string, where the flush-left continuation lines of a multi-line
+     * response pinned that indent at zero and left everything indented.
+     */
+    @Test
+    fun `send_message keeps a multi-line response flush-left instead of indenting the labels`() = runTest {
+        val multiLineSummary = "I've retrieved the local time.\n\nHere is the report:\n## Target Time"
+        val (resolver, _) = successfulViewModel(summary = multiLineSummary)
+        val executor = newExecutor(resolver = resolver)
+        var result: ChatClientEvent.ToolExecutionResult? = null
+
+        executor.execute(
+            toolCallId = 42L,
+            payload = sendPayload(),
+            clientEvents = { result = it }
+        )
+
+        // Every result line is flush-left: neither the labels nor the response pick up template
+        // indentation.
+        assertEquals(
+            "**Target chat session id:** 88\n\n**Response:**\n\n$multiLineSummary",
+            result?.output
+        )
+        assertEquals(false, result?.isError)
+    }
+
+    /**
      * Verifies that a `send_message` fire-and-forget call returns a plain success notification
      * without awaiting the target turn and without force-cancelling it.
      */

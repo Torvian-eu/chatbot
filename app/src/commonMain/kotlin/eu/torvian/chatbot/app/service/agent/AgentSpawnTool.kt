@@ -269,32 +269,16 @@ class AgentSpawnTool(
     ): ChatClientEvent.ToolExecutionResult = when (outcome) {
         is TurnOutcome.Succeeded ->
             if (mode == OperatorToolMode.FIRE_AND_FORGET) {
-                // Immediate mode: the id is the essential payload; with no summary available yet,
-                // the content slot carries a status line so the caller knows the turn continues
-                // in the background.
                 ChatClientEvent.ToolExecutionResult(
                     toolCallId = toolCallId,
-                    output = """
-                        **Spawned chat session id:** $sessionId
-
-                        The spawned conversation started; its first turn continues in the background.
-                    """.trimIndent()
+                    output = "**Spawned chat session id:** $sessionId\n\n" +
+                        "The spawned conversation started; its first turn continues in the background."
                 )
             } else {
-                // The content is the assistant response the spawned conversation produced. A blank
-                // response is normally rejected earlier by the wait-mode newness guard, but this
-                // fallback keeps the output readable (instead of printing an empty section) if a
-                // blank summary ever reaches the formatter.
                 val response = outcome.content?.takeIf { it.isNotBlank() } ?: "No response received."
                 ChatClientEvent.ToolExecutionResult(
                     toolCallId = toolCallId,
-                    output = """
-                        **Spawned chat session id:** $sessionId
-
-                        **Response:**
-
-                        $response
-                    """.trimIndent()
+                    output = "**Spawned chat session id:** $sessionId\n\n**Response:**\n\n$response"
                 )
             }
 

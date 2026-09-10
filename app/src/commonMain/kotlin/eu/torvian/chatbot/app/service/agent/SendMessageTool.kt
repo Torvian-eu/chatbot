@@ -130,28 +130,14 @@ class SendMessageTool(
             if (mode == OperatorToolMode.FIRE_AND_FORGET) {
                 ChatClientEvent.ToolExecutionResult(
                     toolCallId = toolCallId,
-                    output = """
-                        **Target chat session id:** $chatSessionId
-
-                        Message sent successfully; the target conversation continues in the background.
-                    """.trimIndent()
+                    output = "**Target chat session id:** $chatSessionId\n\n" +
+                        "Message sent successfully; the target conversation continues in the background."
                 )
             } else {
-                // The id tag keeps the result self-describing when the caller sends messages to
-                // several sessions concurrently; the body is the assistant response itself, labeled
-                // so the calling model knows what the section contains. A blank response is
-                // normally rejected earlier by the wait-mode newness guard; this fallback keeps the
-                // output readable if a blank response ever reaches the formatter.
                 val response = outcome.content?.takeIf { it.isNotBlank() } ?: "No response received."
                 ChatClientEvent.ToolExecutionResult(
                     toolCallId = toolCallId,
-                    output = """
-                        **Target chat session id:** $chatSessionId
-
-                        **Response:**
-
-                        $response
-                    """.trimIndent()
+                    output = "**Target chat session id:** $chatSessionId\n\n**Response:**\n\n$response"
                 )
             }
 
