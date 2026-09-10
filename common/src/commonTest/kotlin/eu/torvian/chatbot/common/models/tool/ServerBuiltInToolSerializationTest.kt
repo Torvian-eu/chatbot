@@ -160,7 +160,8 @@ class ServerBuiltInToolSerializationTest {
     /**
      * Verifies the catalog defines every tool in stable order (the six project tools, the three
      * targeted instruction-edit tools, the get_current_session_info session-identity tool, the
-     * remaining role/model/settings/tool tools, and the delete_agent_role delete tool) and that
+     * remaining role/model/settings/tool tools, the delete_agent_role delete tool, and the five
+     * model-preset tools) and that
      * every parameterless schema passes the empty-object shape (so seeding validation never
      * rejects it).
      */
@@ -187,7 +188,12 @@ class ServerBuiltInToolSerializationTest {
                 ServerBuiltInToolCatalog.LIST_MODEL_SETTINGS_NAME,
                 ServerBuiltInToolCatalog.LIST_TOOLS_NAME,
                 ServerBuiltInToolCatalog.READ_TOOL_NAME,
-                ServerBuiltInToolCatalog.GET_CURRENT_SESSION_INFO_NAME
+                ServerBuiltInToolCatalog.GET_CURRENT_SESSION_INFO_NAME,
+                ServerBuiltInToolCatalog.LIST_MODEL_PRESETS_NAME,
+                ServerBuiltInToolCatalog.READ_MODEL_PRESET_NAME,
+                ServerBuiltInToolCatalog.CREATE_MODEL_PRESET_NAME,
+                ServerBuiltInToolCatalog.UPDATE_MODEL_PRESET_NAME,
+                ServerBuiltInToolCatalog.DELETE_MODEL_PRESET_NAME
             ),
             names
         )
@@ -202,5 +208,72 @@ class ServerBuiltInToolSerializationTest {
                 "Schema must be a valid JSON Schema: ${spec.name}"
             )
         }
+    }
+
+    /**
+     * Verifies the five model-preset specs declare their parameters correctly: the list tool is
+     * parameterless (empty-object schema, no `required` list), the read/update/delete tools require
+     * `model_preset_id`, the write tools expose `model_id`/`model_settings_id` under the
+     * catalog-owned property names, and `update_model_preset`'s description documents the `0`
+     * "clear the reference" sentinel the LLM must use for patch semantics.
+     */
+    @Test
+    fun `model preset specs declare their parameters and the clear sentinel`() {
+        fun propertiesOf(name: String) = requireNotNull(ServerBuiltInToolCatalog.specFor(name))
+            .inputSchema["properties"]!!.jsonObject
+
+        fun requiredOf(name: String) = requireNotNull(ServerBuiltInToolCatalog.specFor(name))
+            .inputSchema["required"]!!.jsonArray.map { it.jsonPrimitive.content }
+
+        // Parameterless: no parameters to hallucinate, and no required list.
+        val listSpec = requireNotNull(ServerBuiltInToolCatalog.specFor(ServerBuiltInToolCatalog.LIST_MODEL_PRESETS_NAME))
+        assertEquals("object", listSpec.inputSchema["type"]!!.jsonPrimitive.content)
+        assertTrue(propertiesOf(ServerBuiltInToolCatalog.LIST_MODEL_PRESETS_NAME).isEmpty())
+        assertTrue(listSpec.inputSchema["required"] == null)
+
+        // The preset id is the only required parameter of read/update/delete.
+        listOf(
+            ServerBuiltInToolCatalog.READ_MODEL_PRESET_NAME,
+            ServerBuiltInToolCatalog.UPDATE_MODEL_PRESET_NAME,
+            ServerBuiltInToolCatalog.DELETE_MODEL_PRESET_NAME
+        ).forEach { name ->
+            assertEquals(
+                "integer",
+                propertiesOf(name)[ServerBuiltInToolCatalog.MODEL_PRESET_ID_PROPERTY]!!
+                    .jsonObject["type"]!!.jsonPrimitive.content
+            )
+            assertTrue(ServerBuiltInToolCatalog.MODEL_PRESET_ID_PROPERTY in requiredOf(name))
+        }
+
+        // create_model_preset requires only the name and exposes both optional references.
+        assertEquals(listOf(ServerBuiltInToolCatalog.NAME_PROPERTY), requiredOf(ServerBuiltInToolCatalog.CREATE_MODEL_PRESET_NAME))
+        listOf(ServerBuiltInToolCatalog.CREATE_MODEL_PRESET_NAME, ServerBuiltInToolCatalog.UPDATE_MODEL_PRESET_NAME)
+            .forEach { name ->
+                val properties = propertiesOf(name)
+                assertEquals("integer", properties[ServerBuiltInToolCatalog.MODEL_ID_PROPERTY]!!.jsonObject["type"]!!.jsonPrimitive.content)
+                assertEquals(
+                    "integer",
+                    properties[ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY]!!.jsonObject["type"]!!.jsonPrimitive.content
+                )
+            }
+
+        // update_model_preset accepts every writable field and documents the 0 = clear sentinel.
+        val updateProperties = propertiesOf(ServerBuiltInToolCatalog.UPDATE_MODEL_PRESET_NAME)
+        assertEquals(
+            setOf(
+                ServerBuiltInToolCatalog.MODEL_PRESET_ID_PROPERTY,
+                ServerBuiltInToolCatalog.NAME_PROPERTY,
+                ServerBuiltInToolCatalog.DISPLAY_NAME_PROPERTY,
+                ServerBuiltInToolCatalog.DESCRIPTION_PROPERTY,
+                ServerBuiltInToolCatalog.MODEL_ID_PROPERTY,
+                ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY
+            ),
+            updateProperties.keys
+        )
+        val updateDescription = requireNotNull(
+            ServerBuiltInToolCatalog.specFor(ServerBuiltInToolCatalog.UPDATE_MODEL_PRESET_NAME)
+        ).description
+        assertTrue(updateDescription.contains("patch semantics"))
+        assertTrue(updateDescription.contains("pass 0"))
     }
 }

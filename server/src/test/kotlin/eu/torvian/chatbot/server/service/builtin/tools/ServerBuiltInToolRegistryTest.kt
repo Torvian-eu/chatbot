@@ -18,7 +18,8 @@ import kotlin.test.assertNotNull
  *
  * Verifies that the `Map<String, ServerBuiltInTool>` binding (the executor's dispatch table) is
  * keyed by every canonical catalog name — including the three targeted instruction tools,
- * `get_current_session_info`, the five project-management tools, and `delete_agent_role` — and
+ * `get_current_session_info`, the five project-management tools, `delete_agent_role`, and the five
+ * model-preset tools — and
  * that those keys resolve to the correct handler implementations.
  */
 class ServerBuiltInToolRegistryTest {
@@ -70,5 +71,14 @@ class ServerBuiltInToolRegistryTest {
         assertIs<DeleteProjectTool>(tools[ServerBuiltInToolCatalog.DELETE_PROJECT_NAME])
         assertIs<CloneProjectTool>(tools[ServerBuiltInToolCatalog.CLONE_PROJECT_NAME])
         assertIs<DeleteAgentRoleTool>(tools[ServerBuiltInToolCatalog.DELETE_AGENT_ROLE_NAME])
+
+        // The five model-preset tools resolve to their dedicated handlers. Together with the size
+        // assertion above this also proves no sixth tool crept in: the registry holds exactly one
+        // handler per catalog spec.
+        assertIs<ListModelPresetsTool>(tools[ServerBuiltInToolCatalog.LIST_MODEL_PRESETS_NAME])
+        assertIs<ReadModelPresetTool>(tools[ServerBuiltInToolCatalog.READ_MODEL_PRESET_NAME])
+        assertIs<CreateModelPresetTool>(tools[ServerBuiltInToolCatalog.CREATE_MODEL_PRESET_NAME])
+        assertIs<UpdateModelPresetTool>(tools[ServerBuiltInToolCatalog.UPDATE_MODEL_PRESET_NAME])
+        assertIs<DeleteModelPresetTool>(tools[ServerBuiltInToolCatalog.DELETE_MODEL_PRESET_NAME])
     }
 }
