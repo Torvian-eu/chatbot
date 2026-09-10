@@ -51,6 +51,19 @@ data class WorkersTabState(
 
 /**
  * State contract for the Agent Roles tab.
+ *
+ * @property rolesUiState Reactive role list state from the repository.
+ * @property selectedRole The role open in the master-detail view, or null on the list page.
+ * @property dialogState Add/edit/delete dialog state.
+ * @property models Chat-capable models for the role form's model picker.
+ * @property settingsForFormModel Chat-capable settings profiles for the form's currently chosen model.
+ * @property tools Enabled tool definitions for the form's tool multi-select.
+ * @property modelsById Model lookup map for the detail page.
+ * @property settingsById Settings lookup map (chat-capable) for the detail page.
+ * @property toolsById Tool lookup map for the detail page.
+ * @property projects The user's projects, used both by the role form's single-project selector and
+ *            by the list page's project grouping/filter derivation. Non-null (defaults to empty) so
+ *            consumers never have to unwrap an optional.
  */
 data class AgentRolesTabState(
     val rolesUiState: DataState<RepositoryError, List<AgentRoleDto>>,
@@ -63,4 +76,14 @@ data class AgentRolesTabState(
     val settingsById: Map<Long, ModelSettings> = emptyMap(),
     val toolsById: Map<Long, ToolDefinition> = emptyMap(),
     val projects: List<ProjectDto> = emptyList()
-)
+) {
+    /**
+     * The Settings → Agent Roles list grouped by project scope (project sections first, ordered by
+     * project name, then the "No project" section). Computed on every state construction from the
+     * already-loaded role and project streams so grouping stays reactive without extra reloads.
+     */
+    val roleSections: List<AgentRoleSection> = buildAgentRoleSections(
+        roles = rolesUiState.dataOrNull.orEmpty(),
+        projects = projects
+    )
+}

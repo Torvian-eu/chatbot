@@ -67,7 +67,8 @@ fun AgentRolesTab(
                     )
                 } else {
                     AgentRoleListPage(
-                        roles = roles,
+                        sections = state.roleSections,
+                        projects = state.projects,
                         selectedRole = selectedRole,
                         onRoleSelected = { role -> onOpenRoleDetails(role) },
                         onToggleRoleDisabled = { role -> actions.onToggleRoleDisabled(role) },
