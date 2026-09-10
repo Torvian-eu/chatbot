@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.llm.ModelPresetDto
 import kotlin.time.Instant
 
 // Helper to create Instant for tests (using a fixed time)
@@ -78,6 +79,25 @@ fun agentRole(
     modelSettingsId = modelSettingsId,
     tools = tools,
     instructions = instructions
+)
+
+// Helper to create ModelPresetDto
+fun modelPreset(
+    id: Long,
+    name: String,
+    displayName: String? = null,
+    description: String = "",
+    modelId: Long? = null,
+    modelSettingsId: Long? = null
+): ModelPresetDto = ModelPresetDto(
+    id = id,
+    name = name,
+    displayName = displayName,
+    description = description,
+    modelId = modelId,
+    modelSettingsId = modelSettingsId,
+    createdAt = instant(id),
+    updatedAt = instant(id)
 )
 
 // Helper to create a generic API error

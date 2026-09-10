@@ -7,8 +7,10 @@ import eu.torvian.chatbot.app.domain.contracts.AgentRoleDialogState
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleFormState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.createEmptyAgentRoleForm
+import eu.torvian.chatbot.app.domain.contracts.isChatCapable
 import eu.torvian.chatbot.app.domain.contracts.toEditFormState
 import eu.torvian.chatbot.app.repository.AgentRoleRepository
+import eu.torvian.chatbot.app.repository.ModelPresetRepository
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.ModelSettingsRepository
 import eu.torvian.chatbot.app.repository.ProjectRepository
@@ -18,7 +20,7 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
+import eu.torvian.chatbot.common.models.llm.ModelPresetDto
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -32,11 +34,20 @@ import kotlinx.coroutines.launch
  *
  * The ViewModel owns the role list, the selected role (master-detail), and the dialog/form state,
  * mirroring the [ModelSettingsViewModel] shape. It pulls chat-capable models, settings profiles and
- * enabled tools from their repositories to feed the role form's pickers.
+ * enabled tools from their repositories to feed the role form's pickers, and the model presets that
+ * hold every role's model/settings configuration.
+ *
+ * Cache consistency: preset mutations change the *derived* model/settings of bound roles, so the
+ * refresh runs inside [eu.torvian.chatbot.app.repository.ModelPresetRepository] (presets → roles,
+ * one-directional); this ViewModel only observes the preset stream.
  *
  * @property agentRoleRepository Repository for agent-role CRUD and the reactive role list.
- * @property modelRepository Repository of LLM models (filtered to chat-capable for the form).
- * @property modelSettingsRepository Repository of settings profiles (filtered to chat-capable).
+ * @property modelPresetRepository Repository of model presets (the role form's preset picker and the
+ *            detail page's preset/resolved-configuration rendering).
+ * @property modelRepository Repository of LLM models (filtered to chat-capable for the form's
+ *            `model_specific` instruction targets).
+ * @property modelSettingsRepository Repository of settings profiles, used to resolve the settings a
+ *            role's preset references.
  * @property toolRepository Repository of tool definitions (filtered to enabled tools).
  * @property projectRepository Repository of user-owned projects (used by the role form's single
  *            project selector and loaded together with the role catalog).
@@ -45,6 +56,7 @@ import kotlinx.coroutines.launch
  */
 class AgentRolesViewModel(
     private val agentRoleRepository: AgentRoleRepository,
+    private val modelPresetRepository: ModelPresetRepository,
     private val modelRepository: ModelRepository,
     private val modelSettingsRepository: ModelSettingsRepository,
     private val toolRepository: ToolRepository,
@@ -71,7 +83,7 @@ class AgentRolesViewModel(
         roles?.find { it.id == selectedId }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
-    /** Chat-capable models for the role form's model picker (active + having a CHAT/RESPONSES profile). */
+    /** Chat-capable models for the form's `model_specific` instruction target picker. */
     val modelsState: StateFlow<DataState<RepositoryError, List<LLMModel>>> = combine(
         modelRepository.models,
         modelSettingsRepository.allSettings
@@ -79,7 +91,7 @@ class AgentRolesViewModel(
         when (modelsState) {
             is DataState.Success -> {
                 val chatCapableModelIds = settingsState.dataOrNull.orEmpty()
-                    .filter { isChatCapableSettings(it) }
+                    .filter { it.isChatCapable() }
                     .map { it.modelId }
                     .toSet()
                 DataState.Success(modelsState.data.filter { model -> model.active && model.id in chatCapableModelIds })
@@ -106,15 +118,29 @@ class AgentRolesViewModel(
     /** Reactive stream of the user's projects, fed to the role form's single project selector. */
     val projectsState: StateFlow<DataState<RepositoryError, List<ProjectDto>>> = projectRepository.projects
 
+    /** Reactive stream of the user's model presets (name-ascending), fed to the role form's picker. */
+    val presetsState: StateFlow<DataState<RepositoryError, List<ModelPresetDto>>> = modelPresetRepository.presets
+
     /** Model lookup map for the role detail page. */
     val modelsById: StateFlow<Map<Long, LLMModel>> =
         modelRepository.models.map { it.dataOrNull?.associateBy { model -> model.id } ?: emptyMap() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
 
-    /** Settings lookup map (chat-capable profiles) for the role detail page. */
+    /** Preset lookup map for the role detail page's preset and resolved-configuration rows. */
+    val presetsById: StateFlow<Map<Long, ModelPresetDto>> =
+        presetsState.map { it.dataOrNull?.associateBy { preset -> preset.id } ?: emptyMap() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
+
+    /**
+     * Settings lookup map for the role detail page and the form's sendability hint.
+     *
+     * Deliberately unfiltered: the rows always render exactly what the role's preset references, and
+     * a chat-capability filter would render a legal-but-unusable reference as "not available", hiding
+     * the actual reason (which the sendability hint states precisely).
+     */
     val settingsById: StateFlow<Map<Long, ModelSettings>> =
         modelSettingsRepository.allSettings
-            .map { it.dataOrNull?.filter(::isChatCapableSettings)?.associateBy { s -> s.id } ?: emptyMap() }
+            .map { it.dataOrNull?.associateBy { s -> s.id } ?: emptyMap() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
 
     /** Tool lookup map for the role detail page. */
@@ -122,40 +148,32 @@ class AgentRolesViewModel(
         toolRepository.tools.map { it.dataOrNull?.associateBy { tool -> tool.id } ?: emptyMap() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
 
-    /** Chat-capable settings profiles for the model currently chosen in the form. */
-    val settingsForFormModel: StateFlow<List<ModelSettings>?> = combine(
-        modelSettingsRepository.allSettings.map { it.dataOrNull },
-        _dialogState
-    ) { allSettings, currentDialog ->
-        val formModelId = when (currentDialog) {
-            is AgentRoleDialogState.AddRole -> currentDialog.formState.modelId
-            is AgentRoleDialogState.EditRole -> currentDialog.formState.modelId
-            else -> null
-        }
-        allSettings?.filter { settings ->
-            isChatCapableSettings(settings) && settings.modelId == formModelId
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
-
     /** The current dialog state for the tab. */
     val dialogState: StateFlow<AgentRoleDialogState> = _dialogState.asStateFlow()
 
     /**
-     * Loads the role list and the model/settings/tools catalogs in parallel.
+     * Loads the role list and the model/preset/settings/tools/project catalogs in parallel.
      */
     fun loadRolesAndCatalogs() {
         viewModelScope.launch(uiDispatcher) {
             parZip(
                 { agentRoleRepository.loadRoles() },
+                { modelPresetRepository.loadPresets() },
                 { modelRepository.loadModels() },
                 { modelSettingsRepository.loadAllSettings() },
                 { toolRepository.loadTools() },
                 { projectRepository.loadProjects() }
-            ) { rolesResult, modelsResult, settingsResult, toolsResult, projectsResult ->
+            ) { rolesResult, presetsResult, modelsResult, settingsResult, toolsResult, projectsResult ->
                 rolesResult.mapLeft { error ->
                     notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load agent roles"
+                    )
+                }
+                presetsResult.mapLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load model presets"
                     )
                 }
                 modelsResult.mapLeft { error ->
@@ -346,9 +364,5 @@ class AgentRolesViewModel(
                     }
                 )
         }
-    }
-
-    private fun isChatCapableSettings(settings: ModelSettings): Boolean {
-        return settings.modelType == LLMModelType.CHAT || settings.modelType == LLMModelType.RESPONSES
     }
 }

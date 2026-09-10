@@ -51,10 +51,11 @@ fun AgentRolesTabRoute(
     val selectedRole by viewModel.selectedRole.collectAsState()
     val dialogState by viewModel.dialogState.collectAsState()
     val modelsState by viewModel.modelsState.collectAsState()
-    val settingsForFormModel by viewModel.settingsForFormModel.collectAsState()
+    val presetsState by viewModel.presetsState.collectAsState()
     val toolsState by viewModel.toolsState.collectAsState()
     val projectsState by viewModel.projectsState.collectAsState()
     val modelsById by viewModel.modelsById.collectAsState()
+    val presetsById by viewModel.presetsById.collectAsState()
     val settingsById by viewModel.settingsById.collectAsState()
     val toolsById by viewModel.toolsById.collectAsState()
 
@@ -84,9 +85,10 @@ fun AgentRolesTabRoute(
         selectedRole = selectedRole,
         dialogState = dialogState,
         models = modelsState.dataOrNull.orEmpty(),
-        settingsForFormModel = settingsForFormModel,
         tools = toolsState.dataOrNull.orEmpty(),
+        presets = presetsState.dataOrNull.orEmpty(),
         modelsById = modelsById,
+        presetsById = presetsById,
         settingsById = settingsById,
         toolsById = toolsById,
         projects = projectsState.dataOrNull.orEmpty()

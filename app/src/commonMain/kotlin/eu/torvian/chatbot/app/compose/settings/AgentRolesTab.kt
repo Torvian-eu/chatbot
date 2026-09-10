@@ -58,6 +58,7 @@ fun AgentRolesTab(
                     AgentRoleDetailPage(
                         role = selectedRole,
                         modelsById = state.modelsById,
+                        presetsById = state.presetsById,
                         settingsById = state.settingsById,
                         toolsById = state.toolsById,
                         onBackToList = onBackToRoleList,
@@ -105,7 +106,8 @@ fun AgentRolesTab(
         dialogState = state.dialogState,
         actions = actions,
         models = state.models,
-        settingsForModel = state.settingsForFormModel,
+        presets = state.presets,
+        settingsById = state.settingsById,
         tools = state.tools,
         roles = state.rolesUiState.dataOrNull.orEmpty(),
         projects = state.projects

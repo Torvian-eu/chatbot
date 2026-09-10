@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelPresetDto
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -55,11 +56,14 @@ data class WorkersTabState(
  * @property rolesUiState Reactive role list state from the repository.
  * @property selectedRole The role open in the master-detail view, or null on the list page.
  * @property dialogState Add/edit/delete dialog state.
- * @property models Chat-capable models for the role form's model picker.
- * @property settingsForFormModel Chat-capable settings profiles for the form's currently chosen model.
+ * @property models Chat-capable models for the form's `model_specific` instruction target picker.
+ * @property presets The user's model presets (name-ascending) offered by the form's preset picker.
  * @property tools Enabled tool definitions for the form's tool multi-select.
  * @property modelsById Model lookup map for the detail page.
- * @property settingsById Settings lookup map (chat-capable) for the detail page.
+ * @property presetsById Preset lookup map used by the detail page to render the role's preset and
+ *            the model/settings resolved from it.
+ * @property settingsById Settings lookup map (unfiltered) for the detail page and the form's
+ *            sendability hint.
  * @property toolsById Tool lookup map for the detail page.
  * @property projects The user's projects, used both by the role form's single-project selector and
  *            by the list page's project grouping/filter derivation. Non-null (defaults to empty) so
@@ -70,9 +74,10 @@ data class AgentRolesTabState(
     val selectedRole: AgentRoleDto?,
     val dialogState: AgentRoleDialogState,
     val models: List<LLMModel>,
-    val settingsForFormModel: List<ModelSettings>?,
     val tools: List<ToolDefinition>,
+    val presets: List<ModelPresetDto> = emptyList(),
     val modelsById: Map<Long, LLMModel> = emptyMap(),
+    val presetsById: Map<Long, ModelPresetDto> = emptyMap(),
     val settingsById: Map<Long, ModelSettings> = emptyMap(),
     val toolsById: Map<Long, ToolDefinition> = emptyMap(),
     val projects: List<ProjectDto> = emptyList()

@@ -9,23 +9,34 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.domain.contracts.AgentRoleSendability
+import eu.torvian.chatbot.app.domain.contracts.resolveAgentRoleSendability
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.agent.modelSpecificId
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelPresetDto
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 
 /**
  * Full-width details page for a single agent role.
  *
- * Shows the role's model/settings/tools and its resolved instruction list. Unknown instruction
- * types are rendered generically to stay forward compatible with future instruction kinds.
+ * The role's LLM configuration is rendered as the preset it references **plus** the model and
+ * settings profile the server resolves from that preset (U-26): there is no dormant direct
+ * model/settings pair left in the model, so the two rows are the effective configuration a turn would
+ * use. A role that cannot drive a turn is flagged at the top with the reason reported by the shared
+ * [resolveAgentRoleSendability] helper, which the role form uses for its inline hint too.
+ *
+ * Unknown instruction types are rendered generically to stay forward compatible with future
+ * instruction kinds.
  *
  * @param role The role to display.
- * @param modelsById Model lookup for the role's model id.
- * @param settingsById Settings lookup for the role's settings id.
+ * @param modelsById Model lookup for the role's resolved model id.
+ * @param presetsById Preset lookup for the role's preset reference.
+ * @param settingsById Settings lookup for the role's resolved settings id (unfiltered, so the row
+ *            always reports what the preset actually references).
  * @param toolsById Tool lookup for the role's tool ids.
  * @param onBackToList Callback invoked when the user returns to the role list.
  * @param onEdit Callback invoked when the user starts editing the role.
@@ -36,6 +47,7 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
 fun AgentRoleDetailPage(
     role: AgentRoleDto,
     modelsById: Map<Long, LLMModel>,
+    presetsById: Map<Long, ModelPresetDto>,
     settingsById: Map<Long, ModelSettings>,
     toolsById: Map<Long, ToolDefinition>,
     onBackToList: () -> Unit,
@@ -72,19 +84,45 @@ fun AgentRoleDetailPage(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            val preset = role.modelPresetId?.let { presetsById[it] }
+            val model = role.modelId?.let { modelsById[it] }
+            val settings = role.modelSettingsId?.let { settingsById[it] }
+
+            // The flag is what makes AC-21 observable: a preset-less role (or one whose preset cannot
+            // resolve a usable model/settings pair) could otherwise look perfectly configured.
+            val sendability = resolveAgentRoleSendability(
+                role = role,
+                preset = preset,
+                settings = settings
+            )
+            if (sendability is AgentRoleSendability.NotSendable) {
+                Text(
+                    text = "This role is not sendable. ${sendability.reason}",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
             if (role.description.isNotBlank()) {
                 DetailRow(label = "Description", value = role.description)
             }
 
-            val model = role.modelId?.let { modelsById[it] }
-            val settings = role.modelSettingsId?.let { settingsById[it] }
             DetailRow(
-                label = "Model",
-                value = model?.let { it.displayName ?: it.name } ?: "Not available (repair this role)"
+                label = "Model preset",
+                value = preset?.let { it.displayName?.takeIf { name -> name.isNotBlank() } ?: it.name }
+                    ?: role.modelPresetId?.let { "Preset #$it (not found)" }
+                    ?: "None"
+            )
+            // The preset is the sole configuration source, so these two rows are the *resolved*
+            // effective values a turn would use — not a second, editable configuration pair (U-26).
+            DetailRow(
+                label = "Model (resolved from preset)",
+                value = model?.let { it.displayName?.takeIf { name -> name.isNotBlank() } ?: it.name }
+                    ?: "Not configured"
             )
             DetailRow(
-                label = "Settings",
-                value = settings?.name ?: "Not available (repair this role)"
+                label = "Settings profile (resolved from preset)",
+                value = settings?.name ?: "Not configured"
             )
 
             val tools = role.tools.mapNotNull { toolsById[it] }

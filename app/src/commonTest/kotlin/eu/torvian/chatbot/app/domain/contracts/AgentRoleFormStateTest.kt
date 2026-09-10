@@ -5,11 +5,12 @@ import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 /**
  * Tests for the agent-role form draft helpers: conventional default instruction labels, form
- * validation, request mapping and error propagation.
+ * validation (name only — a preset-less role is legal, U-36), preset-based request mapping and error
+ * propagation.
  */
 class AgentRoleFormStateTest {
 
@@ -45,37 +46,36 @@ class AgentRoleFormStateTest {
     }
 
     @Test
+    fun `empty form starts without a model preset`() {
+        assertNull(createEmptyAgentRoleForm().modelPresetId)
+    }
+
+    @Test
     fun `validate rejects blank name`() {
         assertEquals("Role name cannot be empty.", createEmptyAgentRoleForm().copy(name = "  ").validate())
     }
 
     @Test
-    fun `validate rejects missing model`() {
-        val form = createEmptyAgentRoleForm().copy(name = "Test", modelId = null)
-        assertEquals("A model must be selected.", form.validate())
+    fun `validate accepts a preset-less draft`() {
+        // U-36/RQ-2: the model preset is optional on the client too, so a name-only role is savable
+        // and the settings UI merely flags it as non-sendable.
+        assertNull(createEmptyAgentRoleForm().copy(name = "Test").validate())
     }
 
     @Test
-    fun `validate rejects missing settings`() {
-        val form = createEmptyAgentRoleForm().copy(name = "Test", modelId = 1L, modelSettingsId = null)
-        assertEquals("A settings profile must be selected for the model.", form.validate())
+    fun `validate passes when a preset is attached`() {
+        val form = createEmptyAgentRoleForm().copy(name = "Test", modelPresetId = 3L)
+        assertNull(form.validate())
     }
 
     @Test
-    fun `validate passes when all required fields are present`() {
-        val form = createEmptyAgentRoleForm().copy(name = "Test", modelId = 1L, modelSettingsId = 2L)
-        assertEquals(null, form.validate())
-    }
-
-    @Test
-    fun `toCreateRequest maps all fields including instructions`() {
+    fun `toCreateRequest maps all fields including instructions and the preset`() {
         val form = AgentRoleFormState(
             mode = FormMode.NEW,
             name = "My Role",
             displayName = "Display",
             description = "A description",
-            modelId = 1L,
-            modelSettingsId = 2L,
+            modelPresetId = 3L,
             toolIds = setOf(10L, 20L),
             spawnableAgentRoleIds = setOf(30L),
             projectId = 100L,
@@ -87,8 +87,7 @@ class AgentRoleFormStateTest {
         assertEquals("My Role", request.name)
         assertEquals("Display", request.displayName)
         assertEquals("A description", request.description)
-        assertEquals(1L, request.modelId)
-        assertEquals(2L, request.modelSettingsId)
+        assertEquals(3L, request.modelPresetId)
         assertEquals(setOf(10L, 20L), request.toolIds)
         assertEquals(setOf(30L), request.spawnableAgentRoleIds)
         assertEquals(100L, request.projectId)
@@ -97,11 +96,19 @@ class AgentRoleFormStateTest {
     }
 
     @Test
+    fun `toCreateRequest maps a preset-less draft to a null preset id`() {
+        // The removed modelId/modelSettingsId inputs must never come back: a preset-less draft maps
+        // to a null preset id and nothing else configuration-related (U-28/U-29/U-36).
+        val request = createEmptyAgentRoleForm().copy(name = "Test").toCreateRequest()
+        assertEquals("Test", request.name)
+        assertNull(request.modelPresetId)
+    }
+
+    @Test
     fun `toCreateRequest maps projectId`() {
         val form = createEmptyAgentRoleForm().copy(
             name = "Test",
-            modelId = 1L,
-            modelSettingsId = 2L,
+            modelPresetId = 3L,
             projectId = 5L
         )
         assertEquals(5L, form.toCreateRequest().projectId)
@@ -113,18 +120,55 @@ class AgentRoleFormStateTest {
             mode = FormMode.EDIT,
             roleId = 7L,
             name = "Test",
-            modelId = 1L,
-            modelSettingsId = 2L,
+            modelPresetId = 3L,
             projectId = 5L
         )
         assertEquals(5L, edit.toUpdateRequest().projectId)
+        assertEquals(3L, edit.toUpdateRequest().modelPresetId)
         assertEquals(null, createEmptyAgentRoleForm().projectId)
     }
 
     @Test
-    fun `toCreateRequest throws when model is missing`() {
-        val form = createEmptyAgentRoleForm().copy(name = "Test", modelId = null)
-        assertFailsWith<IllegalStateException> { form.toCreateRequest() }
+    fun `toEditFormState carries the preset reference instead of the derived ids`() {
+        // The DTO's modelId/modelSettingsId are server-resolved read-only values; only the preset is
+        // a legal role input, so the edit draft must not pick them up.
+        val role = AgentRoleDto(
+            id = 9L,
+            name = "writer",
+            displayName = "Writer",
+            description = "Writes",
+            modelId = 1L,
+            modelSettingsId = 2L,
+            modelPresetId = 3L,
+            tools = setOf(4L),
+            instructions = emptyList()
+        )
+
+        val form = role.toEditFormState()
+
+        assertEquals(FormMode.EDIT, form.mode)
+        assertEquals(9L, form.roleId)
+        assertEquals("writer", form.name)
+        assertEquals("Writer", form.displayName)
+        assertEquals(3L, form.modelPresetId)
+        assertEquals(setOf(4L), form.toolIds)
+    }
+
+    @Test
+    fun `toEditFormState keeps a preset-less role preset-less`() {
+        val role = AgentRoleDto(
+            id = 9L,
+            name = "writer",
+            displayName = null,
+            description = "",
+            modelId = null,
+            modelSettingsId = null,
+            modelPresetId = null,
+            tools = emptySet(),
+            instructions = emptyList()
+        )
+
+        assertNull(role.toEditFormState().modelPresetId)
     }
 
     @Test
@@ -139,8 +183,7 @@ class AgentRoleFormStateTest {
             mode = FormMode.EDIT,
             roleId = 5L,
             name = "Test",
-            modelId = 1L,
-            modelSettingsId = 2L,
+            modelPresetId = 3L,
             projectId = 50L,
             spawnableAgentRoleIds = setOf(5L, 6L, 9L)
         )
@@ -164,8 +207,7 @@ class AgentRoleFormStateTest {
             mode = FormMode.EDIT,
             roleId = 5L,
             name = "Test",
-            modelId = 1L,
-            modelSettingsId = 2L,
+            modelPresetId = 3L,
             projectId = 50L,
             spawnableAgentRoleIds = setOf(5L, 6L, 7L)
         )
@@ -185,8 +227,7 @@ class AgentRoleFormStateTest {
         val form = createEmptyAgentRoleForm().copy(
             mode = FormMode.NEW,
             name = "Test",
-            modelId = 1L,
-            modelSettingsId = 2L,
+            modelPresetId = 3L,
             spawnableAgentRoleIds = setOf(6L, 99L)
         )
 
@@ -198,12 +239,11 @@ class AgentRoleFormStateTest {
 
     @Test
     fun `withError sets the error message without touching other fields`() {
-        val form = createEmptyAgentRoleForm().copy(name = "Test", modelId = 1L, modelSettingsId = 2L)
+        val form = createEmptyAgentRoleForm().copy(name = "Test", modelPresetId = 3L)
         val withError = form.withError("Something went wrong")
         assertEquals("Something went wrong", withError.errorMessage)
         assertEquals("Test", withError.name)
-        assertEquals(1L, withError.modelId)
-        assertEquals(2L, withError.modelSettingsId)
+        assertEquals(3L, withError.modelPresetId)
         assertEquals(null, form.errorMessage)
     }
 }
@@ -222,6 +262,7 @@ private fun roleDto(id: Long, projectId: Long?): AgentRoleDto = AgentRoleDto(
     description = "",
     modelId = 1L,
     modelSettingsId = 2L,
+    modelPresetId = 3L,
     tools = emptySet(),
     instructions = emptyList(),
     projectId = projectId

@@ -21,6 +21,11 @@ import eu.torvian.chatbot.common.models.agent.AgentRoleDto
  * the user can tell them apart while still being able to re-enable them (the list keeps showing
  * disabled roles — only the chat selector filters them out).
  *
+ * A preset-less role is additionally labeled "Not sendable". The list page has no preset/settings
+ * streams, so the badge is deliberately keyed on the missing preset reference only: a role whose
+ * preset is unusable is flagged precisely on the detail page (and in the form) through the shared
+ * `resolveAgentRoleSendability` helper.
+ *
  * @param role Role shown in the row.
  * @param isSelected Whether the row is visually focused.
  * @param onToggleDisabled Callback invoked with the role when the switch is flipped; the caller
@@ -100,6 +105,13 @@ fun AgentRoleListItem(
                     if (role.disabled) {
                         Text(
                             text = "Disabled",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    if (role.modelPresetId == null) {
+                        Text(
+                            text = "Not sendable",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error
                         )

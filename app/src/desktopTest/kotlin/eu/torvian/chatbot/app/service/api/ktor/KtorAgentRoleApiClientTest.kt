@@ -148,8 +148,7 @@ class KtorAgentRoleApiClientTest {
     fun `createRole - success`() = runTest {
         val request = CreateAgentRoleRequest(
             name = "translator",
-            modelId = 1L,
-            modelSettingsId = 2L,
+            modelPresetId = 3L,
             toolIds = setOf(5L),
             projectId = 100L
         )
@@ -161,6 +160,10 @@ class KtorAgentRoleApiClientTest {
             assertTrue(body.contains("translator"), "Request body should contain the role name")
             assertTrue(body.contains("toolIds"), "Request body should contain toolIds")
             assertTrue(body.contains("projectId"), "Request body should contain projectId")
+            // U-28/U-29: the role's configuration is the preset reference only; the derived ids are
+            // read-only server output and must never appear in a write payload again.
+            assertTrue(body.contains("modelPresetId"), "Request body should contain modelPresetId")
+            assertTrue(!body.contains("modelSettingsId"), "Request body must not contain modelSettingsId: $body")
             respond(
                 content = json.encodeToString(created),
                 status = HttpStatusCode.Created,
@@ -198,8 +201,34 @@ class KtorAgentRoleApiClientTest {
     }
 
     @Test
+    fun `getAllRoles - decodes the preset reference and the derived ids from the wire`() = runTest {
+        // The DTO carries the preset plus the model/settings the server resolved from it; both are
+        // read-only client-side.
+        val roleWithPreset = mockRole(1, "writer").copy(modelPresetId = 3L)
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(href(AgentRoleResource()), request.url.fullPath)
+            respond(
+                content = json.encodeToString(listOf(roleWithPreset)),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.getAllRoles()) {
+            is Either.Right -> {
+                assertEquals(3L, result.value[0].modelPresetId)
+                assertEquals(1L, result.value[0].modelId)
+                assertEquals(1L, result.value[0].modelSettingsId)
+            }
+
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
     fun `createRole - failure - 400 Bad Request`() = runTest {
-        val request = CreateAgentRoleRequest(name = "", modelId = 1L, modelSettingsId = 2L)
+        val request = CreateAgentRoleRequest(name = "")
         val mockEngine = MockEngine { _ ->
             respond(
                 content = json.encodeToString(
@@ -226,8 +255,7 @@ class KtorAgentRoleApiClientTest {
     fun `updateRole - success`() = runTest {
         val request = UpdateAgentRoleRequest(
             name = "editor",
-            modelId = 1L,
-            modelSettingsId = 2L,
+            modelPresetId = 3L,
             toolIds = emptySet()
         )
         val updated = mockRole(10, "editor")
@@ -301,7 +329,7 @@ class KtorAgentRoleApiClientTest {
 
     @Test
     fun `updateRole - failure - 404 Not Found`() = runTest {
-        val request = UpdateAgentRoleRequest(name = "editor", modelId = 1L, modelSettingsId = 2L)
+        val request = UpdateAgentRoleRequest(name = "editor", modelPresetId = 3L)
         val mockEngine = MockEngine { _ ->
             respond(
                 content = json.encodeToString(apiError(CommonApiErrorCodes.NOT_FOUND, "Role not found")),

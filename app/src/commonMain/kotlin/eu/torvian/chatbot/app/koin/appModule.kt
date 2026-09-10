@@ -216,6 +216,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<ProjectApi> {
         KtorProjectApiClient(get())
     }
+    single<ModelPresetApi> {
+        KtorModelPresetApiClient(get())
+    }
     single<UserGroupApi> {
         KtorUserGroupApiClient(get())
     }
@@ -287,6 +290,15 @@ fun appModule(config: AppConfiguration): Module = module {
     }
     single<ProjectRepository> {
         DefaultProjectRepository(get())
+    }
+    single<ModelPresetRepository> {
+        // Preset mutations change the derived model/settings of bound roles, so the implementation
+        // refreshes the role stream itself; the dependency direction is presets → roles → projects
+        // and stays acyclic.
+        DefaultModelPresetRepository(
+            presetApi = get(),
+            agentRoleRepository = get()
+        )
     }
     single<UserGroupRepository> {
         DefaultUserGroupRepository(get())
@@ -590,10 +602,19 @@ fun appModule(config: AppConfiguration): Module = module {
     viewModel {
         AgentRolesViewModel(
             agentRoleRepository = get(),
+            modelPresetRepository = get(),
             modelRepository = get(),
             modelSettingsRepository = get(),
             toolRepository = get(),
             projectRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
+        ModelPresetsViewModel(
+            modelPresetRepository = get(),
+            modelRepository = get(),
+            modelSettingsRepository = get(),
             notificationService = get()
         )
     }

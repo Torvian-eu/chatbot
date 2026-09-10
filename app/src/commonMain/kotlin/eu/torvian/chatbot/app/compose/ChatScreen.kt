@@ -120,7 +120,8 @@ fun ChatScreen(
     // --- Agent-role quick management (add/edit dialogs hosted on the chat screen) ---
     val agentRoleDialogState by agentRoleManagementViewModel.dialogState.collectAsState()
     val agentRoleModelsState by agentRoleManagementViewModel.modelsState.collectAsState()
-    val agentRoleSettingsForForm by agentRoleManagementViewModel.settingsForFormModel.collectAsState()
+    val agentRolePresetsState by agentRoleManagementViewModel.presetsState.collectAsState()
+    val agentRoleSettingsById by agentRoleManagementViewModel.settingsById.collectAsState()
     val agentRoleToolsState by agentRoleManagementViewModel.toolsState.collectAsState()
     val agentRoleCatalogState by agentRoleManagementViewModel.rolesState.collectAsState()
     val agentRoleProjectsState by agentRoleManagementViewModel.projectsState.collectAsState()
@@ -423,7 +424,8 @@ fun ChatScreen(
         dialogState = agentRoleDialogState,
         actions = agentRoleManagementActions,
         models = agentRoleModelsState.dataOrNull.orEmpty(),
-        settingsForModel = agentRoleSettingsForForm,
+        presets = agentRolePresetsState.dataOrNull.orEmpty(),
+        settingsById = agentRoleSettingsById,
         tools = agentRoleToolsState.dataOrNull.orEmpty(),
         roles = agentRoleCatalogState.dataOrNull.orEmpty(),
         projects = agentRoleProjectsState.dataOrNull.orEmpty()
