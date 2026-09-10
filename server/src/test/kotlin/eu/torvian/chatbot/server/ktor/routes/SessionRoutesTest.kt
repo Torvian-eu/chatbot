@@ -85,25 +85,31 @@ class SessionRoutesTest {
         name = "Non-Streaming Settings for Model 1",
         stream = false
     )
+    // Model presets: the sole source of truth for a role's model/settings configuration, so every
+    // role fixture below references one instead of carrying the two ids directly.
+    private val testPreset = TestDefaults.modelPreset1
+    private val testPreset2 = TestDefaults.modelPreset2
+    private val testNonStreamingPreset = TestDefaults.modelPreset1.copy(
+        id = 3L,
+        name = "Non-Streaming Preset",
+        modelSettingsId = testNonStreamingSettings.id
+    )
     private val testAgentRole = TestDefaults.agentRole1.copy(
         id = 1L,
         name = "Test Agent Role",
-        modelId = testModel.id,
-        modelSettingsId = testSettings.id,
+        modelPresetId = testPreset.id,
         instructionsJson = "[]"
     )
     private val testAgentRole2 = TestDefaults.agentRole2.copy(
         id = 2L,
         name = "Test Agent Role 2",
-        modelId = testModel2.id,
-        modelSettingsId = testSettings2.id,
+        modelPresetId = testPreset2.id,
         instructionsJson = "[]"
     )
     private val testNonStreamingAgentRole = TestDefaults.agentRole1.copy(
         id = 3L,
         name = "Non-Streaming Agent Role",
-        modelId = testModel.id,
-        modelSettingsId = testNonStreamingSettings.id,
+        modelPresetId = testNonStreamingPreset.id,
         instructionsJson = "[]"
     )
     private val testSession = TestDefaults.chatSession1.copy(
@@ -157,7 +163,8 @@ class SessionRoutesTest {
                 llmProviders = listOf(TestDefaults.llmProvider1, TestDefaults.llmProvider2),
                 llmModels = listOf(testModel, testModel2),
                 modelSettings = listOf(testSettings, testSettings2, testSettings3, testNonStreamingSettings),
-                agentRoles = listOf(testAgentRole, testAgentRole2, testNonStreamingAgentRole)
+                agentRoles = listOf(testAgentRole, testAgentRole2, testNonStreamingAgentRole),
+                modelPresets = listOf(testPreset, testPreset2, testNonStreamingPreset)
             )
         )
         testDataManager.createTables(

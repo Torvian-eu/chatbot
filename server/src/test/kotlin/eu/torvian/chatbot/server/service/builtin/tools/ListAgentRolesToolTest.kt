@@ -62,8 +62,9 @@ class ListAgentRolesToolTest {
      * @param name Machine-readable role name.
      * @param displayName Optional human-readable role name.
      * @param description Role description.
-     * @param modelId Optional model identifier.
-     * @param modelSettingsId Optional model-settings identifier.
+     * @param modelId Optional derived model identifier (resolved from the preset).
+     * @param modelSettingsId Optional derived model-settings identifier (resolved from the preset).
+     * @param modelPresetId Optional model-preset reference.
      * @param tools Attached tool identifiers.
      * @param spawnableAgentRoleIds Roles this role may spawn.
      * @param projectId Single user-owned project the role belongs to (null = unassociated).
@@ -77,6 +78,7 @@ class ListAgentRolesToolTest {
         description: String = "Writes code",
         modelId: Long? = 3L,
         modelSettingsId: Long? = 4L,
+        modelPresetId: Long? = 9L,
         tools: Set<Long> = setOf(5L, 6L),
         spawnableAgentRoleIds: Set<Long> = setOf(2L),
         projectId: Long? = null,
@@ -102,6 +104,7 @@ class ListAgentRolesToolTest {
         description = description,
         modelId = modelId,
         modelSettingsId = modelSettingsId,
+        modelPresetId = modelPresetId,
         tools = tools,
         spawnableAgentRoleIds = spawnableAgentRoleIds,
         instructions = instructions,
@@ -129,6 +132,8 @@ class ListAgentRolesToolTest {
                 description = "Edits",
                 modelId = null,
                 modelSettingsId = null,
+                // A preset-less role: the explicit null must be preserved in the payload.
+                modelPresetId = null,
                 tools = emptySet(),
                 spawnableAgentRoleIds = emptySet(),
                 projectId = null,
@@ -144,6 +149,7 @@ class ListAgentRolesToolTest {
             "name",
             "displayName",
             "description",
+            "modelPresetId",
             "modelId",
             "modelSettingsId",
             "tools",
@@ -161,6 +167,7 @@ class ListAgentRolesToolTest {
         assertEquals("writer", writer.getValue("name").jsonPrimitive.content)
         assertEquals("Writer", writer.getValue("displayName").jsonPrimitive.content)
         assertEquals("Writes code", writer.getValue("description").jsonPrimitive.content)
+        assertEquals(9L, writer.getValue("modelPresetId").jsonPrimitive.long)
         assertEquals(3L, writer.getValue("modelId").jsonPrimitive.long)
         assertEquals(4L, writer.getValue("modelSettingsId").jsonPrimitive.long)
         // The per-user flag is always present (boolean, never omitted).
@@ -183,6 +190,7 @@ class ListAgentRolesToolTest {
         val editor = roles[1].jsonObject
         assertEquals(expectedKeys, editor.keys)
         assertEquals(JsonNull, editor.getValue("displayName"))
+        assertEquals(JsonNull, editor.getValue("modelPresetId"))
         assertEquals(JsonNull, editor.getValue("modelId"))
         assertEquals(JsonNull, editor.getValue("modelSettingsId"))
         assertEquals(JsonNull, editor.getValue("projectId"))

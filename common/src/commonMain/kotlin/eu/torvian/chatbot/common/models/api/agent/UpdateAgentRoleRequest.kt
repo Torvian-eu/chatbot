@@ -8,18 +8,22 @@ import kotlinx.serialization.Serializable
  *
  * Mirrors [CreateAgentRoleRequest]: all configuration fields are present and are replaced wholesale on
  * update (the role's configuration is rewritten, so the update is a full replacement, not a patch).
- * `modelId`/`modelSettingsId` may be null, which lets callers (e.g. the server built-in
- * `update_agent_role` tool) preserve a role that has no model/settings or complete a role that was
- * created without them.
+ *
+ * The role's LLM configuration is supplied exclusively through [modelPresetId], which references a
+ * user-owned [eu.torvian.chatbot.common.models.llm.ModelPresetDto]. Setting it attaches a preset and
+ * setting it to null detaches the current one, either way leaving the role **non-sendable** until a
+ * usable preset is attached. The preset is optional, which lets callers (e.g. the server built-in
+ * `update_agent_role` tool) preserve a preset-less role or complete a role that was created without
+ * one.
  *
  * @property name Unique (per user) machine-readable role name, non-blank and at most 255 characters.
  * @property displayName Optional human-friendly display name.
  * @property description Free-form description of the role.
- * @property modelId Optional identifier of the LLM model the role uses; null means the role has no
- *            model and is non-sendable until set via update.
- * @property modelSettingsId Optional identifier of the settings profile (CHAT or RESPONSES) the role
- *            uses; null means the role has no settings and is non-sendable until set via update.
- *            When both are provided, the settings must belong to [modelId] and be chat-capable.
+ * @property modelPresetId Identifier of the model preset holding the role's model and settings
+ *            profile, or null to leave the role preset-less. The value replaces the previous
+ *            reference wholesale (a full replacement). The preset must be owned by the requesting
+ *            user; a preset whose model/settings reference is null may still be attached — the role
+ *            simply cannot drive a turn until it is repaired.
  * @property toolIds Set of tool-definition identifiers to attach to the role. Duplicates are
  *            impossible at the wire level (a set), so no service-side de-duplication is needed.
  * @property spawnableAgentRoleIds Same-user role identifiers that this role may spawn. Duplicates are
@@ -45,8 +49,7 @@ data class UpdateAgentRoleRequest(
     val name: String,
     val displayName: String? = null,
     val description: String = "",
-    val modelId: Long? = null,
-    val modelSettingsId: Long? = null,
+    val modelPresetId: Long? = null,
     val toolIds: Set<Long> = emptySet(),
     val spawnableAgentRoleIds: Set<Long> = emptySet(),
     val instructions: List<AgentInstructionDto> = emptyList(),

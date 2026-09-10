@@ -65,6 +65,11 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             Table.LLM_PROVIDERS to LLMProviderTable,
             Table.LLM_MODELS to LLMModelTable,
             Table.MODEL_SETTINGS to ModelSettingsTable,
+            // Model presets are created before agent_roles: the role row carries a model_preset_id
+            // foreign key into `model_presets`, so creation order (and the reverse-order cleanup) must
+            // place the presets first.
+            Table.MODEL_PRESETS to ModelPresetTable,
+            Table.MODEL_PRESET_OWNERS to ModelPresetOwnersTable,
             Table.AGENT_ROLES to AgentRoleTable,
             // Project tables: projects and its two link tables reference users/agent_roles, and
             // chat_sessions references projects (project_id), so they must be created AFTER
@@ -152,6 +157,9 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         dataSet.llmProviders.forEach { insertLLMProvider(it) }
         dataSet.llmModels.forEach { insertLLMModel(it) }
         dataSet.modelSettings.forEach { insertModelSettings(it) }
+        // Presets must be inserted before agent roles: the role row's model_preset_id foreign key is
+        // enforced on these runtime-style connections.
+        dataSet.modelPresets.forEach { insertModelPreset(it) }
         dataSet.chatGroups.forEach { insertChatGroup(it) }
         dataSet.agentRoles.forEach { insertAgentRole(it) }
         dataSet.projects.forEach { insertProject(it) }
@@ -447,8 +455,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 it[name] = agentRole.name
                 it[displayName] = agentRole.displayName
                 it[description] = agentRole.description
-                it[modelId] = agentRole.modelId
-                it[modelSettingsId] = agentRole.modelSettingsId
+                it[modelPresetId] = agentRole.modelPresetId
                 it[instructionsJson] = agentRole.instructionsJson
                 it[createdAt] = agentRole.createdAt.toEpochMilliseconds()
                 it[updatedAt] = agentRole.updatedAt.toEpochMilliseconds()
@@ -502,6 +509,40 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             ProjectOwnersTable.insert {
                 it[ProjectOwnersTable.projectId] = projectId
                 it[ProjectOwnersTable.userId] = userId
+            }
+            return@transaction
+        }
+
+    override suspend fun insertModelPreset(preset: ModelPresetEntity) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.MODEL_PRESETS)
+            ModelPresetTable.insert {
+                it[id] = preset.id
+                it[name] = preset.name
+                it[displayName] = preset.displayName
+                it[description] = preset.description
+                it[modelId] = preset.modelId
+                it[modelSettingsId] = preset.modelSettingsId
+                it[createdAt] = preset.createdAt.toEpochMilliseconds()
+                it[updatedAt] = preset.updatedAt.toEpochMilliseconds()
+            }
+            return@transaction
+        }
+
+    override suspend fun getModelPreset(id: Long): ModelPresetEntity? =
+        transactionScope.transaction {
+            ensureTableCreated(Table.MODEL_PRESETS)
+            ModelPresetTable.selectAll().where { ModelPresetTable.id eq id }
+                .map { it.toModelPresetEntity() }
+                .singleOrNull()
+        }
+
+    override suspend fun insertModelPresetOwnership(presetId: Long, userId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.MODEL_PRESET_OWNERS)
+            ModelPresetOwnersTable.insert {
+                it[ModelPresetOwnersTable.presetId] = presetId
+                it[ModelPresetOwnersTable.userId] = userId
             }
             return@transaction
         }
@@ -847,6 +888,13 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         // before chat_sessions, which references projects via the nullable project_id column).
         if (data.projects.isNotEmpty()) required += Table.PROJECTS
         if (data.projects.isNotEmpty()) required += Table.PROJECT_OWNERS
+        // Model-preset tables: `model_presets` must exist whenever presets are seeded, and also
+        // whenever any agent role carries a preset reference (the role row's foreign key and every role
+        // read that resolves the preset reference it). The owner table is included alongside so ownership
+        // helpers work without a separate createTables call.
+        if (data.modelPresets.isNotEmpty()) required += Table.MODEL_PRESETS
+        if (data.modelPresets.isNotEmpty()) required += Table.MODEL_PRESET_OWNERS
+        if (data.agentRoles.any { it.modelPresetId != null }) required += Table.MODEL_PRESETS
         if (data.sessionCurrentLeaves.isNotEmpty()) required += Table.SESSION_CURRENT_LEAF
 
         return required

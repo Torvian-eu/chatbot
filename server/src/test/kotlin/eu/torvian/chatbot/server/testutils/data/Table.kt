@@ -70,6 +70,17 @@ enum class Table {
     PROJECT_OWNERS,
 
     /**
+     * Table for storing user-owned model presets (the sole source of truth for an agent role's
+     * model/settings configuration).
+     */
+    MODEL_PRESETS,
+
+    /**
+     * Table for linking model presets to their single owner.
+     */
+    MODEL_PRESET_OWNERS,
+
+    /**
      * Table for storing API secrets.
      */
     API_SECRETS,

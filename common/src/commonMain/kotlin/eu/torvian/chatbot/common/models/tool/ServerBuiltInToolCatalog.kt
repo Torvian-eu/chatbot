@@ -65,11 +65,22 @@ object ServerBuiltInToolCatalog {
     /** JSON property holding the tool-definition id for the `read_tool` call. */
     const val TOOL_ID_PROPERTY = "tool_id"
 
-    /** JSON property holding the LLM model id (create/update role, list_model_settings). */
+    /** JSON property holding the LLM model id. Used by `list_model_settings` and by the
+     * model-preset tools (`create_model_preset`/`update_model_preset`); the agent-role tools use
+     * [MODEL_PRESET_ID_PROPERTY] instead. */
     const val MODEL_ID_PROPERTY = "model_id"
 
-    /** JSON property holding the model-settings profile id (create/update role). */
+    /**
+     * JSON property holding the model-settings-profile id. Used exclusively by the model-preset
+     * tools (`create_model_preset`/`update_model_preset`): a preset bundles one model with one
+     * settings profile, and the agent-role tools never accept a settings id directly (they use
+     * [MODEL_PRESET_ID_PROPERTY] and resolve the profile through the preset).
+     */
     const val MODEL_SETTINGS_ID_PROPERTY = "model_settings_id"
+
+    /** JSON property holding the model-preset id: the preset a role uses (create/update role) and
+     * the preset addressed by the read/update/delete preset tools. */
+    const val MODEL_PRESET_ID_PROPERTY = "model_preset_id"
 
     /** JSON property holding the role name (create/update role). */
     const val NAME_PROPERTY = "name"
@@ -502,7 +513,9 @@ object ServerBuiltInToolCatalog {
         ServerBuiltInToolSpec(
             name = LIST_AGENT_ROLES_NAME,
             description = "Lists all agent roles owned by the current user, returning each role's id, " +
-                "name, display name, description, model id, model settings id, attached tool ids, " +
+                "name, display name, description, model preset id, its model id and model settings id " +
+                "as resolved from that preset (null when the role has no preset or the preset's " +
+                "reference is unset), attached tool ids, " +
                 "spawnable role ids, instruction types only, its project id (null when the role is " +
                 "unassociated), and its disabled flag (roles disabled by the current user are hidden " +
                 "from session selection). Use read_agent_role with a role id to inspect full " +
@@ -512,7 +525,8 @@ object ServerBuiltInToolCatalog {
         ServerBuiltInToolSpec(
             name = READ_AGENT_ROLE_NAME,
             description = "Reads one agent role owned by the current user by its id, returning the " +
-                "full role including its model/settings ids, attached tool ids, spawnable role ids, " +
+                "full role including its model preset id, the model id and settings id resolved from " +
+                "that preset, attached tool ids, spawnable role ids, " +
                 "resolved instructions, and its disabled flag for the current user.",
             inputSchema = buildJsonObject {
                 put("type", "object")
@@ -530,8 +544,8 @@ object ServerBuiltInToolCatalog {
         ServerBuiltInToolSpec(
             name = CREATE_AGENT_ROLE_NAME,
             description = "Creates a new agent role owned by the current user. The role may be " +
-                "created without a model and settings and completed later via update_agent_role; " +
-                "a role without a model/settings is non-sendable until set. Returns a concise " +
+                "created without a model preset and completed later via update_agent_role; " +
+                "a role without a preset is non-sendable until set. Returns a concise " +
                 "one-line summary of the operation.",
             inputSchema = buildJsonObject {
                 put("type", "object")
@@ -547,12 +561,11 @@ object ServerBuiltInToolCatalog {
                     put(DISPLAY_NAME_PROPERTY, stringProperty("Optional human-friendly display name."))
                     put(DESCRIPTION_PROPERTY, stringProperty("Free-form description of the role."))
                     put(
-                        MODEL_ID_PROPERTY,
-                        integerProperty("Optional id of the LLM model the role uses. Must be accessible by the current user.")
-                    )
-                    put(
-                        MODEL_SETTINGS_ID_PROPERTY,
-                        integerProperty("Optional id of the settings profile the role uses. Must belong to the model and be chat-capable.")
+                        MODEL_PRESET_ID_PROPERTY,
+                        integerProperty(
+                            "Optional id of the model preset that supplies the role's model and " +
+                                "settings profile. The preset must be owned by the current user."
+                        )
                     )
                     put(
                         TOOL_IDS_PROPERTY,
@@ -584,7 +597,8 @@ object ServerBuiltInToolCatalog {
                 "attached tools, spawnable roles and instructions. Passing null is treated as omitted " +
                 "— fields cannot be cleared with null; pass an empty string or an empty array to " +
                 "clear a field (project_id is the exception: pass 0 to clear it, which moves the " +
-                "role to unassociated). Returns a concise one-line summary of the operation.",
+                "role to unassociated; model_preset_id also accepts 0 to detach its preset). " +
+                "Returns a concise one-line summary of the operation.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -603,12 +617,15 @@ object ServerBuiltInToolCatalog {
                     put(DISPLAY_NAME_PROPERTY, stringProperty("New optional human-friendly display name."))
                     put(DESCRIPTION_PROPERTY, stringProperty("New free-form description of the role."))
                     put(
-                        MODEL_ID_PROPERTY,
-                        integerProperty("New id of the LLM model the role uses. Must be accessible by the current user.")
-                    )
-                    put(
-                        MODEL_SETTINGS_ID_PROPERTY,
-                        integerProperty("New id of the settings profile the role uses. Must belong to the model and be chat-capable.")
+                        MODEL_PRESET_ID_PROPERTY,
+                        integerProperty(
+                            "New id of the model preset that supplies the role's model and settings " +
+                                "profile. The preset must be owned by the current user. When not " +
+                                "changing the role's preset, pass the current model_preset_id from " +
+                                "read_agent_role or list_agent_roles (an omitted or null value " +
+                                "preserves the persisted preset). Pass 0 to explicitly detach the " +
+                                "preset (0 is never a valid preset id)."
+                        )
                     )
                     put(
                         TOOL_IDS_PROPERTY,

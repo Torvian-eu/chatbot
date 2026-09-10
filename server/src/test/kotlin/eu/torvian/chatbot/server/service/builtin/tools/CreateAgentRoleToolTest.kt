@@ -26,8 +26,8 @@ import kotlin.test.assertTrue
  *
  * Covers input validation (required `name`, optional fields, unknown parameters, accumulated
  * errors), the mapping of the parsed input into a [CreateAgentRoleRequest] (including the
- * model-less create path), and the mapping of [CreateAgentRoleError]s to LLM-readable handler
- * errors.
+ * preset-less create path), the rejection of the removed legacy `model_id`/`model_settings_id`
+ * parameters, and the mapping of [CreateAgentRoleError]s to LLM-readable handler errors.
  */
 class CreateAgentRoleToolTest {
 
@@ -73,7 +73,7 @@ class CreateAgentRoleToolTest {
     }
 
     @Test
-    fun `creates a model-less role and maps the request`() = runTest {
+    fun `creates a preset-less role and maps the request`() = runTest {
         val agentRoleService = mockk<AgentRoleService>()
         coEvery { agentRoleService.createRole(userId, any()) } returns createdRole().right()
         val tool = CreateAgentRoleTool(agentRoleService)
@@ -91,8 +91,7 @@ class CreateAgentRoleToolTest {
                 match<CreateAgentRoleRequest> { request ->
                     request.name == "translator" &&
                             request.description == "translates" &&
-                            request.modelId == null &&
-                            request.modelSettingsId == null &&
+                            request.modelPresetId == null &&
                             request.toolIds.isEmpty() &&
                             request.spawnableAgentRoleIds.isEmpty() &&
                             request.instructions.isEmpty()
@@ -111,8 +110,7 @@ class CreateAgentRoleToolTest {
             put("name", "writer")
             put("display_name", "Writer")
             put("description", "Writes code")
-            put("model_id", 3L)
-            put("model_settings_id", 4L)
+            put("model_preset_id", 3L)
             putJsonArray("tool_ids") { add(JsonPrimitive(5L)); add(JsonPrimitive(6L)) }
             putJsonArray("spawnable_agent_role_ids") { add(JsonPrimitive(2L)) }
             putJsonArray("instructions") {
@@ -135,8 +133,7 @@ class CreateAgentRoleToolTest {
                     request.name == "writer" &&
                             request.displayName == "Writer" &&
                             request.description == "Writes code" &&
-                            request.modelId == 3L &&
-                            request.modelSettingsId == 4L &&
+                            request.modelPresetId == 3L &&
                             request.toolIds == setOf(5L, 6L) &&
                             request.spawnableAgentRoleIds == setOf(2L) &&
                             request.instructions.size == 1 &&
@@ -147,19 +144,34 @@ class CreateAgentRoleToolTest {
     }
 
     @Test
-    fun `maps a model-not-found failure to a readable error`() = runTest {
+    fun `maps a model-preset-not-found failure to a readable error`() = runTest {
         val agentRoleService = mockk<AgentRoleService>()
-        coEvery { agentRoleService.createRole(userId, any()) } returns CreateAgentRoleError.ModelNotFound(3L).left()
+        coEvery { agentRoleService.createRole(userId, any()) } returns
+                CreateAgentRoleError.ModelPresetNotFound(3L).left()
         val tool = CreateAgentRoleTool(agentRoleService)
+
+        val result = tool.execute(
+            buildJsonObject { put("name", "x"); put("model_preset_id", 3L) },
+            context()
+        )
+
+        val error = assertIs<ServerBuiltInToolHandlerError.OperationFailed>(result.leftOrNull())
+        assertEquals("model_preset_not_found", error.code)
+        assertTrue(error.message.contains("Model preset 3"))
+    }
+
+    @Test
+    fun `rejects the removed legacy model parameters as unknown`() = runTest {
+        val tool = CreateAgentRoleTool(mockk())
 
         val result = tool.execute(
             buildJsonObject { put("name", "x"); put("model_id", 3L); put("model_settings_id", 4L) },
             context()
         )
 
-        val error = assertIs<ServerBuiltInToolHandlerError.OperationFailed>(result.leftOrNull())
-        assertEquals("model_not_found", error.code)
-        assertTrue(error.message.contains("Model 3"))
+        val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
+        assertTrue(error.message.contains("Unknown parameter: 'model_id'"), error.message)
+        assertTrue(error.message.contains("Unknown parameter: 'model_settings_id'"), error.message)
     }
 
     @Test
@@ -210,7 +222,7 @@ class CreateAgentRoleToolTest {
         val tool = CreateAgentRoleTool(mockk())
 
         val result = tool.execute(
-            buildJsonObject { put("name", 123); put("model_id", "not-a-number"); put("unknown", true) },
+            buildJsonObject { put("name", 123); put("model_preset_id", "not-a-number"); put("unknown", true) },
             context()
         )
 
@@ -218,7 +230,7 @@ class CreateAgentRoleToolTest {
         // All three issues are reported at once so the LLM can fix them in a single turn.
         assertTrue(error.message.contains("3 error(s)"), "Expected 3 accumulated errors in: ${error.message}")
         assertTrue(error.message.contains("Argument 'name' must be a string"))
-        assertTrue(error.message.contains("Argument 'model_id' must be an integer"))
+        assertTrue(error.message.contains("Argument 'model_preset_id' must be an integer"))
         assertTrue(error.message.contains("Unknown parameter: 'unknown'"))
     }
 

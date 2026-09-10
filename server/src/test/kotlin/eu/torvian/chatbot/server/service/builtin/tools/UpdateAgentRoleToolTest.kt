@@ -49,22 +49,23 @@ class UpdateAgentRoleToolTest {
     /**
      * Creates a role fixture carrying the persisted state that the PATCH merge is tested against.
      *
-     * @param modelId Persisted model id.
-     * @param modelSettingsId Persisted settings id.
+     * @param modelPresetId Persisted model-preset reference.
      * @param projectId Persisted project membership (null = unassociated).
      * @return The fixture role.
      */
     private fun sampleRole(
-        modelId: Long? = 3L,
-        modelSettingsId: Long? = 4L,
+        modelPresetId: Long? = 3L,
         projectId: Long? = null
     ) = AgentRoleDto(
         id = 1L,
         name = "writer",
         displayName = "Writer",
         description = "Writes code",
-        modelId = modelId,
-        modelSettingsId = modelSettingsId,
+        // Derived from the preset: the fixture reports the preset's ids for completeness, but the tool
+        // only ever reads and writes `modelPresetId`.
+        modelId = modelPresetId?.let { 30L },
+        modelSettingsId = modelPresetId?.let { 40L },
+        modelPresetId = modelPresetId,
         tools = setOf(5L, 6L),
         spawnableAgentRoleIds = setOf(2L),
         projectId = projectId,
@@ -91,16 +92,16 @@ class UpdateAgentRoleToolTest {
     @Test
     fun `merges provided fields over the persisted role`() = runTest {
         val agentRoleService = mockk<AgentRoleService>()
-        // The persisted role was created model-less; the update sets model/settings later.
-        val persisted = sampleRole(modelId = null, modelSettingsId = null)
+        // The persisted role was created preset-less; the update attaches a preset later.
+        val persisted = sampleRole(modelPresetId = null)
         coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
         coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns
-            sampleRole(modelId = 3L, modelSettingsId = 4L).right()
+            sampleRole(modelPresetId = 3L).right()
         val tool = UpdateAgentRoleTool(agentRoleService)
 
         val output = assertSuccess(
             tool.execute(
-                buildJsonObject { put("role_id", 1L); put("model_id", 3L); put("model_settings_id", 4L) },
+                buildJsonObject { put("role_id", 1L); put("model_preset_id", 3L) },
                 context()
             )
         )
@@ -118,14 +119,96 @@ class UpdateAgentRoleToolTest {
                     request.name == persisted.name &&
                         request.displayName == persisted.displayName &&
                         request.description == persisted.description &&
-                        request.modelId == 3L &&
-                        request.modelSettingsId == 4L &&
+                        request.modelPresetId == 3L &&
                         request.toolIds == persisted.tools &&
                         request.spawnableAgentRoleIds == persisted.spawnableAgentRoleIds &&
                         request.instructions == persisted.instructions
                 }
             )
         }
+    }
+
+    @Test
+    fun `omitted model_preset_id preserves an attached preset`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        val persisted = sampleRole(modelPresetId = 3L)
+        coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
+        coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns persisted.right()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        assertSuccess(tool.execute(buildJsonObject { put("role_id", 1L); put("name", "renamed") }, context()))
+
+        coVerify(exactly = 1) {
+            agentRoleService.updateRole(
+                userId,
+                1L,
+                match<UpdateAgentRoleRequest> { request ->
+                    request.modelPresetId == 3L && request.name == "renamed"
+                }
+            )
+        }
+    }
+
+    @Test
+    fun `model_preset_id 0 explicitly detaches the preset`() = runTest {
+        // 0 is the LLM-facing sentinel for "detach": preset ids are always positive AUTOINCREMENT
+        // database ids, so 0 unambiguously means "no preset" rather than a real one.
+        val agentRoleService = mockk<AgentRoleService>()
+        val persisted = sampleRole(modelPresetId = 3L)
+        coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
+        coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns
+            sampleRole(modelPresetId = null).right()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        assertSuccess(tool.execute(buildJsonObject { put("role_id", 1L); put("model_preset_id", 0L) }, context()))
+
+        coVerify(exactly = 1) {
+            agentRoleService.updateRole(
+                userId,
+                1L,
+                match<UpdateAgentRoleRequest> { request -> request.modelPresetId == null }
+            )
+        }
+    }
+
+    @Test
+    fun `explicit null model_preset_id preserves an attached preset`() = runTest {
+        // Like an omitted value, an explicitly-null model_preset_id must not detach the preset; only
+        // the 0 sentinel does. Keeps the patch contract documented alongside the sentinel test.
+        val agentRoleService = mockk<AgentRoleService>()
+        val persisted = sampleRole(modelPresetId = 3L)
+        coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
+        coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns persisted.right()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        assertSuccess(
+            tool.execute(buildJsonObject { put("role_id", 1L); put("model_preset_id", JsonNull) }, context())
+        )
+
+        coVerify(exactly = 1) {
+            agentRoleService.updateRole(
+                userId,
+                1L,
+                match<UpdateAgentRoleRequest> { request -> request.modelPresetId == 3L }
+            )
+        }
+    }
+
+    @Test
+    fun `rejects the removed legacy model parameters as unknown`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        val result = tool.execute(
+            buildJsonObject { put("role_id", 1L); put("model_id", 3L); put("model_settings_id", 4L) },
+            context()
+        )
+
+        val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
+        assertTrue(error.message.contains("Unknown parameter: 'model_id'"), error.message)
+        assertTrue(error.message.contains("Unknown parameter: 'model_settings_id'"), error.message)
+        coVerify(exactly = 0) { agentRoleService.getRoleById(any(), any()) }
+        coVerify(exactly = 0) { agentRoleService.updateRole(any(), any(), any()) }
     }
 
     @Test
@@ -148,7 +231,7 @@ class UpdateAgentRoleToolTest {
                 match<UpdateAgentRoleRequest> { request ->
                     request.description == "Renamed description" &&
                         request.name == persisted.name &&
-                        request.modelId == persisted.modelId &&
+                        request.modelPresetId == persisted.modelPresetId &&
                         request.toolIds == persisted.tools
                 }
             )

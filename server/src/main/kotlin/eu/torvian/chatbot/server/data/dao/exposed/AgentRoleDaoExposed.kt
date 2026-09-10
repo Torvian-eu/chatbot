@@ -31,7 +31,8 @@ import org.jetbrains.exposed.v1.jdbc.update
  * verbatim so serialization stays at the service boundary. The role's tool ids live in the separate
  * `agent_role_tools` join table and are managed through [AgentRoleToolDao]. The single project
  * membership lives on the role row (`project_id` column) and is therefore read/written with every
- * row operation.
+ * row operation, as does the single `model_preset_id` configuration reference (the preset itself is a
+ * different table and is resolved by the service layer, never here).
  *
  * @property transactionScope Transaction wrapper used for the DAO operations.
  */
@@ -139,8 +140,7 @@ class AgentRoleDaoExposed(
         name: String,
         displayName: String?,
         description: String,
-        modelId: Long?,
-        modelSettingsId: Long?,
+        modelPresetId: Long?,
         instructionsJson: String,
         projectId: Long?
     ): AgentRoleEntity =
@@ -150,8 +150,7 @@ class AgentRoleDaoExposed(
                 it[AgentRoleTable.name] = name
                 it[AgentRoleTable.displayName] = displayName
                 it[AgentRoleTable.description] = description
-                it[AgentRoleTable.modelId] = modelId
-                it[AgentRoleTable.modelSettingsId] = modelSettingsId
+                it[AgentRoleTable.modelPresetId] = modelPresetId
                 it[AgentRoleTable.projectId] = projectId
                 it[AgentRoleTable.instructionsJson] = instructionsJson
                 it[AgentRoleTable.createdAt] = now
@@ -168,8 +167,7 @@ class AgentRoleDaoExposed(
                     it[AgentRoleTable.name] = role.name
                     it[AgentRoleTable.displayName] = role.displayName
                     it[AgentRoleTable.description] = role.description
-                    it[AgentRoleTable.modelId] = role.modelId
-                    it[AgentRoleTable.modelSettingsId] = role.modelSettingsId
+                    it[AgentRoleTable.modelPresetId] = role.modelPresetId
                     it[AgentRoleTable.projectId] = role.projectId
                     it[AgentRoleTable.instructionsJson] = role.instructionsJson
                     it[AgentRoleTable.updatedAt] = System.currentTimeMillis()

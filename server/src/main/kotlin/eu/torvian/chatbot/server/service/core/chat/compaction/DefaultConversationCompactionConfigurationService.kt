@@ -10,11 +10,10 @@ import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
-import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.server.data.dao.UserPreferenceDao
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
 import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
+import eu.torvian.chatbot.server.service.llm.chatStreamFlag
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import eu.torvian.chatbot.server.service.security.ResourceType
 import kotlinx.serialization.json.Json
@@ -199,13 +198,9 @@ class DefaultConversationCompactionConfigurationService(
             // Only chat-like settings may drive an auxiliary chat request, and the auxiliary call is
             // non-streaming, so a streaming-only profile is invalid regardless of the primary mode.
             // This is a static property of the settings row, so it is a write-time configuration
-            // concern here rather than a runtime one.
-            val nonStreaming = when (settings) {
-                is ChatModelSettings -> !settings.stream
-                is ResponsesModelSettings -> !settings.stream
-                else -> false
-            }
-            ensure(nonStreaming) {
+            // concern here rather than a runtime one. The shared helper answers both questions with the
+            // same rules turn preparation and role-attach validation use.
+            ensure(chatStreamFlag(settings) == false) {
                 ConversationCompactionConfigurationError.IncompatibleConfiguration(
                     "Compaction settings ${settings.name} must be chat-like (CHAT or RESPONSES) " +
                         "with stream=false, but was ${settings::class.simpleName}"

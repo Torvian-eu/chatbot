@@ -21,9 +21,9 @@ import kotlinx.serialization.json.JsonObject
 /**
  * `create_agent_role` server built-in tool.
  *
- * Creates a role from the parsed input, reusing [CreateAgentRoleRequest]. `model_id` and
- * `model_settings_id` are optional: a role may be created without a model/settings and completed
- * later via `update_agent_role`; such a role is non-sendable until set.
+ * Creates a role from the parsed input, reusing [CreateAgentRoleRequest]. `model_preset_id` is
+ * optional: a role may be created without a model preset and completed later via `update_agent_role`;
+ * such a role is non-sendable until set (the preset supplies both the model and the settings profile).
  *
  * Returns a concise one-line summary of the completed operation (see [formatCreatedAgentRole])
  * instead of the full role JSON to keep the LLM context lean; `read_agent_role` returns the full role.
@@ -56,8 +56,7 @@ class CreateAgentRoleTool(
                 ServerBuiltInToolCatalog.NAME_PROPERTY,
                 ServerBuiltInToolCatalog.DISPLAY_NAME_PROPERTY,
                 ServerBuiltInToolCatalog.DESCRIPTION_PROPERTY,
-                ServerBuiltInToolCatalog.MODEL_ID_PROPERTY,
-                ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY,
+                ServerBuiltInToolCatalog.MODEL_PRESET_ID_PROPERTY,
                 ServerBuiltInToolCatalog.TOOL_IDS_PROPERTY,
                 ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY,
                 ServerBuiltInToolCatalog.PROJECT_ID_PROPERTY,
@@ -68,9 +67,8 @@ class CreateAgentRoleTool(
         val name = parseRequiredString(input, ServerBuiltInToolCatalog.NAME_PROPERTY, validationErrors)
         val displayName = parseOptionalString(input, ServerBuiltInToolCatalog.DISPLAY_NAME_PROPERTY, validationErrors)
         val description = parseOptionalString(input, ServerBuiltInToolCatalog.DESCRIPTION_PROPERTY, validationErrors)
-        val modelId = parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_ID_PROPERTY, validationErrors)
-        val modelSettingsId =
-            parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY, validationErrors)
+        val modelPresetId =
+            parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_PRESET_ID_PROPERTY, validationErrors)
         val toolIds = parseOptionalLongSet(input, ServerBuiltInToolCatalog.TOOL_IDS_PROPERTY, validationErrors)
         val spawnableAgentRoleIds =
             parseOptionalLongSet(input, ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY, validationErrors)
@@ -85,8 +83,7 @@ class CreateAgentRoleTool(
             name = name!!,
             displayName = displayName,
             description = description ?: "",
-            modelId = modelId,
-            modelSettingsId = modelSettingsId,
+            modelPresetId = modelPresetId,
             toolIds = toolIds ?: emptySet(),
             spawnableAgentRoleIds = spawnableAgentRoleIds ?: emptySet(),
             projectId = projectId,
@@ -113,26 +110,22 @@ private fun CreateAgentRoleError.toHandlerError(): ServerBuiltInToolHandlerError
             "name_already_exists",
             "A role named '$name' already exists for the current user."
         )
-    is CreateAgentRoleError.ModelNotFound ->
+    is CreateAgentRoleError.ModelPresetNotFound ->
         ServerBuiltInToolHandlerError.OperationFailed(
-            "model_not_found",
-            "Model $modelId not found or not accessible by the current user."
+            "model_preset_not_found",
+            "Model preset $presetId not found or not owned by the current user."
         )
-    is CreateAgentRoleError.SettingsNotFound ->
+    is CreateAgentRoleError.ModelPresetNotChatLike ->
         ServerBuiltInToolHandlerError.OperationFailed(
-            "settings_not_found",
-            "Settings profile $settingsId not found or not accessible by the current user."
+            "model_preset_not_chat_like",
+            "Model preset $presetId uses settings profile $settingsId of type $actualType; only CHAT " +
+                "or RESPONSES settings are supported."
         )
-    is CreateAgentRoleError.SettingsNotChatLike ->
+    is CreateAgentRoleError.ModelPresetSettingsModelMismatch ->
         ServerBuiltInToolHandlerError.OperationFailed(
-            "settings_not_chat_like",
-            "Settings profile $settingsId is of type $actualType; only CHAT or RESPONSES " +
-                "settings are supported."
-        )
-    is CreateAgentRoleError.SettingsModelMismatch ->
-        ServerBuiltInToolHandlerError.OperationFailed(
-            "settings_model_mismatch",
-            "Settings profile $settingsId belongs to model $settingsModelId, not $roleModelId."
+            "model_preset_settings_model_mismatch",
+            "Model preset $presetId references model $presetModelId but its settings profile belongs " +
+                "to model $settingsModelId."
         )
     is CreateAgentRoleError.ToolNotFound ->
         ServerBuiltInToolHandlerError.OperationFailed(

@@ -58,8 +58,7 @@ class UpdateAgentRoleTool(
                 ServerBuiltInToolCatalog.NAME_PROPERTY,
                 ServerBuiltInToolCatalog.DISPLAY_NAME_PROPERTY,
                 ServerBuiltInToolCatalog.DESCRIPTION_PROPERTY,
-                ServerBuiltInToolCatalog.MODEL_ID_PROPERTY,
-                ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY,
+                ServerBuiltInToolCatalog.MODEL_PRESET_ID_PROPERTY,
                 ServerBuiltInToolCatalog.TOOL_IDS_PROPERTY,
                 ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY,
                 ServerBuiltInToolCatalog.PROJECT_ID_PROPERTY,
@@ -71,9 +70,8 @@ class UpdateAgentRoleTool(
         val name = parseOptionalString(input, ServerBuiltInToolCatalog.NAME_PROPERTY, validationErrors)
         val displayName = parseOptionalString(input, ServerBuiltInToolCatalog.DISPLAY_NAME_PROPERTY, validationErrors)
         val description = parseOptionalString(input, ServerBuiltInToolCatalog.DESCRIPTION_PROPERTY, validationErrors)
-        val modelId = parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_ID_PROPERTY, validationErrors)
-        val modelSettingsId =
-            parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY, validationErrors)
+        val modelPresetId =
+            parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_PRESET_ID_PROPERTY, validationErrors)
         val toolIds = parseOptionalLongSet(input, ServerBuiltInToolCatalog.TOOL_IDS_PROPERTY, validationErrors)
         val spawnableAgentRoleIds =
             parseOptionalLongSet(input, ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY, validationErrors)
@@ -105,12 +103,21 @@ class UpdateAgentRoleTool(
             else -> projectId
         }
 
+        // The model preset follows the same patch merge, including the LLM-facing `0` sentinel that
+        // detaches the preset (preset ids are positive AUTOINCREMENT values, so 0 is unambiguous).
+        // Without it a caller could never make a role preset-less through this tool, since an omitted
+        // or explicitly-null model_preset_id must preserve the persisted value.
+        val targetModelPresetId = when (modelPresetId) {
+            null -> persisted.modelPresetId
+            0L -> null
+            else -> modelPresetId
+        }
+
         val request = UpdateAgentRoleRequest(
             name = name ?: persisted.name,
             displayName = displayName ?: persisted.displayName,
             description = description ?: persisted.description,
-            modelId = modelId ?: persisted.modelId,
-            modelSettingsId = modelSettingsId ?: persisted.modelSettingsId,
+            modelPresetId = targetModelPresetId,
             toolIds = toolIds ?: persisted.tools,
             spawnableAgentRoleIds = spawnableAgentRoleIds ?: persisted.spawnableAgentRoleIds,
             instructions = instructions ?: persisted.instructions,

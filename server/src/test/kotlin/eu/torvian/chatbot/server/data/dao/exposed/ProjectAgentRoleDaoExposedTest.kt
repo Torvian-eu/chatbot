@@ -34,17 +34,15 @@ class ProjectAgentRoleDaoExposedTest {
     private lateinit var agentRoleDao: AgentRoleDao
     private lateinit var testDataManager: TestDataManager
 
-    // Roles with null model/settings references so no llm_models/model_settings seeding is needed.
+    // Preset-less roles so no llm_models/model_settings/model_presets seeding is needed.
     private val role1 = TestDefaults.agentRole1.copy(
         id = 1L,
-        modelId = null,
-        modelSettingsId = null,
+        modelPresetId = null,
         instructionsJson = "[]"
     )
     private val role2 = TestDefaults.agentRole2.copy(
         id = 2L,
-        modelId = null,
-        modelSettingsId = null,
+        modelPresetId = null,
         instructionsJson = "[]"
     )
 

@@ -293,13 +293,22 @@ fun serviceModule() = module {
             agentRoleSpawnableRoleDao = get(),
             agentRoleOwnershipDao = get(),
             agentRoleDisabledDao = get(),
-            modelDao = get(),
+            modelPresetDao = get(),
             settingsDao = get(),
             toolDefinitionDao = get(),
             json = get(),
             transactionScope = get(),
             projectDao = get(),
             sessionDao = get()
+        )
+    }
+    single<ModelPresetService> {
+        ModelPresetServiceImpl(
+            modelPresetDao = get(),
+            modelPresetOwnershipDao = get(),
+            modelDao = get(),
+            settingsDao = get(),
+            transactionScope = get()
         )
     }
     single<ProjectService> {

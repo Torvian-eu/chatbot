@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -57,25 +58,32 @@ class ProjectCloneRoutesTest {
 
     private val sourceProject = TestDefaults.project1
     private val foreignProject = TestDefaults.project2.copy(id = 2L)
+
+    // The preset bound to sourceRoleA; the clone must carry the same reference (presets are user-wide,
+    // not project-scoped, so a clone shares the source's preset row). Its model/settings references are
+    // null so this suite needs no llm_models/model_settings seeding — the deep copy only looks at the
+    // preset id.
+    private val sourcePreset = TestDefaults.modelPreset1.copy(
+        id = 1L,
+        modelId = null,
+        modelSettingsId = null
+    )
     private val sourceRoleA = TestDefaults.agentRole1.copy(
         id = 10L,
         name = "Architect",
         displayName = "Senior Architect",
         description = "The architecture role",
-        // Model/settings references are null so the fixtures need no llm_models/model_settings seeding
-        // (the deep-copy of those ids is covered by the service unit tests).
-        modelId = null,
-        modelSettingsId = null,
+        // The preset reference is carried over verbatim by the clone (asserted as model_preset_id).
+        modelPresetId = sourcePreset.id,
         instructionsJson = """[{"type":"role","name":"Role","message":"You are the architect."}]""",
         projectId = sourceProject.id
     )
     private val sourceRoleB = TestDefaults.agentRole2.copy(
         id = 11L,
         name = "Reviewer",
-        // Model/settings references are null so the fixtures need no llm_models/model_settings seeding
-        // (see sourceRoleA).
-        modelId = null,
-        modelSettingsId = null,
+        // Seeded without a preset so the assertion on the clone stays discriminating: the copy must
+        // preserve null just as faithfully as a real id.
+        modelPresetId = null,
         projectId = sourceProject.id
     )
 
@@ -103,6 +111,8 @@ class ProjectCloneRoutesTest {
                 Table.PROJECTS,
                 Table.PROJECT_OWNERS,
                 Table.AGENT_ROLES,
+                // The role rows reference model_presets (sourceRoleA carries a preset reference).
+                Table.MODEL_PRESETS,
                 Table.AGENT_ROLE_OWNERS,
                 Table.AGENT_ROLE_TOOLS,
                 Table.AGENT_ROLE_SPAWNABLE_ROLES,
@@ -118,6 +128,9 @@ class ProjectCloneRoutesTest {
 
         testDataManager.insertProject(sourceProject)
         testDataManager.insertProject(foreignProject)
+        // The referenced preset must exist before the role row that references it (FK enforcement is ON
+        // on the runtime connections these DAOs use).
+        testDataManager.insertModelPreset(sourcePreset)
         testDataManager.insertAgentRole(sourceRoleA)
         testDataManager.insertAgentRole(sourceRoleB)
 
@@ -200,8 +213,9 @@ class ProjectCloneRoutesTest {
         val clonedB = clonedRoles.single { it.name == "Reviewer" }
         assertEquals(sourceRoleA.displayName, clonedA.displayName)
         assertEquals(sourceRoleA.description, clonedA.description)
-        assertEquals(sourceRoleA.modelId, clonedA.modelId)
-        assertEquals(sourceRoleA.modelSettingsId, clonedA.modelSettingsId)
+        assertEquals(sourceRoleA.modelPresetId, clonedA.modelPresetId, "the preset reference is copied")
+        assertEquals(sourcePreset.id, clonedA.modelPresetId)
+        assertNull(clonedB.modelPresetId, "a preset-less source role yields a preset-less clone")
         assertEquals(sourceRoleA.instructionsJson, clonedA.instructionsJson)
         assertTrue(clonedRoles.all { it.projectId == cloned.id }, "every cloned role is bound to the clone")
 

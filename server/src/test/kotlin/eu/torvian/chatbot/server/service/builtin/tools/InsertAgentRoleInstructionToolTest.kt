@@ -54,8 +54,11 @@ class InsertAgentRoleInstructionToolTest {
         name = "writer",
         displayName = "Writer",
         description = "Writes code",
-        modelId = 3L,
-        modelSettingsId = 4L,
+        // Derived from the preset for completeness; the tools never read them, but the fixture keeps a
+        // non-null preset id so "the preset is carried over" is actually asserted below.
+        modelId = 30L,
+        modelSettingsId = 40L,
+        modelPresetId = 3L,
         tools = setOf(5L, 6L),
         spawnableAgentRoleIds = setOf(2L),
         instructions = listOf(
@@ -124,7 +127,7 @@ class InsertAgentRoleInstructionToolTest {
                         request.instructions[1].message == "Be concise." &&
                         request.instructions[2] == persisted.instructions[1] &&
                         request.name == persisted.name &&
-                        request.modelId == persisted.modelId &&
+                        request.modelPresetId == persisted.modelPresetId &&
                         request.toolIds == persisted.tools &&
                         request.spawnableAgentRoleIds == persisted.spawnableAgentRoleIds
                 }

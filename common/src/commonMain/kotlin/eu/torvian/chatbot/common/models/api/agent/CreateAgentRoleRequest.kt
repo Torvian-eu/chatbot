@@ -7,21 +7,23 @@ import kotlinx.serialization.Serializable
 /**
  * Request body for creating a new user-defined agent role.
  *
- * `modelId`/`modelSettingsId` are optional at creation time: a role may be created without a model
- * and settings and completed later via [UpdateAgentRoleRequest] (e.g. by the server built-in
- * `update_agent_role` tool). A role without a model/settings is **non-sendable** until repaired —
- * turn preparation raises a model-configuration error for it. The persisted columns are nullable
- * anyway (they also become null via `ON DELETE SET NULL` when a referenced model/settings is
- * deleted).
+ * A role's LLM configuration is supplied through [modelPresetId], which references a user-owned
+ * [eu.torvian.chatbot.common.models.llm.ModelPresetDto] (the model preset is the sole source of truth
+ * for the role's model and settings profile). The preset is **optional** at creation time: a role may
+ * be created without one and completed later via [UpdateAgentRoleRequest] (e.g. by the server built-in
+ * `update_agent_role` tool). A preset-less role — or a role whose preset has a null model/settings
+ * reference — is **non-sendable** until repaired; turn preparation raises a model-configuration error
+ * for it.
  *
  * @property name Unique (per user) machine-readable role name, non-blank and at most 255 characters.
  * @property displayName Optional human-friendly display name.
  * @property description Free-form description of the role.
- * @property modelId Optional identifier of the LLM model the role uses; null means the role has no
- *            model and is non-sendable until set via update.
- * @property modelSettingsId Optional identifier of the settings profile (CHAT or RESPONSES) the role
- *            uses; null means the role has no settings and is non-sendable until set via update.
- *            When both are provided, the settings must belong to [modelId] and be chat-capable.
+ * @property modelPresetId Optional identifier of the model preset that holds the role's model and
+ *            settings profile; null means the role has no model configuration and is non-sendable
+ *            until a preset is attached. The preset must be owned by the requesting user; a preset
+ *            whose model/settings reference is null (the state produced when a referenced row is
+ *            deleted) may still be attached — the role simply cannot drive a turn until it is
+ *            repaired.
  * @property toolIds Set of tool-definition identifiers to attach to the role. Duplicates are
  *            impossible at the wire level (a set), so no service-side de-duplication is needed.
  * @property spawnableAgentRoleIds Same-user role identifiers that this role may spawn. Duplicates are
@@ -43,8 +45,7 @@ data class CreateAgentRoleRequest(
     val name: String,
     val displayName: String? = null,
     val description: String = "",
-    val modelId: Long? = null,
-    val modelSettingsId: Long? = null,
+    val modelPresetId: Long? = null,
     val toolIds: Set<Long> = emptySet(),
     val spawnableAgentRoleIds: Set<Long> = emptySet(),
     val instructions: List<AgentInstructionDto> = emptyList(),

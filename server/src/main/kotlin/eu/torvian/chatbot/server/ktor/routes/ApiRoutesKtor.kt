@@ -47,6 +47,7 @@ class ApiRoutesKtor(
     private val roleService: RoleService,
     private val agentRoleService: AgentRoleService,
     private val projectService: ProjectService,
+    private val modelPresetService: ModelPresetService,
     private val authorizationService: AuthorizationService,
     private val workerService: WorkerService,
     private val json: Json,
@@ -68,6 +69,7 @@ class ApiRoutesKtor(
         configureRoleRoutes(route)
         configureAgentRoleRoutes(route)
         configureProjectRoutes(route)
+        configureModelPresetRoutes(route)
         configureSessionRoutes(route)
         configureGroupRoutes(route)
         configureProviderRoutes(route)
@@ -142,6 +144,14 @@ class ApiRoutesKtor(
      */
     fun configureProjectRoutes(route: Route) {
         route.configureProjectRoutes(projectService, authorizationService)
+    }
+
+    /**
+     * Configures routes related to Model Preset Management (/api/v1/model-presets), the resource that
+     * holds an agent role's model/settings configuration.
+     */
+    fun configureModelPresetRoutes(route: Route) {
+        route.configureModelPresetRoutes(modelPresetService, authorizationService)
     }
 
     /**
