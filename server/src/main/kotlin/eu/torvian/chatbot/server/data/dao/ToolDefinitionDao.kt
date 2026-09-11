@@ -41,7 +41,7 @@ interface ToolDefinitionDao {
 
     /**
      * Retrieves only globally enabled tool definitions.
-     * Note: Session-specific enablement is handled separately in SessionToolConfigDao.
+     * Note: Per-role enablement is managed through AgentRoleToolDao.
      *
      * @return List of enabled tool definitions
      */
@@ -82,7 +82,7 @@ interface ToolDefinitionDao {
 
     /**
      * Deletes a tool definition.
-     * Warning: CASCADE will delete all related ToolCall records and SessionToolConfig entries.
+     * Warning: CASCADE will delete all related ToolCall records and agent-role tool assignments.
      *
      * @param id The unique identifier of the tool definition to delete
      * @return Either [ToolDefinitionError.NotFound] or Unit on success

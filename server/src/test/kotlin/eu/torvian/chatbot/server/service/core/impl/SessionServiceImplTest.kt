@@ -31,7 +31,7 @@ import kotlin.time.Instant
  * This test suite verifies that [SessionServiceImpl] correctly orchestrates
  * calls to the underlying DAO and handles business logic validation.
  * All dependencies ([SessionDao], [SessionOwnershipDao], [MessageDao], [ToolCallDao],
- * [SessionToolConfigDao], [AgentRoleDao], [TransactionScope]) are mocked using MockK.
+ * [AgentRoleDao], [TransactionScope]) are mocked using MockK.
  */
 class SessionServiceImplTest {
 
@@ -40,7 +40,6 @@ class SessionServiceImplTest {
     private lateinit var sessionOwnershipDao: SessionOwnershipDao
     private lateinit var messageDao: MessageDao
     private lateinit var toolCallDao: ToolCallDao
-    private lateinit var sessionToolConfigDao: SessionToolConfigDao
     private lateinit var agentRoleDao: AgentRoleDao
     private lateinit var transactionScope: TransactionScope
 
@@ -84,7 +83,6 @@ class SessionServiceImplTest {
         sessionOwnershipDao = mockk()
         messageDao = mockk()
         toolCallDao = mockk()
-        sessionToolConfigDao = mockk()
         agentRoleDao = mockk()
         transactionScope = mockk()
 
@@ -94,7 +92,6 @@ class SessionServiceImplTest {
             sessionOwnershipDao,
             messageDao,
             toolCallDao,
-            sessionToolConfigDao,
             agentRoleDao,
             transactionScope
         )
@@ -122,7 +119,6 @@ class SessionServiceImplTest {
             sessionOwnershipDao,
             messageDao,
             toolCallDao,
-            sessionToolConfigDao,
             agentRoleDao,
             transactionScope
         )

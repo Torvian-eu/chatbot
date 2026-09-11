@@ -24,9 +24,7 @@ import kotlinx.coroutines.flow.update
  * StateFlow, automatically refreshing the cache after successful load and update operations.
  *
  * To keep the Configure Tools dialog (which reads from the shared [ToolRepository]) in sync,
- * successful updates are also propagated into [ToolRepository.tools] and, when the enabled
- * state changes, the per-session enabled-tools cache is invalidated. This mirrors the behavior
- * already implemented by [DefaultBuiltInToolRepository].
+ * successful updates are also propagated into [ToolRepository.tools].
  *
  * @property operatorToolApi The API client for operator tool operations.
  * @property toolRepository The shared tool repository whose cache backs the Configure Tools dialog.
@@ -89,16 +87,10 @@ class DefaultOperatorToolRepository(
                 }
 
                 // Propagate the change to the shared ToolRepository so the Configure Tools dialog
-                // (which reads toolRepository.tools and the per-session enabled cache) reflects the
-                // change immediately, without requiring an app restart.
-                val oldTool = toolRepository.tools.value.dataOrNull?.find { it.id == tool.id }
+                // (which reads toolRepository.tools) reflects the change immediately,
+                // without requiring an app restart.
                 toolRepository.updateToolCache { currentList ->
                     currentList.map { if (it.id == tool.id) tool else it }
-                }
-                // Only invalidate the enabled-tools cache when the enabled state actually changed,
-                // avoiding unnecessary session reloads on pure metadata edits.
-                if (oldTool?.isEnabled != tool.isEnabled) {
-                    toolRepository.invalidateEnabledToolsCache()
                 }
 
                 logger.debug("Successfully updated operator tool ${updatedTool.id}")

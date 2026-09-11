@@ -2,17 +2,12 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import arrow.core.raise.either
 import arrow.core.raise.withError
-import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.api.resources.SessionToolsResource
 import eu.torvian.chatbot.common.api.resources.ToolResource
-import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
-import eu.torvian.chatbot.common.models.api.tool.SetToolsEnabledRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolApprovalPreferenceRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.error.tool.*
-import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
@@ -20,21 +15,20 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 
 /**
- * Configures routes related to Tool Management (/api/v1/tools and /api/v1/sessions/{sessionId}/tools)
+ * Configures routes related to Tool Management (/api/v1/tools)
  * using Ktor Resources.
+ *
+ * A session's effective tools are resolved from its agent role; there are no
+ * session-scoped tool endpoints.
  *
  * This function sets up the following endpoints:
  * - GET /api/v1/tools - List all tools accessible to the current user
  * - GET /api/v1/tools/{toolId} - Get tool details
- * - GET /api/v1/sessions/{sessionId}/tools - Get enabled tools for session
- * - PUT /api/v1/sessions/{sessionId}/tools/{toolId} - Enable/disable tool for session
  *
  * @param toolService The service handling tool business logic
- * @param authorizationService The service handling authorization checks
  */
 fun Route.configureToolRoutes(
-    toolService: ToolService,
-    authorizationService: AuthorizationService
+    toolService: ToolService
 ) {
     authenticate(AuthSchemes.USER_JWT) {
         // GET /api/v1/tools - List all tools accessible to the current user
@@ -51,55 +45,6 @@ fun Route.configureToolRoutes(
             val result = either {
                 withError({ e: GetToolError -> e.toApiError() }) {
                     toolService.getToolById(toolId).bind()
-                }
-            }
-            call.respondEither(result)
-        }
-
-        // GET /api/v1/sessions/{sessionId}/tools - Get enabled tools for session
-        get<SessionToolsResource> { resource ->
-            val userId = call.getUserId()
-            val sessionId = resource.parent.sessionId
-
-            val result = either {
-                // Check that the user has read access to the session
-                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.READ)
-
-                toolService.getEnabledToolsForSession(sessionId)
-            }
-            call.respondEither(result)
-        }
-
-        // PUT /api/v1/sessions/{sessionId}/tools/{toolId} - Enable/disable tool for session
-        put<SessionToolsResource.ById> { resource ->
-            val userId = call.getUserId()
-            val sessionId = resource.parent.parent.sessionId
-            val toolId = resource.toolId
-            val request = call.receive<SetToolEnabledRequest>()
-
-            val result = either {
-                // Check that the user has write access to the session
-                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
-
-                withError({ e: SetToolEnabledError -> e.toApiError() }) {
-                    toolService.setToolEnabledForSession(sessionId, toolId, request.enabled).bind()
-                }
-            }
-            call.respondEither(result)
-        }
-
-        // PUT /api/v1/sessions/{sessionId}/tools - Batch enable/disable multiple tools for session
-        put<SessionToolsResource> { resource ->
-            val userId = call.getUserId()
-            val sessionId = resource.parent.sessionId
-            val request = call.receive<SetToolsEnabledRequest>()
-
-            val result = either {
-                // Check that the user has write access to the session
-                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
-
-                withError({ e: SetToolsEnabledError -> e.toApiError() }) {
-                    toolService.setToolsEnabledForSession(sessionId, request.toolIds, request.enabled).bind()
                 }
             }
             call.respondEither(result)

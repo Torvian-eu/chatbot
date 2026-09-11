@@ -174,7 +174,14 @@ interface LocalMCPServerManager {
      * This operation only saves the configuration. If the server is currently running,
      * it will continue with its old configuration until it is restarted.
      * No restart, reconnection, or tool rediscovery is performed automatically.
-     * If the [LocalMCPServerDto.isEnabled] state changed, the enabled tools cache is invalidated.
+     * Toggling the enabled state needs no local cache invalidation: a session's
+     * effective tools are resolved from its agent role on the backend.
+     *
+     * Intentionally, no local "server must be known" pre-check is performed. The backend
+     * owns existence validation, so updating an unknown server surfaces as an
+     * UpdateServerError.ServerUpdateFailed failure from the repository call. The former
+     * local lookup only existed to compare the previous enabled state for the removed
+     * per-session tools cache.
      *
      * @param server The updated MCP server configuration
      * @return Either.Right with Unit on success, or Either.Left with UpdateServerError on failure

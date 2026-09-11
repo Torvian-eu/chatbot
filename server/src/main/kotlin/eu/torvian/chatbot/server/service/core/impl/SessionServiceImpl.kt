@@ -24,7 +24,6 @@ class SessionServiceImpl(
     private val sessionOwnershipDao: SessionOwnershipDao,
     private val messageDao: MessageDao,
     private val toolCallDao: ToolCallDao,
-    private val sessionToolConfigDao: SessionToolConfigDao,
     private val agentRoleDao: AgentRoleDao,
     private val transactionScope: TransactionScope,
 ) : SessionService {
@@ -384,20 +383,8 @@ class SessionServiceImpl(
                     }
                 }
 
-                // Clone session tool configurations
-                val enabledTools = sessionToolConfigDao.getEnabledToolsForSession(id)
-                if (enabledTools.isNotEmpty()) {
-                    val toolIds = enabledTools.map { it.id }
-                    withError({ daoError: SetToolsEnabledError ->
-                        CloneSessionError.InternalError("Failed to clone tool configurations: $daoError")
-                    }) {
-                        sessionToolConfigDao.setToolsEnabledForSession(
-                            sessionId = newSession.id,
-                            toolDefinitionIds = toolIds,
-                            enabled = true
-                        ).bind()
-                    }
-                }
+                // A cloned session inherits its effective tools through the copied agent role
+                // reference above; there is no per-session tool state to copy.
 
                 // Load and return the complete cloned session with messages
                 withError({ daoError: SessionError.SessionNotFound ->

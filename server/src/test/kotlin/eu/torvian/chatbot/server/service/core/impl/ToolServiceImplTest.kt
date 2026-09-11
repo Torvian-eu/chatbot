@@ -2,7 +2,6 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
-import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.UserToolApprovalPreferenceDao
 import eu.torvian.chatbot.server.service.core.error.tool.ValidateToolError
@@ -25,14 +24,12 @@ import kotlin.test.assertTrue
  */
 class ToolServiceImplTest {
     private val toolDefinitionDao = mockk<ToolDefinitionDao>()
-    private val sessionToolConfigDao = mockk<SessionToolConfigDao>()
     private val localMCPToolDefinitionDao = mockk<LocalMCPToolDefinitionDao>()
     private val userToolApprovalPreferenceDao = mockk<UserToolApprovalPreferenceDao>()
     private val transactionScope = mockk<TransactionScope>()
 
     private val service = ToolServiceImpl(
         toolDefinitionDao = toolDefinitionDao,
-        sessionToolConfigDao = sessionToolConfigDao,
         localMCPToolDefinitionDao = localMCPToolDefinitionDao,
         userToolApprovalPreferenceDao = userToolApprovalPreferenceDao,
         transactionScope = transactionScope
@@ -40,7 +37,7 @@ class ToolServiceImplTest {
 
     @BeforeEach
     fun setUp() {
-        clearMocks(toolDefinitionDao, sessionToolConfigDao, localMCPToolDefinitionDao, userToolApprovalPreferenceDao, transactionScope)
+        clearMocks(toolDefinitionDao, localMCPToolDefinitionDao, userToolApprovalPreferenceDao, transactionScope)
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
             block()

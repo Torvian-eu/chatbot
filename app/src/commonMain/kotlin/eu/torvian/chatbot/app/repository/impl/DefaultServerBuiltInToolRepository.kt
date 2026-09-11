@@ -24,9 +24,7 @@ import kotlinx.coroutines.flow.update
  * using StateFlow, automatically refreshing the cache after successful load and update operations.
  *
  * To keep the Configure Tools dialog (which reads from the shared [ToolRepository]) in sync,
- * successful updates are also propagated into [ToolRepository.tools] and, when the enabled state
- * changes, the per-session enabled-tools cache is invalidated. This mirrors the behavior already
- * implemented by [DefaultOperatorToolRepository].
+ * successful updates are also propagated into [ToolRepository.tools].
  *
  * @property serverBuiltInToolApi The API client for server built-in tool operations.
  * @property toolRepository The shared tool repository whose cache backs the Configure Tools dialog.
@@ -89,18 +87,12 @@ class DefaultServerBuiltInToolRepository(
                 }
 
                 // Propagate the change to the shared ToolRepository so the Configure Tools dialog
-                // (which reads toolRepository.tools and the per-session enabled cache) reflects the
-                // change immediately, without requiring an app restart. The server-returned
+                // (which reads toolRepository.tools) reflects the change immediately,
+                // without requiring an app restart. The server-returned
                 // `updatedTool` is the authoritative row (fresh updatedAt, immutable name preserved),
                 // so it — not the request object — is what the cache must store.
-                val oldTool = toolRepository.tools.value.dataOrNull?.find { it.id == updatedTool.id }
                 toolRepository.updateToolCache { currentList ->
                     currentList.map { if (it.id == updatedTool.id) updatedTool else it }
-                }
-                // Only invalidate the enabled-tools cache when the enabled state actually changed,
-                // avoiding unnecessary session reloads on pure metadata edits.
-                if (oldTool?.isEnabled != updatedTool.isEnabled) {
-                    toolRepository.invalidateEnabledToolsCache()
                 }
 
                 logger.debug("Successfully updated server built-in tool ${updatedTool.id}")

@@ -116,9 +116,4 @@ interface LocalMCPToolRepository {
      * @param serverId The ID of the MCP server whose tools should be removed from the cache
      */
     suspend fun removeToolsFromCache(serverId: Long)
-
-    /**
-     * Invalidates the enabled tools cache for all sessions.
-     */
-    suspend fun invalidateEnabledToolsCache()
 }

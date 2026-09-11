@@ -226,11 +226,6 @@ enum class Table {
     TOOL_CALLS,
 
     /**
-     * Table for storing session-specific tool configurations.
-     */
-    SESSION_TOOL_CONFIG,
-
-    /**
      * Table for storing full local MCP server configurations.
      */
     LOCAL_MCP_SERVERS,
