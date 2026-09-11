@@ -10,7 +10,6 @@ import eu.torvian.chatbot.common.models.tool.ToolNameValidator
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
-import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.UserToolApprovalPreferenceDao
 import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
@@ -20,26 +19,19 @@ import eu.torvian.chatbot.server.data.entities.ToolDefinitionEntity
 import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.error.tool.*
 import kotlinx.serialization.json.JsonObject
-import org.apache.logging.log4j.LogManager
-import org.apache.logging.log4j.Logger
 import kotlin.time.Clock
-import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError as DaoSetToolEnabledError
-import eu.torvian.chatbot.server.data.dao.error.SetToolsEnabledError as DaoSetToolsEnabledError
 
 /**
  * Implementation of the [ToolService] interface.
- * Manages tool definitions and session-specific tool configurations.
+ * Manages tool definitions and user tool approval preferences.
  */
 class ToolServiceImpl(
     private val toolDefinitionDao: ToolDefinitionDao,
-    private val sessionToolConfigDao: SessionToolConfigDao,
     private val localMCPToolDefinitionDao: LocalMCPToolDefinitionDao,
     private val userToolApprovalPreferenceDao: UserToolApprovalPreferenceDao,
     private val transactionScope: TransactionScope,
     private val toolNameValidator: ToolNameValidator = ToolNameValidator()
 ) : ToolService {
-
-    private val logger: Logger = LogManager.getLogger(ToolServiceImpl::class.java)
 
     override suspend fun getAllTools(): List<ToolDefinition> {
         return transactionScope.transaction {
@@ -128,65 +120,6 @@ class ToolServiceImpl(
                 }
             }
         }
-
-    override suspend fun getEnabledToolsForSession(sessionId: Long): List<ToolDefinition> =
-        transactionScope.transaction {
-            sessionToolConfigDao.getEnabledToolsForSession(sessionId)
-        }
-
-
-    override suspend fun setToolEnabledForSession(
-        sessionId: Long,
-        toolId: Long,
-        enabled: Boolean
-    ): Either<SetToolEnabledError, Unit> = transactionScope.transaction {
-        either {
-            // Verify tool exists
-            withError({ _: ToolDefinitionError.NotFound ->
-                SetToolEnabledError.ToolNotFound(toolId)
-            }) {
-                toolDefinitionDao.getToolDefinitionById(toolId).bind()
-            }
-
-            // Set tool enabled state for session
-            withError({ daoError: DaoSetToolEnabledError ->
-                when (daoError) {
-                    is DaoSetToolEnabledError.ForeignKeyViolation -> {
-                        // Try to determine if it's a session or tool issue
-                        // Check if tool exists (we already did this above, so this shouldn't fail)
-                        // This must be a session issue
-                        SetToolEnabledError.SessionNotFound(sessionId)
-                    }
-                }
-            }) {
-                sessionToolConfigDao.setToolEnabledForSession(sessionId, toolId, enabled).bind()
-            }
-
-            logger.info("Tool $toolId ${if (enabled) "enabled" else "disabled"} for session $sessionId")
-        }
-    }
-
-    override suspend fun setToolsEnabledForSession(
-        sessionId: Long,
-        toolIds: List<Long>,
-        enabled: Boolean
-    ): Either<SetToolsEnabledError, Unit> = transactionScope.transaction {
-        either {
-            // Batch set tool enabled state for session
-            // Foreign key violations are handled by the DAO layer
-            withError({ daoError: DaoSetToolsEnabledError ->
-                when (daoError) {
-                    is DaoSetToolsEnabledError.ForeignKeyViolation -> {
-                        SetToolsEnabledError.InvalidReference(sessionId, toolIds)
-                    }
-                }
-            }) {
-                sessionToolConfigDao.setToolsEnabledForSession(sessionId, toolIds, enabled).bind()
-            }
-
-            logger.info("${toolIds.size} tools ${if (enabled) "enabled" else "disabled"} for session $sessionId")
-        }
-    }
 
     override suspend fun validateToolDefinition(tool: ToolDefinition): Either<ValidateToolError, Unit> = either {
         validateToolDefinition(

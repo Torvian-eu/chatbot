@@ -203,8 +203,10 @@ class DatabaseMigratorAgentRolesTest {
                 }
             }
 
-            // Migrate to latest (V19 creates agent_roles, V20 rebuilds chat_sessions).
-            DatabaseMigrator(config).migrate()
+            // Migrate to V20 (V19 creates agent_roles, V20 rebuilds chat_sessions). The target is
+            // pinned because later migrations intentionally remove one of the asserted child tables
+            // (V30 drops session_tool_config, covered by its own test below).
+            flywayFor(config.url, target = "20").migrate()
 
             DriverManager.getConnection(config.url).use { connection ->
                 // None of the child tables may have lost rows to a cascade triggered by DROP TABLE.
@@ -450,6 +452,50 @@ class DatabaseMigratorAgentRolesTest {
                     countRows(connection, "SELECT COUNT(*) FROM agent_role_disabled"),
                     "upgrading a DB with existing roles must leave every role enabled for every user"
                 )
+            }
+        } finally {
+            dbFile.deleteIfExists()
+        }
+    }
+
+    /**
+     * V30 drops the session-specific tool configuration table.
+     *
+     * A session's effective tools resolve from its agent role, so the direct session<->tool
+     * association is discarded by design: the toggle row seeded below must be gone after the
+     * migration while the referenced session and tool rows survive.
+     */
+    @Test
+    fun `v30 drops session tool config without touching sessions or tools`() {
+        val dbFile = Files.createTempFile("chatbot-drop-session-tool-config", ".db")
+        try {
+            val config = DatabaseConfig(vendor = "sqlite", type = "file", filepath = dbFile.toString())
+
+            // Migrate to V29 and seed a session tool toggle.
+            flywayFor(config.url, target = "29").migrate()
+            DriverManager.getConnection(config.url).use { connection ->
+                connection.createStatement().use { statement ->
+                    statement.executeUpdate(
+                        "INSERT INTO users (id, username, password_hash, email, status, created_at, updated_at) " +
+                            "VALUES (1, 'u1', 'h', NULL, 'ENABLED', 0, 0)"
+                    )
+                    statement.executeUpdate("INSERT INTO chat_sessions (id, name, created_at, updated_at) VALUES (1, 's1', 0, 0)")
+                    statement.executeUpdate(
+                        "INSERT INTO tool_definitions (id, name, description, type, config_json, input_schema_json, is_enabled, created_at, updated_at) " +
+                            "VALUES (1, 't1', 'd', 'mcp', '{}', '{}', 1, 0, 0)"
+                    )
+                    statement.executeUpdate("INSERT INTO session_tool_config (session_id, tool_definition_id, is_enabled) VALUES (1, 1, 1)")
+                }
+            }
+
+            // Migrate to latest (V30 drops session_tool_config).
+            DatabaseMigrator(config).migrate()
+
+            DriverManager.getConnection(config.url).use { connection ->
+                assertFalse(hasTable(connection, "session_tool_config"), "session_tool_config must be dropped")
+                // The referenced session and tool rows survive the drop.
+                assertEquals(1, countRows(connection, "SELECT COUNT(*) FROM chat_sessions"))
+                assertEquals(1, countRows(connection, "SELECT COUNT(*) FROM tool_definitions"))
             }
         } finally {
             dbFile.deleteIfExists()

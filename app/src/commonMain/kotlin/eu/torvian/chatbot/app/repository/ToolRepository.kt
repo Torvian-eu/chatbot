@@ -7,7 +7,7 @@ import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Repository interface for managing tool definitions and session-specific tool configurations.
+ * Repository interface for managing tool definitions and user tool approval preferences.
  *
  * This repository serves as the single source of truth for tool data in the application,
  * providing reactive data streams through StateFlow and handling all tool-related operations.
@@ -67,53 +67,6 @@ interface ToolRepository {
     suspend fun getToolById(toolId: Long): Either<RepositoryError, ToolDefinition>
 
     /**
-     * Loads the list of tools enabled for a specific session.
-     *
-     * This allows per-session tool configuration to be cached separately.
-     *
-     * @param sessionId The unique identifier of the session
-     * @return Either.Right with a list of enabled ToolDefinition on success, or Either.Left with RepositoryError on failure
-     */
-    suspend fun loadEnabledToolsForSession(sessionId: Long): Either<RepositoryError, List<ToolDefinition>>
-
-    /**
-     * Gets a reactive stream of enabled tools for a specific session.
-     *
-     * The returned StateFlow will emit the current state of enabled tools for the session.
-     * If the tools have not been loaded yet, call loadEnabledToolsForSession() first.
-     *
-     * @param sessionId The unique identifier of the session
-     * @return A StateFlow containing the current state of enabled tools wrapped in DataState
-     */
-    suspend fun getEnabledToolsForSessionFlow(sessionId: Long): StateFlow<DataState<RepositoryError, List<ToolDefinition>>>
-
-    /**
-     * Enables or disables a tool for a specific session.
-     *
-     * Upon successful update, the session's tool configuration is updated in the cache,
-     * triggering updates to all observers.
-     *
-     * @param sessionId The unique identifier of the session
-     * @param toolDefinition The tool definition to enable/disable
-     * @param enabled Whether to enable or disable the tool
-     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
-     */
-    suspend fun setToolEnabledForSession(sessionId: Long, toolDefinition: ToolDefinition, enabled: Boolean): Either<RepositoryError, Unit>
-
-    /**
-     * Batch enables or disables multiple tools for a specific session.
-     *
-     * Upon successful update, the session's tool configuration is updated in the cache,
-     * triggering updates to all observers.
-     *
-     * @param sessionId The unique identifier of the session
-     * @param toolDefinitions The tool definitions to enable/disable
-     * @param enabled Whether to enable or disable the tools
-     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
-     */
-    suspend fun setToolsEnabledForSession(sessionId: Long, toolDefinitions: List<ToolDefinition>, enabled: Boolean): Either<RepositoryError, Unit>
-
-    /**
      * Loads the current user's tool approval preferences from the backend.
      *
      * This operation fetches the latest tool approval preferences and updates the internal StateFlow.
@@ -154,28 +107,6 @@ interface ToolRepository {
      * @param update A function that takes the current list of tools and returns an updated list.
      */
     suspend fun updateToolCache(update: (List<ToolDefinition>) -> List<ToolDefinition>)
-
-    /**
-     * Applies a batch update to the enabled tools cache for a specific session.
-     *
-     * @param sessionId The unique identifier of the session
-     * @param tools The tools to update
-     * @param enabled Whether to enable or disable the tools
-     */
-    suspend fun updateEnabledToolsCache(sessionId: Long, tools: List<ToolDefinition>, enabled: Boolean)
-
-    /**
-     * Applies a batch update to the enabled tools cache for all sessions.
-     *
-     * @param tools The tools to update
-     * @param enabled Whether to enable or disable the tools
-     */
-    suspend fun updateEnabledToolsCache(tools: List<ToolDefinition>, enabled: Boolean)
-
-    /**
-     * Invalidates the enabled tools cache for all sessions.
-     */
-    suspend fun invalidateEnabledToolsCache()
 
     /**
      * Applies a transformation to the in-memory tool approval preferences cache.

@@ -125,7 +125,7 @@ fun serviceModule() = module {
     single { ToolNameValidator() }
     single { ToolNamePrefixValidator() }
 
-    single<SessionService> { SessionServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
+    single<SessionService> { SessionServiceImpl(get(), get(), get(), get(), get(), get()) }
     single<GroupService> { GroupServiceImpl(get(), get(), get(), get()) }
     single<LLMModelService> { LLMModelServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<ModelSettingsService> { ModelSettingsServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
@@ -190,7 +190,7 @@ fun serviceModule() = module {
     }
 
     single<ChatService> { ChatServiceImpl(get(), get()) }
-    single<ToolService> { ToolServiceImpl(get(), get(), get(), get(), get(), get()) }
+    single<ToolService> { ToolServiceImpl(get(), get(), get(), get(), get()) }
     single<ToolCallService> { ToolCallServiceImpl(get(), get()) }
     single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
     single<LocalMCPRuntimeCommandDispatchService> { DefaultLocalMCPRuntimeCommandDispatchService(get()) }

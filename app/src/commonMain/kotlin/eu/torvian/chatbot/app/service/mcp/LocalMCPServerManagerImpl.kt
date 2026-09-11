@@ -1,9 +1,7 @@
 package eu.torvian.chatbot.app.service.mcp
 
 import arrow.core.Either
-import arrow.core.left
 import arrow.core.raise.either
-import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.zipWith
 import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
@@ -237,25 +235,15 @@ class LocalMCPServerManagerImpl(
     override suspend fun updateServer(server: LocalMCPServerDto): Either<UpdateServerError, Unit> = either {
         logger.info("Updating MCP server: ${server.id}")
 
-        // Step 1: Get the old configuration to check if isEnabled changed
-        val oldServer = getServerConfig(server.id).mapLeft { error ->
-            logger.error("Failed to load current config for MCP server ${server.id}: ${error.message}")
-            UpdateServerError.ServerUpdateFailed(server.id, error)
-        }.bind()
-
-        // Step 2: Persist the updated server configuration (no restart or tool rediscovery)
+        // Persist the updated server configuration (no restart or tool rediscovery).
+        // A session's effective tools are resolved from its agent role on the backend,
+        // so toggling a server here needs no per-session cache invalidation.
         serverRepository.updateServer(server).mapLeft { error ->
             logger.error("Failed to update MCP server configuration ${server.id}: ${error.message}")
             UpdateServerError.ServerUpdateFailed(server.id, error)
         }.bind()
 
         logger.info("Server configuration saved for MCP server ${server.id}")
-
-        // Step 3: Invalidate enabled tools cache if enabled state changed
-        if (oldServer.isEnabled != server.isEnabled) {
-            logger.info("Server enabled state changed, invalidating enabled tools cache for all sessions")
-            toolRepository.invalidateEnabledToolsCache()
-        }
     }
 
     override suspend fun deleteServer(serverId: Long): Either<DeleteServerError, Unit> = either {
@@ -273,23 +261,4 @@ class LocalMCPServerManagerImpl(
 
         logger.info("Successfully deleted MCP server $serverId")
     }
-
-    /**
-     * Retrieves the server configuration from the repository.
-     *
-     * @param serverId The ID of the server to retrieve
-     * @return Either.Right with the server config or Either.Left with RepositoryError
-     */
-    private fun getServerConfig(serverId: Long): Either<RepositoryError, LocalMCPServerDto> {
-        return when (val currentState = serverRepository.servers.value) {
-            is DataState.Success -> {
-                val server = currentState.data.find { it.id == serverId }
-                server?.right() ?: RepositoryError.OtherError("MCP server not found: $serverId").left()
-            }
-
-            is DataState.Error -> currentState.error.left()
-            else -> RepositoryError.OtherError("MCP server repository not loaded").left()
-        }
-    }
-
 }

@@ -79,44 +79,6 @@ interface ToolService {
     suspend fun deleteTool(id: Long): Either<DeleteToolError, Unit>
 
     /**
-     * Retrieves all tools that are enabled for a specific session.
-     * Returns both globally enabled tools and session-specific overrides.
-     * @param sessionId The ID of the session.
-     * @return A list of [ToolDefinition] objects enabled for this session.
-     */
-    suspend fun getEnabledToolsForSession(sessionId: Long): List<ToolDefinition>
-
-    /**
-     * Enables or disables a specific tool for a session.
-     * This creates a session-specific override of the tool's default enabled state.
-     * @param sessionId The ID of the session.
-     * @param toolId The ID of the tool.
-     * @param enabled Whether to enable or disable the tool for this session.
-     * @return Either a [SetToolEnabledError] if the session or tool doesn't exist,
-     *         or Unit if successful.
-     */
-    suspend fun setToolEnabledForSession(
-        sessionId: Long,
-        toolId: Long,
-        enabled: Boolean
-    ): Either<SetToolEnabledError, Unit>
-
-    /**
-     * Batch enables or disables multiple tools for a session.
-     * This creates session-specific overrides of the tools' default enabled states.
-     * @param sessionId The ID of the session.
-     * @param toolIds The IDs of the tools.
-     * @param enabled Whether to enable or disable the tools for this session.
-     * @return Either a [SetToolsEnabledError] if the session or any tools don't exist,
-     *         or Unit if successful.
-     */
-    suspend fun setToolsEnabledForSession(
-        sessionId: Long,
-        toolIds: List<Long>,
-        enabled: Boolean
-    ): Either<SetToolsEnabledError, Unit>
-
-    /**
      * Validates a tool definition without persisting it.
      * @param tool The tool definition to validate.
      * @return Either a [ValidateToolError] if validation fails, or Unit if successful.

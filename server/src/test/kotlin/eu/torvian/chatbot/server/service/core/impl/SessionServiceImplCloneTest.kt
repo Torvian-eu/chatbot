@@ -7,7 +7,6 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
@@ -28,7 +27,8 @@ import kotlin.time.Instant
  * Unit tests for [SessionServiceImpl.cloneSession].
  *
  * This test suite verifies that the clone session functionality correctly:
- * - Clones sessions with all their data (messages, tool calls, tool configs)
+ * - Clones sessions with all their data (messages, tool calls)
+ * - Preserves the agent role reference so effective tools carry over
  * - Preserves message timestamps and thread structure
  * - Maps currentLeafMessageId correctly
  * - Handles authorization properly
@@ -41,7 +41,6 @@ class SessionServiceImplCloneTest {
     private lateinit var sessionOwnershipDao: SessionOwnershipDao
     private lateinit var messageDao: MessageDao
     private lateinit var toolCallDao: ToolCallDao
-    private lateinit var sessionToolConfigDao: SessionToolConfigDao
     private lateinit var agentRoleDao: AgentRoleDao
     private lateinit var transactionScope: TransactionScope
 
@@ -126,7 +125,6 @@ class SessionServiceImplCloneTest {
         sessionOwnershipDao = mockk()
         messageDao = mockk()
         toolCallDao = mockk()
-        sessionToolConfigDao = mockk()
         agentRoleDao = mockk()
         transactionScope = mockk()
 
@@ -136,7 +134,6 @@ class SessionServiceImplCloneTest {
             sessionOwnershipDao,
             messageDao,
             toolCallDao,
-            sessionToolConfigDao,
             agentRoleDao,
             transactionScope
         )
@@ -155,7 +152,6 @@ class SessionServiceImplCloneTest {
             sessionOwnershipDao,
             messageDao,
             toolCallDao,
-            sessionToolConfigDao,
             agentRoleDao,
             transactionScope
         )
@@ -183,7 +179,6 @@ class SessionServiceImplCloneTest {
         coEvery { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) } returns Unit.right()
         coEvery { messageDao.getMessagesBySessionId(testSessionId) } returns originalMessages
         coEvery { toolCallDao.getToolCallsBySessionId(testSessionId) } returns emptyList()
-        coEvery { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) } returns emptyList()
 
         // Mock message insertions - need to capture and return cloned messages with new IDs
         var nextMessageId = 201L
@@ -278,7 +273,6 @@ class SessionServiceImplCloneTest {
         }
         coVerify { sessionDao.updateSessionLeafMessageId(testClonedSessionId, 203L) }
         coVerify { toolCallDao.getToolCallsBySessionId(testSessionId) }
-        coVerify { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) }
         coVerify { sessionDao.getSessionById(testClonedSessionId) }
     }
 
@@ -295,7 +289,6 @@ class SessionServiceImplCloneTest {
         coEvery { sessionOwnershipDao.setOwner(any(), any()) } returns Unit.right()
         coEvery { messageDao.getMessagesBySessionId(testSessionId) } returns originalMessages
         coEvery { toolCallDao.getToolCallsBySessionId(testSessionId) } returns emptyList()
-        coEvery { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) } returns emptyList()
 
         var nextMessageId = 201L
         coEvery {
@@ -379,7 +372,6 @@ class SessionServiceImplCloneTest {
         coEvery { sessionOwnershipDao.setOwner(any(), any()) } returns Unit.right()
         coEvery { messageDao.getMessagesBySessionId(testSessionId) } returns originalMessages
         coEvery { toolCallDao.getToolCallsBySessionId(testSessionId) } returns emptyList()
-        coEvery { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) } returns emptyList()
 
         val insertedMessages = mutableListOf<Pair<Long?, String>>() // parentId, content
         var nextMessageId = 201L
@@ -448,7 +440,6 @@ class SessionServiceImplCloneTest {
         coEvery { sessionOwnershipDao.setOwner(any(), any()) } returns Unit.right()
         coEvery { messageDao.getMessagesBySessionId(testSessionId) } returns originalMessages
         coEvery { toolCallDao.getToolCallsBySessionId(testSessionId) } returns listOf(originalToolCall)
-        coEvery { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) } returns emptyList()
 
         var nextMessageId = 201L
         coEvery {
@@ -501,55 +492,6 @@ class SessionServiceImplCloneTest {
     }
 
     @Test
-    fun `cloneSession should clone session tool configurations`() = runTest {
-        // Arrange
-        val cloneName = "Cloned Session"
-        val enabledTool = mockk<ToolDefinition> {
-            coEvery { id } returns 50L
-        }
-
-        coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
-        coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns clonedSession.copy(
-            name = cloneName,
-            currentLeafMessageId = null
-        ).right()
-        coEvery { sessionOwnershipDao.setOwner(any(), any()) } returns Unit.right()
-        coEvery { messageDao.getMessagesBySessionId(testSessionId) } returns originalMessages
-        coEvery { toolCallDao.getToolCallsBySessionId(testSessionId) } returns emptyList()
-        coEvery { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) } returns listOf(enabledTool)
-
-        var nextMessageId = 201L
-        coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
-        } answers {
-            ChatMessage.UserMessage(
-                id = nextMessageId++,
-                sessionId = testClonedSessionId,
-                content = "Test",
-                createdAt = testTimestamp1,
-                updatedAt = testTimestamp1,
-                parentMessageId = null,
-                childrenMessageIds = emptyList()
-            ).right()
-        }
-
-        coEvery {
-            sessionToolConfigDao.setToolsEnabledForSession(testClonedSessionId, listOf(50L), true)
-        } returns Unit.right()
-
-        coEvery { sessionDao.updateSessionLeafMessageId(any(), any()) } returns Unit.right()
-        coEvery { sessionDao.getSessionById(testClonedSessionId) } returns clonedSession.right()
-
-        // Act
-        sessionService.cloneSession(testSessionId, cloneName)
-
-        // Assert
-        coVerify { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) }
-        coVerify { sessionToolConfigDao.setToolsEnabledForSession(testClonedSessionId, listOf(50L), true) }
-    }
-
-    @Test
     fun `cloneSession should copy the original session's project selection`() = runTest {
         // Arrange
         val cloneName = "Cloned Session"
@@ -568,7 +510,6 @@ class SessionServiceImplCloneTest {
         coEvery { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) } returns Unit.right()
         coEvery { messageDao.getMessagesBySessionId(testSessionId) } returns emptyList()
         coEvery { toolCallDao.getToolCallsBySessionId(testSessionId) } returns emptyList()
-        coEvery { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) } returns emptyList()
         coEvery { sessionDao.updateSessionLeafMessageId(any(), any()) } returns Unit.right()
         coEvery { sessionDao.getSessionById(testClonedSessionId) } returns clonedWithProject.right()
 
@@ -601,7 +542,6 @@ class SessionServiceImplCloneTest {
         coEvery { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) } returns Unit.right()
         coEvery { messageDao.getMessagesBySessionId(testSessionId) } returns emptyList()
         coEvery { toolCallDao.getToolCallsBySessionId(testSessionId) } returns emptyList()
-        coEvery { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) } returns emptyList()
         coEvery { sessionDao.getSessionById(testClonedSessionId) } returns clonedSession.copy(
             name = normalizedName,
             currentLeafMessageId = null

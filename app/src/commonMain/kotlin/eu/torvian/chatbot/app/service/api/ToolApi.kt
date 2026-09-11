@@ -8,7 +8,7 @@ import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
  * Frontend API interface for interacting with tool-related endpoints.
  *
  * This interface defines the operations for managing tool definitions
- * and retrieving session-specific tool configurations. Implementations use the internal HTTP API.
+ * and user tool approval preferences. Implementations use the internal HTTP API.
  * All methods are suspend functions and return [Either<ApiResourceError, T>].
  */
 interface ToolApi {
@@ -36,51 +36,6 @@ interface ToolApi {
      *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found).
      */
     suspend fun getToolById(toolId: Long): Either<ApiResourceError, ToolDefinition>
-
-    /**
-     * Loads the list of tools enabled for a specific session.
-     *
-     * Corresponds to `GET /api/v1/sessions/{sessionId}/tools`.
-     *
-     * @param sessionId The ID of the session.
-     * @return [Either.Right] containing a list of enabled [ToolDefinition] on success,
-     *         or [Either.Left] containing a [ApiResourceError] on failure.
-     */
-    suspend fun getEnabledToolsForSession(sessionId: Long): Either<ApiResourceError, List<ToolDefinition>>
-
-    /**
-     * Enables or disables a tool for a specific session.
-     *
-     * Corresponds to `PUT /api/v1/sessions/{sessionId}/tools/{toolId}`.
-     *
-     * @param sessionId The ID of the session.
-     * @param toolId The ID of the tool.
-     * @param enabled Whether to enable (true) or disable (false) the tool for this session.
-     * @return [Either.Right] with [Unit] on successful update,
-     *         or [Either.Left] containing a [ApiResourceError] on failure.
-     */
-    suspend fun setToolEnabledForSession(
-        sessionId: Long,
-        toolId: Long,
-        enabled: Boolean
-    ): Either<ApiResourceError, Unit>
-
-    /**
-     * Batch enables or disables multiple tools for a specific session.
-     *
-     * Corresponds to `PUT /api/v1/sessions/{sessionId}/tools`.
-     *
-     * @param sessionId The ID of the session.
-     * @param toolIds List of tool IDs to enable or disable.
-     * @param enabled Whether to enable (true) or disable (false) the tools for this session.
-     * @return [Either.Right] with [Unit] on successful update,
-     *         or [Either.Left] containing a [ApiResourceError] on failure.
-     */
-    suspend fun setToolsEnabledForSession(
-        sessionId: Long,
-        toolIds: List<Long>,
-        enabled: Boolean
-    ): Either<ApiResourceError, Unit>
 
     /**
      * Retrieves the current user's approval preferences for all tools.

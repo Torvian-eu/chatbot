@@ -68,7 +68,6 @@ fun daoModule() = module {
     // Tool-related DAOs
     single<ToolDefinitionDao> { ToolDefinitionDaoExposed(get()) }
     single<ToolCallDao> { ToolCallDaoExposed(get()) }
-    single<SessionToolConfigDao> { SessionToolConfigDaoExposed(get()) }
     single<UserToolApprovalPreferenceDao> { UserToolApprovalPreferenceDaoExposed(get()) }
     single<OperatorToolDefinitionDao> { OperatorToolDefinitionDaoExposed(get()) }
     single<ServerBuiltInToolDefinitionDao> { ServerBuiltInToolDefinitionDaoExposed(get()) }

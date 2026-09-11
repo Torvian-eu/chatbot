@@ -215,7 +215,7 @@ class ApiRoutesKtor(
      * Configures routes related to Tool Management (/api/v1/tools).
      */
     fun configureToolRoutes(route: Route) {
-        route.configureToolRoutes(toolService, authorizationService)
+        route.configureToolRoutes(toolService)
     }
 
     /**

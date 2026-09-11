@@ -39,25 +39,6 @@ fun DeleteToolError.toApiError(): ApiError = when (this) {
 }
 
 /**
- * Converts a [SetToolEnabledError] to an [ApiError].
- */
-fun SetToolEnabledError.toApiError(): ApiError = when (this) {
-    is SetToolEnabledError.SessionNotFound ->
-        apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to id.toString())
-
-    is SetToolEnabledError.ToolNotFound ->
-        apiError(CommonApiErrorCodes.NOT_FOUND, "Tool not found", "toolId" to id.toString())
-}
-
-/**
- * Converts a [SetToolsEnabledError] to an [ApiError].
- */
-fun SetToolsEnabledError.toApiError(): ApiError = when (this) {
-    is SetToolsEnabledError.InvalidReference ->
-        apiError(CommonApiErrorCodes.NOT_FOUND, "Session or one or more tools not found", "sessionId" to sessionId.toString(), "toolIds" to toolIds.joinToString(","))
-}
-
-/**
  * Converts a [ValidateToolError] to an [ApiError].
  */
 fun ValidateToolError.toApiError(): ApiError = when (this) {

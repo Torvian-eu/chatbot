@@ -127,8 +127,6 @@ class DefaultLocalMCPToolRepository(
             currentList.filter { it.id !in deletedIds && it.id !in updatedIds } +
                     refreshResponse.addedTools + refreshResponse.updatedTools
         }
-        // Disable deleted tools for all sessions in cache
-        toolRepository.updateEnabledToolsCache(refreshResponse.deletedTools, false)
 
         // Remove approval preferences for deleted tools
         toolRepository.updateToolApprovalPreferencesCache { currentList ->
@@ -163,14 +161,8 @@ class DefaultLocalMCPToolRepository(
         }
 
         // Update the tool in the cache
-        val oldTool = toolRepository.tools.value.dataOrNull?.find { it.id == tool.id }
         toolRepository.updateToolCache { currentList ->
             currentList.map { if (it.id == tool.id) tool else it }
-        }
-
-        // If the tool's enabled state changed, invalidate all enabled tools caches
-        if (oldTool?.isEnabled != tool.isEnabled) {
-            toolRepository.invalidateEnabledToolsCache()
         }
     }
 
@@ -185,15 +177,7 @@ class DefaultLocalMCPToolRepository(
             localMCPToolApi.batchUpdateMCPTools(serverId, toolDefinitions).bind()
         }
 
-        // Check if any tool's enabled state changed and invalidate cache if needed
-        val oldTools = toolRepository.tools.value.dataOrNull
         val updatedToolsById = updatedTools.associateBy { it.id }
-        val enabledStateChanged = oldTools?.any { tool ->
-            updatedToolsById[tool.id]?.isEnabled?.let { it != tool.isEnabled } ?: false
-        } ?: false
-        if (enabledStateChanged) {
-            toolRepository.invalidateEnabledToolsCache()
-        }
 
         // Update tools cache
         toolRepository.updateToolCache { currentList ->
@@ -213,8 +197,6 @@ class DefaultLocalMCPToolRepository(
         toolRepository.updateToolCache { currentList ->
             currentList.filter { it.id !in deletedToolsMap }
         }
-        // Disable deleted tools for all sessions in cache
-        toolRepository.updateEnabledToolsCache(deletedTools, false)
 
         // Remove approval preferences for deleted tools
         toolRepository.updateToolApprovalPreferencesCache { currentList ->
@@ -222,7 +204,4 @@ class DefaultLocalMCPToolRepository(
         }
     }
 
-    override suspend fun invalidateEnabledToolsCache() {
-        toolRepository.invalidateEnabledToolsCache()
-    }
 }

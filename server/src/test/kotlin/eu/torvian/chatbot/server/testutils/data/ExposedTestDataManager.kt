@@ -112,7 +112,6 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             // both.
             Table.AGENT_ROLE_DISABLED to AgentRoleDisabledTable,
             Table.TOOL_CALLS to ToolCallTable,
-            Table.SESSION_TOOL_CONFIG to SessionToolConfigTable,
 
             // MCP server tables (must come after users and tool definitions)
             Table.LOCAL_MCP_SERVERS to LocalMCPServerTable,

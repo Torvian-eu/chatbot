@@ -46,35 +46,6 @@ sealed interface DeleteToolError : ToolServiceError {
     data class ToolNotFound(val id: Long) : DeleteToolError
 }
 
-/**
- * Errors that can occur when setting tool enablement for a session.
- */
-sealed interface SetToolEnabledError : ToolServiceError {
-    /**
-     * The requested session was not found.
-     * @property id The ID of the session that was not found.
-     */
-    data class SessionNotFound(val id: Long) : SetToolEnabledError
-
-    /**
-     * The requested tool was not found.
-     * @property id The ID of the tool that was not found.
-     */
-    data class ToolNotFound(val id: Long) : SetToolEnabledError
-}
-
-/**
- * Errors that can occur when batch setting tool enablement for a session.
- */
-sealed interface SetToolsEnabledError : ToolServiceError {
-    /**
-     * Foreign key constraint violation - either the session or one or more tools don't exist.
-     * @property sessionId The ID of the session that was part of the batch request.
-     * @property toolIds The IDs of the tools that were part of the batch request.
-     */
-    data class InvalidReference(val sessionId: Long, val toolIds: List<Long>) : SetToolsEnabledError
-}
-
 sealed interface ValidateToolError : ToolServiceError {
     /**
      * The tool name is invalid (empty, blank, or too long).
