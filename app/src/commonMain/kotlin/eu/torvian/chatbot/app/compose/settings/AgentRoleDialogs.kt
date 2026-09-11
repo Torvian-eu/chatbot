@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleDialogState
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelPresetDto
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -18,12 +19,14 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  * Dialog router for the Agent Roles tab.
  *
  * Dispatches to the form or confirmation dialog based on the current [AgentRoleDialogState], and
- * feeds the role form its model/settings/tool catalogs.
+ * feeds the role form its model/preset/settings/tool catalogs.
  *
  * @param dialogState The current dialog state from the ViewModel.
  * @param actions ViewModel-forwarding actions.
- * @param models Chat-capable models available for the form.
- * @param settingsForModel Chat-capable settings for the model currently chosen in the form.
+ * @param models Chat-capable models available for the form's `model_specific` instruction targets.
+ * @param presets The user's model presets (name-ascending) offered by the form's preset picker.
+ * @param settingsById Settings lookup used by the form's non-sendability hint to resolve the profile a
+ *            preset references.
  * @param tools Enabled tools available for the form's multi-select.
  * @param roles Same-user roles available as spawn targets.
  * @param projects Same-user projects available for the form's single project selector (a role
@@ -34,7 +37,8 @@ fun AgentRoleDialogs(
     dialogState: AgentRoleDialogState,
     actions: AgentRolesTabActions,
     models: List<LLMModel>,
-    settingsForModel: List<ModelSettings>?,
+    presets: List<ModelPresetDto>,
+    settingsById: Map<Long, ModelSettings>,
     tools: List<ToolDefinition>,
     roles: List<AgentRoleDto>,
     projects: List<ProjectDto>
@@ -45,7 +49,8 @@ fun AgentRoleDialogs(
                 title = "Add Agent Role",
                 formState = dialogState.formState,
                 models = models,
-                settingsForModel = settingsForModel.orEmpty(),
+                presets = presets,
+                settingsById = settingsById,
                 tools = tools,
                 roles = roles,
                 projects = projects,
@@ -60,7 +65,8 @@ fun AgentRoleDialogs(
                 title = "Edit Agent Role",
                 formState = dialogState.formState,
                 models = models,
-                settingsForModel = settingsForModel.orEmpty(),
+                presets = presets,
+                settingsById = settingsById,
                 tools = tools,
                 roles = roles,
                 projects = projects,

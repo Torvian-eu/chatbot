@@ -104,11 +104,17 @@ class DefaultConversationTurnPreparationServiceTest {
     /** The authenticated user sending the message whose per-user disabled state applies to the turn. */
     private val userId = 7L
 
+    /**
+     * The role's LLM configuration now lives exclusively in its model preset: this id is what turn
+     * preparation keys on, while [AgentRole.modelId]/[AgentRole.modelSettingsId] are the preset-derived
+     * values it validates.
+     */
     private val testRole = AgentRole(
         id = 1L,
         name = "Test Role",
         modelId = testModel.id,
         modelSettingsId = testSettings.id,
+        modelPresetId = 1L,
         tools = emptySet(),
         instructions = emptyList()
     )
@@ -212,6 +218,24 @@ class DefaultConversationTurnPreparationServiceTest {
     }
 
     /**
+     * Verifies a preset-less role (the state every pre-upgrade role ends up in, and a legal state after
+     * the upgrade) cannot be prepared: there is no fallback configuration to fall back to.
+     */
+    @Test
+    fun `prepareNewMessageTurn should return ModelConfigurationError when the role has no model preset`() = runTest {
+        val sessionId = 1L
+        coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
+        coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns
+            testRole.copy(modelPresetId = null, modelId = null, modelSettingsId = null).right()
+
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
+
+        assertTrue(result.isLeft())
+        val error = assertIs<ValidateNewMessageError.ModelConfigurationError>(result.leftOrNull())
+        assertTrue(error.message.contains("has no model preset"), error.message)
+    }
+
+    /**
      * Verifies a role whose referenced model was deleted (model_id null) cannot be prepared.
      */
     @Test
@@ -227,6 +251,29 @@ class DefaultConversationTurnPreparationServiceTest {
         assertNotNull(error)
         assertIs<ValidateNewMessageError.ModelConfigurationError>(error)
         assertTrue(error.message.contains("deleted model"))
+    }
+
+    /**
+     * Verifies the defensive equality re-check: a settings profile re-pointed to another model after the
+     * preset was written makes the stored pair inconsistent, so the turn must fail loudly instead of
+     * sending the model id together with a profile of a different model.
+     */
+    @Test
+    fun `prepareNewMessageTurn should return ModelConfigurationError when the preset ids disagree`() = runTest {
+        val sessionId = 1L
+        val mismatchedSettings = testSettings.copy(id = 2L, modelId = 99L)
+        coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
+        coEvery {
+            agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!)
+        } returns testRole.copy(modelSettingsId = mismatchedSettings.id).right()
+        coEvery { llmModelService.getModelById(testModel.id) } returns testModel.right()
+        coEvery { modelSettingsService.getSettingsById(mismatchedSettings.id) } returns mismatchedSettings.right()
+
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
+
+        assertTrue(result.isLeft())
+        val error = assertIs<ValidateNewMessageError.ModelConfigurationError>(result.leftOrNull())
+        assertTrue(error.message.contains("is inconsistent"), error.message)
     }
 
     /**

@@ -10,17 +10,24 @@ import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
  * Mutable draft of an agent role being created or edited in the management form.
  *
  * All fields are held as plain values so the form can build a [CreateAgentRoleRequest] or
- * [UpdateAgentRoleRequest] on save. [modelId] and [modelSettingsId] are nullable while editing
- * because a role can lose its references via `ON DELETE SET NULL`; the save action validates that
- * both are present (they are mandatory at creation and on a normal edit).
+ * [UpdateAgentRoleRequest] on save. The role's LLM configuration is expressed by [modelPresetId]
+ * alone: [AgentRoleDto.modelId] and [AgentRoleDto.modelSettingsId] are *derived*, read-only values
+ * the server resolves from the referenced preset, so they are never part of the draft and the form
+ * offers no direct model/settings pickers.
+ *
+ * [modelPresetId] is optional (U-36/RQ-2): a preset-less draft is valid and savable, and the
+ * resulting role is merely non-sendable until a preset is attached. [validate] therefore checks the
+ * name only; whether the selected preset is usable is surfaced as an inline hint through
+ * [resolveAgentRoleSendability], while the server keeps rejecting an unusable configuration at turn
+ * time with a model-configuration error.
  *
  * @property mode Whether this draft creates a new role or edits an existing one.
  * @property roleId Existing role id while editing, used to exclude self from the target selector.
  * @property name Unique (per user) machine-readable role name.
  * @property displayName Optional human-friendly display name.
  * @property description Free-form description of the role's purpose.
- * @property modelId Identifier of the LLM model the role uses, or null when not (yet) chosen.
- * @property modelSettingsId Identifier of the chat-capable settings profile the role uses, or null.
+ * @property modelPresetId Identifier of the model preset holding the role's model and settings
+ *            profile, or null for a preset-less draft. A preset-less role is legal but non-sendable.
  * @property toolIds Set of tool-definition identifiers attached to the role.
  * @property spawnableAgentRoleIds Unordered role ids this role may spawn; may include the role's own id.
  *            Only roles sharing the role's project scope ([projectId]) are selectable (the server
@@ -42,8 +49,7 @@ data class AgentRoleFormState(
     val name: String = "",
     val displayName: String = "",
     val description: String = "",
-    val modelId: Long? = null,
-    val modelSettingsId: Long? = null,
+    val modelPresetId: Long? = null,
     val toolIds: Set<Long> = emptySet(),
     val spawnableAgentRoleIds: Set<Long> = emptySet(),
     val projectId: Long? = null,
@@ -79,15 +85,15 @@ data class AgentRoleFormState(
     }
 
     /**
-     * Validates the required fields. The role needs a name and a resolvable model/settings pair;
-     * tool ids and instructions are optional.
+     * Validates the required fields. Only the name is mandatory: the model preset is optional
+     * (U-36), so a preset-less draft is valid and must not be blocked here. An unusable preset is
+     * reported as an inline hint by [resolveAgentRoleSendability] rather than as a validation
+     * failure, and the server remains authoritative on save.
      *
      * @return A human-readable validation message, or null when the draft is valid.
      */
     fun validate(): String? {
         if (name.isBlank()) return "Role name cannot be empty."
-        if (modelId == null) return "A model must be selected."
-        if (modelSettingsId == null) return "A settings profile must be selected for the model."
         return null
     }
 
@@ -95,47 +101,38 @@ data class AgentRoleFormState(
      * Builds a [CreateAgentRoleRequest] from this draft. Only valid when [mode] is NEW and
      * [validate] returns null.
      *
-     * @throws IllegalStateException when invoked on a draft without model/settings ids.
+     * The request carries [modelPresetId] and nothing else configuration-related: the removed
+     * `modelId`/`modelSettingsId` inputs must never be sent back (U-28/U-29). A null preset id is a
+     * legitimate payload (the role is then non-sendable until a preset is attached).
      */
-    fun toCreateRequest(): CreateAgentRoleRequest {
-        val modelId = modelId ?: throw IllegalStateException("Cannot create role without a model")
-        val modelSettingsId = modelSettingsId
-            ?: throw IllegalStateException("Cannot create role without settings")
-        return CreateAgentRoleRequest(
-            name = name.trim(),
-            displayName = displayName.trim().takeIf { it.isNotBlank() },
-            description = description.trim(),
-            modelId = modelId,
-            modelSettingsId = modelSettingsId,
-            toolIds = toolIds,
-            spawnableAgentRoleIds = spawnableAgentRoleIds,
-            projectId = projectId,
-            instructions = instructions
-        )
-    }
+    fun toCreateRequest(): CreateAgentRoleRequest = CreateAgentRoleRequest(
+        name = name.trim(),
+        displayName = displayName.trim().takeIf { it.isNotBlank() },
+        description = description.trim(),
+        modelPresetId = modelPresetId,
+        toolIds = toolIds,
+        spawnableAgentRoleIds = spawnableAgentRoleIds,
+        projectId = projectId,
+        instructions = instructions
+    )
 
     /**
      * Builds a [UpdateAgentRoleRequest] from this draft. Only valid when [mode] is EDIT and
      * [validate] returns null.
      *
-     * @throws IllegalStateException when invoked on a draft without model/settings ids.
+     * Like [toCreateRequest], the payload carries only [modelPresetId] as configuration; a null id
+     * detaches the preset and leaves the role non-sendable.
      */
-    fun toUpdateRequest(): UpdateAgentRoleRequest {
-        val modelId = modelId ?: throw IllegalStateException("Cannot update role without a model")
-        val modelSettingsId = modelSettingsId
-            ?: throw IllegalStateException("Cannot update role without settings")
-        return UpdateAgentRoleRequest(
-            name = name.trim(),
-            displayName = displayName.trim().takeIf { it.isNotBlank() },
-            description = description.trim(),
-            modelId = modelId,
-            modelSettingsId = modelSettingsId,
-            toolIds = toolIds,
-            spawnableAgentRoleIds = spawnableAgentRoleIds,
-            projectId = projectId,
-            instructions = instructions
-        )
-    }
+    fun toUpdateRequest(): UpdateAgentRoleRequest = UpdateAgentRoleRequest(
+        name = name.trim(),
+        displayName = displayName.trim().takeIf { it.isNotBlank() },
+        description = description.trim(),
+        modelPresetId = modelPresetId,
+        toolIds = toolIds,
+        spawnableAgentRoleIds = spawnableAgentRoleIds,
+        projectId = projectId,
+        instructions = instructions
+    )
 }
 
 /**
@@ -204,8 +201,9 @@ fun AgentRoleDto.toEditFormState(): AgentRoleFormState = AgentRoleFormState(
     name = name,
     displayName = displayName ?: "",
     description = description,
-    modelId = modelId,
-    modelSettingsId = modelSettingsId,
+    // The preset is the only configuration reference carried into the draft; the DTO's derived
+    // model/settings ids are read-only server output and must not become role inputs again.
+    modelPresetId = modelPresetId,
     toolIds = tools,
     spawnableAgentRoleIds = spawnableAgentRoleIds,
     projectId = projectId,

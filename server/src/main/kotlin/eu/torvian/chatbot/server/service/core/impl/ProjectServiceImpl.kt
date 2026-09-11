@@ -289,8 +289,10 @@ class ProjectServiceImpl(
                     name = sourceRole.name,
                     displayName = sourceRole.displayName,
                     description = sourceRole.description,
-                    modelId = sourceRole.modelId,
-                    modelSettingsId = sourceRole.modelSettingsId,
+                    // The preset reference is copied verbatim: presets are user-wide (not
+                    // project-scoped), so the clone shares the same preset row and re-pointing that
+                    // preset switches the source and every clone at once.
+                    modelPresetId = sourceRole.modelPresetId,
                     instructionsJson = sourceRole.instructionsJson,
                     // Membership is established by the row write itself: the clone's member set is
                     // exactly the roles inserted with the clone's project id.

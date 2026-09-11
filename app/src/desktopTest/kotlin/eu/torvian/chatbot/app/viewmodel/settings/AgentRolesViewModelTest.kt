@@ -6,12 +6,14 @@ import eu.torvian.chatbot.app.domain.contracts.AgentRoleDialogState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.app.repository.*
+import eu.torvian.chatbot.app.testutils.viewmodel.awaitLaunchedBy
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
+import eu.torvian.chatbot.common.models.llm.ModelPresetDto
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -25,14 +27,15 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 
 /**
- * Tests for [AgentRolesViewModel]: form-draft to request mapping, save/delete flows and error
- * notifications.
+ * Tests for [AgentRolesViewModel]: form-draft to request mapping (preset-based, U-28/U-29/U-36),
+ * save/delete flows, catalog loading and error notifications.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AgentRolesViewModelTest {
 
     private lateinit var dispatcher: TestDispatcher
     private lateinit var repository: AgentRoleRepository
+    private lateinit var presetRepository: ModelPresetRepository
     private lateinit var modelRepository: ModelRepository
     private lateinit var settingsRepository: ModelSettingsRepository
     private lateinit var toolRepository: ToolRepository
@@ -40,13 +43,14 @@ class AgentRolesViewModelTest {
     private lateinit var notificationService: NotificationService
     private lateinit var viewModel: AgentRolesViewModel
 
-    private fun role(id: Long, name: String) = AgentRoleDto(
+    private fun role(id: Long, name: String, modelPresetId: Long? = 3L) = AgentRoleDto(
         id = id,
         name = name,
         displayName = null,
         description = "",
         modelId = 1L,
         modelSettingsId = 2L,
+        modelPresetId = modelPresetId,
         tools = emptySet(),
         instructions = listOf(
             AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a writer")
@@ -57,6 +61,7 @@ class AgentRolesViewModelTest {
     fun setup() {
         dispatcher = UnconfinedTestDispatcher()
         repository = mockk(relaxed = true)
+        presetRepository = mockk(relaxed = true)
         modelRepository = mockk(relaxed = true)
         settingsRepository = mockk(relaxed = true)
         toolRepository = mockk(relaxed = true)
@@ -64,13 +69,24 @@ class AgentRolesViewModelTest {
         notificationService = mockk(relaxed = true)
 
         every { repository.roles } returns MutableStateFlow(DataState.Success(emptyList()))
+        every { presetRepository.presets } returns
+            MutableStateFlow<DataState<RepositoryError, List<ModelPresetDto>>>(DataState.Success(emptyList()))
         every { modelRepository.models } returns MutableStateFlow(DataState.Success(emptyList()))
         every { settingsRepository.allSettings } returns MutableStateFlow(DataState.Success(emptyList()))
         every { toolRepository.tools } returns MutableStateFlow(DataState.Success(emptyList()))
         every { projectRepository.projects } returns MutableStateFlow(DataState.Success(emptyList()))
+        // Stub every catalog load: the ViewModel maps each result's Left branch to a notification, and
+        // a relaxed mock would answer with a placeholder Either whose value cannot be mapped.
+        coEvery { repository.loadRoles() } returns Either.Right(Unit)
+        coEvery { presetRepository.loadPresets() } returns Either.Right(Unit)
+        coEvery { modelRepository.loadModels() } returns Either.Right(Unit)
+        coEvery { settingsRepository.loadAllSettings() } returns Either.Right(Unit)
+        coEvery { toolRepository.loadTools() } returns Either.Right(Unit)
+        coEvery { projectRepository.loadProjects() } returns Either.Right(Unit)
 
         viewModel = AgentRolesViewModel(
             agentRoleRepository = repository,
+            modelPresetRepository = presetRepository,
             modelRepository = modelRepository,
             modelSettingsRepository = settingsRepository,
             toolRepository = toolRepository,
@@ -87,6 +103,20 @@ class AgentRolesViewModelTest {
     }
 
     @Test
+    fun `loadRolesAndCatalogs - also loads the preset catalog`() = runTest(dispatcher) {
+        // parZip runs the six loaders on Dispatchers.Default, outside this test's scheduler: await the
+        // launched load so the verifications below observe completed calls instead of racing the pool.
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
+
+        coVerify(exactly = 1) { repository.loadRoles() }
+        coVerify(exactly = 1) { presetRepository.loadPresets() }
+        coVerify(exactly = 1) { modelRepository.loadModels() }
+        coVerify(exactly = 1) { settingsRepository.loadAllSettings() }
+        coVerify(exactly = 1) { toolRepository.loadTools() }
+        coVerify(exactly = 1) { projectRepository.loadProjects() }
+    }
+
+    @Test
     fun `saveRole - add - maps draft to CreateAgentRoleRequest`() = runTest(dispatcher) {
         coEvery { repository.createRole(any()) } returns Either.Right(role(10, "writer"))
         viewModel.startAddingNewRole()
@@ -96,8 +126,7 @@ class AgentRolesViewModelTest {
                 name = "writer",
                 displayName = "Writer",
                 description = "Creative writing",
-                modelId = 1L,
-                modelSettingsId = 2L,
+                modelPresetId = 3L,
                 toolIds = setOf(10L, 20L),
                 instructions = listOf(
                     AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a writer"),
@@ -113,8 +142,7 @@ class AgentRolesViewModelTest {
                 match<CreateAgentRoleRequest> { request ->
                     request.name == "writer" &&
                             request.displayName == "Writer" &&
-                            request.modelId == 1L &&
-                            request.modelSettingsId == 2L &&
+                            request.modelPresetId == 3L &&
                             request.toolIds == setOf(10L, 20L) &&
                             request.instructions.size == 2 &&
                             request.instructions[1].type == AgentInstructionTypes.CUSTOM
@@ -124,29 +152,28 @@ class AgentRolesViewModelTest {
     }
 
     @Test
-    fun `saveRole - edit - maps draft to UpdateAgentRoleRequest`() = runTest(dispatcher) {
-        coEvery { repository.updateRole(7L, any()) } returns Either.Right(role(7, "writer-v2"))
-        val existing = role(7, "writer")
-        viewModel.startEditingRole(existing)
-
-        viewModel.updateRoleForm { form ->
-            form.copy(name = "writer-v2", modelId = 1L, modelSettingsId = 2L)
-        }
+    fun `saveRole - add - a preset-less draft still reaches the repository`() = runTest(dispatcher) {
+        // U-36/RQ-2: the preset is optional on the client too, so the save must not be blocked and
+        // must send a null preset id.
+        coEvery { repository.createRole(any()) } returns Either.Right(role(10, "incomplete", modelPresetId = null))
+        viewModel.startAddingNewRole()
+        viewModel.updateRoleForm { form -> form.copy(name = "incomplete") }
 
         viewModel.saveRole()
 
         coVerify(exactly = 1) {
-            repository.updateRole(
-                eq(7L),
-                match<UpdateAgentRoleRequest> { request -> request.name == "writer-v2" }
+            repository.createRole(
+                match<CreateAgentRoleRequest> { request ->
+                    request.name == "incomplete" && request.modelPresetId == null
+                }
             )
         }
+        assertEquals(AgentRoleDialogState.None, viewModel.dialogState.value)
     }
 
     @Test
-    fun `saveRole - missing model - validates without calling api`() = runTest(dispatcher) {
+    fun `saveRole - blank name - validates without calling the api`() = runTest(dispatcher) {
         viewModel.startAddingNewRole()
-        viewModel.updateRoleForm { form -> form.copy(name = "incomplete") }
 
         viewModel.saveRole()
 
@@ -154,6 +181,53 @@ class AgentRolesViewModelTest {
         val dialogState = viewModel.dialogState.value
         assertTrue(dialogState is AgentRoleDialogState.AddRole)
         assertNotNull(dialogState.formState.errorMessage)
+    }
+
+    @Test
+    fun `saveRole - edit - maps draft to UpdateAgentRoleRequest`() = runTest(dispatcher) {
+        coEvery { repository.updateRole(7L, any()) } returns Either.Right(role(7, "writer-v2"))
+        val existing = role(7, "writer")
+        viewModel.startEditingRole(existing)
+
+        viewModel.updateRoleForm { form ->
+            form.copy(name = "writer-v2", modelPresetId = 4L)
+        }
+
+        viewModel.saveRole()
+
+        coVerify(exactly = 1) {
+            repository.updateRole(
+                eq(7L),
+                match<UpdateAgentRoleRequest> { request ->
+                    request.name == "writer-v2" && request.modelPresetId == 4L
+                }
+            )
+        }
+    }
+
+    @Test
+    fun `saveRole - edit - detaching the preset sends a null preset id`() = runTest(dispatcher) {
+        coEvery { repository.updateRole(7L, any()) } returns Either.Right(role(7, "writer-v2", modelPresetId = null))
+        viewModel.startEditingRole(role(7, "writer"))
+
+        viewModel.updateRoleForm { form -> form.copy(name = "writer-v2", modelPresetId = null) }
+
+        viewModel.saveRole()
+
+        coVerify(exactly = 1) {
+            repository.updateRole(
+                eq(7L),
+                match<UpdateAgentRoleRequest> { request -> request.modelPresetId == null }
+            )
+        }
+    }
+
+    @Test
+    fun `startEditingRole - the draft carries the role's preset reference`() = runTest(dispatcher) {
+        viewModel.startEditingRole(role(9, "coder"))
+
+        val form = (viewModel.dialogState.value as AgentRoleDialogState.EditRole).formState
+        assertEquals(3L, form.modelPresetId)
     }
 
     @Test
@@ -218,8 +292,7 @@ class AgentRolesViewModelTest {
         viewModel.updateRoleForm { form ->
             form.copy(
                 name = "writer",
-                modelId = 1L,
-                modelSettingsId = 2L,
+                modelPresetId = 3L,
                 projectId = 50L
             )
         }

@@ -26,26 +26,22 @@ internal fun UpdateAgentRoleError.toHandlerError(): ServerBuiltInToolHandlerErro
             "name_already_exists",
             "A role named '$name' already exists for the current user."
         )
-    is UpdateAgentRoleError.ModelNotFound ->
+    is UpdateAgentRoleError.ModelPresetNotFound ->
         ServerBuiltInToolHandlerError.OperationFailed(
-            "model_not_found",
-            "Model $modelId not found or not accessible by the current user."
+            "model_preset_not_found",
+            "Model preset $presetId not found or not owned by the current user."
         )
-    is UpdateAgentRoleError.SettingsNotFound ->
+    is UpdateAgentRoleError.ModelPresetNotChatLike ->
         ServerBuiltInToolHandlerError.OperationFailed(
-            "settings_not_found",
-            "Settings profile $settingsId not found or not accessible by the current user."
+            "model_preset_not_chat_like",
+            "Model preset $presetId uses settings profile $settingsId of type $actualType; only CHAT " +
+                "or RESPONSES settings are supported."
         )
-    is UpdateAgentRoleError.SettingsNotChatLike ->
+    is UpdateAgentRoleError.ModelPresetSettingsModelMismatch ->
         ServerBuiltInToolHandlerError.OperationFailed(
-            "settings_not_chat_like",
-            "Settings profile $settingsId is of type $actualType; only CHAT or RESPONSES " +
-                "settings are supported."
-        )
-    is UpdateAgentRoleError.SettingsModelMismatch ->
-        ServerBuiltInToolHandlerError.OperationFailed(
-            "settings_model_mismatch",
-            "Settings profile $settingsId belongs to model $settingsModelId, not $roleModelId."
+            "model_preset_settings_model_mismatch",
+            "Model preset $presetId references model $presetModelId but its settings profile belongs " +
+                "to model $settingsModelId."
         )
     is UpdateAgentRoleError.ToolNotFound ->
         ServerBuiltInToolHandlerError.OperationFailed(

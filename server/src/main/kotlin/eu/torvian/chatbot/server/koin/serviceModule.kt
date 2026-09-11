@@ -18,22 +18,27 @@ import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolExecutor
 import eu.torvian.chatbot.server.service.builtin.tools.CloneProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.CreateAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.CreateModelPresetTool
 import eu.torvian.chatbot.server.service.builtin.tools.CreateProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.DeleteAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.DeleteModelPresetTool
 import eu.torvian.chatbot.server.service.builtin.tools.DeleteProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.EditAgentRoleInstructionsTool
 import eu.torvian.chatbot.server.service.builtin.tools.GetCurrentSessionInfoTool
 import eu.torvian.chatbot.server.service.builtin.tools.InsertAgentRoleInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListAgentRolesTool
+import eu.torvian.chatbot.server.service.builtin.tools.ListModelPresetsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListModelSettingsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListModelsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListProjectsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListToolsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ReadAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.ReadModelPresetTool
 import eu.torvian.chatbot.server.service.builtin.tools.ReadProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.ReadToolTool
 import eu.torvian.chatbot.server.service.builtin.tools.RemoveAgentRoleInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.UpdateAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.UpdateModelPresetTool
 import eu.torvian.chatbot.server.service.builtin.tools.UpdateProjectTool
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.agent.AgentSpawnRequestBuilder
@@ -249,6 +254,11 @@ fun serviceModule() = module {
             DeleteProjectTool(projectService = get()),
             CloneProjectTool(projectService = get(), json = get()),
             DeleteAgentRoleTool(agentRoleService = get()),
+            ListModelPresetsTool(modelPresetService = get(), json = get()),
+            ReadModelPresetTool(modelPresetService = get(), json = get()),
+            CreateModelPresetTool(modelPresetService = get(), json = get()),
+            UpdateModelPresetTool(modelPresetService = get()),
+            DeleteModelPresetTool(modelPresetService = get()),
         ).associateBy { it.name }
     }
     single<ServerBuiltInToolExecutor> {
@@ -293,13 +303,22 @@ fun serviceModule() = module {
             agentRoleSpawnableRoleDao = get(),
             agentRoleOwnershipDao = get(),
             agentRoleDisabledDao = get(),
-            modelDao = get(),
+            modelPresetDao = get(),
             settingsDao = get(),
             toolDefinitionDao = get(),
             json = get(),
             transactionScope = get(),
             projectDao = get(),
             sessionDao = get()
+        )
+    }
+    single<ModelPresetService> {
+        ModelPresetServiceImpl(
+            modelPresetDao = get(),
+            modelPresetOwnershipDao = get(),
+            modelDao = get(),
+            settingsDao = get(),
+            transactionScope = get()
         )
     }
     single<ProjectService> {

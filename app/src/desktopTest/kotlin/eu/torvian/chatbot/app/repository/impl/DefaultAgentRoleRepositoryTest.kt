@@ -82,7 +82,7 @@ class DefaultAgentRoleRepositoryTest {
         coEvery { api.createRole(any()) } returns Either.Right(created)
 
         val result = repository.createRole(
-            CreateAgentRoleRequest(name = "translator", modelId = 1L, modelSettingsId = 2L)
+            CreateAgentRoleRequest(name = "translator", modelPresetId = 3L)
         )
 
         assertTrue(result.isRight())
@@ -101,7 +101,7 @@ class DefaultAgentRoleRepositoryTest {
 
         val result = repository.updateRole(
             1L,
-            UpdateAgentRoleRequest(name = "writer-v2", modelId = 1L, modelSettingsId = 2L)
+            UpdateAgentRoleRequest(name = "writer-v2", modelPresetId = 3L)
         )
 
         assertTrue(result.isRight())
@@ -168,7 +168,7 @@ class DefaultAgentRoleRepositoryTest {
         coEvery { api.createRole(any()) } returns Either.Right(role(10, "translator"))
 
         val result = repository.createRole(
-            CreateAgentRoleRequest(name = "translator", modelId = 1L, modelSettingsId = 2L)
+            CreateAgentRoleRequest(name = "translator", modelPresetId = 3L)
         )
 
         assertTrue(result.isRight())
@@ -184,7 +184,7 @@ class DefaultAgentRoleRepositoryTest {
 
         coEvery { api.updateRole(1L, any()) } returns Either.Right(role(1, "writer-v2"))
 
-        repository.updateRole(1L, UpdateAgentRoleRequest(name = "writer-v2", modelId = 1L, modelSettingsId = 2L))
+        repository.updateRole(1L, UpdateAgentRoleRequest(name = "writer-v2", modelPresetId = 3L))
 
         coVerify(exactly = 1) { projectRepository.loadProjects() }
     }
@@ -210,7 +210,7 @@ class DefaultAgentRoleRepositoryTest {
             eu.torvian.chatbot.app.service.api.ApiResourceError.UnknownError("boom", null)
         )
 
-        repository.createRole(CreateAgentRoleRequest(name = "x", modelId = 1L, modelSettingsId = 2L))
+        repository.createRole(CreateAgentRoleRequest(name = "x"))
 
         coVerify(exactly = 0) { projectRepository.loadProjects() }
     }

@@ -13,6 +13,10 @@ import kotlin.time.Instant
  * this row — they live in the `agent_role_tools` join table and are loaded separately. The single
  * `project_id` membership column IS part of the row (a role belongs to at most one project).
  *
+ * The role's model id and settings id are NOT part of this row either: they are derived at the service
+ * layer from the referenced model preset (`model_preset_id`), which is the sole source of truth for the
+ * role's LLM configuration.
+ *
  * @receiver The result row produced by a query against [AgentRoleTable].
  * @return The corresponding [AgentRoleEntity].
  */
@@ -21,8 +25,7 @@ fun ResultRow.toAgentRoleEntity(): AgentRoleEntity = AgentRoleEntity(
     name = this[AgentRoleTable.name],
     displayName = this[AgentRoleTable.displayName],
     description = this[AgentRoleTable.description],
-    modelId = this[AgentRoleTable.modelId]?.value,
-    modelSettingsId = this[AgentRoleTable.modelSettingsId]?.value,
+    modelPresetId = this[AgentRoleTable.modelPresetId]?.value,
     instructionsJson = this[AgentRoleTable.instructionsJson],
     createdAt = Instant.fromEpochMilliseconds(this[AgentRoleTable.createdAt]),
     updatedAt = Instant.fromEpochMilliseconds(this[AgentRoleTable.updatedAt]),

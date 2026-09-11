@@ -32,38 +32,47 @@ sealed interface UpdateAgentRoleError {
     data class NameAlreadyExists(val name: String) : UpdateAgentRoleError
 
     /**
-     * The referenced model does not exist or is not accessible.
+     * The referenced model preset does not exist or is not owned by the requesting user.
      *
-     * @property modelId The missing model identifier.
+     * The same error shape covers a missing preset and a foreign one, so the request cannot tell an
+     * ownership mismatch apart from a plain non-existent id (no existence leak).
+     *
+     * @property presetId The missing or foreign model-preset identifier.
      */
-    data class ModelNotFound(val modelId: Long) : UpdateAgentRoleError
+    data class ModelPresetNotFound(val presetId: Long) : UpdateAgentRoleError
 
     /**
-     * The referenced settings profile does not exist.
+     * The attached model preset's settings profile is not chat-capable (not CHAT or RESPONSES).
      *
-     * @property settingsId The missing settings identifier.
-     */
-    data class SettingsNotFound(val settingsId: Long) : UpdateAgentRoleError
-
-    /**
-     * The referenced settings profile is not chat-capable (not CHAT or RESPONSES).
+     * Raised only when the preset carries a non-null settings reference that cannot drive a chat turn.
+     * A preset whose settings reference is null is attachable (that is the state `ON DELETE SET NULL`
+     * produces when a settings profile is deleted) and yields a non-sendable role instead.
      *
-     * @property settingsId The settings identifier.
+     * @property presetId The offending model-preset identifier.
+     * @property settingsId The referenced settings identifier.
      * @property actualType The settings subtype name.
      */
-    data class SettingsNotChatLike(val settingsId: Long, val actualType: String) : UpdateAgentRoleError
+    data class ModelPresetNotChatLike(
+        val presetId: Long,
+        val settingsId: Long,
+        val actualType: String
+    ) : UpdateAgentRoleError
 
     /**
-     * The referenced settings profile belongs to a different model than the role's model.
+     * The attached model preset's settings profile belongs to a different model than the preset.
      *
-     * @property settingsId The settings identifier.
-     * @property settingsModelId The model the settings belong to.
-     * @property roleModelId The model the role references.
+     * Raised only when both the preset's model and settings references are non-null and disagree —
+     * reachable when the settings profile was re-pointed to another model after the preset was
+     * written.
+     *
+     * @property presetId The offending model-preset identifier.
+     * @property presetModelId The model the preset references.
+     * @property settingsModelId The model the settings profile actually belongs to.
      */
-    data class SettingsModelMismatch(
-        val settingsId: Long,
-        val settingsModelId: Long,
-        val roleModelId: Long
+    data class ModelPresetSettingsModelMismatch(
+        val presetId: Long,
+        val presetModelId: Long,
+        val settingsModelId: Long
     ) : UpdateAgentRoleError
 
     /**
@@ -120,27 +129,25 @@ fun UpdateAgentRoleError.toApiError(): ApiError = when (this) {
     is UpdateAgentRoleError.NameAlreadyExists ->
         apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Agent role name already exists", "name" to name)
 
-    is UpdateAgentRoleError.ModelNotFound ->
-        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Model not found", "modelId" to modelId.toString())
+    is UpdateAgentRoleError.ModelPresetNotFound ->
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Model preset not found", "presetId" to presetId.toString())
 
-    is UpdateAgentRoleError.SettingsNotFound ->
-        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Settings profile not found", "settingsId" to settingsId.toString())
-
-    is UpdateAgentRoleError.SettingsNotChatLike ->
+    is UpdateAgentRoleError.ModelPresetNotChatLike ->
         apiError(
             CommonApiErrorCodes.INVALID_ARGUMENT,
-            "Settings profile must be CHAT or RESPONSES",
+            "Model preset settings profile must be CHAT or RESPONSES",
+            "presetId" to presetId.toString(),
             "settingsId" to settingsId.toString(),
             "actualType" to actualType
         )
 
-    is UpdateAgentRoleError.SettingsModelMismatch ->
+    is UpdateAgentRoleError.ModelPresetSettingsModelMismatch ->
         apiError(
             CommonApiErrorCodes.INVALID_ARGUMENT,
-            "Settings profile belongs to a different model",
-            "settingsId" to settingsId.toString(),
-            "settingsModelId" to settingsModelId.toString(),
-            "roleModelId" to roleModelId.toString()
+            "Model preset settings profile belongs to a different model",
+            "presetId" to presetId.toString(),
+            "presetModelId" to presetModelId.toString(),
+            "settingsModelId" to settingsModelId.toString()
         )
 
     is UpdateAgentRoleError.ToolNotFound ->

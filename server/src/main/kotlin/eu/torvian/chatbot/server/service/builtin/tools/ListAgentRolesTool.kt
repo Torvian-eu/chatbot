@@ -66,6 +66,9 @@ class ListAgentRolesTool(
                         // Keep nullable DTO properties explicit so consumers can distinguish null from omission.
                         put("displayName", role.displayName?.let { JsonPrimitive(it) } ?: JsonNull)
                         put("description", role.description)
+                        put("modelPresetId", role.modelPresetId?.let { JsonPrimitive(it) } ?: JsonNull)
+                        // Derived, read-only convenience values resolved from the role's preset (null
+                        // when no preset is attached or the preset's reference is unset).
                         put("modelId", role.modelId?.let { JsonPrimitive(it) } ?: JsonNull)
                         put("modelSettingsId", role.modelSettingsId?.let { JsonPrimitive(it) } ?: JsonNull)
                         put("tools", buildJsonArray {

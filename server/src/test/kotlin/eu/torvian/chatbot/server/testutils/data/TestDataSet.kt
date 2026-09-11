@@ -41,6 +41,7 @@ import eu.torvian.chatbot.server.data.entities.FailedLoginAttemptEntity
  * @property modelSettings List of model settings entries to insert into the `model_settings` table.
  * @property agentRoles List of agent role entries to insert into the `agent_roles` table.
  * @property projects List of project entries to insert into the `projects` table.
+ * @property modelPresets List of model preset entries to insert into the `model_presets` table.
  * @property sessionCurrentLeaves List of session current leaf entries to insert into the `session_current_leaf` table.
  * @property users List of user entries to insert into the `users` table.
  * @property roles List of role entries to insert into the `roles` table.
@@ -59,6 +60,7 @@ data class TestDataSet(
     val modelSettings: List<ModelSettings> = emptyList(),
     val agentRoles: List<AgentRoleEntity> = emptyList(),
     val projects: List<ProjectEntity> = emptyList(),
+    val modelPresets: List<ModelPresetEntity> = emptyList(),
     val sessionCurrentLeaves: List<SessionCurrentLeafEntity> = emptyList(),
     val users: List<UserEntity> = emptyList(),
     val roles: List<RoleEntity> = emptyList(),

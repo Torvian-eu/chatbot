@@ -61,6 +61,10 @@ fun daoModule() = module {
     single<ProjectOwnershipDao> { ProjectOwnershipDaoExposed(get()) }
     single<ProjectAgentRoleDao> { ProjectAgentRoleDaoExposed(get()) }
 
+    // Model preset DAOs
+    single<ModelPresetDao> { ModelPresetDaoExposed(get()) }
+    single<ModelPresetOwnershipDao> { ModelPresetOwnershipDaoExposed(get()) }
+
     // Tool-related DAOs
     single<ToolDefinitionDao> { ToolDefinitionDaoExposed(get()) }
     single<ToolCallDao> { ToolCallDaoExposed(get()) }

@@ -15,13 +15,16 @@ import eu.torvian.chatbot.app.compose.common.ConfigDropdown
 import eu.torvian.chatbot.app.compose.common.ConfigTextField
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleFormState
+import eu.torvian.chatbot.app.domain.contracts.AgentRoleSendability
 import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.app.domain.contracts.defaultInstructionName
+import eu.torvian.chatbot.app.domain.contracts.resolveAgentRoleSendability
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.agent.modelSpecificId
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelPresetDto
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -47,15 +50,21 @@ private val EDITABLE_INSTRUCTION_TYPES = listOf(
 /**
  * Form dialog for creating or editing an agent role.
  *
- * The dialog binds the role's model, settings profile, tools and ordered instruction list. Switching
- * the model clears the settings selection because profiles belong to a specific model. Each
- * instruction row can be reordered, and `SPAWNABLE_AGENTS` rows keep their generated messages
- * read-only (the server resolves them from the selected spawn targets).
+ * The dialog binds the role's model preset, tools and ordered instruction list. A role's LLM
+ * configuration is the preset's (U-28/U-29), so the form offers a single preset picker instead of the
+ * removed direct model/settings pickers; all owned presets are offered — including incomplete ones the
+ * server accepts — because validation stays server-side.
+ *
+ * A preset-less (or unusable-preset) draft is legal and savable (U-36/RQ-2): the Save button is only
+ * gated on the name, and the non-sendability is reported inline through the shared
+ * [resolveAgentRoleSendability] helper, which the role detail page uses as well.
  *
  * @param title Dialog title ("Add Agent Role" / "Edit Agent Role").
  * @param formState The current form draft.
- * @param models Chat-capable models available for selection.
- * @param settingsForModel Chat-capable settings profiles for the model currently chosen in the form.
+ * @param models Chat-capable models available for a `model_specific` instruction row's target picker.
+ * @param presets All presets owned by the user, name-ascending, offered by the preset picker.
+ * @param settingsById Settings lookup used to resolve the profile a preset references, so the
+ *            sendability hint can name the precise reason.
  * @param tools Enabled tool definitions available for the multi-select.
  * @param roles Same-user roles available as spawn targets, including the edited role (self-spawn is
  *            allowed).
@@ -70,7 +79,8 @@ fun AgentRoleFormDialog(
     title: String,
     formState: AgentRoleFormState,
     models: List<LLMModel>,
-    settingsForModel: List<ModelSettings>,
+    presets: List<ModelPresetDto>,
+    settingsById: Map<Long, ModelSettings>,
     tools: List<ToolDefinition>,
     roles: List<AgentRoleDto>,
     projects: List<ProjectDto>,
@@ -98,6 +108,21 @@ fun AgentRoleFormDialog(
                     Text(title, style = MaterialTheme.typography.headlineSmall)
                     Spacer(modifier = Modifier.height(24.dp))
 
+                    // The draft's sendability is evaluated from the same pure helper the detail page
+                    // uses; a draft has no server-resolved model/settings ids yet, so the candidate
+                    // carries only the preset reference.
+                    val selectedPreset = formState.modelPresetId?.let { presetId ->
+                        presets.find { it.id == presetId }
+                    }
+                    val selectedPresetSettings = selectedPreset?.modelSettingsId?.let { settingsId ->
+                        settingsById[settingsId]
+                    }
+                    val sendability = resolveAgentRoleSendability(
+                        role = formState.asSendabilityCandidate(),
+                        preset = selectedPreset,
+                        settings = selectedPresetSettings
+                    )
+
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         ConfigTextField(
                             value = formState.name,
@@ -118,29 +143,34 @@ fun AgentRoleFormDialog(
                             modifier = Modifier.height(80.dp)
                         )
 
-                        // Model selector. Switching the model clears the settings selection because
-                        // settings profiles belong to a specific model.
+                        // Model preset selector: the single source of the role's LLM configuration.
+                        // "No preset" is an explicit choice that keeps the role savable (U-36);
+                        // every owned preset is offered (the server accepts an incomplete preset and
+                        // rejects an unusable one with a typed error).
                         ConfigDropdown(
-                            selectedItem = formState.modelId?.let { id -> models.find { it.id == id } },
-                            onItemSelected = { model ->
-                                onFormUpdate { it.copy(modelId = model.id, modelSettingsId = null) }
+                            selectedItem = selectedPreset,
+                            onItemSelected = { preset ->
+                                onFormUpdate { it.copy(modelPresetId = preset?.id) }
                             },
-                            items = models,
-                            label = "Model *",
-                            itemText = { it.displayName ?: it.name }
+                            items = listOf<ModelPresetDto?>(null) + presets,
+                            label = "Model Preset",
+                            itemText = { preset ->
+                                preset?.let { p ->
+                                    p.displayName?.takeIf { it.isNotBlank() } ?: p.name
+                                } ?: "No preset (role will not be sendable)"
+                            }
                         )
 
-                        ConfigDropdown(
-                            selectedItem = formState.modelSettingsId?.let { id ->
-                                settingsForModel.find { it.id == id }
-                            },
-                            onItemSelected = { settings ->
-                                onFormUpdate { it.copy(modelSettingsId = settings.id) }
-                            },
-                            items = settingsForModel,
-                            label = "Settings Profile *",
-                            itemText = { it.name }
-                        )
+                        // Non-sendability is a hint, never a save blocker: the user may complete the
+                        // role later, and the server stays authoritative on send.
+                        if (sendability is AgentRoleSendability.NotSendable) {
+                            Text(
+                                text = "${sendability.reason} The role can still be saved; sending will " +
+                                        "fail until a usable preset is attached.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
 
                         // Tools multi-select (FilterChip row).
                         Text("Tools", style = MaterialTheme.typography.titleSmall)
@@ -326,7 +356,7 @@ fun AgentRoleFormDialog(
                                     instruction = instruction,
                                     models = models,
                                     usedModelIds = usedModelIds,
-                                    roleModelId = formState.modelId,
+                                    roleModelId = selectedPreset?.modelId,
                                     isMessageReadOnly = isSpawnableAgents,
                                     isFullyReadOnly = isUnknownType,
                                     unavailableTypes = unavailableTypes,
@@ -666,6 +696,27 @@ private fun buildInstructionForType(
     } else {
         null
     }
+)
+
+/**
+ * Builds the minimal [AgentRoleDto] shape the sendability rules read for this *draft*.
+ *
+ * [resolveAgentRoleSendability] evaluates a role, but the form only holds a draft: the draft carries
+ * the preset reference and nothing else configuration-related — the derived model/settings ids only
+ * exist after the server resolves a saved role. The candidate therefore leaves those ids null, which
+ * makes the helper resolve the effective configuration from the selected preset (its documented
+ * fallback for a not-yet-saved role). The remaining fields are placeholders the rules never read.
+ *
+ * @receiver The draft being edited.
+ * @return A role stand-in carrying only the draft's preset reference.
+ */
+private fun AgentRoleFormState.asSendabilityCandidate(): AgentRoleDto = AgentRoleDto(
+    // The id is part of the DTO shape only; the sendability rules do not read it.
+    id = roleId ?: 0L,
+    name = name,
+    modelId = null,
+    modelSettingsId = null,
+    modelPresetId = modelPresetId
 )
 
 /**

@@ -29,12 +29,11 @@ class AgentRoleDisabledDaoExposedTest {
     private lateinit var agentRoleDisabledDao: AgentRoleDisabledDao
     private lateinit var testDataManager: TestDataManager
 
-    // Model/settings references are null so the role fixture needs no llm_models/model_settings
-    // seeding (the agent_role_disabled table itself only references users and agent_roles).
+    // The role fixture is preset-less, so the role needs no model/settings/preset seeding (the
+    // agent_role_disabled table itself only references users and agent_roles).
     private val role = TestDefaults.agentRole1.copy(
         id = 1L,
-        modelId = null,
-        modelSettingsId = null,
+        modelPresetId = null,
         instructionsJson = "[]"
     )
 

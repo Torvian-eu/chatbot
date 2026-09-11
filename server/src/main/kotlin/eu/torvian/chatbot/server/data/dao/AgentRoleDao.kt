@@ -12,6 +12,11 @@ import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
  * owns (de)serialization via the shared JSON codec. The role's tool ids are stored separately in the
  * `agent_role_tools` join table and are managed through [AgentRoleToolDao].
  *
+ * The role's LLM configuration is a single nullable `model_preset_id` column referencing a user-owned
+ * model preset; the preset is the sole source of truth for the model and settings profile, so the DAO
+ * never reads or writes a role-level model/settings id (those columns were removed in V29, and the
+ * DTO's derived values are resolved by the service layer).
+ *
  * Role names are unique **per user and project scope**, not globally: different users may reuse the
  * same name, and the same user may reuse a name in disjoint scopes (same-named roles conflict only
  * when they share the same scope — the same project id, or both unassociated). The DB cannot express
@@ -120,8 +125,8 @@ interface AgentRoleDao {
      * @param name Machine-readable role name (unique per user and project scope; checked by the caller).
      * @param displayName Optional human-friendly display name.
      * @param description Free-form description.
-     * @param modelId Optional identifier of the LLM model used by the role.
-     * @param modelSettingsId Optional identifier of the settings profile used by the role.
+     * @param modelPresetId Optional identifier of the model preset holding the role's model and
+     *            settings profile; null creates a preset-less (non-sendable) role.
      * @param instructionsJson Raw JSON array of the flat `AgentInstructionDto` list.
      * @param projectId The single project id the role belongs to, or null for an unassociated role.
      * @return The newly created [AgentRoleEntity].
@@ -130,8 +135,7 @@ interface AgentRoleDao {
         name: String,
         displayName: String?,
         description: String,
-        modelId: Long?,
-        modelSettingsId: Long?,
+        modelPresetId: Long?,
         instructionsJson: String,
         projectId: Long?
     ): AgentRoleEntity

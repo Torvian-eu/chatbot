@@ -154,8 +154,9 @@ object TestDefaults {
         name = "Senior Architect",
         displayName = "Senior Software Architect",
         description = "A senior software architect role",
-        modelId = llmModel1.id,
-        modelSettingsId = modelSettings1.id,
+        // Preset-free on purpose: most suites exercise role behaviour that is unrelated to the model
+        // configuration, and a preset-less role is a legal (non-sendable) state.
+        modelPresetId = null,
         instructionsJson = """[{"type":"role","name":"Role","message":"You are a senior software architect."}]""",
         createdAt = DEFAULT_INSTANT,
         updatedAt = DEFAULT_INSTANT
@@ -166,9 +167,30 @@ object TestDefaults {
         name = "Code Reviewer",
         displayName = "Code Reviewer",
         description = "A code review specialist role",
+        modelPresetId = null,
+        instructionsJson = """[{"type":"role","name":"Role","message":"You are a meticulous code reviewer."}]""",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT
+    )
+
+    val modelPreset1 = ModelPresetEntity(
+        id = 1L,
+        name = "smart_model",
+        displayName = "Smart model",
+        description = "Preset bundling the first model with its chat settings",
+        modelId = llmModel1.id,
+        modelSettingsId = modelSettings1.id,
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT
+    )
+
+    val modelPreset2 = ModelPresetEntity(
+        id = 2L,
+        name = "cheap_model",
+        displayName = null,
+        description = "Preset bundling the second model with its chat settings",
         modelId = llmModel2.id,
         modelSettingsId = modelSettings2.id,
-        instructionsJson = """[{"type":"role","name":"Role","message":"You are a meticulous code reviewer."}]""",
         createdAt = DEFAULT_INSTANT,
         updatedAt = DEFAULT_INSTANT
     )

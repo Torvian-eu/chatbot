@@ -5,10 +5,7 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModelCapabilities
-import eu.torvian.chatbot.common.models.llm.ModelSettings
-import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.common.models.llm.hasCapability
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
@@ -26,6 +23,8 @@ import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageEr
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
 import eu.torvian.chatbot.server.service.core.error.provider.GetProviderError
 import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
+import eu.torvian.chatbot.server.service.llm.chatStreamFlag
+import eu.torvian.chatbot.server.service.llm.isChatLikeSettings
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.service.security.error.CredentialError
 
@@ -34,8 +33,11 @@ import eu.torvian.chatbot.server.service.security.error.CredentialError
  * before a conversation turn is orchestrated.
  *
  * Model, settings, tools and the composed system prompt are resolved from the session's selected agent
- * role (a session no longer stores its own model/settings). A session without a role, or a role whose
- * referenced model/settings were deleted (`ON DELETE SET NULL`), raises a [ValidateNewMessageError.ModelConfigurationError].
+ * role (a session no longer stores its own model/settings). The role's model/settings come exclusively
+ * from its referenced model preset — the preset is the sole source of truth — so a session without a
+ * role, a role without a preset, and a preset whose model/settings reference is missing or unusable all
+ * raise a [ValidateNewMessageError.ModelConfigurationError]. There is deliberately no fallback: a
+ * broken configuration must never silently run with a different model or default settings.
  *
  * @property messageDao DAO used to verify the optional parent message.
  * @property sessionDao DAO used to load the target chat session.
@@ -116,18 +118,32 @@ class DefaultConversationTurnPreparationService(
                 )
             }
 
-            // model_id/model_settings_id are nullable because deleting the referenced model/settings
-            // nulls them (ON DELETE SET NULL); re-check at turn time so a broken role fails loudly.
+            // The role's LLM configuration comes exclusively from its model preset: the preset is the
+            // sole source of truth (there is no role-level fallback pair), so a preset-less role and a
+            // preset whose model/settings reference is null are both non-sendable and fail loudly here.
+            val modelPresetId = role.modelPresetId
+                ?: raise(
+                    ValidateNewMessageError.ModelConfigurationError(
+                        "Agent role $agentRoleId for session $sessionId has no model preset " +
+                            "(attach one to make the role sendable)"
+                    )
+                )
+            // The derived references are nullable because `ON DELETE SET NULL` nulls them when the
+            // referenced model/settings is deleted, and because a preset may legitimately have never had
+            // them set (such a preset is attachable but cannot drive a turn). Re-check at turn time so a
+            // broken configuration fails loudly instead of falling back to anything.
             val modelId = role.modelId
                 ?: raise(
                     ValidateNewMessageError.ModelConfigurationError(
-                        "Agent role $agentRoleId for session $sessionId references a deleted model"
+                        "Model preset $modelPresetId of agent role $agentRoleId for session $sessionId " +
+                            "references a deleted model, or has no model configured"
                     )
                 )
             val settingsId = role.modelSettingsId
                 ?: raise(
                     ValidateNewMessageError.ModelConfigurationError(
-                        "Agent role $agentRoleId for session $sessionId references deleted settings"
+                        "Model preset $modelPresetId of agent role $agentRoleId for session $sessionId " +
+                            "references deleted settings, or has no settings profile configured"
                     )
                 )
 
@@ -146,6 +162,15 @@ class DefaultConversationTurnPreparationService(
             ensure(isChatLikeSettings(settings)) {
                 ValidateNewMessageError.ModelConfigurationError(
                     "Settings type ${settings::class.simpleName} is not compatible with the selected chat model"
+                )
+            }
+            // Defensive re-check of the preset's equality invariant: a settings profile can be
+            // re-pointed to another model after the preset was written, so the stored pair may disagree
+            // at rest. Fail loudly rather than sending the model id and a profile of a different model.
+            ensure(settings.modelId == modelId) {
+                ValidateNewMessageError.ModelConfigurationError(
+                    "Model preset $modelPresetId of agent role $agentRoleId is inconsistent: settings " +
+                        "$settingsId belongs to model ${settings.modelId}, not $modelId"
                 )
             }
             ensure(chatStreamFlag(settings) == isStreaming) {
@@ -201,32 +226,5 @@ class DefaultConversationTurnPreparationService(
                 llmConfig = LLMConfig(provider, model, settings, apiKey, tools, systemMessage)
             )
         }
-    }
-
-    /**
-     * Whether the given [ModelSettings] is compatible with a CHAT or RESPONSES chat-session model.
-     * Both [ChatModelSettings] and [ResponsesModelSettings] describe conversational generation and
-     * carry a `stream` flag, so either may be attached to a chat session.
-     *
-     * @receiver The settings profile to inspect.
-     * @return `true` if the settings describe a chat-capable model type.
-     */
-    private fun isChatLikeSettings(settings: ModelSettings): Boolean = when (settings) {
-        is ChatModelSettings -> true
-        is ResponsesModelSettings -> true
-        else -> false
-    }
-
-    /**
-     * Extracts the streaming flag from chat-capable settings. Returns `null` for settings that do not
-     * describe a chat-capable model (i.e. types other than [ChatModelSettings] and [ResponsesModelSettings]).
-     *
-     * @receiver The settings profile to inspect.
-     * @return The `stream` flag when the settings are chat-capable, otherwise `null`.
-     */
-    private fun chatStreamFlag(settings: ModelSettings): Boolean? = when (settings) {
-        is ChatModelSettings -> settings.stream
-        is ResponsesModelSettings -> settings.stream
-        else -> null
     }
 }

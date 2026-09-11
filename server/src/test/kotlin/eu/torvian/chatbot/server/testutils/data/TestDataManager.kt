@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
+import eu.torvian.chatbot.server.data.entities.ModelPresetEntity
 import eu.torvian.chatbot.server.data.entities.ProjectEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.data.entities.UserEntity
@@ -263,6 +264,30 @@ interface TestDataManager {
      * @param userId The ID of the user who owns the project.
      */
     suspend fun insertProjectOwnership(projectId: Long, userId: Long)
+
+    /**
+     * Inserts a model preset into the database. Creates the table if it does not exist.
+     *
+     * @param preset The model preset entity to insert (including its ID).
+     */
+    suspend fun insertModelPreset(preset: ModelPresetEntity)
+
+    /**
+     * Retrieves a model preset from the database.
+     *
+     * @param id The ID of the model preset to retrieve.
+     * @return The model preset entity if found, null otherwise.
+     */
+    suspend fun getModelPreset(id: Long): ModelPresetEntity?
+
+    /**
+     * Inserts a model-preset ownership record into the database. Creates the table if it does not
+     * exist.
+     *
+     * @param presetId The ID of the model preset.
+     * @param userId The ID of the user who owns the preset.
+     */
+    suspend fun insertModelPresetOwnership(presetId: Long, userId: Long)
 
     /**
      * Assigns a role to a project by setting its single `project_id` column (a role belongs to at

@@ -788,11 +788,15 @@ class ProjectServiceImplTest {
             name = "Architect",
             displayName = "Senior Architect",
             description = "role description",
-            modelId = 1L,
-            modelSettingsId = 2L,
+            modelPresetId = 7L,
             projectId = source.id
         )
-        val sourceRoleB = TestDefaults.agentRole2.copy(id = 11L, name = "Reviewer", projectId = source.id)
+        val sourceRoleB = TestDefaults.agentRole2.copy(
+            id = 11L,
+            name = "Reviewer",
+            modelPresetId = 8L,
+            projectId = source.id
+        )
         coEvery { projectDao.getProjectById(source.id) } returns source.right()
         coEvery { projectOwnershipDao.getOwner(source.id) } returns userId.right()
         coEvery { projectDao.projectNameExistsForUser(userId, "Copy of Acme Web App") } returns false
@@ -807,7 +811,7 @@ class ProjectServiceImplTest {
             TestDefaults.project2.copy(id = 20L, name = "Copy of Acme Web App")
         coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
         // New ids 30/31 are assigned in source iteration order (insertRole call order).
-        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
             TestDefaults.agentRole1.copy(id = 30L),
             TestDefaults.agentRole2.copy(id = 31L)
         )
@@ -819,19 +823,28 @@ class ProjectServiceImplTest {
         assertNotNull(dto)
         assertEquals(20L, dto.id)
         assertEquals(setOf(30L, 31L), dto.agentRoleIds, "the DTO carries the NEW role ids, not the source's")
-        // Per-role configuration is copied field-for-field, with the membership pointing at the clone.
+        // Per-role configuration is copied field-for-field (including the model-preset reference), with
+        // the membership pointing at the clone.
         coVerify(exactly = 1) {
             agentRoleDao.insertRole(
                 name = "Architect",
                 displayName = "Senior Architect",
                 description = "role description",
-                modelId = 1L,
-                modelSettingsId = 2L,
+                modelPresetId = 7L,
                 instructionsJson = sourceRoleA.instructionsJson,
                 projectId = 20L
             )
         }
-        coVerify(exactly = 1) { agentRoleDao.insertRole("Reviewer", "Code Reviewer", sourceRoleB.description, 2L, 2L, sourceRoleB.instructionsJson, 20L) }
+        coVerify(exactly = 1) {
+            agentRoleDao.insertRole(
+                "Reviewer",
+                "Code Reviewer",
+                sourceRoleB.description,
+                8L,
+                sourceRoleB.instructionsJson,
+                20L
+            )
+        }
         // The tool set is copied as-is.
         coVerify(exactly = 1) { agentRoleToolDao.replaceToolsForRole(30L, setOf(100L, 101L)) }
         // The spawn allow-list is remapped old-id -> new-id (11 -> 31), and the stale target 99 is
@@ -862,7 +875,7 @@ class ProjectServiceImplTest {
         coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(10L, 11L)) } returns listOf(sourceRoleA, sourceRoleB)
         coEvery { projectDao.insertProject("Copy", source.description) } returns TestDefaults.project2.copy(id = 20L, name = "Copy")
         coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
-        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
             TestDefaults.agentRole1.copy(id = 30L),
             TestDefaults.agentRole2.copy(id = 31L)
         )
@@ -891,7 +904,7 @@ class ProjectServiceImplTest {
         coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(10L, 11L)) } returns listOf(sourceRoleA, sourceRoleB)
         coEvery { projectDao.insertProject("Copy", source.description) } returns TestDefaults.project2.copy(id = 20L, name = "Copy")
         coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
-        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
             TestDefaults.agentRole1.copy(id = 30L),
             TestDefaults.agentRole2.copy(id = 31L)
         )
@@ -921,7 +934,7 @@ class ProjectServiceImplTest {
         // A forced failure while copying a role, after the new project row was inserted: the exception
         // escapes the service so the real TransactionScope can roll the whole clone back (no new
         // project, no orphaned role rows).
-        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any(), any()) } throws
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) } throws
             RuntimeException("injected role insertion failure")
 
         assertFailsWith<RuntimeException> {

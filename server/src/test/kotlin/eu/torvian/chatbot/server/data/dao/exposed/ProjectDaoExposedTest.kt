@@ -147,7 +147,7 @@ class ProjectDaoExposedTest {
     @Test
     fun `deleteProject removes the row and cascades ownership and membership links`() = runTest {
         val project = projectDao.insertProject("Acme Web App", "Flagship")
-        val role = TestDefaults.agentRole1.copy(modelId = null, modelSettingsId = null, instructionsJson = "[]")
+        val role = TestDefaults.agentRole1.copy(modelPresetId = null, instructionsJson = "[]")
         testDataManager.setup(
             TestDataSet(agentRoles = listOf(role))
         )

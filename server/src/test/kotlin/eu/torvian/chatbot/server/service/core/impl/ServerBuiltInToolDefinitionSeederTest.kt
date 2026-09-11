@@ -33,7 +33,10 @@ import kotlin.test.assertTrue
  * names carry the user's effective prefix (default `"chatbot-"`, custom per user, blank = none)
  * while the canonical `builtInToolName` stays unprefixed, that seeding is idempotent (re-runs
  * neither duplicate rows nor clobber user edits), and that the prefix-aware [isInitialized]
- * reconciliation covers every existing user including prefix drift.
+ * reconciliation covers every existing user including prefix drift. It also pins the catalog-version
+ * behaviour: a user whose set predates a catalog addition gains the new specs with the current
+ * catalog schemas on the next startup reconcile, while [ServerBuiltInToolDefinitionSeeder.resetToDefaults]
+ * remains the only schema-repair path and preserves every tool's enabled state.
  */
 class ServerBuiltInToolDefinitionSeederTest {
 
@@ -357,6 +360,64 @@ class ServerBuiltInToolDefinitionSeederTest {
     }
 
     @Test
+    fun `startup reconcile keeps a pre-V29 update_agent_role schema while reset repairs it preserving enabled`() =
+        runTest {
+            val toolService = container.get<ToolService>()
+            val seeded = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
+            // User 2 must exist so the global isInitialized check passes after the reconcile.
+            seeder.ensureForUser(TestDefaults.user2.id)
+
+            // Simulate a persisted pre-V29 schema: it still advertises the removed model_id parameter (the
+            // catalog now declares model_preset_id instead), and the user disabled the tool. This is the
+            // state every existing user is in until they run "Reset to defaults", because the startup
+            // reconcile is name-only and never rewrites stored schemas.
+            val legacyInputSchema = buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                    put("role_id", buildJsonObject { put("type", JsonPrimitive("integer")) })
+                    put("model_id", buildJsonObject { put("type", JsonPrimitive("integer")) })
+                })
+            }
+            val drifted = seeded.first {
+                it.builtInToolName == ServerBuiltInToolCatalog.UPDATE_AGENT_ROLE_NAME
+            }.copy(isEnabled = false, inputSchema = legacyInputSchema)
+            toolService.updateTool(drifted)
+
+            // Force the startup reconcile to actually run by changing the prefix while the persisted rows
+            // still carry the old names.
+            userPreferenceDao.upsertPreference(
+                userId = TestDefaults.user1.id,
+                internalDeviceId = null,
+                clientDeviceId = null,
+                key = PreferenceKeys.SERVER_BUILTIN_TOOL_NAME_PREFIX,
+                value = "acme-"
+            )
+            assertTrue(!seeder.isInitialized())
+            assertTrue(seeder.initialize().isRight())
+
+            // The drifted schema survives the startup reconcile...
+            val afterInitialize = serverBuiltInToolDefinitionDao.getToolsByUserId(TestDefaults.user1.id)
+                .first { it.builtInToolName == ServerBuiltInToolCatalog.UPDATE_AGENT_ROLE_NAME }
+            assertEquals(legacyInputSchema, afterInitialize.inputSchema)
+            assertTrue(afterInitialize.inputSchema.toString().contains("model_id"))
+
+            // ...while the explicit reset replaces it with the current catalog schema. The id and the
+            // user's enabled choice are preserved, so the remedy is non-destructive.
+            val result = seeder.resetToDefaults(TestDefaults.user1.id)
+            assertTrue(result.isRight(), "reset failed: ${result.leftOrNull()}")
+            val repaired = result.getOrNull()!!
+                .first { it.builtInToolName == ServerBuiltInToolCatalog.UPDATE_AGENT_ROLE_NAME }
+            val spec = requireNotNull(
+                ServerBuiltInToolCatalog.specFor(ServerBuiltInToolCatalog.UPDATE_AGENT_ROLE_NAME)
+            )
+            assertEquals(spec.inputSchema, repaired.inputSchema)
+            assertTrue(repaired.inputSchema.toString().contains("model_preset_id"))
+            assertTrue(!repaired.inputSchema.toString().contains("model_id"))
+            assertEquals(drifted.id, repaired.id)
+            assertTrue(!repaired.isEnabled, "the reset preserves the enabled state")
+        }
+
+    @Test
     fun `resetToDefaults creates missing tools with the effective prefix`() = runTest {
         // Nothing seeded yet: reset acts as a full seed.
         val result = seeder.resetToDefaults(TestDefaults.user1.id)
@@ -442,6 +503,89 @@ class ServerBuiltInToolDefinitionSeederTest {
         assertEquals(first.map { it.id }.toSet(), second.map { it.id }.toSet())
         assertEquals(ServerBuiltInToolCatalog.allTools.size, second.size)
     }
+
+    /**
+     * Verifies how a catalog addition (the five model-preset tools) reaches an existing user: the
+     * startup reconcile is name-keyed, so `isInitialized()` reports false while any catalog name is
+     * missing and `initialize()` creates the missing per-user instances with the **current** catalog
+     * `inputSchema`, enabled by default, without touching any other tool's user edits. The explicit
+     * reset stays the schema-repair path and is idempotent for the new tools, preserving `isEnabled`.
+     */
+    @Test
+    fun `startup reconcile creates newly added catalog specs for an existing user preserving other tools edits`() =
+        runTest {
+            val toolService = container.get<ToolService>()
+            val presetToolNames = listOf(
+                ServerBuiltInToolCatalog.LIST_MODEL_PRESETS_NAME,
+                ServerBuiltInToolCatalog.READ_MODEL_PRESET_NAME,
+                ServerBuiltInToolCatalog.CREATE_MODEL_PRESET_NAME,
+                ServerBuiltInToolCatalog.UPDATE_MODEL_PRESET_NAME,
+                ServerBuiltInToolCatalog.DELETE_MODEL_PRESET_NAME
+            )
+
+            val seeded = seeder.ensureForUser(TestDefaults.user1.id).getOrNull()!!
+            // Simulate a user whose set predates the catalog addition: the preset-tool instances are
+            // absent (they simply did not exist when the user was first seeded).
+            val presetRows = seeded.filter { it.builtInToolName in presetToolNames }
+            assertEquals(presetToolNames.size, presetRows.size)
+            presetRows.forEach { row ->
+                assertTrue(toolService.deleteTool(row.id).isRight(), "failed to remove ${row.builtInToolName}")
+            }
+
+            // A user edit on an unrelated tool that the reconcile must leave untouched: custom
+            // description, custom schema, and disabled.
+            val edited = seeded.first { it.builtInToolName == ServerBuiltInToolCatalog.LIST_AGENT_ROLES_NAME }
+                .copy(
+                    description = "custom description",
+                    isEnabled = false,
+                    inputSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+                )
+            toolService.updateTool(edited)
+            val editedSchema = edited.inputSchema
+
+            // A missing catalog name makes the startup short-circuit fail, so initialize() runs the
+            // per-user reconcile (which also seeds user 2, who has no tools yet).
+            assertTrue(!seeder.isInitialized())
+            val result = seeder.initialize()
+
+            assertTrue(result.isRight(), "initialization failed: ${result.leftOrNull()}")
+            assertTrue(seeder.isInitialized())
+
+            val after = serverBuiltInToolDefinitionDao.getToolsByUserId(TestDefaults.user1.id)
+            assertEquals(ServerBuiltInToolCatalog.allTools.size, after.size)
+            // The five new tools exist again, carrying the real catalog schema and the default
+            // enabled state (a re-created row has no user edits to preserve).
+            for (name in presetToolNames) {
+                val spec = requireNotNull(ServerBuiltInToolCatalog.specFor(name))
+                val row = requireNotNull(after.firstOrNull { it.builtInToolName == name }) {
+                    "missing instance for newly added tool '$name'"
+                }
+                assertEquals(spec.inputSchema, row.inputSchema)
+                assertEquals(spec.description, row.description)
+                assertEquals("chatbot-$name", row.name)
+                assertTrue(row.isEnabled)
+            }
+            // The unrelated tool keeps its user-edited description, schema, and disabled state: the
+            // startup reconcile never rewrites catalog-derived fields of existing rows.
+            val survived = after.first { it.id == edited.id }
+            assertEquals("custom description", survived.description)
+            assertEquals(editedSchema, survived.inputSchema)
+            assertTrue(!survived.isEnabled)
+
+            // The explicit reset is the schema-repair path: it is idempotent for the five new tools
+            // (same ids) and preserves the enabled state of every tool.
+            val disabledPreset = after.first { it.builtInToolName == ServerBuiltInToolCatalog.UPDATE_MODEL_PRESET_NAME }
+            toolService.updateTool(disabledPreset.copy(isEnabled = false))
+            val idsBeforeReset = after.map { it.id }.toSet()
+
+            val reset = seeder.resetToDefaults(TestDefaults.user1.id)
+
+            assertTrue(reset.isRight(), "reset failed: ${reset.leftOrNull()}")
+            val resetTools = reset.getOrNull()!!
+            assertEquals(idsBeforeReset, resetTools.map { it.id }.toSet())
+            assertTrue(!resetTools.first { it.id == disabledPreset.id }.isEnabled)
+            assertTrue(!resetTools.first { it.id == edited.id }.isEnabled)
+        }
 
     @Test
     fun `resetToDefaults prunes stale rows whose canonical spec no longer exists`() = runTest {

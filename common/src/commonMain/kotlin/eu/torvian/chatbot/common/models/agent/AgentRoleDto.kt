@@ -11,14 +11,29 @@ import kotlinx.serialization.Serializable
  * composed system prompt — into one reusable, user-managed entity. A chat session references an agent
  * role by [id] instead of storing model/settings/tools directly.
  *
+ * The role's LLM configuration lives exclusively in the referenced
+ * [eu.torvian.chatbot.common.models.llm.ModelPresetDto] ([modelPresetId]): the preset is the sole
+ * source of truth, and re-pointing it switches every role bound to it at once. [modelId] and
+ * [modelSettingsId] are **derived, read-only convenience values** resolved from that preset — they are
+ * never accepted on write and never stored on the role row.
+ *
  * @property id Immutable, database-generated identifier.
  * @property name Unique (per user) machine-readable name of the role.
  * @property displayName Optional human-friendly display name; clients fall back to [name].
  * @property description Free-form description of the role's purpose.
- * @property modelId Identifier of the [LLMModel] the role uses. Null after the referenced model is
- *            deleted (`ON DELETE SET NULL`); the role is then non-sendable until repaired.
- * @property modelSettingsId Identifier of the [ModelSettings] profile (CHAT or RESPONSES) the role
- *            uses. Null after the referenced settings are deleted; the role is then non-sendable.
+ * @property modelId **Derived** identifier of the [LLMModel] the role uses: the referenced preset's
+ *            model. Null when no preset is attached, or when the preset's model reference is null
+ *            (its model was deleted via `ON DELETE SET NULL`, or the preset never had one). The role
+ *            is then non-sendable.
+ * @property modelSettingsId **Derived** identifier of the [ModelSettings] profile (CHAT or RESPONSES)
+ *            the role uses: the referenced preset's settings profile. Null when no preset is attached,
+ *            or when the preset's settings reference is null. The role is then non-sendable.
+ * @property modelPresetId Identifier of the [eu.torvian.chatbot.common.models.llm.ModelPresetDto]
+ *            holding this role's model/settings configuration, or `null` for a **preset-less** role.
+ *            A preset-less role is legal but non-sendable: turn preparation fails loudly until a
+ *            preset is attached. Deleting the preset nulls this field (`ON DELETE SET NULL`) without
+ *            deleting, disabling or otherwise editing the role. Defaults to null so payloads produced
+ *            before this property existed decode as preset-less.
  * @property tools Set of tool-definition identifiers attached to the role. Referential integrity is
  *            enforced at the database level (the server stores the ids in the `agent_role_tools` join
  *            table); the wire shape is a plain set of ids, so duplicates are impossible.
@@ -50,6 +65,7 @@ data class AgentRoleDto(
     val description: String = "",
     val modelId: Long?,
     val modelSettingsId: Long?,
+    val modelPresetId: Long? = null,
     val tools: Set<Long> = emptySet(),
     val spawnableAgentRoleIds: Set<Long> = emptySet(),
     val instructions: List<AgentInstructionDto> = emptyList(),

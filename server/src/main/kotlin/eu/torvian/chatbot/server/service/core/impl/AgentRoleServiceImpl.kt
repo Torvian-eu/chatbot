@@ -6,48 +6,31 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
-import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
-import eu.torvian.chatbot.common.models.agent.modelSpecificId
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
-import eu.torvian.chatbot.common.models.llm.ModelSettings
-import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
-import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleOwnershipDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleToolDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleSpawnableRoleDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleDisabledDao
-import eu.torvian.chatbot.server.data.dao.ModelDao
+import eu.torvian.chatbot.server.data.dao.ModelPresetDao
 import eu.torvian.chatbot.server.data.dao.ProjectDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.AgentRoleError as AgentRoleDaoError
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
-import eu.torvian.chatbot.server.data.dao.error.ModelError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
-import eu.torvian.chatbot.server.data.dao.error.SettingsError
 import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
+import eu.torvian.chatbot.server.data.entities.ModelPresetEntity
 import eu.torvian.chatbot.server.service.core.AgentRoleService
-import eu.torvian.chatbot.server.service.core.agent.AgentInstruction
 import eu.torvian.chatbot.server.service.core.agent.AgentRole
-import eu.torvian.chatbot.server.service.core.agent.CustomInstruction
-import eu.torvian.chatbot.server.service.core.agent.MainInstruction
-import eu.torvian.chatbot.server.service.core.agent.ModelSpecificInstruction
-import eu.torvian.chatbot.server.service.core.agent.RoleInstruction
-import eu.torvian.chatbot.server.service.core.agent.AgentRoleSummary
-import eu.torvian.chatbot.server.service.core.agent.SpawnableAgentsInstruction
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.DeleteAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.UpdateAgentRoleError
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
@@ -56,19 +39,22 @@ import org.apache.logging.log4j.Logger
  *
  * Uses Arrow's `either { }`/`ensure`/`withError` pattern for typed logical errors and wraps all
  * operations in the shared [TransactionScope]. Instructions are persisted as a raw JSON string
- * (`instructions_json`) so serialization stays at this service boundary: the stored shape equals the
- * wire shape (polymorphic [AgentInstructionDto] list), and the server domain [AgentInstruction] hierarchy is
- * reconstructed per read. The role's tool set is stored in the normalized `agent_role_tools` join
+ * (`instructions_json`) so serialization stays at the [AgentRoleMapper] service boundary: the stored
+ * shape equals the wire shape (polymorphic instruction DTO list), and the server domain instruction
+ * hierarchy is reconstructed per read. The role's tool set is stored in the normalized `agent_role_tools` join
  * table through [agentRoleToolDao] (full replacement on create/update, cascade-deleted with the role
- * or a tool definition).
+ * or a tool definition). Shared request invariants live in [AgentRoleRequestValidator].
  *
  * @property agentRoleDao DAO for the `agent_roles` table.
  * @property agentRoleToolDao DAO for the `agent_role_tools` join table (the role's tool ids).
  * @property agentRoleSpawnableRoleDao DAO for the role-to-role spawn allow-list.
  * @property agentRoleOwnershipDao DAO for the `agent_role_owners` table (per-user ownership).
  * @property agentRoleDisabledDao DAO for the `agent_role_disabled` side table (per-user disabled state).
- * @property modelDao DAO used to validate model references.
- * @property settingsDao DAO used to validate settings references (existence, chat-capability, and model match).
+ * @property modelPresetDao DAO used to resolve the model presets a role references — the single read
+ *            for single-role paths and one batch read for the list path — and to validate an attached
+ *            preset.
+ * @property settingsDao DAO used to validate an attached preset's settings reference (chat-capability
+ *            and agreement with the preset's model).
  * @property toolDefinitionDao DAO used to validate tool references.
  * @property projectDao DAO used to validate project references (ownership and existence).
  * @property sessionDao DAO used to restore the Session Legality Invariant when a role update changes
@@ -79,13 +65,22 @@ import org.apache.logging.log4j.Logger
  * Project membership is a single nullable `project_id` column on the role row (a role belongs to at
  * most one project), so the membership is written together with the row in `insertRole`/`updateRole`
  * and read from the loaded entity — no separate membership DAO is needed for roles.
+ *
+ * The role's LLM configuration lives **only** in the referenced model preset
+ * (`agent_roles.model_preset_id`). This service therefore resolves the preset
+ * ([ModelPresetDao.getPresetById] for single-role reads, [ModelPresetDao.getPresetsByIdsForUser] once
+ * for a whole list) and derives the domain role's `modelId`/`modelSettingsId` from it inside the
+ * single [AgentRoleMapper] funnel, so every read path reports the same values without persisting
+ * them. There is deliberately no `ModelDao` dependency: the model reference needs no separate lookup
+ * because a preset's non-null references are guaranteed to exist by their foreign keys, and the
+ * model↔settings agreement is checked against the loaded settings row.
  */
 class AgentRoleServiceImpl(
     private val agentRoleDao: AgentRoleDao,
     private val agentRoleToolDao: AgentRoleToolDao,
     private val agentRoleOwnershipDao: AgentRoleOwnershipDao,
     private val agentRoleDisabledDao: AgentRoleDisabledDao,
-    private val modelDao: ModelDao,
+    private val modelPresetDao: ModelPresetDao,
     private val settingsDao: SettingsDao,
     private val toolDefinitionDao: ToolDefinitionDao,
     private val json: Json,
@@ -95,52 +90,32 @@ class AgentRoleServiceImpl(
     private val sessionDao: SessionDao
 ) : AgentRoleService {
 
+    /**
+     * Shared request validation (name shape, attached preset, tools, spawn targets, project,
+     * instructions), constructed from the DAOs this service already receives so the constructor
+     * and the Koin wiring stay unchanged.
+     */
+    private val requestValidator = AgentRoleRequestValidator(
+        agentRoleDao = agentRoleDao,
+        modelPresetDao = modelPresetDao,
+        settingsDao = settingsDao,
+        toolDefinitionDao = toolDefinitionDao,
+        projectDao = projectDao
+    )
+
+    /**
+     * Row↔domain and domain↔wire mapping plus the instruction codec, constructed from the DAOs
+     * and JSON codec this service already receives so the constructor stays unchanged.
+     */
+    private val mapper = AgentRoleMapper(
+        agentRoleDao = agentRoleDao,
+        toolDefinitionDao = toolDefinitionDao,
+        json = json
+    )
+
     companion object {
         /** Logger used for service-level diagnostics. */
         private val logger: Logger = LogManager.getLogger(AgentRoleServiceImpl::class.java)
-
-        /** Maximum allowed length of the role name. */
-        private const val MAX_NAME_LENGTH: Int = 255
-
-        /** Error factories for the create flow ([CreateAgentRoleError] surface). */
-        private val createValidationErrors = RoleValidationErrors(
-            invalidName = { name, reason -> CreateAgentRoleError.InvalidName(name, reason) },
-            modelNotFound = { modelId -> CreateAgentRoleError.ModelNotFound(modelId) },
-            settingsNotFound = { settingsId -> CreateAgentRoleError.SettingsNotFound(settingsId) },
-            settingsNotChatLike = { settingsId, actualType ->
-                CreateAgentRoleError.SettingsNotChatLike(settingsId, actualType)
-            },
-            settingsModelMismatch = { settingsId, settingsModelId, roleModelId ->
-                CreateAgentRoleError.SettingsModelMismatch(settingsId, settingsModelId, roleModelId)
-            },
-            toolNotFound = { toolId -> CreateAgentRoleError.ToolNotFound(toolId) },
-            spawnableRoleNotFound = { roleId -> CreateAgentRoleError.SpawnableRoleNotFound(roleId) },
-            spawnableRoleNotInProject = { roleId, projectId ->
-                CreateAgentRoleError.SpawnableRoleNotInProject(roleId, projectId)
-            },
-            projectNotFound = { projectId -> CreateAgentRoleError.ProjectNotFound(projectId) },
-            instructionValidationFailed = { reason -> CreateAgentRoleError.InstructionValidationFailed(reason) }
-        )
-
-        /** Error factories for the update flow ([UpdateAgentRoleError] surface). */
-        private val updateValidationErrors = RoleValidationErrors(
-            invalidName = { name, reason -> UpdateAgentRoleError.InvalidName(name, reason) },
-            modelNotFound = { modelId -> UpdateAgentRoleError.ModelNotFound(modelId) },
-            settingsNotFound = { settingsId -> UpdateAgentRoleError.SettingsNotFound(settingsId) },
-            settingsNotChatLike = { settingsId, actualType ->
-                UpdateAgentRoleError.SettingsNotChatLike(settingsId, actualType)
-            },
-            settingsModelMismatch = { settingsId, settingsModelId, roleModelId ->
-                UpdateAgentRoleError.SettingsModelMismatch(settingsId, settingsModelId, roleModelId)
-            },
-            toolNotFound = { toolId -> UpdateAgentRoleError.ToolNotFound(toolId) },
-            spawnableRoleNotFound = { roleId -> UpdateAgentRoleError.SpawnableRoleNotFound(roleId) },
-            spawnableRoleNotInProject = { roleId, projectId ->
-                UpdateAgentRoleError.SpawnableRoleNotInProject(roleId, projectId)
-            },
-            projectNotFound = { projectId -> UpdateAgentRoleError.ProjectNotFound(projectId) },
-            instructionValidationFailed = { reason -> UpdateAgentRoleError.InstructionValidationFailed(reason) }
-        )
     }
 
     override suspend fun getAllRolesForUser(userId: Long): List<AgentRoleDto> = transactionScope.transaction {
@@ -148,19 +123,25 @@ class AgentRoleServiceImpl(
         val entities = agentRoleDao.getAllRolesForUser(userId)
         // Batch-load every role's tool ids, spawn allow-list ids, project ids and the user's disabled
         // ids in one query each so the list endpoint avoids an N+1 read (mirrors the spawn allow-list
-        // batch pattern).
+        // batch pattern). The referenced model presets are batch-loaded the same way: one query for the
+        // whole list, and the derived model/settings ids come from that single map.
         val roleIds = entities.map { it.id }
         val toolsByRole = agentRoleToolDao.getToolsForRoles(roleIds)
         val spawnableByRole = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(roleIds)
         val disabledRoleIds = agentRoleDisabledDao.getDisabledRoleIds(userId, roleIds)
+        val presetsById = modelPresetDao
+            .getPresetsByIdsForUser(userId, entities.mapNotNull { it.modelPresetId }.distinct())
+            .associateBy { it.id }
         entities.map {
-            it.toAgentRole(
+            mapper.toDto(
+                entity = it,
                 tools = toolsByRole[it.id].orEmpty(),
                 spawnableRoleIds = spawnableByRole[it.id].orEmpty(),
                 projectId = it.projectId,
+                preset = it.modelPresetId?.let(presetsById::get),
                 ownerId = userId,
                 disabled = it.id in disabledRoleIds
-            ).toDto()
+            )
         }
     }
 
@@ -170,13 +151,15 @@ class AgentRoleServiceImpl(
                 val entity = loadOwnedRole(userId, roleId, AgentRoleError.NotFound(roleId))
                 val disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id)
                 val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
-                entity.toAgentRole(
+                mapper.toDto(
+                    entity = entity,
                     tools = agentRoleToolDao.getToolsForRole(entity.id),
                     spawnableRoleIds = spawnableRoleIds,
                     projectId = entity.projectId,
+                    preset = resolvePreset(entity),
                     ownerId = userId,
                     disabled = disabled
-                ).toDto()
+                )
             }
         }
 
@@ -195,13 +178,15 @@ class AgentRoleServiceImpl(
                 }
                 val disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id)
                 val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
-                entity.toAgentRole(
+                mapper.toDto(
+                    entity = entity,
                     tools = agentRoleToolDao.getToolsForRole(entity.id),
                     spawnableRoleIds = spawnableRoleIds,
                     projectId = entity.projectId,
+                    preset = resolvePreset(entity),
                     ownerId = userId,
                     disabled = disabled
-                ).toDto()
+                )
             }
         }
 
@@ -236,15 +221,17 @@ class AgentRoleServiceImpl(
                 // ownership check; a foreign or nonexistent role is rejected before any write happens.
                 agentRoleDisabledDao.setRoleDisabled(userId, entity.id, disabled)
                 val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
-                entity.toAgentRole(
+                mapper.toDto(
+                    entity = entity,
                     tools = agentRoleToolDao.getToolsForRole(entity.id),
                     spawnableRoleIds = spawnableRoleIds,
                     projectId = entity.projectId,
+                    preset = resolvePreset(entity),
                     ownerId = userId,
                     // The DTO must echo the requested state even if the row pre-existed: the write is
                     // idempotent, so the new value equals the requested value by construction.
                     disabled = disabled
-                ).toDto()
+                )
             }
         }
 
@@ -255,18 +242,9 @@ class AgentRoleServiceImpl(
         either {
             logger.info("Creating agent role '${request.name}' for user $userId")
 
-            validateRoleRequest(
-                errors = createValidationErrors,
-                name = request.name,
-                modelId = request.modelId,
-                modelSettingsId = request.modelSettingsId,
-                toolIds = request.toolIds,
-                spawnableAgentRoleIds = request.spawnableAgentRoleIds,
-                projectId = request.projectId,
-                roleId = null,
-                instructions = request.instructions,
-                userId = userId
-            )
+            // The attached preset (if any) is resolved and validated here; it is reused below to build
+            // the echoed DTO, so the derived model/settings ids need no second read.
+            val preset = requestValidator.validateCreate(userId, request).bind()
 
             // Names are unique per (user, project scope), not globally or per user alone: the new
             // role's project scope (null = unassociated scope) must not equal any other same-name
@@ -276,14 +254,13 @@ class AgentRoleServiceImpl(
                 CreateAgentRoleError.NameAlreadyExists(request.name)
             }
 
-            val instructionsJson = encodeInstructions(request.instructions)
+            val instructionsJson = mapper.encodeInstructions(request.instructions)
 
             val entity = agentRoleDao.insertRole(
                 name = request.name,
                 displayName = request.displayName,
                 description = request.description,
-                modelId = request.modelId,
-                modelSettingsId = request.modelSettingsId,
+                modelPresetId = request.modelPresetId,
                 instructionsJson = instructionsJson,
                 projectId = request.projectId
             )
@@ -301,14 +278,16 @@ class AgentRoleServiceImpl(
             }
 
             logger.info("Created agent role '${request.name}' (id ${entity.id}) for user $userId")
-            entity.toAgentRole(
+            mapper.toDto(
+                entity = entity,
                 tools = request.toolIds,
                 spawnableRoleIds = request.spawnableAgentRoleIds,
                 projectId = request.projectId,
+                preset = preset,
                 ownerId = userId,
                 // No side-table row is ever inserted on create: a fresh role is enabled for its owner.
                 disabled = false
-            ).toDto()
+            )
         }
     }
 
@@ -325,18 +304,7 @@ class AgentRoleServiceImpl(
             // the scope-sensitive uniqueness check below and to compare against the request's value.
             val currentProjectId = existing.projectId
 
-            validateRoleRequest(
-                errors = updateValidationErrors,
-                name = request.name,
-                modelId = request.modelId,
-                modelSettingsId = request.modelSettingsId,
-                toolIds = request.toolIds,
-                spawnableAgentRoleIds = request.spawnableAgentRoleIds,
-                projectId = request.projectId,
-                roleId = roleId,
-                instructions = request.instructions,
-                userId = userId
-            )
+            val preset = requestValidator.validateUpdate(userId, roleId, request).bind()
 
             // Name uniqueness is scoped per (user, project scope). The check is scope-sensitive: it
             // runs whenever the update changes the name and/or the project. The role being updated is
@@ -357,9 +325,8 @@ class AgentRoleServiceImpl(
                 name = request.name,
                 displayName = request.displayName,
                 description = request.description,
-                modelId = request.modelId,
-                modelSettingsId = request.modelSettingsId,
-                instructionsJson = encodeInstructions(request.instructions),
+                modelPresetId = request.modelPresetId,
+                instructionsJson = mapper.encodeInstructions(request.instructions),
                 projectId = request.projectId
             )
 
@@ -388,13 +355,15 @@ class AgentRoleServiceImpl(
             // The side-table disabled marker is untouched by the full-replacement row update, so the
             // returned DTO must re-read the per-user flag (single-role existence check, mirrors the
             // single role paths) rather than defaulting it.
-            updated.toAgentRole(
+            mapper.toDto(
+                entity = updated,
                 tools = request.toolIds,
                 spawnableRoleIds = request.spawnableAgentRoleIds,
                 projectId = request.projectId,
+                preset = preset,
                 ownerId = userId,
                 disabled = agentRoleDisabledDao.isRoleDisabled(userId, roleId)
-            ).toDto()
+            )
         }
     }
 
@@ -414,207 +383,6 @@ class AgentRoleServiceImpl(
                 logger.info("Deleted agent role $roleId for user $userId")
             }
         }
-
-    // --- Validation helpers ---
-
-    /**
-     * Validates all shared role configuration invariants: name shape, model existence, settings
-     * existence + chat-capability + model consistency, tool ownership, and instruction-list rules.
-     *
-     * The exact error subtype raised is decoupled through [errors], letting this single helper serve
-     * both the create and update flows (which use different error surfaces).
-     *
-     * @param errors Factories that map each validation failure to the caller's error type.
-     * @param name The role name to validate.
-     * @param modelId The model identifier to validate; null is allowed (a role without a model is
-     *            non-sendable until a model is set via update).
-     * @param modelSettingsId The settings identifier to validate; null is allowed (a role without
-     *            settings is non-sendable until settings are set via update).
-     * @param toolIds The tool identifiers to validate; every id must belong to [userId]'s owned
-     *            tool set (MCP tools of the user's servers, built-in tools of the user's workers,
-     *            and the user's operator/server built-in rows). A missing or foreign id raises the
-     *            same not-found error, so an attach attempt cannot be told apart from a plain
-     *            non-existent id.
-     * @param spawnableAgentRoleIds Target role identifiers to validate; duplicates are impossible at
-     *            the wire level (a set) and self-referencing is allowed. Every target must exist,
-     *            belong to [userId], and have the **same project scope** as the role ([projectId]):
-     *            the same project id, or both unassociated.
-     * @param projectId The single project id the role belongs to; a non-null id must reference a
-     *            user-owned project. A missing or foreign id raises the same not-found error.
-     * @param roleId The role's own id while editing, used to exempt self-spawn from the persisted
-     *            (stale) membership comparison; null on create.
-     * @param instructions The instruction DTOs to validate.
-     * @param userId User whose role and tool ownership is required.
-     * @return `null` on success or an error of type `E` via the raise scope.
-     */
-    private suspend fun <E> Raise<E>.validateRoleRequest(
-        errors: RoleValidationErrors<E>,
-        name: String,
-        modelId: Long?,
-        modelSettingsId: Long?,
-        toolIds: Set<Long>,
-        spawnableAgentRoleIds: Set<Long>,
-        projectId: Long?,
-        roleId: Long?,
-        instructions: List<AgentInstructionDto>,
-        userId: Long
-    ) {
-        ensure(name.isNotBlank()) {
-            errors.invalidName(name, "Role name cannot be blank")
-        }
-        ensure(name.length <= MAX_NAME_LENGTH) {
-            errors.invalidName(name, "Role name cannot exceed $MAX_NAME_LENGTH characters")
-        }
-
-        // Model and settings references are validated individually and only when provided: a role
-        // may be created or updated without a model/settings (it is non-sendable until repaired),
-        // so the checks must not run for null references.
-        if (modelId != null) {
-            withError({ _: ModelError.ModelNotFound -> errors.modelNotFound(modelId) }) {
-                modelDao.getModelById(modelId).bind()
-            }
-        }
-
-        if (modelSettingsId != null) {
-            val settings = withError({ _: SettingsError.SettingsNotFound -> errors.settingsNotFound(modelSettingsId) }) {
-                settingsDao.getSettingsById(modelSettingsId).bind()
-            }
-            ensure(isChatLikeSettings(settings)) {
-                errors.settingsNotChatLike(modelSettingsId, settings::class.simpleName ?: "Unknown")
-            }
-            // The model↔settings consistency check only makes sense when both references are
-            // provided; a model-less role has nothing to match its settings against.
-            if (modelId != null) {
-                ensure(settings.modelId == modelId) {
-                    errors.settingsModelMismatch(modelSettingsId, settings.modelId, modelId)
-                }
-            }
-        }
-
-        // Every tool is user-owned: MCP tools via their server's owner, worker built-ins via the
-        // worker's owner, and operator/server built-in tools via the per-user linkage row. Rather
-        // than checking each type separately, the whole id set is validated against the user's owned
-        // tool set (the same four owner-scoped joins the tool listing uses), so a guessed or foreign
-        // id — of any type — collapses to the same not-found error as a plain non-existent id.
-        if (toolIds.isNotEmpty()) {
-            val userToolIds = toolDefinitionDao.getToolsForUser(userId).map { it.id }.toSet()
-            toolIds.firstOrNull { it !in userToolIds }?.let { missingId ->
-                raise(errors.toolNotFound(missingId))
-            }
-        }
-
-        // Targets must exist, belong to the requesting user, and share the role's project scope:
-        // an in-project role may only spawn roles of the same project, an unassociated role only
-        // unassociated roles. The set wire shape already rules out duplicates and self-referencing
-        // is intentionally allowed (a role spawned from itself is trivially same-scope because the
-        // role's own membership is written with the same [projectId] in this transaction). The
-        // owned-target load doubles as the membership source (the single `project_id` column rides
-        // the loaded entities), so no separate project read is needed.
-        if (spawnableAgentRoleIds.isNotEmpty()) {
-            val ownedTargets = agentRoleDao.getRolesByIdsForUser(userId, spawnableAgentRoleIds.toList())
-            val ownedTargetIds = ownedTargets.map { it.id }.toSet()
-            spawnableAgentRoleIds.firstOrNull { it !in ownedTargetIds }?.let { missingId ->
-                raise(errors.spawnableRoleNotFound(missingId))
-            }
-            // Same-project enforcement: every target must occupy exactly the role's project scope —
-            // the same project id, or both null. Self-spawn is exempt from the persisted comparison:
-            // the target IS the role being written, and its stored (stale) membership may legally
-            // differ from [projectId] until this transaction writes the new one.
-            ownedTargets
-                .filterNot { it.id == roleId }
-                .firstOrNull { it.projectId != projectId }
-                ?.let { target -> raise(errors.spawnableRoleNotInProject(target.id, projectId)) }
-        }
-
-        // The role's project must be user-owned; a missing or foreign id collapses to the same
-        // not-found error as a plain non-existent id (mirrors the tool/spawnable checks, no existence
-        // leak). Null (unassociated) has nothing to check.
-        if (projectId != null) {
-            val ownedProjectIds = projectDao
-                .getProjectsByIdsForUser(userId, listOf(projectId))
-                .map { it.id }
-                .toSet()
-            if (projectId !in ownedProjectIds) {
-                raise(errors.projectNotFound(projectId))
-            }
-        }
-
-        val roleCount = instructions.count { it.type == AgentInstructionTypes.ROLE }
-        val mainCount = instructions.count { it.type == AgentInstructionTypes.MAIN }
-        val spawnableInstructionCount = instructions.count { it.type == AgentInstructionTypes.SPAWNABLE_AGENTS }
-        ensure(roleCount <= 1) {
-            errors.instructionValidationFailed("At most one 'role' instruction is allowed")
-        }
-        ensure(mainCount <= 1) {
-            errors.instructionValidationFailed("At most one 'main' instruction is allowed")
-        }
-        ensure(spawnableInstructionCount <= 1) {
-            errors.instructionValidationFailed("At most one 'spawnable_agents' instruction is allowed")
-        }
-
-        // A `model_specific` instruction is meaningless without its target model: the composer
-        // keeps only the instance matching the active model, so a missing target would be silently
-        // dropped at read time. Reject it up front instead of accepting data that disappears.
-        ensure(instructions.none {
-            it.type == AgentInstructionTypes.MODEL_SPECIFIC && it.modelSpecificId() == null
-        }) {
-            errors.instructionValidationFailed(
-                "A 'model_specific' instruction must include custom.modelId"
-            )
-        }
-
-        // `model_specific` is multi-instance (one per target model) but each instance must reference a
-        // distinct model: two entries for the same model would be redundant and ambiguous at compose
-        // time, where the composer keeps only the matching instance.
-        val modelSpecificModelIds = instructions
-            .filter { it.type == AgentInstructionTypes.MODEL_SPECIFIC }
-            .mapNotNull { it.modelSpecificId() }
-        ensure(modelSpecificModelIds.distinct().size == modelSpecificModelIds.size) {
-            errors.instructionValidationFailed(
-                "Each 'model_specific' instruction must reference a distinct model"
-            )
-        }
-    }
-
-    /**
-     * Whether the given [ModelSettings] is chat-capable (CHAT or RESPONSES).
-     *
-     * @param settings The settings profile to inspect.
-     * @return `true` for chat-capable settings, `false` otherwise.
-     */
-    private fun isChatLikeSettings(settings: ModelSettings): Boolean = when (settings) {
-        is ChatModelSettings -> true
-        is ResponsesModelSettings -> true
-        else -> false
-    }
-
-    /**
-     * Factories mapping each role-validation failure to a caller-specific error type.
-     *
-     * @property invalidName Builds an invalid-name error.
-     * @property modelNotFound Builds a model-not-found error.
-     * @property settingsNotFound Builds a settings-not-found error.
-     * @property settingsNotChatLike Builds a settings-not-chat-capable error.
-     * @property settingsModelMismatch Builds a settings/model mismatch error.
-     * @property toolNotFound Builds a tool-not-found error.
-     * @property spawnableRoleNotFound Builds an inaccessible-target error.
-     * @property spawnableRoleNotInProject Builds a same-project-spawn enforcement error (a target
-     *            role does not occupy the source role's project scope).
-     * @property projectNotFound Builds a project-not-found error.
-     * @property instructionValidationFailed Builds an instruction-validation error.
-     */
-    private data class RoleValidationErrors<E>(
-        val invalidName: (name: String, reason: String) -> E,
-        val modelNotFound: (modelId: Long) -> E,
-        val settingsNotFound: (settingsId: Long) -> E,
-        val settingsNotChatLike: (settingsId: Long, actualType: String) -> E,
-        val settingsModelMismatch: (settingsId: Long, settingsModelId: Long, roleModelId: Long) -> E,
-        val toolNotFound: (toolId: Long) -> E,
-        val spawnableRoleNotFound: (roleId: Long) -> E,
-        val spawnableRoleNotInProject: (roleId: Long, projectId: Long?) -> E,
-        val projectNotFound: (projectId: Long) -> E,
-        val instructionValidationFailed: (reason: String) -> E
-    )
 
     /**
      * Whether two same-name roles' project scopes are identical (the scope-equality conflict rule).
@@ -665,7 +433,7 @@ class AgentRoleServiceImpl(
         ensure(ownerId == userId) { notFoundError }
     }
 
-    // --- Mapping / serialization helpers ---
+    // --- Read helpers ---
 
     /**
      * Loads normalized role relations and maps a stored row into its domain representation.
@@ -675,202 +443,45 @@ class AgentRoleServiceImpl(
      * @param userId Requesting user whose per-user disabled state applies (used only for the disabled
      *            flag; the role row itself is resolved by id, and the caller has already bound
      *            [userId] to the session).
-     * @return Domain role with current relation ids and lazy instruction sources.
+     * @return Domain role with current relation ids, preset-derived model/settings ids and lazy
+     *         instruction sources.
      */
     private suspend fun loadDomainRole(entity: AgentRoleEntity, ownerId: Long, userId: Long): AgentRole {
         val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
-        return entity.toAgentRole(
+        return mapper.toDomain(
+            entity = entity,
             tools = agentRoleToolDao.getToolsForRole(entity.id),
             spawnableRoleIds = spawnableRoleIds,
             projectId = entity.projectId,
+            preset = resolvePreset(entity),
             ownerId = ownerId,
             disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id)
         )
     }
 
     /**
-     * Converts a stored role into the domain type while retaining current, ownership-scoped prompt
-     * loaders for dynamic instructions.
+     * Resolves the model preset a stored role references, for the single-role read paths (list paths
+     * batch-resolve instead).
      *
-     * @receiver Stored role row to convert.
-     * @param tools Attached tool ids.
-     * @param spawnableRoleIds Unordered target role ids.
-     * @param projectId The single project id the role belongs to (null = unassociated).
-     * @param ownerId Owner used to scope dynamic target-summary queries.
-     * @param disabled Whether the role is disabled for the requesting user (side-table derived).
-     * @return Domain role with lazy instruction sources.
+     * A non-null `model_preset_id` always resolves on a runtime connection because the foreign key is
+     * enforced, so a missing row is a database inconsistency: it is logged and reported as "no preset"
+     * rather than failing the read. The role then looks preset-less to the caller, while turn
+     * preparation still fails loudly with a model-configuration error (it never falls back silently).
+     *
+     * @param entity The stored role row whose preset reference should be resolved.
+     * @return The referenced preset, or null when the role is preset-less or the reference is dangling.
      */
-    private fun AgentRoleEntity.toAgentRole(
-        tools: Set<Long>,
-        spawnableRoleIds: Set<Long>,
-        projectId: Long?,
-        ownerId: Long,
-        disabled: Boolean
-    ): AgentRole = AgentRole(
-        id = id,
-        name = name,
-        displayName = displayName,
-        description = description,
-        modelId = modelId,
-        modelSettingsId = modelSettingsId,
-        tools = tools,
-        spawnableAgentRoleIds = spawnableRoleIds,
-        projectId = projectId,
-        instructions = decodeInstructions(instructionsJson).mapNotNull {
-            it.toDomain(
-                ownerId = ownerId,
-                spawnableRoleIds = spawnableRoleIds,
-                roleToolIds = tools
-            )
-        },
-        disabled = disabled
-    )
-
-    /**
-     * Converts a server domain [AgentRole] into a wire [AgentRoleDto], resolving every instruction
-     * message first so the DTO always carries non-null, current text.
-     *
-     * @receiver The domain role to convert.
-     * @return The corresponding [AgentRoleDto].
-     */
-    private suspend fun AgentRole.toDto(): AgentRoleDto = AgentRoleDto(
-        id = id,
-        name = name,
-        displayName = displayName,
-        description = description,
-        modelId = modelId,
-        modelSettingsId = modelSettingsId,
-        tools = tools,
-        spawnableAgentRoleIds = spawnableAgentRoleIds,
-        instructions = instructions.map { it.toDto() },
-        disabled = disabled,
-        projectId = projectId
-    )
-
-    /**
-     * Maps an [AgentInstructionDto] to its server domain subtype.
-     *
-     * Dispatches on the DTO's [AgentInstructionDto.type] string (a flat, non-polymorphic DTO).
-     * The `else` branch logs a warning and returns null for unknown or unrecognized kinds,
-     * so forward-compatible payloads don't silently apply unrecognized semantics.
-     *
-     * @receiver The DTO to map.
-     * @param ownerId Owner scope for dynamic target-summary resolution.
-     * @param spawnableRoleIds Unordered target ids used by the dynamic marker.
-     * @param roleToolIds Tool ids used to determine whether `spawn_agent` is enabled.
-     * @return The corresponding [AgentInstruction], or null when the kind is unrecognized or a
-     *         `model_specific` instruction is missing its `modelId` in `custom` (both logged as
-     *         warnings — they indicate a database inconsistency).
-     */
-    private fun AgentInstructionDto.toDomain(
-        ownerId: Long,
-        spawnableRoleIds: Set<Long>,
-        roleToolIds: Set<Long>
-    ): AgentInstruction? = when (type) {
-        AgentInstructionTypes.SPAWNABLE_AGENTS -> SpawnableAgentsInstruction(
-            name = name,
-            roleSummaryLoader = {
-                // The allow-list is a set, so no persisted order exists; sort by name to keep the
-                // generated prompt deterministic across reads.
-                agentRoleDao.getRolesByIdsForUser(ownerId, spawnableRoleIds.toList())
-                    .sortedBy { it.name.lowercase() }
-                    .map { target ->
-                        AgentRoleSummary(
-                            id = target.id,
-                            name = target.name,
-                            displayName = target.displayName,
-                            description = target.description
-                        )
-                    }
-            },
-            spawnAgentToolAvailableLoader = {
-                toolDefinitionDao.getToolDefinitionsByIds(roleToolIds)
-                    .any { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
-            }
-        )
-
-        AgentInstructionTypes.ROLE -> RoleInstruction(name, message)
-        AgentInstructionTypes.MAIN -> MainInstruction(name, message)
-        AgentInstructionTypes.CUSTOM -> CustomInstruction(name, message)
-        AgentInstructionTypes.MODEL_SPECIFIC -> {
-            val targetModelId = modelSpecificId()
-            if (targetModelId == null) {
-                // A model_specific instruction without a modelId is a data integrity issue: the
-                // stored JSON was malformed or partially migrated. Log it and drop the instruction
-                // rather than crashing role retrieval.
-                logger.warn(
-                    "Dropping model_specific instruction '{}' for role retrieval: missing 'modelId' in custom",
-                    name
+    private suspend fun resolvePreset(entity: AgentRoleEntity): ModelPresetEntity? {
+        val presetId = entity.modelPresetId ?: return null
+        return modelPresetDao.getPresetById(presetId).fold(
+            { error ->
+                logger.error(
+                    "Agent role ${entity.id} references model preset $presetId, which does not exist " +
+                        "(database inconsistency): $error"
                 )
                 null
-            } else {
-                ModelSpecificInstruction(
-                    name = name,
-                    message = message,
-                    modelId = targetModelId
-                )
-            }
-        }
-        // Unknown/unrecognized kinds: log and drop rather than silently applying them as generic
-        // text, so data integrity issues surface instead of being hidden.
-        else -> {
-            logger.warn(
-                "Dropping unrecognized instruction '{}' (type '{}') for role retrieval:"
-                + " unrecognized kind",
-                name,
-                type
-            )
-            null
-        }
+            },
+            { it }
+        )
     }
-
-    /**
-     * Converts a domain [AgentInstruction] into a wire [AgentInstructionDto], resolving its message.
-     *
-     * The `when` covers all known domain subtypes; the `else` throws an `IllegalStateException`
-     * for unknown subtypes, since encountering one indicates a programming error (a new subtype
-     * was added without updating this mapping).
-     *
-     * @receiver The domain instruction to convert.
-     * @return The corresponding [AgentInstructionDto] with a resolved [AgentInstructionDto.message].
-     */
-    private suspend fun AgentInstruction.toDto(): AgentInstructionDto {
-        loadMessage()
-        return when (this) {
-            is SpawnableAgentsInstruction ->
-                AgentInstructionDto(AgentInstructionTypes.SPAWNABLE_AGENTS, name, message)
-            is RoleInstruction ->
-                AgentInstructionDto(AgentInstructionTypes.ROLE, name, message)
-            is MainInstruction ->
-                AgentInstructionDto(AgentInstructionTypes.MAIN, name, message)
-            is CustomInstruction ->
-                AgentInstructionDto(AgentInstructionTypes.CUSTOM, name, message)
-            is ModelSpecificInstruction ->
-                AgentInstructionDto(
-                    type = AgentInstructionTypes.MODEL_SPECIFIC,
-                    name = name,
-                    message = message,
-                    custom = buildJsonObject { put("modelId", modelId) }
-                )
-
-            else -> error("Unknown AgentInstruction subtype: ${this::class.simpleName}")
-        }
-    }
-
-    /**
-     * Serializes an instruction DTO list into its JSON column representation (the wire shape).
-     *
-     * @param instructions The instruction DTOs.
-     * @return The JSON array string.
-     */
-    private fun encodeInstructions(instructions: List<AgentInstructionDto>): String = json.encodeToString(instructions)
-
-    /**
-     * Deserializes the `instructions_json` column into the instruction DTO list (the wire shape).
-     *
-     * @param instructionsJson The JSON array string.
-     * @return The instruction DTOs; an empty list when the stored value is unparseable.
-     */
-    private fun decodeInstructions(instructionsJson: String): List<AgentInstructionDto> =
-        runCatching { json.decodeFromString<List<AgentInstructionDto>>(instructionsJson) }.getOrDefault(emptyList())
 }

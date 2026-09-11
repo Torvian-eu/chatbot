@@ -125,6 +125,9 @@ fun ConfigNumberField(
  * @param itemEnabled Function to determine whether an item can be selected
  * @param isError Whether the dropdown is in error state
  * @param errorMessage Error message to display
+ * @param enabled Whether the dropdown can be opened. A disabled dropdown still displays the current
+ *            selection but cannot be expanded, which is how the preset form gates its settings
+ *            picker on a selected model; every existing caller keeps the default (interactive).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,20 +140,24 @@ fun <T> ConfigDropdown(
     itemText: (T) -> String = { it.toString() },
     itemEnabled: (T) -> Boolean = { true },
     isError: Boolean = false,
-    errorMessage: String? = null
+    errorMessage: String? = null,
+    enabled: Boolean = true
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Column(modifier = modifier) {
         ExposedDropdownMenuBox(
             expanded = expanded,
-            onExpandedChange = { expanded = it },
+            // Never open a disabled dropdown; the `enabled` flag also stops the text field from
+            // receiving pointer input, so this guard only covers programmatic dismissal.
+            onExpandedChange = { requested -> if (enabled) expanded = requested },
             modifier = Modifier.fillMaxWidth()
         ) {
             OutlinedTextField(
                 value = selectedItem?.let(itemText) ?: "",
                 onValueChange = { },
                 readOnly = true,
+                enabled = enabled,
                 label = { Text(label) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 isError = isError,

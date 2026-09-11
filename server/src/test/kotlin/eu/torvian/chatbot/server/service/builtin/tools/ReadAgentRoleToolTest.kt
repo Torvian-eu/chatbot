@@ -56,8 +56,10 @@ class ReadAgentRoleToolTest {
         name = "writer",
         displayName = "Writer",
         description = "Writes code",
+        // Derived from the preset, which is the only configuration reference the role stores.
         modelId = 3L,
         modelSettingsId = 4L,
+        modelPresetId = 9L,
         tools = setOf(5L, 6L),
         spawnableAgentRoleIds = setOf(2L),
         instructions = listOf(
@@ -115,6 +117,11 @@ class ReadAgentRoleToolTest {
         assertEquals("writer", decoded.name)
         assertEquals(setOf(5L, 6L), decoded.tools)
         assertEquals(1, decoded.instructions.size)
+        // The response reports the preset reference plus the ids derived from it (the role stores
+        // nothing else configuration-wise).
+        assertEquals(9L, decoded.modelPresetId)
+        assertEquals(3L, decoded.modelId)
+        assertEquals(4L, decoded.modelSettingsId)
         // The DTO serialization carries the per-user disabled flag (read-only exposure).
         assertTrue(output.contains("\"disabled\":false"), "disabled must be present in the output JSON")
     }

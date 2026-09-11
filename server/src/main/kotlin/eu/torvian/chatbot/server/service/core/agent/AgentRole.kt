@@ -13,9 +13,16 @@ package eu.torvian.chatbot.server.service.core.agent
  * @property name Unique (per user) machine-readable role name.
  * @property displayName Optional human-friendly display name.
  * @property description Free-form description of the role's purpose.
- * @property modelId Identifier of the LLM model used by the role; null after the model is deleted.
- * @property modelSettingsId Identifier of the settings profile (CHAT/RESPONSES) used by the role; null
- *            after the settings are deleted.
+ * @property modelId **Derived**, read-only convenience value: the model of the role's referenced model
+ *            preset. Null when no preset is attached, or when the preset's model reference is null
+ *            (its model was deleted); the role is then non-sendable. Never persisted on the role.
+ * @property modelSettingsId **Derived**, read-only convenience value: the settings profile of the
+ *            role's referenced model preset. Null when no preset is attached, or when the preset's
+ *            settings reference is null; the role is then non-sendable. Never persisted on the role.
+ * @property modelPresetId Identifier of the model preset that is the **sole** source of truth for the
+ *            role's model and settings configuration; null means the role is preset-less and
+ *            therefore non-sendable. This is the only model-configuration reference stored on the
+ *            role row.
  * @property tools Set of tool-definition identifiers attached to the role. Unordered; duplicates are
  *            impossible (the `agent_role_tools` primary key and the wire `Set` both reject them).
  * @property spawnableAgentRoleIds Unordered same-user role identifiers this role may spawn; may
@@ -41,6 +48,7 @@ data class AgentRole(
     val description: String = "",
     val modelId: Long?,
     val modelSettingsId: Long?,
+    val modelPresetId: Long? = null,
     val tools: Set<Long> = emptySet(),
     val spawnableAgentRoleIds: Set<Long> = emptySet(),
     val projectId: Long? = null,
