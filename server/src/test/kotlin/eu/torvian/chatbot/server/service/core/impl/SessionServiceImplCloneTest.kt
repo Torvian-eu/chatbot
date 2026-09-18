@@ -3,8 +3,11 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.core.AssistantMessageErrorCode
+import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.server.data.dao.*
@@ -274,6 +277,124 @@ class SessionServiceImplCloneTest {
         coVerify { sessionDao.updateSessionLeafMessageId(testClonedSessionId, 203L) }
         coVerify { toolCallDao.getToolCallsBySessionId(testSessionId) }
         coVerify { sessionDao.getSessionById(testClonedSessionId) }
+    }
+
+    @Test
+    fun `cloneSession should preserve the completion state of incomplete assistant messages`() = runTest {
+        // Arrange
+        val cloneName = "Cloned incomplete session"
+        val interruptedMessage = ChatMessage.AssistantMessage(
+            id = 301L,
+            sessionId = testSessionId,
+            content = "Half an answer",
+            createdAt = testTimestamp1,
+            updatedAt = testTimestamp1,
+            parentMessageId = null,
+            childrenMessageIds = emptyList(),
+            modelId = testModelId,
+            settingsId = testSettingsId,
+            isComplete = false,
+            incompleteCause = AssistantMessageIncompleteCause.INTERRUPTED_BY_USER
+        )
+        val failedMessage = ChatMessage.AssistantMessage(
+            id = 302L,
+            sessionId = testSessionId,
+            content = "Cut off answer",
+            createdAt = testTimestamp2,
+            updatedAt = testTimestamp2,
+            parentMessageId = interruptedMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = testModelId,
+            settingsId = testSettingsId,
+            isComplete = false,
+            incompleteCause = AssistantMessageIncompleteCause.FAILED,
+            errorCode = AssistantMessageErrorCode.OUTPUT_LIMIT_EXCEEDED,
+            errorMessage = "The response was stopped because it exceeded the 64,000-character limit."
+        )
+        coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
+        coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
+        coEvery { sessionDao.insertSession(cloneName, testGroupId, testAgentRoleId, null) } returns
+                clonedSession.copy(name = cloneName, currentLeafMessageId = null).right()
+        coEvery { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) } returns Unit.right()
+        coEvery { messageDao.getMessagesBySessionId(testSessionId) } returns
+                listOf(interruptedMessage, failedMessage)
+        coEvery { toolCallDao.getToolCallsBySessionId(testSessionId) } returns emptyList()
+        // The clone of the first message becomes 401, so the second one is appended under it.
+        var nextMessageId = 401L
+        coEvery {
+            messageDao.insertMessage(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
+        } answers {
+            ChatMessage.AssistantMessage(
+                id = nextMessageId++,
+                sessionId = testClonedSessionId,
+                content = arg<String>(4),
+                createdAt = arg<Instant>(10),
+                updatedAt = arg<Instant>(11),
+                parentMessageId = arg<Long?>(1),
+                childrenMessageIds = emptyList(),
+                modelId = arg<Long?>(5),
+                settingsId = arg<Long?>(6)
+            ).right()
+        }
+        coEvery { sessionDao.updateSessionLeafMessageId(any(), any()) } returns Unit.right()
+        coEvery { sessionDao.getSessionById(testClonedSessionId) } returns clonedSession.right()
+
+        // Act
+        val result = sessionService.cloneSession(testSessionId, cloneName)
+
+        // Assert
+        assertTrue(result.isRight())
+        coVerify {
+            messageDao.insertMessage(
+                sessionId = testClonedSessionId,
+                targetMessageId = null,
+                position = MessageInsertPosition.APPEND,
+                role = ChatMessage.Role.ASSISTANT,
+                content = "Half an answer",
+                modelId = testModelId,
+                settingsId = testSettingsId,
+                agentRoleId = null,
+                fileReferences = emptyList(),
+                reasoningItems = null,
+                createdAt = testTimestamp1,
+                updatedAt = testTimestamp1,
+                completion = AssistantMessageCompletionState.InterruptedByUser
+            )
+        }
+        coVerify {
+            messageDao.insertMessage(
+                sessionId = testClonedSessionId,
+                targetMessageId = 401L,
+                position = MessageInsertPosition.APPEND,
+                role = ChatMessage.Role.ASSISTANT,
+                content = "Cut off answer",
+                modelId = testModelId,
+                settingsId = testSettingsId,
+                agentRoleId = null,
+                fileReferences = emptyList(),
+                reasoningItems = null,
+                createdAt = testTimestamp2,
+                updatedAt = testTimestamp2,
+                completion = AssistantMessageCompletionState.failed(
+                    code = AssistantMessageErrorCode.OUTPUT_LIMIT_EXCEEDED,
+                    message = "The response was stopped because it exceeded the 64,000-character limit."
+                )
+            )
+        }
     }
 
     @Test

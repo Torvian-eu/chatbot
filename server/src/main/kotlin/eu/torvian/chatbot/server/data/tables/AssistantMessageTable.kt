@@ -15,6 +15,17 @@ import org.jetbrains.exposed.v1.core.Table
  *            provenance survives role deletion.
  * @property reasoningItemsJson JSON array of replay-safe reasoning output items emitted with the message, for
  *            Responses-capable models. Opaque and nullable; must not be logged or rendered.
+ * @property isComplete Whether the assistant message completed normally. `NOT NULL DEFAULT TRUE` so every row
+ *            created before this column existed (and every row inserted without an explicit state) reads as
+ *            completed.
+ * @property incompleteCause Enum *name* of the terminal incompletion cause (`INTERRUPTED_BY_USER` or
+ *            `FAILED`), or `NULL` when no terminal cause is known (completed message, in-flight streaming
+ *            placeholder, or a row abandoned by a crash). Stored as text rather than an enumerated column so a
+ *            corrupt or unknown value can degrade to "no cause" instead of failing a whole session read.
+ * @property errorCode Enum *name* of the machine-readable failure classification, populated only together with
+ *            `FAILED`; `NULL` otherwise.
+ * @property errorMessage Bounded, user-facing failure reason (no provider bodies or exception text), populated
+ *            only together with `FAILED`; `NULL` for a user interruption.
  */
 object AssistantMessageTable : Table("assistant_messages") {
     val messageId = reference(
@@ -38,6 +49,10 @@ object AssistantMessageTable : Table("assistant_messages") {
         onDelete = ReferenceOption.SET_NULL
     ).nullable()
     val reasoningItemsJson = text("reasoning_items_json").nullable()
+    val isComplete = bool("is_complete").default(true)
+    val incompleteCause = varchar("incomplete_cause", 50).nullable()
+    val errorCode = varchar("error_code", 50).nullable()
+    val errorMessage = text("error_message").nullable()
 
     // Make messageId the primary key
     override val primaryKey = PrimaryKey(messageId)

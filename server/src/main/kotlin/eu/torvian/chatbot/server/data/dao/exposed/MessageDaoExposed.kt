@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
+import eu.torvian.chatbot.server.data.dao.AssistantMessageCompletionState
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.data.dao.error.MessageError
@@ -232,7 +233,8 @@ class MessageDaoExposed(
         fileReferences: List<FileReference>,
         reasoningItems: List<JsonObject>?,
         createdAt: Instant?,
-        updatedAt: Instant?
+        updatedAt: Instant?,
+        completion: AssistantMessageCompletionState
     ): Either<InsertMessageError, ChatMessage> =
         transactionScope.transaction {
             either {
@@ -300,6 +302,12 @@ class MessageDaoExposed(
                         it[AssistantMessageTable.settingsId] = settingsId
                         it[AssistantMessageTable.agentRoleId] = agentRoleId
                         it[AssistantMessageTable.reasoningItemsJson] = serializeReasoning(reasoningItems)
+                        // Completion state is written with the row itself so the streaming placeholder is born
+                        // not-completed and no window exists in which the row looks complete.
+                        it[AssistantMessageTable.isComplete] = completion.isComplete
+                        it[AssistantMessageTable.incompleteCause] = completion.incompleteCause?.name
+                        it[AssistantMessageTable.errorCode] = completion.errorCode?.name
+                        it[AssistantMessageTable.errorMessage] = completion.errorMessage
                     }
                 }
 
@@ -378,7 +386,12 @@ class MessageDaoExposed(
                         modelId = modelId,
                         settingsId = settingsId,
                         agentRoleId = agentRoleId,
-                        reasoningItems = reasoningItems
+                        reasoningItems = reasoningItems,
+                        // Mirror the persisted state so callers can emit the message without re-reading it.
+                        isComplete = completion.isComplete,
+                        incompleteCause = completion.incompleteCause,
+                        errorCode = completion.errorCode,
+                        errorMessage = completion.errorMessage
                     )
                 } else {
                     ChatMessage.UserMessage(
@@ -398,7 +411,8 @@ class MessageDaoExposed(
     override suspend fun updateMessageContent(
         id: Long,
         content: String,
-        fileReferences: List<FileReference>?
+        fileReferences: List<FileReference>?,
+        completion: AssistantMessageCompletionState
     ): Either<MessageError.MessageNotFound, ChatMessage> =
         transactionScope.transaction {
             either {
@@ -410,6 +424,15 @@ class MessageDaoExposed(
                     }
                 }
                 ensure(updatedRowCount != 0) { MessageError.MessageNotFound(id) }
+
+                // Only assistant messages carry the completion columns, so this update silently matches no row
+                // for user messages (Exposed reports zero updated rows, which is expected and ignored here).
+                AssistantMessageTable.update({ AssistantMessageTable.messageId eq id }) {
+                    it[AssistantMessageTable.isComplete] = completion.isComplete
+                    it[AssistantMessageTable.incompleteCause] = completion.incompleteCause?.name
+                    it[AssistantMessageTable.errorCode] = completion.errorCode?.name
+                    it[AssistantMessageTable.errorMessage] = completion.errorMessage
+                }
 
                 // Retrieve the updated message
                 getMessageById(id).getOrElse { throw IllegalStateException("Failed to retrieve updated message") }

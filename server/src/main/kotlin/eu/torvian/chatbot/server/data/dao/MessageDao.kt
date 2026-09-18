@@ -69,6 +69,11 @@ interface MessageDao {
      * @param fileReferences Optional list of file references.
      * @param createdAt Optional creation timestamp. If null, uses current time.
      * @param updatedAt Optional update timestamp. If null, uses current time.
+     * @param completion Completion state written to the assistant row. Ignored for user messages, since only
+     *                   assistant messages carry the completion columns. Defaults to
+     *                   [AssistantMessageCompletionState.Completed], which is what manual inserts want; the turn
+     *                   lifecycle passes [AssistantMessageCompletionState.InFlight] for a streaming placeholder
+     *                   and a terminal state when the message is finalized.
      * @return Either an error or the newly created message.
      */
     suspend fun insertMessage(
@@ -83,20 +88,31 @@ interface MessageDao {
         fileReferences: List<FileReference> = emptyList(),
         reasoningItems: List<JsonObject>? = null,
         createdAt: Instant? = null,
-        updatedAt: Instant? = null
+        updatedAt: Instant? = null,
+        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed
     ): Either<InsertMessageError, ChatMessage>
 
     /**
      * Updates the content, file references, and updated timestamp of an existing message.
+     *
+     * For assistant messages the completion state is written together with the content in the same statement,
+     * so content and state can never disagree: the public content-update path (a user editing the message) relies
+     * on the default [AssistantMessageCompletionState.Completed] and thereby clears a previous incompletion state,
+     * while the turn-finalization path passes the terminal state it determined. Assistant messages are the only
+     * rows carrying completion columns, so the state write is a silent no-op for user messages.
+     *
      * @param id The ID of the message to update.
      * @param content The new content.
      * @param fileReferences The new list of file references (optional, if null keeps existing).
+     * @param completion Completion state to persist with the new content. Defaults to
+     *                   [AssistantMessageCompletionState.Completed], i.e. the message counts as complete.
      * @return Either a [MessageError.MessageNotFound] or the updated [ChatMessage] object.
      */
     suspend fun updateMessageContent(
         id: Long,
         content: String,
-        fileReferences: List<FileReference>? = null
+        fileReferences: List<FileReference>? = null,
+        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed
     ): Either<MessageError.MessageNotFound, ChatMessage>
 
     /**

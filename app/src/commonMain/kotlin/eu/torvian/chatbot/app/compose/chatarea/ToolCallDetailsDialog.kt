@@ -230,12 +230,16 @@ private fun ToolCallDataSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            // Try to pretty-print JSON, fall back to raw string
-            val formattedData = try {
-                val json = Json { prettyPrint = true }
-                json.encodeToString(json.parseToJsonElement(data))
-            } catch (_: Exception) {
-                data
+            // Try to pretty-print JSON, fall back to raw string. Memoized on the input, because parsing and
+            // re-serializing a large payload on every recomposition is expensive and the dialog recomposes
+            // whenever its state changes.
+            val formattedData = remember(data) {
+                try {
+                    val json = Json { prettyPrint = true }
+                    json.encodeToString(json.parseToJsonElement(data))
+                } catch (_: Exception) {
+                    data
+                }
             }
 
             Surface(
@@ -292,12 +296,16 @@ private fun ToolCallErrorDetailsSection(errorDetails: String) {
         )
         Spacer(Modifier.height(4.dp))
 
-        // Try to pretty-print JSON, fall back to raw string
-        val formattedDetails = try {
-            val json = Json { prettyPrint = true }
-            json.encodeToString(json.parseToJsonElement(errorDetails))
-        } catch (_: Exception) {
-            errorDetails
+        // Try to pretty-print JSON, fall back to raw string. Memoized on the input, because parsing and
+        // re-serializing a large payload on every recomposition is expensive and the dialog recomposes
+        // whenever its state changes.
+        val formattedDetails = remember(errorDetails) {
+            try {
+                val json = Json { prettyPrint = true }
+                json.encodeToString(json.parseToJsonElement(errorDetails))
+            } catch (_: Exception) {
+                errorDetails
+            }
         }
 
         Surface(

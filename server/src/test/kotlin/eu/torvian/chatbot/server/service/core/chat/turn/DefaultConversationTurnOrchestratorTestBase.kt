@@ -1,11 +1,13 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.server.data.dao.AssistantMessageCompletionState
 import eu.torvian.chatbot.server.service.core.chat.compaction.CompactedMessageCoverage
 import eu.torvian.chatbot.server.service.core.chat.compaction.CompactionTurnState
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionChunk
@@ -127,6 +129,29 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
                 primaryMessages = firstArg<CompactionTurnState>().units.flatMap { it.rawMessages },
                 persistedChunkIfAny = null
             ).right()
+        }
+        // Default stub for the turn-finalization write: the returned message echoes the requested id, content
+        // and completion state, so tests that only need the finalized message do not have to stub it and tests
+        // that assert the written state can still verify the call (and override this stub when needed).
+        coEvery {
+            conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any())
+        } answers {
+            val completion = thirdArg<AssistantMessageCompletionState>()
+            ChatMessage.AssistantMessage(
+                id = firstArg(),
+                sessionId = testSession.id,
+                content = secondArg(),
+                createdAt = baseInstant,
+                updatedAt = baseInstant,
+                parentMessageId = null,
+                childrenMessageIds = emptyList(),
+                modelId = testModel.id,
+                settingsId = testSettings.id,
+                isComplete = completion.isComplete,
+                incompleteCause = completion.incompleteCause,
+                errorCode = completion.errorCode,
+                errorMessage = completion.errorMessage
+            )
         }
 
         orchestrator = DefaultConversationTurnOrchestrator(

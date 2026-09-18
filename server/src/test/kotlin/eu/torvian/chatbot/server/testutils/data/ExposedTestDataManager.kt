@@ -354,6 +354,14 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                     it[modelId] = chatMessage.modelId
                     it[settingsId] = chatMessage.settingsId
                     it[agentRoleId] = chatMessage.agentRoleId
+                    // Completion state is taken from the seeded DTO, mirroring the production insert path, so
+                    // a test can seed an incomplete message simply by constructing it with `isComplete`,
+                    // `incompleteCause`, `errorCode` and `errorMessage`; a plain assistant message stays
+                    // completed (the DTO defaults and the column defaults agree).
+                    it[isComplete] = chatMessage.isComplete
+                    it[incompleteCause] = chatMessage.incompleteCause?.name
+                    it[errorCode] = chatMessage.errorCode?.name
+                    it[errorMessage] = chatMessage.errorMessage
                 }
             }
             return@transaction

@@ -80,6 +80,22 @@ sealed class ChatMessage {
      *            reasoning context across turns in a stateless fashion. `null` when the model did not emit
      *            reasoning. Each item is an opaque object (may include OpenAI-encrypted content) and must not
      *            be logged or rendered.
+     * @property isComplete Whether the generation of this message finished normally. Four combinations are
+     *            observable: `true` with no cause means completed (also the meaning of a legacy payload or a
+     *            manually inserted/cloned-completed message); `false` with a `null` [incompleteCause] means the
+     *            generation is still in flight (streaming placeholder) or was abandoned without a recorded
+     *            cause; `false` with [AssistantMessageIncompleteCause.INTERRUPTED_BY_USER] means the user
+     *            stopped it; `false` with [AssistantMessageIncompleteCause.FAILED] means it failed and
+     *            [errorCode]/[errorMessage] are set. Payloads produced before these fields existed decode as
+     *            completed (`isComplete = true`) with no cause, code or reason.
+     * @property incompleteCause Machine-readable cause of a non-completion, or `null` when no terminal cause
+     *            is known (completed message, in-flight placeholder). Never `null` when [isComplete] is `false`
+     *            for a message that reached a terminal state.
+     * @property errorCode Machine-readable failure classification, set only together with
+     *            [AssistantMessageIncompleteCause.FAILED].
+     * @property errorMessage Bounded, user-facing reason for a failure. It is server-authored English that
+     *            never contains raw provider bodies or exception text, and it is `null` for a user
+     *            interruption (the client localizes that label from [incompleteCause] instead).
      */
     @Serializable
     data class AssistantMessage(
@@ -94,9 +110,23 @@ sealed class ChatMessage {
         val modelId: Long?,
         val settingsId: Long?,
         val agentRoleId: Long? = null,
-        val reasoningItems: List<JsonObject>? = null
+        val reasoningItems: List<JsonObject>? = null,
+        val isComplete: Boolean = true,
+        val incompleteCause: AssistantMessageIncompleteCause? = null,
+        val errorCode: AssistantMessageErrorCode? = null,
+        val errorMessage: String? = null
     ) : ChatMessage() {
         override val role: Role = Role.ASSISTANT
+
+        /**
+         * Whether this message ended without completing *and* carries a terminal cause explaining why.
+         *
+         * Derived on the fly (never serialized) so the notice rule lives in one place: completed messages
+         * and in-flight placeholders (no cause) show nothing, while interrupted and failed messages show a
+         * notice. This is what lets clients suppress the notice for the streaming message of the active turn
+         * without tracking turn state separately.
+         */
+        val showsIncompleteNotice: Boolean get() = !isComplete && incompleteCause != null
     }
 
     /**
