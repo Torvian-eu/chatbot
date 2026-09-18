@@ -2,12 +2,14 @@ package eu.torvian.chatbot.server.service.core.chat.persistence
 
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
+import eu.torvian.chatbot.server.data.dao.AssistantMessageCompletionState
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
@@ -401,5 +403,111 @@ class DefaultConversationTurnPersistenceTest {
 
         assertEquals(updated, result)
         coVerify(exactly = 1) { messageDao.updateAssistantMessageReasoning(12L, sanitizedReasoningItems) }
+    }
+
+    /**
+     * Verifies the streaming placeholder is inserted with its non-completed state, so no window exists in which
+     * the row of a running generation looks finished.
+     */
+    @Test
+    fun `saveAssistantMessage forwards the completion state to the DAO`() = runTest {
+        val savedPlaceholder = ChatMessage.AssistantMessage(
+            id = 12L,
+            sessionId = 1L,
+            content = "",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = 5L,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id,
+            isComplete = false
+        )
+        val refreshedParent = ChatMessage.UserMessage(
+            id = 5L,
+            sessionId = 1L,
+            content = "Hello",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = listOf(savedPlaceholder.id)
+        )
+
+        coEvery {
+            messageDao.insertMessage(
+                sessionId = 1L,
+                targetMessageId = 5L,
+                position = any(),
+                role = ChatMessage.Role.ASSISTANT,
+                content = "",
+                modelId = testModel.id,
+                settingsId = testSettings.id,
+                agentRoleId = any(),
+                fileReferences = any(),
+                reasoningItems = any(),
+                completion = AssistantMessageCompletionState.InFlight
+            )
+        } returns savedPlaceholder.right()
+        coEvery { sessionDao.updateSessionLeafMessageId(1L, savedPlaceholder.id) } returns Unit.right()
+        coEvery { messageDao.getMessageById(5L) } returns refreshedParent.right()
+
+        val result = persistence.saveAssistantMessage(
+            sessionId = 1L,
+            content = "",
+            parentMessageId = 5L,
+            model = testModel,
+            settings = testSettings,
+            completion = AssistantMessageCompletionState.InFlight
+        )
+
+        assertEquals(savedPlaceholder, result.assistantMessage)
+        coVerify(exactly = 1) {
+            messageDao.insertMessage(
+                sessionId = 1L,
+                targetMessageId = 5L,
+                position = any(),
+                role = ChatMessage.Role.ASSISTANT,
+                content = "",
+                modelId = testModel.id,
+                settingsId = testSettings.id,
+                agentRoleId = any(),
+                fileReferences = any(),
+                reasoningItems = any(),
+                completion = AssistantMessageCompletionState.InFlight
+            )
+        }
+    }
+
+    /**
+     * Verifies the turn-finalization write forwards the terminal state together with the partial content, which
+     * is what makes an interrupted or failed message explain itself after a reload.
+     */
+    @Test
+    fun `updateAssistantMessageContent forwards the completion state to the DAO`() = runTest {
+        val interruptedMessage = ChatMessage.AssistantMessage(
+            id = 12L,
+            sessionId = 1L,
+            content = "Partial answer",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = 5L,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id,
+            isComplete = false,
+            incompleteCause = AssistantMessageIncompleteCause.INTERRUPTED_BY_USER
+        )
+        val interruptedCompletion = AssistantMessageCompletionState.InterruptedByUser
+
+        coEvery {
+            messageDao.updateMessageContent(12L, "Partial answer", null, interruptedCompletion)
+        } returns interruptedMessage.right()
+
+        val result = persistence.updateAssistantMessageContent(12L, "Partial answer", interruptedCompletion)
+
+        assertEquals(interruptedMessage, result)
+        coVerify(exactly = 1) {
+            messageDao.updateMessageContent(12L, "Partial answer", null, interruptedCompletion)
+        }
     }
 }

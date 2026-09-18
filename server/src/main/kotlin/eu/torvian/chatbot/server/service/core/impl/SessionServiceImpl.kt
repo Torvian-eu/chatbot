@@ -309,6 +309,17 @@ class SessionServiceImpl(
                     val settingsId = (message as? ChatMessage.AssistantMessage)?.settingsId
                     val agentRoleId = (message as? ChatMessage.AssistantMessage)?.agentRoleId
                     val reasoningItems = (message as? ChatMessage.AssistantMessage)?.reasoningItems
+                    // FR-13: the clone reproduces the source message's own completion state, so a transcript
+                    // containing an interrupted or failed response explains the same non-completions after
+                    // cloning. Non-assistant messages carry no state and stay completed.
+                    val completion = (message as? ChatMessage.AssistantMessage)?.let { sourceAssistantMessage ->
+                        AssistantMessageCompletionState(
+                            isComplete = sourceAssistantMessage.isComplete,
+                            incompleteCause = sourceAssistantMessage.incompleteCause,
+                            errorCode = sourceAssistantMessage.errorCode,
+                            errorMessage = sourceAssistantMessage.errorMessage
+                        )
+                    } ?: AssistantMessageCompletionState.Completed
 
                     // Clone this message
                     val newMessage = withError({ daoError: InsertMessageError ->
@@ -326,7 +337,8 @@ class SessionServiceImpl(
                             fileReferences = message.fileReferences,
                             reasoningItems = reasoningItems,
                             createdAt = message.createdAt,
-                            updatedAt = message.updatedAt
+                            updatedAt = message.updatedAt,
+                            completion = completion
                         ).bind()
                     }
 

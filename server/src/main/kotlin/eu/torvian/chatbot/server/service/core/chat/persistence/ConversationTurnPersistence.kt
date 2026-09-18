@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.server.data.dao.AssistantMessageCompletionState
 import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import kotlinx.serialization.json.JsonObject
 
@@ -42,6 +43,10 @@ interface ConversationTurnPersistence {
      * @param reasoningItems Optional replay-safe reasoning items emitted with the assistant message. Must be
      *                       `null` for non-reasoning models; callers must sanitize them before persistence.
      *                       Opaque, never logged or rendered.
+     * @param completion Completion state written together with the row. The streaming placeholder is inserted
+     *                   with [AssistantMessageCompletionState.InFlight] (not completed, no cause yet), a
+     *                   non-streaming answer with an explicit terminal state, and the default
+     *                   [AssistantMessageCompletionState.Completed] covers manually inserted messages.
      * @return Saved assistant message and the refreshed parent message.
      */
     suspend fun saveAssistantMessage(
@@ -51,19 +56,27 @@ interface ConversationTurnPersistence {
         model: LLMModel,
         settings: ModelSettings,
         agentRoleId: Long? = null,
-        reasoningItems: List<JsonObject>? = null
+        reasoningItems: List<JsonObject>? = null,
+        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed
     ): PersistedAssistantMessage
 
     /**
      * Persists the latest accumulated content for an assistant message.
      *
+     * This is the turn-finalization write: content and completion state are always written together, so the
+     * accumulated partial text of an abnormal ending is stored in the same statement that records why the
+     * generation stopped. Unlike the public edit path, this call never clears the state implicitly: the
+     * completion state it writes is the one the caller identified.
+     *
      * @param messageId Assistant message to update.
      * @param content Final or partial accumulated content.
+     * @param completion Terminal (or in-flight) completion state to persist with [content].
      * @return Updated assistant message.
      */
     suspend fun updateAssistantMessageContent(
         messageId: Long,
-        content: String
+        content: String,
+        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed
     ): ChatMessage.AssistantMessage
 
     /**
