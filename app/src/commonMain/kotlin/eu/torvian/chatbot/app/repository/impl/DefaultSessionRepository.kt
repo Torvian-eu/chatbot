@@ -14,6 +14,7 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
+import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -148,6 +149,31 @@ class DefaultSessionRepository(
                 sessionFlow.update { DataState.Success(sessionDetails) }
             }
 
+    }
+
+    override suspend fun markAssistantMessageInterrupted(sessionId: Long, messageId: Long) {
+        // A local settlement of one message: the rest of the cached session is left exactly as it is, no
+        // request is issued and the persisted state is not touched (the next load reads it authoritatively).
+        updateSessionDetailsInCache(sessionId) { session ->
+            session.copy(
+                messages = session.messages.map { message ->
+                    // The guard keeps the server authoritative: a message that already carries a terminal state
+                    // (its finalizing event arrived, or an earlier ending was already applied) must not be
+                    // re-flagged, and only the placeholder this client stopped may be settled.
+                    if (message.id == messageId &&
+                        message is ChatMessage.AssistantMessage &&
+                        !message.isComplete &&
+                        message.incompleteCause == null
+                    ) {
+                        // Cause only: a user interruption has no code and no reason text (D2); the client
+                        // localizes the label from the cause and `updatedAt` stays the server's timestamp.
+                        message.copy(incompleteCause = AssistantMessageIncompleteCause.INTERRUPTED_BY_USER)
+                    } else {
+                        message
+                    }
+                }
+            )
+        }
     }
 
     override suspend fun loadSessionToolCalls(sessionId: Long): Either<RepositoryError, ToolCallsMap> {
@@ -676,6 +702,10 @@ class DefaultSessionRepository(
     /**
      * Helper to update a specific session's details flow in the `_sessionDetailsFlows` cache.
      * Only applies the update if the current state for that session ID is DataState.Success.
+     *
+     * The cache-miss branch inserts a `DataState.Error` entry for the session. That is harmless for the local
+     * settling of a stopped turn ([markAssistantMessageInterrupted]): nothing is rendered for a session that is
+     * not cached, and the next `loadSessionDetails` replaces the entry with the persisted state.
      *
      * @param sessionId The ID of the session to update
      * @param updateFunction A function that takes the current ChatSession and returns an updated one.

@@ -106,6 +106,25 @@ interface SessionRepository {
      */
     suspend fun loadSessionDetails(sessionId: Long): Either<RepositoryError, ChatSession>
 
+    /**
+     * Settles one cached assistant message as interrupted by the user, without issuing any request.
+     *
+     * This is the client-side counterpart of the server's terminal state for an ending the client caused
+     * itself: when *this* client cancelled a streaming turn and the socket teardown made the finalizing event
+     * impossible, the cause is not in doubt (`INTERRUPTED_BY_USER` is what the server persists for a torn-down
+     * socket), so the message the client already holds is settled immediately instead of being fetched again.
+     *
+     * Only the cause is set: no error code and no reason text (D2 — a user interruption carries none, and the
+     * label is localized client-side from the cause). The mutation is confined to that single message — the rest
+     * of the cached session is not replaced, re-derived or re-fetched — and the persisted state stays
+     * authoritative, because the next [loadSessionDetails] overwrites the cache with the server's copy. A message
+     * that already carries a terminal state is left untouched, so a terminal event delivered by the server always
+     * wins over this local marking.
+     *
+     * @param sessionId The unique identifier of the session that holds the message
+     * @param messageId The ID of the assistant message to settle as interrupted by the user
+     */
+    suspend fun markAssistantMessageInterrupted(sessionId: Long, messageId: Long)
 
     /**
      * Loads all tool calls for a specific chat session.
