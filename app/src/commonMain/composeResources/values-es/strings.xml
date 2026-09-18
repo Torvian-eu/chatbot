@@ -19,4 +19,7 @@
     <string name="select_role_hint">Selecciona un rol de agente para comenzar a chatear</string>
     <string name="cancel_send_message_button_description">Detener el envío del mensaje</string>
     <string name="sending_message_tooltip">Enviando mensaje... (haz clic para cancelar)</string>
+    <!-- Aviso de finalización del mensaje del asistente -->
+    <string name="assistant_message_stopped_by_user">Detenido por el usuario</string>
+    <string name="assistant_message_failed_label">La respuesta falló</string>
 </resources>

@@ -180,6 +180,17 @@ fun MessageItem(
             )
         }
 
+        // Incompletion notice: shows the reason the message stopped early, right next to whatever partial
+        // content was received. Suppressed while the message is being edited, because saving the edit
+        // clears the state server-side; the condition rules out completed messages and the placeholder of
+        // the turn that is still streaming.
+        if (message is ChatMessage.AssistantMessage &&
+            message.showsIncompleteNotice &&
+            editingMessage?.id != message.id
+        ) {
+            AssistantMessageCompletionNotice(message = message, contentColor = contentColor)
+        }
+
         // Tool Call Badges (for assistant messages)
         if (message.role == ChatMessage.Role.ASSISTANT && toolCallsForMessage.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))

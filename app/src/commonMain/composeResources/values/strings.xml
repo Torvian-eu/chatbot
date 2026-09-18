@@ -66,4 +66,8 @@
     <!-- Success Messages -->
     <string name="operation_success">Operation completed successfully.</string>
 
+    <!-- Assistant Message Completion Notice -->
+    <string name="assistant_message_stopped_by_user">Stopped by the user</string>
+    <string name="assistant_message_failed_label">Response failed</string>
+
 </resources>
