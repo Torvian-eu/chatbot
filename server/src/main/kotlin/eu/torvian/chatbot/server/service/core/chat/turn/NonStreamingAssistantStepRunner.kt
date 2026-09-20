@@ -19,8 +19,11 @@ import org.apache.logging.log4j.Logger
  * call).
  *
  * The step returns `null` on every path that ends the turn — a failed call, a response cut off at the character
- * cap (which also suppresses its untrustworthy tool calls), a response whose calls were dropped by the per-step or
- * argument cap, and a completed response without tool calls. Only the calls that survive the caps are handed back
+ * cap or carrying a provider-declared ending (both of which suppress their untrustworthy tool calls), a response
+ * whose calls were dropped by the per-step or argument cap, and a completed response without tool calls. Failure
+ * precedence is the provider-declared ending, then the server character cap, then the tool-call limits: the
+ * provider's own declaration is the more specific cause, and the cap still bounds the persisted content. Only the
+ * calls that survive the caps are handed back
  * (under the argument cap the clipped calls alone are dropped), and reaching the turn's iteration bound flags the
  * message while still handing its calls over, so the loop executes them before it ends the turn.
  *
@@ -129,6 +132,14 @@ internal class NonStreamingAssistantStepRunner(
         } else {
             null
         }
+        // A provider-declared ending is a failure the server did not detect itself: the provider answered 2xx and
+        // then reported that the generation did not complete, while the body still carried the text it produced.
+        // It outranks the server's own character cap, which still bounds the persisted content, so a generation
+        // the provider cut short is reported the same way on both call paths. Both failures suppress tool
+        // execution.
+        val providerFailure = llmCompletionResult.providerFailure
+        val providerEndingFailure = providerFailure?.toAssistantMessageCompletionState()
+        val stepFailure = providerEndingFailure ?: contentFailure
         // The tool-call limits have their own execution policies: the calls of a step over the per-step cap are
         // dropped as a whole, the argument cap drops only the calls whose argument exceeded it, and the iteration
         // bound keeps every call. Only a limit that still leaves calls to run flags the message and asks the loop
@@ -149,7 +160,7 @@ internal class NonStreamingAssistantStepRunner(
             settings = request.llmConfig.settings,
             agentRoleId = request.session.agentRoleId,
             reasoningItems = sanitizedReasoningItems,
-            completion = contentFailure ?: toolCallFailure ?: AssistantMessageCompletionState.Completed
+            completion = stepFailure ?: toolCallFailure ?: AssistantMessageCompletionState.Completed
         )
         emit(
             ConversationTurnEvent.AssistantMessageSaved(
@@ -159,16 +170,22 @@ internal class NonStreamingAssistantStepRunner(
         )
         val assistantMessage = persistedAssistantMessage.assistantMessage
 
-        // A truncated response must never drive tool execution. The turn therefore ends here — before processTurn
-        // can persist pending tool calls or execute them — and only the count of the discarded requests is logged:
-        // no tool-call row is written, nothing is executed, so no approval prompt or tool badge can appear below a
-        // failed message.
-        if (contentFailure != null) {
+        // A step with a declared ending must never drive tool execution. The turn therefore ends here — before
+        // processTurn can persist pending tool calls or execute them — and only the count of the discarded
+        // requests is logged: no tool-call row is written, nothing is executed, so no approval prompt or tool
+        // badge can appear below a failed message.
+        if (stepFailure != null) {
             if (requestedToolCallCount > 0) {
                 logger.warn(
                     "Discarding $requestedToolCallCount tool call request(s) for session ${request.session.id}: " +
-                        "${contentFailure.errorMessage} (${contentFailure.errorCode})"
+                        "${stepFailure.errorMessage} (${stepFailure.errorCode})"
                 )
+            }
+            // A provider-declared ending is the one failure the client cannot infer from the persisted message, so
+            // it is reported once before the turn closes. The server's own caps are already visible in the stored
+            // reason and add no frame.
+            if (providerFailure != null) {
+                emit(ConversationTurnEvent.ExternalServiceError(providerFailure))
             }
             emit(ConversationTurnEvent.TurnCompleted)
             return null

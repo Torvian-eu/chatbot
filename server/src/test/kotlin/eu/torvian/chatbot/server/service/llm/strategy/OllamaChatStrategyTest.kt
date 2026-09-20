@@ -5,7 +5,11 @@ import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.server.service.llm.GenericContentType
 import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
+import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlin.test.*
@@ -202,6 +206,64 @@ class OllamaChatStrategyTest {
     @Test
     fun `strategy should have correct provider type`() {
         assertEquals(LLMProviderType.OLLAMA, strategy.providerType)
+    }
+
+    /**
+     * Verifies that a generation the server stopped at the model's output limit is reported as a failure on the
+     * result, without displacing the partial answer the same body carried.
+     */
+    @Test
+    fun `processSuccessResponse reports a length terminal reason as a failure that keeps the content`() {
+        val responseBody = """
+            {
+                "model": "llama3.2",
+                "created_at": "2023-12-07T09:32:18.757212583-08:00",
+                "message": { "role": "assistant", "content": "Partial answer" },
+                "done": true,
+                "done_reason": "length",
+                "prompt_eval_count": 26,
+                "eval_count": 15
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        val completionResult = assertNotNull(result.getOrNull())
+        assertEquals("Partial answer", completionResult.choices.single().content)
+        val providerFailure = assertNotNull(completionResult.providerFailure)
+        assertEquals("length", providerFailure.providerCode)
+    }
+
+    /**
+     * Verifies that a normally finished generation declares no ending, both when the server reports the reason and
+     * when it omits the field entirely.
+     */
+    @Test
+    fun `processSuccessResponse declares no ending without a non-success terminal reason`() {
+        val stoppedBody = """
+            {
+                "model": "llama3.2",
+                "created_at": "2023-12-07T09:32:18.757212583-08:00",
+                "message": { "role": "assistant", "content": "A complete answer" },
+                "done": true,
+                "done_reason": "stop"
+            }
+        """.trimIndent()
+        // Older and Ollama-compatible servers omit the field; `done` alone must not be read as a truncation.
+        val reasonlessBody = """
+            {
+                "model": "llama3.2",
+                "created_at": "2023-12-07T09:32:18.757212583-08:00",
+                "message": { "role": "assistant", "content": "A complete answer" },
+                "done": true
+            }
+        """.trimIndent()
+
+        listOf(stoppedBody, reasonlessBody).forEach { responseBody ->
+            val completionResult = assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull())
+            assertEquals("A complete answer", completionResult.choices.single().content)
+            assertNull(completionResult.providerFailure, "A normally finished generation declares no ending")
+        }
     }
 
     /**

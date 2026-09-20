@@ -177,6 +177,11 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             // 1. Deserialize the raw string body into the API-specific success response DTO
             val successResponse: OpenAiApiModels.ChatCompletionResponse = json.decodeFromString(responseBody)
 
+            // The finish reason is this dialect's declaration of how the generation ended: a stop token that
+            // means "cut short" (`length`, `content_filter`) is reported on the result, which keeps it inseparable
+            // from the partial content the same body carried.
+            val providerFailure = providerDeclaredEndingError(successResponse.choices.firstOrNull()?.finish_reason)
+
             // 2. Map the API-specific DTO to the generic LLMCompletionResult
             val result = LLMCompletionResult(
                 id = successResponse.id,
@@ -208,7 +213,8 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                     "api_object" to successResponse.`object`,
                     "api_created" to successResponse.created,
                     "api_model" to successResponse.model
-                )
+                ),
+                providerFailure = providerFailure
             )
             logger.debug("Successfully parsed response with ${result.choices.size} choice(s)")
             result.right()

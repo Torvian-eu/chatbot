@@ -6,11 +6,13 @@ import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.server.service.llm.GenericContentType
 import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
+import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import eu.torvian.chatbot.server.service.llm.sanitizeReasoningItem
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import io.ktor.http.*
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
@@ -274,6 +276,242 @@ class ResponsesStrategyTest {
         assertEquals("Just text.", choice.content)
         assertEquals("stop", choice.finishReason)
         assertNull(choice.toolCalls)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should carry a failed provider status on the result instead of an empty completion")
+    fun processSuccessResponse_failedStatus_carriesProviderFailure() {
+        val responseBody = """
+            {
+              "id": "resp_failed",
+              "object": "response",
+              "status": "failed",
+              "model": "gpt-5.4",
+              "output": [],
+              "usage": null,
+              "error": { "code": "server_error", "message": "The model failed to generate a response." }
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        // A 2xx body whose status is `failed` must not be read as a completed choice, and the ending travels with
+        // the mapped output of the same body so the two can never be persisted apart.
+        val completion = assertIs<LLMCompletionResult>(result.getOrNull())
+        val providerFailure = assertNotNull(completion.providerFailure)
+        assertEquals("server_error", providerFailure.providerCode)
+        assertNull(completion.choices.single().content, "A body without output text carries no content")
+        assertFalse(
+            providerFailure.message.contains("The model failed to generate a response."),
+            "The provider message must not be copied into the emitted error: ${providerFailure.message}"
+        )
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should keep the partial output an incomplete status explains")
+    fun processSuccessResponse_incompleteStatus_keepsPartialContent() {
+        val responseBody = """
+            {
+              "id": "resp_incomplete",
+              "object": "response",
+              "status": "incomplete",
+              "model": "gpt-5.4",
+              "output": [
+                {
+                  "type": "message",
+                  "id": "msg_1",
+                  "status": "incomplete",
+                  "role": "assistant",
+                  "content": [ { "type": "output_text", "text": "Partial output:" } ]
+                }
+              ],
+              "incomplete_details": { "reason": "max_output_tokens" },
+              "usage": { "input_tokens": 10, "output_tokens": 200, "total_tokens": 210 }
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        val completion = assertIs<LLMCompletionResult>(result.getOrNull())
+        // The declared ending must never replace the output the same body carried: that is the difference between
+        // a flagged partial answer and an empty failed message.
+        assertEquals("Partial output:", completion.choices.single().content)
+        val providerFailure = assertNotNull(completion.providerFailure)
+        // The reason travels as the provider code so the failure mapping can flag the provider output limit.
+        assertEquals("max_output_tokens", providerFailure.providerCode)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should fall back to the status itself when the body declares no other token")
+    fun processSuccessResponse_statusWithoutCode_fallsBackToTheStatusToken() {
+        val responseBody = """
+            {
+              "id": "resp_cancelled",
+              "object": "response",
+              "status": "cancelled",
+              "output": []
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        val completion = assertIs<LLMCompletionResult>(result.getOrNull())
+        val providerFailure = assertNotNull(completion.providerFailure)
+        // Without a code of its own the status itself is the token, which the mapping degrades to the default.
+        assertEquals("cancelled", providerFailure.providerCode)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should recognise a non-success status whatever its casing")
+    fun processSuccessResponse_upperCaseStatus_carriesProviderFailure() {
+        val responseBody = """
+            {
+              "id": "resp_incomplete_proxy",
+              "object": "response",
+              "status": "Incomplete",
+              "output": [
+                {
+                  "type": "message",
+                  "role": "assistant",
+                  "content": [ { "type": "output_text", "text": "Cut off" } ]
+                }
+              ],
+              "incomplete_details": { "reason": "max_output_tokens" }
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        val completion = assertIs<LLMCompletionResult>(result.getOrNull())
+        assertEquals("Cut off", completion.choices.single().content)
+        val providerFailure = assertNotNull(completion.providerFailure)
+        assertEquals("max_output_tokens", providerFailure.providerCode)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should prefer the error code over the incomplete reason")
+    fun processSuccessResponse_errorCodeTakesPrecedenceOverIncompleteReason() {
+        val responseBody = """
+            {
+              "id": "resp_both_tokens",
+              "object": "response",
+              "status": "incomplete",
+              "output": [],
+              "error": { "code": "server_error" },
+              "incomplete_details": { "reason": "max_output_tokens" }
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        val completion = assertIs<LLMCompletionResult>(result.getOrNull())
+        val providerFailure = assertNotNull(completion.providerFailure)
+        // `error.code` is the provider's own description of what went wrong and wins over the coarser reason.
+        assertEquals("server_error", providerFailure.providerCode)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should treat a non-primitive provider code or message as absent")
+    fun processSuccessResponse_nonPrimitiveProviderFields_stillCarryProviderFailure() {
+        val responseBody = """
+            {
+              "id": "resp_malformed",
+              "object": "response",
+              "status": "failed",
+              "output": [],
+              "error": { "code": { "value": "server_error" }, "message": ["The model failed."] }
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        // Reading a malformed field must not turn the terminal ending into a mapping failure.
+        val completion = assertIs<LLMCompletionResult>(result.getOrNull())
+        val providerFailure = assertNotNull(completion.providerFailure)
+        assertEquals("failed", providerFailure.providerCode)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should bound an oversized provider code")
+    fun processSuccessResponse_oversizedProviderCode_isBounded() {
+        val oversizedCode = "x".repeat(4_000)
+        val responseBody = """
+            {
+              "id": "resp_long_code",
+              "object": "response",
+              "status": "failed",
+              "output": [],
+              "error": { "code": "$oversizedCode" }
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        // The token is copied into transient diagnostics and downstream log lines, so it is cut where the ending
+        // is built rather than at each consumer.
+        val completion = assertIs<LLMCompletionResult>(result.getOrNull())
+        val providerCode = assertNotNull(completion.providerFailure?.providerCode)
+        assertTrue(oversizedCode.startsWith(providerCode), "The bounded code is a prefix of the reported one")
+        assertTrue(
+            providerCode.length < oversizedCode.length,
+            "An oversized provider code must be cut: ${providerCode.length} characters kept"
+        )
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should map a refusal part into the message content of a completed answer")
+    fun processSuccessResponse_refusalPart_becomesContent() {
+        val responseBody = """
+            {
+              "id": "resp_refusal",
+              "object": "response",
+              "status": "completed",
+              "output": [
+                {
+                  "type": "message",
+                  "id": "msg_1",
+                  "status": "completed",
+                  "role": "assistant",
+                  "content": [ { "type": "refusal", "refusal": "I cannot help with that." } ]
+                }
+              ],
+              "usage": { "input_tokens": 1, "output_tokens": 5, "total_tokens": 6 }
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        // A refusal is the model's answer, so it becomes the content of a completed message instead of a failure.
+        val completion = assertIs<LLMCompletionResult>(result.getOrNull())
+        assertEquals("I cannot help with that.", completion.choices.single().content)
+        assertNull(completion.providerFailure)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should report a completed body without any provider-declared ending")
+    fun processSuccessResponse_completedStatus_hasNoProviderFailure() {
+        val responseBody = """
+            {
+              "id": "resp_ok",
+              "object": "response",
+              "status": "completed",
+              "model": "gpt-5.4",
+              "output": [
+                {
+                  "type": "message",
+                  "role": "assistant",
+                  "content": [ { "type": "output_text", "text": "All good." } ]
+                }
+              ],
+              "usage": { "input_tokens": 1, "output_tokens": 2, "total_tokens": 3 }
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        val completion = assertIs<LLMCompletionResult>(result.getOrNull())
+        assertEquals("All good.", completion.choices.single().content)
+        assertNull(completion.providerFailure, "A completed generation carries no declared ending")
     }
 
     @Test

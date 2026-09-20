@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.*
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import java.util.Locale
 
 /**
  * Chat completion strategy for OpenAI's Responses API (`POST /v1/responses`).
@@ -39,6 +40,34 @@ class ResponsesStrategy(
 ) : ChatCompletionStrategy {
 
     private val logger: Logger = LogManager.getLogger(ResponsesStrategy::class.java)
+
+    private companion object {
+        /**
+         * Upper bound, in characters, of provider-supplied text copied into one log line, so a single
+         * provider ending cannot produce an unbounded log entry.
+         */
+        const val PROVIDER_DETAIL_LOG_CHARS: Int = 500
+
+        /**
+         * Upper bound, in characters, of the provider classification token kept on an ending.
+         *
+         * The token is copied into the transient wire `details` string and into downstream log lines, so it is
+         * cut where the ending is built. No token family is that long, so a cut token can only lose a match it
+         * would not have made anyway.
+         */
+        const val PROVIDER_CODE_MAX_CHARS: Int = 64
+
+        /**
+         * `response.status` values that mean the provider did not complete the generation, even though the
+         * HTTP response carried a success status.
+         *
+         * Matches the documented `status` enum minus its success and in-flight values: `failed` and
+         * `incomplete` are the documented non-success endings, and `cancelled` is emitted by
+         * OpenAI-compatible proxies (the strategy also serves OpenRouter). Providers and proxies are not
+         * consistent about the casing, so the status is lowercased before it is looked up here.
+         */
+        val PROVIDER_DECLARED_NON_SUCCESS_STATUSES: Set<String> = setOf("failed", "incomplete", "cancelled")
+    }
 
     override val providerType: LLMProviderType = LLMProviderType.OPENAI
 
@@ -192,7 +221,16 @@ class ResponsesStrategy(
             val responseModel = response["model"]?.jsonPrimitive?.contentOrNull
             val responseStatus = response["status"]?.jsonPrimitive?.contentOrNull
 
-            val usage = response["usage"]?.jsonObject
+            // The status enum is not case-stable across providers and proxies, so it is normalised before it is
+            // looked up. A non-success status is not reported here: the body still has to be mapped first, so
+            // the ending can travel with the partial output it explains instead of replacing it.
+            val declaredEndingStatus = responseStatus
+                ?.lowercase(Locale.ROOT)
+                ?.takeIf { it in PROVIDER_DECLARED_NON_SUCCESS_STATUSES }
+
+            // A missing or JSON-null usage (`usage: null` is what providers send when they did not complete the
+            // generation) must not fail the mapping: only a real object contributes token counts.
+            val usage = response["usage"] as? JsonObject
             val promptTokens = usage?.get("input_tokens")?.jsonPrimitive?.intOrNull ?: 0
             val completionTokens = usage?.get("output_tokens")?.jsonPrimitive?.intOrNull ?: 0
             val totalTokens = usage?.get("total_tokens")?.jsonPrimitive?.intOrNull ?: 0
@@ -212,11 +250,17 @@ class ResponsesStrategy(
             for (item in outputItems) {
                 when (item["type"]?.jsonPrimitive?.contentOrNull) {
                     "message" -> {
-                        // Concatenate output_text content from all content parts.
+                        // Concatenate the text of every content part: generated text carries it in an `output_text`
+                        // part, a refusal in a `refusal` part, and both are the model's answer.
                         val text = item["content"]?.jsonArray
                             ?.mapNotNull { it.jsonObject }
-                            ?.filter { it["type"]?.jsonPrimitive?.contentOrNull == "output_text" }
-                            ?.mapNotNull { it["text"]?.jsonPrimitive?.contentOrNull }
+                            ?.mapNotNull { part ->
+                                when (part["type"]?.jsonPrimitive?.contentOrNull) {
+                                    "output_text" -> part["text"]?.jsonPrimitive?.contentOrNull
+                                    "refusal" -> part["refusal"]?.jsonPrimitive?.contentOrNull
+                                    else -> null
+                                }
+                            }
                             ?.joinToString(separator = "")
                         if (!text.isNullOrBlank()) {
                             content = (content ?: "") + text
@@ -238,6 +282,19 @@ class ResponsesStrategy(
             // A successful response that produced function calls should be treated as a tool-calling
             // step so the orchestrator can execute them and continue the loop.
             val finishReason = if (toolCalls.isNotEmpty()) "tool_calls" else "stop"
+
+            // A 2xx body is not proof of a completed generation: the provider returns the same envelope (with an
+            // empty `output[]`) for a response it declared failed, incomplete or cancelled, and for an
+            // `incomplete` response that envelope still carries the partial answer. Reporting the ending as a
+            // field of the result keeps it inseparable from that mapped output, so the caller cannot persist the
+            // failure without the content it explains. The provider code/message stay in the logs.
+            val providerFailure = declaredEndingStatus?.let { status ->
+                providerDeclaredResponseFailure(
+                    source = "responses.body status=$status",
+                    response = response,
+                    fallbackCode = status
+                )
+            }
 
             val result = LLMCompletionResult(
                 choices = listOf(
@@ -262,7 +319,8 @@ class ResponsesStrategy(
                     put("api_model", responseModel)
                     put("api_status", responseStatus)
                     put("reasoning_effort", reasoningEffort)
-                }
+                },
+                providerFailure = providerFailure
             )
             logger.debug("Parsed Responses response with ${result.choices.size} choice(s)")
             result.right()
@@ -305,6 +363,108 @@ class ResponsesStrategy(
                 errorBody
             )
         }
+    }
+
+    /**
+     * Reads the provider's own classification token from a terminal Responses payload.
+     *
+     * The API reports the cause of a non-success ending in one of two places: `error.code` (on `response.failed`
+     * and on a response whose `status` is `failed`) or `incomplete_details.reason` (on `response.incomplete`, e.g.
+     * `max_output_tokens`). Both are read in that order, so a payload carrying only one of them still yields a
+     * usable token; [fallbackCode] is used for payloads that carry neither (for instance the `status` value of a
+     * non-success completion event).
+     *
+     * The token is a log/classification input only: it selects the persisted
+     * [eu.torvian.chatbot.common.models.core.AssistantMessageErrorCode] but is never persisted itself and never
+     * becomes part of a user-visible reason.
+     *
+     * @param response The embedded `response` snapshot of the event, or `null` when the event carries none.
+     * @param fallbackCode Token to use when the payload declares no code or reason of its own.
+     * @return The provider's classification token, or `null` when none could be determined. A non-primitive
+     *         `code`/`reason` counts as absent rather than as a parse failure, so a malformed payload cannot turn
+     *         a terminal ending into a strategy-level error.
+     */
+    private fun providerDeclaredCode(response: JsonObject?, fallbackCode: String?): String? =
+        ((response?.get("error") as? JsonObject)?.get("code") as? JsonPrimitive)?.contentOrNull
+            ?: ((response?.get("incomplete_details") as? JsonObject)?.get("reason") as? JsonPrimitive)?.contentOrNull
+            ?: fallbackCode
+
+    /**
+     * Builds the server-internal error that represents a provider-declared non-success ending.
+     *
+     * The error only marks *how* the stream ended: the persisted code and reason are derived from
+     * [providerCode] by [eu.torvian.chatbot.server.service.llm.toAssistantMessageCompletionState], so this message
+     * never reaches the user. It is therefore deliberately provider-free and only states the shape of the ending,
+     * while the provider code remains in the record and in the log line written by
+     * [logProviderDeclaredEnding].
+     *
+     * @param providerCode Provider classification token of the ending, or `null` when it declared none. It is cut
+     *        at [PROVIDER_CODE_MAX_CHARS], because it is copied into the transient wire `details` string and into
+     *        downstream log lines.
+     * @return The error to emit as an [LLMStreamChunk.Error] chunk (or to report on the non-streaming result).
+     */
+    private fun providerDeclaredFailure(providerCode: String?): LLMCompletionError.ProviderFailureError =
+        LLMCompletionError.ProviderFailureError(
+            providerCode = providerCode?.take(PROVIDER_CODE_MAX_CHARS),
+            message = "The provider ended the response without completing it."
+        )
+
+    /**
+     * Turns one provider-declared non-success `response` snapshot into the error that reports it.
+     *
+     * Shared by the three terminal streaming arms that carry a `response` snapshot (`response.failed`,
+     * `response.incomplete` and a `response.completed` whose `status` is not `completed`) and by the non-streaming
+     * status check, so every one of them classifies and logs identically and each writes exactly one log line.
+     *
+     * @param source Event type (or, for the non-streaming path, the body status) that declared the ending; it is
+     *        the log discriminator that tells the four call sites apart.
+     * @param response The embedded `response` snapshot, or `null` when the payload carried none.
+     * @param fallbackCode Token to use when the payload declares no code or reason of its own.
+     * @return The provider-failure error describing the ending.
+     */
+    private fun providerDeclaredResponseFailure(
+        source: String,
+        response: JsonObject?,
+        fallbackCode: String?
+    ): LLMCompletionError.ProviderFailureError {
+        val providerCode = providerDeclaredCode(response, fallbackCode)
+        logProviderDeclaredEnding(
+            source = source,
+            responseId = (response?.get("id") as? JsonPrimitive)?.contentOrNull,
+            providerCode = providerCode,
+            providerMessage = ((response?.get("error") as? JsonObject)?.get("message") as? JsonPrimitive)
+                ?.contentOrNull
+        )
+        return providerDeclaredFailure(providerCode)
+    }
+
+    /**
+     * Logs one provider-declared non-success ending with every detail the provider supplied.
+     *
+     * These details are log-only: the provider code, the provider message and the response id are operator
+     * diagnostics, while everything user-visible comes from the bounded, server-authored templates in
+     * [eu.torvian.chatbot.server.service.llm.toAssistantMessageCompletionState]. Every provider-supplied field is
+     * cut at [PROVIDER_DETAIL_LOG_CHARS], so one ending cannot produce an unbounded log entry (a provider could
+     * otherwise inflate or forge entries through an oversized code, message or response id).
+     *
+     * @param source Event type (or non-streaming status) that declared the ending.
+     * @param responseId Provider response identifier, or `null` when the payload carried none.
+     * @param providerCode Provider classification token, or `null` when the payload carried none.
+     * @param providerMessage Provider-authored message, or `null` when the payload carried none.
+     */
+    private fun logProviderDeclaredEnding(
+        source: String,
+        responseId: String?,
+        providerCode: String?,
+        providerMessage: String?
+    ) {
+        logger.error(
+            "Responses provider outcome is not a completion ({}): response id '{}', provider code '{}', provider message '{}'",
+            source,
+            responseId?.take(PROVIDER_DETAIL_LOG_CHARS) ?: "-",
+            providerCode?.take(PROVIDER_DETAIL_LOG_CHARS) ?: "-",
+            providerMessage?.take(PROVIDER_DETAIL_LOG_CHARS) ?: "-"
+        )
     }
 
     override fun processStreamingResponse(

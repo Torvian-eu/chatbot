@@ -18,6 +18,9 @@ object OllamaApiModels {
      * @property created_at ISO 8601 timestamp of when the completion was created
      * @property message The generated message
      * @property done Whether the response is complete
+     * @property done_reason Terminal reason the server reports for the finished generation (`stop`, `length`, …), or
+     *            `null` when it reports none. [done] only says *that* the generation ended, so this reason is what
+     *            declares a generation the server cut short.
      * @property total_duration Total time spent generating the response (nanoseconds)
      * @property load_duration Time spent loading the model (nanoseconds)
      * @property prompt_eval_count Number of tokens in the prompt
@@ -31,6 +34,7 @@ object OllamaApiModels {
         val created_at: String,
         val message: Message,
         val done: Boolean,
+        val done_reason: String? = null,
         val total_duration: Long? = null,
         val load_duration: Long? = null,
         val prompt_eval_count: Int? = null,

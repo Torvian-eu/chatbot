@@ -339,7 +339,9 @@ class DefaultConversationCompactionService(
      * @param messages The bounded compaction input (the over-threshold window).
      * @param instruction The user's compaction instruction (guaranteed non-blank by the resolver),
      *            appended as the final user message.
-     * @return Either a compaction error or the raw completion result.
+     * @return Either a compaction error or the raw completion result. A result whose generation the provider
+     *         declared incomplete is reported as a generation failure, because a summary cut off mid-generation
+     *         would silently replace the messages it covers with partial text.
      */
     private suspend fun generateSummary(
         config: LLMConfig,
@@ -363,6 +365,13 @@ class DefaultConversationCompactionService(
                     tools = null,
                     systemMessage = config.systemMessage.takeIf { it.isNotBlank() }
                 )
+            }
+            // A result that carries a provider-declared ending is not a summary: the provider answered, but it
+            // reported that the generation did not complete, so the text is truncated provider output and must
+            // never become a summary chunk.
+            val providerFailure = result.getOrNull()?.providerFailure
+            if (providerFailure != null) {
+                return ConversationCompactionError.GenerationFailed(providerFailure.sanitizedMessage()).left()
             }
             // TimeoutCancellationException is caught below; any other CancellationException (external
             // socket cancellation) must propagate as a coroutine cancellation, not a compaction error.
@@ -388,6 +397,7 @@ class DefaultConversationCompactionService(
                 message?.take(MAX_ERROR_MESSAGE_CHARS) ?: "HTTP $statusCode"
 
             is LLMCompletionError.InvalidResponseError -> message
+            is LLMCompletionError.ProviderFailureError -> message
             is LLMCompletionError.AuthenticationError -> message
             is LLMCompletionError.ConfigurationError -> message
             is LLMCompletionError.OtherError -> message

@@ -668,6 +668,24 @@ class DefaultConversationCompactionServiceTest {
     }
 
     @Test
+    fun `a provider-declared ending fails the summary instead of becoming a chunk`() = runTest {
+        stubGlobalPreference(preferenceRow())
+        stubCounter()
+        // The provider answered with text, but declared that the generation did not complete: that text is a
+        // truncated answer and must never be persisted as the summary of the messages it would cover.
+        val declaredEnding = LLMCompletionError.ProviderFailureError(
+            providerCode = "max_output_tokens",
+            message = "The provider ended the response without completing it."
+        )
+        stubAuxiliarySuccess(completionWith("A cut-off summary.").copy(providerFailure = declaredEnding))
+
+        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units).getOrNull()!!
+        val result = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 1L)
+        assertIs<ConversationCompactionError.GenerationFailed>(result.leftOrNull())
+        coVerify(exactly = 0) { chunkDao.insertVerifiedChunk(any(), any()) }
+    }
+
+    @Test
     fun `auxiliary timeout becomes a timed-out failure`() = runTest {
         stubGlobalPreference(preferenceRow())
         stubCounter()

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -66,6 +67,94 @@ class OpenAIChatStrategyResponseTest : OpenAIChatStrategyTestBase() {
         assertEquals("chat.completion", completionResult.metadata["api_object"])
         assertEquals(1677652288L, completionResult.metadata["api_created"])
         assertEquals("gpt-4o", completionResult.metadata["api_model"])
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should report a length finish reason as a failure that keeps the content")
+    fun processSuccessResponse_lengthFinishReason_carriesProviderFailure() {
+        // Given - a generation the provider cut at the model's output limit, with the partial answer still present.
+        val responseBody = """
+            {
+              "id": "chatcmpl-123",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "gpt-4o",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Partial answer"
+                  },
+                  "finish_reason": "length"
+                }
+              ],
+              "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15 }
+            }
+        """.trimIndent()
+
+        // When
+        val result = strategy.processSuccessResponse(responseBody)
+
+        // Then - the ending travels with the mapped output, so the partial text survives the failure.
+        val completionResult = assertNotNull(result.getOrNull())
+        assertEquals("Partial answer", completionResult.choices.first().content)
+        val providerFailure = assertNotNull(completionResult.providerFailure)
+        assertEquals("length", providerFailure.providerCode)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should report a content_filter finish reason as a failure")
+    fun processSuccessResponse_contentFilterFinishReason_carriesProviderFailure() {
+        val responseBody = """
+            {
+              "id": "chatcmpl-123",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "gpt-4o",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Refused by policy" },
+                  "finish_reason": "content_filter"
+                }
+              ],
+              "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15 }
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        val completionResult = assertNotNull(result.getOrNull())
+        val providerFailure = assertNotNull(completionResult.providerFailure)
+        assertEquals("content_filter", providerFailure.providerCode)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should not report an ending for a stop finish reason")
+    fun processSuccessResponse_stopFinishReason_hasNoProviderFailure() {
+        val responseBody = """
+            {
+              "id": "chatcmpl-123",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "gpt-4o",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "A complete answer" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15 }
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        val completionResult = assertNotNull(result.getOrNull())
+        assertEquals("A complete answer", completionResult.choices.first().content)
+        assertNull(completionResult.providerFailure, "A normally finished generation declares no ending")
     }
 
     @Test
