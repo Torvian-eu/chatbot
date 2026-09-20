@@ -17,6 +17,12 @@ import java.util.Locale
  * Status-code-derived classifications: `401`/`403` are authentication failures, `429` is rate limiting, other
  * `4xx` are request rejections and `5xx` (or unexpected statuses) mean the provider is unavailable.
  *
+ * Provider-declared failures ([LLMCompletionError.ProviderFailureError], i.e. a provider that answered 2xx and
+ * then declared a non-success ending) are classified from the provider's own code instead, because no HTTP
+ * status exists for them. The provider code selects the family (authentication, rate limit, output limit, …)
+ * and is never persisted; the variants' server-authored `message` is likewise ignored, so a provider cannot
+ * influence the persisted text through either field.
+ *
  * @receiver The failure reported by the LLM client.
  * @return A `FAILED` completion state carrying a machine-readable code and a bounded, provider-internal-free
  *         reason. Never contains provider response bodies or exception text.
@@ -33,6 +39,8 @@ fun LLMCompletionError.toAssistantMessageCompletionState(): AssistantMessageComp
     )
 
     is LLMCompletionError.ApiError -> toAssistantMessageCompletionState()
+
+    is LLMCompletionError.ProviderFailureError -> toAssistantMessageCompletionState()
 
     is LLMCompletionError.InvalidResponseError -> AssistantMessageCompletionState.failed(
         code = AssistantMessageErrorCode.INVALID_PROVIDER_RESPONSE,
@@ -88,6 +96,190 @@ private fun LLMCompletionError.ApiError.toAssistantMessageCompletionState(): Ass
             message = "The provider returned an unexpected response status (HTTP $statusCode)."
         )
     }
+
+/**
+ * Classifies a provider-declared non-success ending into a failure state.
+ *
+ * Only the provider's classification token is used, matched case-insensitively because providers are not
+ * consistent about its casing. Token families map to existing codes; `max_output_tokens` has its own code
+ * ([AssistantMessageErrorCode.PROVIDER_OUTPUT_LIMIT_EXCEEDED]) because a
+ * provider-side output limit is a different situation from the server's own assistant-message character cap.
+ *
+ * Unknown tokens, tokens the provider omits entirely, and a `cancelled` status all degrade to the
+ * `PROVIDER_UNAVAILABLE` default ("The provider failed to generate a response."), which is coarse but honest: the
+ * provider did not produce a generation for us to classify further, and the raw token is always in the server
+ * logs. [LLMCompletionError.ProviderFailureError.message] is deliberately ignored — the persisted reason is one
+ * of the templates below, so no provider-authored text can reach it.
+ *
+ * @receiver The provider-declared failure described by its provider code.
+ * @return A `FAILED` completion state with the mapped code and a bounded, server-authored reason.
+ */
+private fun LLMCompletionError.ProviderFailureError.toAssistantMessageCompletionState(): AssistantMessageCompletionState {
+    return when (providerCode?.lowercase(Locale.ROOT)) {
+        in PROVIDER_AUTHENTICATION_CODES -> AssistantMessageCompletionState.failed(
+            code = AssistantMessageErrorCode.AUTHENTICATION_FAILED,
+            message = "The provider rejected the API key or credentials."
+        )
+        in PROVIDER_QUOTA_CODES -> AssistantMessageCompletionState.failed(
+            code = AssistantMessageErrorCode.RATE_LIMITED,
+            message = "The provider account has no remaining quota."
+        )
+        in PROVIDER_RATE_LIMIT_CODES -> AssistantMessageCompletionState.failed(
+            code = AssistantMessageErrorCode.RATE_LIMITED,
+            message = "The provider is rate limiting requests. Try again in a moment."
+        )
+        in PROVIDER_OUTPUT_LIMIT_CODES -> AssistantMessageCompletionState.failed(
+            code = AssistantMessageErrorCode.PROVIDER_OUTPUT_LIMIT_EXCEEDED,
+            // Distinct from the server's own character cap, so the two limits can never be confused.
+            message = "The provider stopped the response because the model reached its output limit."
+        )
+        in PROVIDER_CONTEXT_LENGTH_CODES -> AssistantMessageCompletionState.failed(
+            code = AssistantMessageErrorCode.PROVIDER_REQUEST_REJECTED,
+            message = "The request was longer than the model's context window."
+        )
+        in PROVIDER_CONTENT_POLICY_CODES -> AssistantMessageCompletionState.failed(
+            code = AssistantMessageErrorCode.PROVIDER_REQUEST_REJECTED,
+            message = "The provider stopped the response because of its content policy."
+        )
+        in PROVIDER_REQUEST_REJECTED_CODES -> AssistantMessageCompletionState.failed(
+            code = AssistantMessageErrorCode.PROVIDER_REQUEST_REJECTED,
+            message = "The provider rejected the request."
+        )
+        in PROVIDER_INCOMPLETE_STATUS_TOKENS -> AssistantMessageCompletionState.failed(
+            code = AssistantMessageErrorCode.STREAM_INTERRUPTED,
+            // The provider is answering, so an unavailability reason would misdescribe a generation it merely
+            // ended early; only the outcome is known, not the cause.
+            message = "The provider ended the response before it finished."
+        )
+        else -> AssistantMessageCompletionState.failed(
+            code = AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
+            message = "The provider failed to generate a response."
+        )
+    }
+}
+
+/**
+ * Reports the non-success ending a provider's own stop token declares.
+ *
+ * A stop token is how the Chat Completions-style dialects say how a generation ended, and the token becomes the
+ * [LLMCompletionError.ProviderFailureError.providerCode] that [toAssistantMessageCompletionState] classifies, so
+ * every dialect and both call paths report the same ending for the same token.
+ *
+ * @param stopToken Stop token of a finished choice (`length`, `content_filter`, `stop`, `tool_calls`, …), or
+ *        `null` when the dialect does not report one.
+ * @return The ending to report, or `null` when the token means the generation completed normally.
+ */
+internal fun providerDeclaredEndingError(stopToken: String?): LLMCompletionError.ProviderFailureError? {
+    val normalizedStopToken = stopToken?.lowercase(Locale.ROOT) ?: return null
+    if (normalizedStopToken !in PROVIDER_INCOMPLETE_STOP_TOKENS) return null
+    return LLMCompletionError.ProviderFailureError(
+        providerCode = normalizedStopToken,
+        message = "The provider ended the response without completing it."
+    )
+}
+
+/**
+ * Provider codes meaning the provider refused our credentials.
+ *
+ * Maps to `AUTHENTICATION_FAILED`, the same classification an HTTP 401/403 gets.
+ */
+private val PROVIDER_AUTHENTICATION_CODES: Set<String> = setOf(
+    "invalid_api_key",
+    "authentication_error",
+    "invalid_organization",
+    "account_deactivated"
+)
+
+/**
+ * Provider codes meaning the provider is throttling us.
+ *
+ * Maps to `RATE_LIMITED`, the same classification an HTTP 429 gets. `too_many_requests` is the code some
+ * OpenAI-compatible providers use for the same condition.
+ */
+private val PROVIDER_RATE_LIMIT_CODES: Set<String> = setOf(
+    "rate_limit_exceeded",
+    "too_many_requests"
+)
+
+/**
+ * Provider codes meaning the provider account ran out of credit/allowance.
+ *
+ * Folded into `RATE_LIMITED` because no code describes billing, and "the operator has to act / try later" is
+ * closer to rate limiting than to a rejected request; the persisted reason names the quota so the two are
+ * distinguishable.
+ */
+private val PROVIDER_QUOTA_CODES: Set<String> = setOf(
+    "insufficient_quota",
+    "billing_hard_limit_reached"
+)
+
+/**
+ * Provider codes meaning the model hit the provider's own output limit and the answer was cut off.
+ *
+ * Maps to its own `PROVIDER_OUTPUT_LIMIT_EXCEEDED` code, which is deliberately not shared with the server's
+ * assistant-message character cap (`OUTPUT_LIMIT_EXCEEDED`). `length` is the Chat Completions/Ollama stop token
+ * for the same situation the Responses API describes with `max_output_tokens`.
+ */
+private val PROVIDER_OUTPUT_LIMIT_CODES: Set<String> = setOf(
+    "max_output_tokens",
+    "length"
+)
+
+/**
+ * Stop tokens that mean the provider cut a generation short instead of finishing it.
+ *
+ * Both are reported as a failure so an incomplete answer is never persisted as a completed one; any other token
+ * (`stop`, `tool_calls`, or none at all) means the generation ended normally.
+ */
+private val PROVIDER_INCOMPLETE_STOP_TOKENS: Set<String> = setOf(
+    "length",
+    "content_filter"
+)
+
+/**
+ * Provider codes meaning the provider declared the generation incomplete without disclosing a cause of its own.
+ *
+ * The status says only *that* the generation ended early, so it is classified as an interrupted generation: no
+ * evidence points to the provider being unavailable, and the answer may be cut off mid-generation.
+ */
+private val PROVIDER_INCOMPLETE_STATUS_TOKENS: Set<String> = setOf(
+    "incomplete"
+)
+
+/**
+ * Provider codes meaning the request was longer than the model's context window.
+ *
+ * Maps to `PROVIDER_REQUEST_REJECTED` with a reason naming the context window.
+ */
+private val PROVIDER_CONTEXT_LENGTH_CODES: Set<String> = setOf(
+    "context_length_exceeded"
+)
+
+/**
+ * Provider codes meaning the provider stopped the generation because of its content policy.
+ *
+ * Maps to `PROVIDER_REQUEST_REJECTED` with a reason naming the content policy, so a policy stop is not read as a
+ * malformed request.
+ */
+private val PROVIDER_CONTENT_POLICY_CODES: Set<String> = setOf(
+    "content_filter",
+    "content_policy_violation"
+)
+
+/**
+ * Provider codes meaning the provider rejected the request itself (unknown model, malformed payload, a
+ * message-count limit, …).
+ *
+ * Maps to `PROVIDER_REQUEST_REJECTED`, the same classification an HTTP 4xx other than 401/403/429 gets. Codes
+ * outside every family — including `server_error`, `timeout`, `connection_error`, a `cancelled` status and any
+ * future token — fall through to the `PROVIDER_UNAVAILABLE` default instead of being reported as our fault.
+ */
+private val PROVIDER_REQUEST_REJECTED_CODES: Set<String> = setOf(
+    "invalid_request_error",
+    "invalid_prompt",
+    "unsupported_value",
+    "max_messages"
+)
 
 /**
  * Builds the failure state for a response that was cut off at the assistant message character limit.

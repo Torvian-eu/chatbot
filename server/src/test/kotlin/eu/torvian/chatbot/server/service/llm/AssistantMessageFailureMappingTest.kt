@@ -6,7 +6,9 @@ import eu.torvian.chatbot.server.data.dao.AssistantMessageCompletionState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -36,6 +38,24 @@ class AssistantMessageFailureMappingTest {
                 AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
             LLMCompletionError.ApiError(503, "overloaded", null) to
                 AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
+            LLMCompletionError.ProviderFailureError(null, "You exceeded your current quota.") to
+                AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
+            LLMCompletionError.ProviderFailureError("server_error", "The model failed to generate a response.") to
+                AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
+            LLMCompletionError.ProviderFailureError("invalid_api_key", "Incorrect API key provided") to
+                AssistantMessageErrorCode.AUTHENTICATION_FAILED,
+            LLMCompletionError.ProviderFailureError("rate_limit_exceeded", "Rate limit reached") to
+                AssistantMessageErrorCode.RATE_LIMITED,
+            LLMCompletionError.ProviderFailureError("insufficient_quota", "You exceeded your current quota") to
+                AssistantMessageErrorCode.RATE_LIMITED,
+            LLMCompletionError.ProviderFailureError("max_output_tokens", "The output was cut off") to
+                AssistantMessageErrorCode.PROVIDER_OUTPUT_LIMIT_EXCEEDED,
+            LLMCompletionError.ProviderFailureError("context_length_exceeded", "Too many tokens") to
+                AssistantMessageErrorCode.PROVIDER_REQUEST_REJECTED,
+            LLMCompletionError.ProviderFailureError("content_filter", "Content was filtered") to
+                AssistantMessageErrorCode.PROVIDER_REQUEST_REJECTED,
+            LLMCompletionError.ProviderFailureError("something_new", "brand new provider code") to
+                AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
             LLMCompletionError.InvalidResponseError("success response without choices") to
                 AssistantMessageErrorCode.INVALID_PROVIDER_RESPONSE,
             LLMCompletionError.ConfigurationError("ResponsesStrategy requires ResponsesModelSettings") to
@@ -55,6 +75,115 @@ class AssistantMessageFailureMappingTest {
     }
 
     @Test
+    fun `provider declared failures map to bounded reasons without provider text`() {
+        val providerMessage = "You exceeded your current quota, please check your plan and billing details."
+
+        // Every family is pinned to its exact code and to its exact, server-authored reason, so a provider
+        // cannot influence the persisted text through its code or its message.
+        val cases = listOf(
+            Triple(
+                LLMCompletionError.ProviderFailureError(null, providerMessage),
+                AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
+                "The provider failed to generate a response."
+            ),
+            Triple(
+                LLMCompletionError.ProviderFailureError("server_error", providerMessage),
+                AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
+                "The provider failed to generate a response."
+            ),
+            // The status of a cancelled (or otherwise failed) response without a code of its own degrades to the
+            // same default, because the provider did not produce an answer to classify further.
+            Triple(
+                LLMCompletionError.ProviderFailureError("cancelled", providerMessage),
+                AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
+                "The provider failed to generate a response."
+            ),
+            // A status that says only that the generation ended early is no evidence of an outage.
+            Triple(
+                LLMCompletionError.ProviderFailureError("incomplete", providerMessage),
+                AssistantMessageErrorCode.STREAM_INTERRUPTED,
+                "The provider ended the response before it finished."
+            ),
+            Triple(
+                LLMCompletionError.ProviderFailureError("invalid_api_key", providerMessage),
+                AssistantMessageErrorCode.AUTHENTICATION_FAILED,
+                "The provider rejected the API key or credentials."
+            ),
+            // Provider codes are matched case-insensitively.
+            Triple(
+                LLMCompletionError.ProviderFailureError("RATE_LIMIT_EXCEEDED", providerMessage),
+                AssistantMessageErrorCode.RATE_LIMITED,
+                "The provider is rate limiting requests. Try again in a moment."
+            ),
+            Triple(
+                LLMCompletionError.ProviderFailureError("insufficient_quota", providerMessage),
+                AssistantMessageErrorCode.RATE_LIMITED,
+                "The provider account has no remaining quota."
+            ),
+            Triple(
+                LLMCompletionError.ProviderFailureError("max_output_tokens", providerMessage),
+                AssistantMessageErrorCode.PROVIDER_OUTPUT_LIMIT_EXCEEDED,
+                "The provider stopped the response because the model reached its output limit."
+            ),
+            // `length` is the Chat Completions/Ollama stop token for the same situation.
+            Triple(
+                LLMCompletionError.ProviderFailureError("length", providerMessage),
+                AssistantMessageErrorCode.PROVIDER_OUTPUT_LIMIT_EXCEEDED,
+                "The provider stopped the response because the model reached its output limit."
+            ),
+            Triple(
+                LLMCompletionError.ProviderFailureError("context_length_exceeded", providerMessage),
+                AssistantMessageErrorCode.PROVIDER_REQUEST_REJECTED,
+                "The request was longer than the model's context window."
+            ),
+            Triple(
+                LLMCompletionError.ProviderFailureError("content_filter", providerMessage),
+                AssistantMessageErrorCode.PROVIDER_REQUEST_REJECTED,
+                "The provider stopped the response because of its content policy."
+            ),
+            Triple(
+                LLMCompletionError.ProviderFailureError("invalid_request_error", providerMessage),
+                AssistantMessageErrorCode.PROVIDER_REQUEST_REJECTED,
+                "The provider rejected the request."
+            ),
+            Triple(
+                LLMCompletionError.ProviderFailureError("something_new", providerMessage),
+                AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
+                "The provider failed to generate a response."
+            )
+        )
+
+        cases.forEach { (error, expectedCode, expectedReason) ->
+            val state = error.toAssistantMessageCompletionState()
+
+            assertEquals(expectedCode, state.errorCode, "Unexpected code for $error")
+            assertEquals(AssistantMessageIncompleteCause.FAILED, state.incompleteCause)
+            assertFalse(state.isComplete, "A provider-declared failure must not be marked completed")
+            val message = assertNotNull(state.errorMessage)
+            assertEquals(expectedReason, message)
+            assertTrue(
+                message.length <= AssistantMessageCompletionState.MAX_ERROR_MESSAGE_CHARS,
+                "A provider-declared reason must fit the persisted budget: '$message'"
+            )
+            assertFalse(message.contains(providerMessage), "Provider text leaked into '$message'")
+            // A provider code is a classification/log token and must never appear in the persisted reason.
+            error.providerCode?.let { providerCode ->
+                assertFalse(
+                    message.contains(providerCode, ignoreCase = true),
+                    "The provider code '$providerCode' reached the persisted reason: '$message'"
+                )
+            }
+        }
+
+        // The provider's own output limit is deliberately not the server's character-cap code.
+        assertNotEquals(
+            AssistantMessageErrorCode.OUTPUT_LIMIT_EXCEEDED,
+            LLMCompletionError.ProviderFailureError("max_output_tokens", providerMessage)
+                .toAssistantMessageCompletionState().errorCode
+        )
+    }
+
+    @Test
     fun `never persists provider supplied text or exception messages`() {
         val providerText = "OpenAI Responses API returned error 500: upstream leaked detail"
         val errorBody = """{"error":{"message":"leaked provider body"}}"""
@@ -69,13 +198,22 @@ class AssistantMessageFailureMappingTest {
         val otherErrorState = LLMCompletionError.OtherError(providerText, RuntimeException(exceptionMessage))
             .toAssistantMessageCompletionState()
 
-        val persistedMessages = listOf(apiErrorState, networkErrorState, invalidResponseState, otherErrorState)
-            .map { assertNotNull(it.errorMessage) }
+        val providerDeclaredState = LLMCompletionError.ProviderFailureError("server_error", providerText)
+            .toAssistantMessageCompletionState()
+
+        val persistedMessages = listOf(
+            apiErrorState,
+            networkErrorState,
+            invalidResponseState,
+            otherErrorState,
+            providerDeclaredState
+        ).map { assertNotNull(it.errorMessage) }
 
         persistedMessages.forEach { message ->
             assertFalse(message.contains(providerText), "Provider text leaked into '$message'")
             assertFalse(message.contains("leaked provider body"), "Provider body leaked into '$message'")
             assertFalse(message.contains(exceptionMessage), "Exception text leaked into '$message'")
+            assertFalse(message.contains("server_error"), "The provider code leaked into '$message'")
         }
         // Only the numeric status may appear, so operators can still classify the failure.
         assertTrue(persistedMessages.first().contains("HTTP 500"))
@@ -165,6 +303,31 @@ class AssistantMessageFailureMappingTest {
         assertEquals(AssistantMessageIncompleteCause.INTERRUPTED_BY_USER, state.incompleteCause)
         assertEquals(null, state.errorCode)
         assertEquals(null, state.errorMessage)
+    }
+
+    @Test
+    fun `a provider stop token becomes the ending it declares`() {
+        // The two tokens that mean the generation was cut short are reported as an ending, and they select their
+        // own classification: the output limit and the content policy are different situations for the user.
+        val outputLimit = assertNotNull(providerDeclaredEndingError("length"))
+        assertEquals("length", outputLimit.providerCode)
+        assertEquals(
+            AssistantMessageErrorCode.PROVIDER_OUTPUT_LIMIT_EXCEEDED,
+            outputLimit.toAssistantMessageCompletionState().errorCode
+        )
+
+        val contentPolicy = assertNotNull(providerDeclaredEndingError("content_filter"))
+        assertEquals("content_filter", contentPolicy.providerCode)
+        assertEquals(
+            AssistantMessageErrorCode.PROVIDER_REQUEST_REJECTED,
+            contentPolicy.toAssistantMessageCompletionState().errorCode
+        )
+
+        // Tokens are case-inconsistent across providers, and a normally finished generation declares no ending.
+        assertEquals("length", assertNotNull(providerDeclaredEndingError("LENGTH")).providerCode)
+        assertNull(providerDeclaredEndingError("stop"))
+        assertNull(providerDeclaredEndingError("tool_calls"))
+        assertNull(providerDeclaredEndingError(null), "A dialect without a stop token declares no ending")
     }
 
     @Test
