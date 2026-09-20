@@ -132,6 +132,7 @@ class ChatMessageAssistantMessageCompletionSerializationTest {
                 "INVALID_PROVIDER_RESPONSE",
                 "CONFIGURATION_ERROR",
                 "OUTPUT_LIMIT_EXCEEDED",
+                "PROVIDER_OUTPUT_LIMIT_EXCEEDED",
                 "TOOL_CALL_ITERATION_LIMIT_EXCEEDED",
                 "TOOL_CALLS_PER_STEP_LIMIT_EXCEEDED",
                 "TOOL_CALL_ARGUMENT_LIMIT_EXCEEDED",
