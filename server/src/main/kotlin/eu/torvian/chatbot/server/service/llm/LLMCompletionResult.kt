@@ -18,13 +18,19 @@ import kotlinx.serialization.json.JsonObject
  * @property metadata Optional metadata from the provider. Could be used for debugging or logging.
  *                    This map should contain data that doesn't fit into the structured fields but is useful
  *                    to pass up from the specific API response.
+ * @property providerFailure The provider's own declaration that this response did not complete, or `null` when it
+ *            did. It travels together with [choices] on purpose: a declared ending and the partial output it
+ *            explains are one fact, so a caller cannot act on the ending without the content. The value is the
+ *            same [LLMCompletionError.ProviderFailureError] the streaming path reports as an
+ *            [LLMStreamChunk.Error], which keeps both paths classified by the same mapping.
  */
 data class LLMCompletionResult(
     val choices: List<CompletionChoice>,
     val usage: UsageStats,
     val id: String? = null,
     val reasoningItems: List<JsonObject>? = null,
-    val metadata: Map<String, Any?> = emptyMap()
+    val metadata: Map<String, Any?> = emptyMap(),
+    val providerFailure: LLMCompletionError.ProviderFailureError? = null
 ) {
     /**
      * Represents a single generated completion choice from the LLM.

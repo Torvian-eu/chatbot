@@ -179,7 +179,7 @@ class LLMApiClientKtor(
                     strategy.processSuccessResponse(responseBody)
                         .getOrElse { error -> // Handle InvalidResponseError from strategy (parsing/mapping failure)
                             logger.error(
-                                "Strategy ${strategy::class.simpleName} failed to process success response: ${error.message}",
+                                "Strategy ${strategy::class.simpleName} failed to process success response: $error",
                                 error.cause
                             )
                             return@withContext error.left() // Propagate the specific error

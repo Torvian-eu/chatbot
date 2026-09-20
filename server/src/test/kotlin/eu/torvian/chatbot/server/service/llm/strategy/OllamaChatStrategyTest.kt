@@ -5,7 +5,11 @@ import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.server.service.llm.GenericContentType
 import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
+import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlin.test.*
@@ -202,6 +206,125 @@ class OllamaChatStrategyTest {
     @Test
     fun `strategy should have correct provider type`() {
         assertEquals(LLMProviderType.OLLAMA, strategy.providerType)
+    }
+
+    /**
+     * Verifies that a generation the server stopped at the model's output limit is reported as a failure on the
+     * result, without displacing the partial answer the same body carried.
+     */
+    @Test
+    fun `processSuccessResponse reports a length terminal reason as a failure that keeps the content`() {
+        val responseBody = """
+            {
+                "model": "llama3.2",
+                "created_at": "2023-12-07T09:32:18.757212583-08:00",
+                "message": { "role": "assistant", "content": "Partial answer" },
+                "done": true,
+                "done_reason": "length",
+                "prompt_eval_count": 26,
+                "eval_count": 15
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        val completionResult = assertNotNull(result.getOrNull())
+        assertEquals("Partial answer", completionResult.choices.single().content)
+        val providerFailure = assertNotNull(completionResult.providerFailure)
+        assertEquals("length", providerFailure.providerCode)
+    }
+
+    /**
+     * Verifies that a normally finished generation declares no ending, both when the server reports the reason and
+     * when it omits the field entirely.
+     */
+    @Test
+    fun `processSuccessResponse declares no ending without a non-success terminal reason`() {
+        val stoppedBody = """
+            {
+                "model": "llama3.2",
+                "created_at": "2023-12-07T09:32:18.757212583-08:00",
+                "message": { "role": "assistant", "content": "A complete answer" },
+                "done": true,
+                "done_reason": "stop"
+            }
+        """.trimIndent()
+        // Older and Ollama-compatible servers omit the field; `done` alone must not be read as a truncation.
+        val reasonlessBody = """
+            {
+                "model": "llama3.2",
+                "created_at": "2023-12-07T09:32:18.757212583-08:00",
+                "message": { "role": "assistant", "content": "A complete answer" },
+                "done": true
+            }
+        """.trimIndent()
+
+        listOf(stoppedBody, reasonlessBody).forEach { responseBody ->
+            val completionResult = assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull())
+            assertEquals("A complete answer", completionResult.choices.single().content)
+            assertNull(completionResult.providerFailure, "A normally finished generation declares no ending")
+        }
+    }
+
+    /**
+     * Verifies the streaming order: the failure of a cut-off generation is emitted after the content of the same
+     * generation and before the terminal chunk, so a consumer that keeps the first ending records the truncation.
+     */
+    @Test
+    fun `processStreamingResponse emits a length terminal reason before the terminal chunk`() = runTest {
+        val streamLines = listOf(
+            "{\"model\":\"llama3.2\",\"created_at\":\"2023-12-07T09:32:18Z\"," +
+                "\"message\":{\"role\":\"assistant\",\"content\":\"Partial answer\"},\"done\":false}",
+            "{\"model\":\"llama3.2\",\"created_at\":\"2023-12-07T09:32:18Z\"," +
+                "\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true," +
+                "\"done_reason\":\"length\",\"prompt_eval_count\":26,\"eval_count\":15}"
+        )
+
+        val emitted = strategy.processStreamingResponse(flowOf(*streamLines.toTypedArray()))
+            .toList()
+            .mapNotNull { it.getOrNull() }
+
+        val contentIndex = emitted.indexOfFirst {
+            it is LLMStreamChunk.ContentChunk && it.deltaContent == "Partial answer"
+        }
+        val errorIndex = emitted.indexOfFirst { it is LLMStreamChunk.Error }
+        val doneIndex = emitted.indexOfFirst { it is LLMStreamChunk.Done }
+        assertTrue(contentIndex >= 0, "The partial answer of the cut-off generation must be emitted")
+        assertTrue(errorIndex in (contentIndex + 1) until doneIndex, "The failure must sit between content and Done")
+        val errorChunk = assertIs<LLMStreamChunk.Error>(emitted[errorIndex])
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(errorChunk.llmError)
+        assertEquals("length", providerFailure.providerCode)
+        // The usage of the terminal chunk is still reported, ahead of the failure it qualifies.
+        assertTrue(emitted.any { it is LLMStreamChunk.UsageChunk })
+    }
+
+    /**
+     * Verifies that a streaming generation with a normal or absent terminal reason ends without any failure chunk.
+     */
+    @Test
+    fun `processStreamingResponse declares no failure without a non-success terminal reason`() = runTest {
+        val stoppedLines = listOf(
+            "{\"model\":\"llama3.2\",\"created_at\":\"2023-12-07T09:32:18Z\"," +
+                "\"message\":{\"role\":\"assistant\",\"content\":\"Complete\"},\"done\":false}",
+            "{\"model\":\"llama3.2\",\"created_at\":\"2023-12-07T09:32:18Z\"," +
+                "\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true,\"done_reason\":\"stop\"}"
+        )
+        val reasonlessLines = stoppedLines.map { line ->
+            line.replace(",\"done_reason\":\"stop\"", "")
+        }
+
+        listOf(stoppedLines, reasonlessLines).forEach { streamLines ->
+            val emitted = strategy.processStreamingResponse(flowOf(*streamLines.toTypedArray()))
+                .toList()
+                .mapNotNull { it.getOrNull() }
+
+            assertEquals(
+                listOf("Complete"),
+                emitted.filterIsInstance<LLMStreamChunk.ContentChunk>().map { it.deltaContent }
+            )
+            assertTrue(emitted.none { it is LLMStreamChunk.Error }, "A finished generation is not a failure")
+            assertTrue(emitted.any { it is LLMStreamChunk.Done })
+        }
     }
 
     /**

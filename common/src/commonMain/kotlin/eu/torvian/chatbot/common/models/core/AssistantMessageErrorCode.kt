@@ -56,6 +56,17 @@ enum class AssistantMessageErrorCode {
     OUTPUT_LIMIT_EXCEEDED,
 
     /**
+     * The provider stopped the generation because the model reached the **provider's own** output limit
+     * (for example a Responses `response.incomplete` event whose `incomplete_details.reason` is
+     * `max_output_tokens`), so the answer is cut off at the provider's side.
+     *
+     * Deliberately distinct from [OUTPUT_LIMIT_EXCEEDED], which reports the server's own
+     * assistant-message character cap: the limit was enforced by the provider on a generation the server
+     * never cut, and the two situations lead to different operator and user follow-ups.
+     */
+    PROVIDER_OUTPUT_LIMIT_EXCEEDED,
+
+    /**
      * The turn reached the server's limit of assistant/tool iterations, so the model could not be asked
      * to react to the tool calls of the final allowed iteration. Those calls are nevertheless persisted,
      * approved and executed before the turn ends; only the follow-up model call is gone.
@@ -77,8 +88,10 @@ enum class AssistantMessageErrorCode {
     TOOL_CALL_ARGUMENT_LIMIT_EXCEEDED,
 
     /**
-     * The provider's response stream ended without a completion signal (no terminal chunk, no error
-     * and no cancellation), so the answer may be cut off mid-generation.
+     * The generation ended before it was completed and no further cause is known: the provider's response
+     * stream ended without a completion signal (no terminal chunk, no error and no cancellation), or the
+     * provider declared the response incomplete without disclosing why. The answer may be cut off
+     * mid-generation.
      */
     STREAM_INTERRUPTED,
 

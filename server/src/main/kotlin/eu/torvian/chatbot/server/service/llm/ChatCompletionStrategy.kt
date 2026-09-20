@@ -85,16 +85,25 @@ interface ChatCompletionStrategy {
      * The strategy is responsible for knowing the expected JSON (or other) structure of a successful
      * response for its provider and extracting/mapping the relevant data.
      *
+     * A 2xx status is not proof of a completed generation: some dialects report a provider-declared ending
+     * inside the body (for instance a Responses payload whose `status` is `failed`, `incomplete` or
+     * `cancelled`). Such a body is a *parsed* result, not a mapping failure, so it is reported through
+     * [LLMCompletionResult.providerFailure] together with the output the body carried; the failure side is
+     * reserved for a body that could not be mapped at all.
+     *
      * @param responseBody The raw string body of the successful HTTP response (status 2xx).
-     * @return Either an [LLMCompletionError.InvalidResponseError] if parsing or mapping fails,
-     *         or the generic [LLMCompletionResult].
+     * @return Either an [LLMCompletionError.InvalidResponseError] if the body cannot be parsed/mapped, or the
+     *         generic [LLMCompletionResult], whose [LLMCompletionResult.providerFailure] is non-null when the
+     *         body declared that the generation did not complete.
      */
     fun processSuccessResponse(responseBody: String): Either<LLMCompletionError.InvalidResponseError, LLMCompletionResult>
 
     /**
      * Processes a raw streaming API response (as a Flow of strings/bytes) into a generic stream of LLMStreamChunk.
      * The strategy is responsible for parsing each raw chunk according to its provider's streaming format
-     * (e.g., SSE for OpenAI, NDJSON for Ollama) and mapping it to LLMStreamChunk.
+     * (e.g., SSE for OpenAI, NDJSON for Ollama) and mapping it to LLMStreamChunk; it translates events and does not
+     * decide how the stream ended, because the consumer of this flow keeps the first ending it sees, so a terminal
+     * event of a dialect is reported as such no matter what the provider sends afterwards.
      *
      * @param responseStream A Flow of raw string chunks from the HTTP response.
      * @return A Flow of Either<LLMCompletionError.InvalidResponseError, LLMStreamChunk>

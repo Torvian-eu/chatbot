@@ -177,6 +177,11 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             // 1. Deserialize the raw string body into the API-specific success response DTO
             val successResponse: OpenAiApiModels.ChatCompletionResponse = json.decodeFromString(responseBody)
 
+            // The finish reason is this dialect's declaration of how the generation ended: a stop token that
+            // means "cut short" (`length`, `content_filter`) is reported on the result, which keeps it inseparable
+            // from the partial content the same body carried.
+            val providerFailure = providerDeclaredEndingError(successResponse.choices.firstOrNull()?.finish_reason)
+
             // 2. Map the API-specific DTO to the generic LLMCompletionResult
             val result = LLMCompletionResult(
                 id = successResponse.id,
@@ -208,7 +213,8 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                     "api_object" to successResponse.`object`,
                     "api_created" to successResponse.created,
                     "api_model" to successResponse.model
-                )
+                ),
+                providerFailure = providerFailure
             )
             logger.debug("Successfully parsed response with ${result.choices.size} choice(s)")
             result.right()
@@ -377,6 +383,15 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                                 finishReason = choice.finish_reason
                             ).right()
                         )
+                    }
+
+                    // 4. A stop token that means the generation was cut short rather than finished (`length`,
+                    // `content_filter`) is reported as a failure, so the answer cannot be persisted as completed.
+                    // The content of this choice is emitted above, which keeps the partial answer with the ending;
+                    // the flow still ends with its terminal `Done` chunk, which the consumer ignores because the
+                    // failure is already the ending of the stream.
+                    providerDeclaredEndingError(choice.finish_reason)?.let { endingError ->
+                        emit(LLMStreamChunk.Error(endingError).right())
                     }
                 }
             } catch (e: Exception) {

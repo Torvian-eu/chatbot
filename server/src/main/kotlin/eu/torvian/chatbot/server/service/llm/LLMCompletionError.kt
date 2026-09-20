@@ -33,6 +33,24 @@ sealed class LLMCompletionError {
     data class InvalidResponseError(val message: String, val cause: Throwable? = null) : LLMCompletionError()
 
     /**
+     * Error indicating that the provider ended a generation with a declared non-success outcome instead of a
+     * completion: the Responses streaming `response.failed`, `response.incomplete` and `error` events, and a
+     * non-streaming Responses body whose `status` is `failed`, `incomplete` or `cancelled`.
+     *
+     * Unlike [ApiError] no HTTP status is involved: the provider answered successfully (2xx) and then reported
+     * the failure inside its payload, so the persisted classification has to be derived from [providerCode].
+     *
+     * @property providerCode Provider classification token carried by the terminal outcome (`server_error`,
+     *           `rate_limit_exceeded`, `max_output_tokens`, …), or `null` when the provider declared none. It
+     *           selects the persisted [eu.torvian.chatbot.common.models.core.AssistantMessageErrorCode] and is
+     *           logged, but it is never persisted and never part of a user-visible reason.
+     * @property message Server-authored description of the ending, deliberately provider-free: provider-supplied
+     *           text (error bodies, provider `message` fields) must never enter it, because this value can reach
+     *           log lines, the transient error `details` of the wire response and compaction error reasons.
+     */
+    data class ProviderFailureError(val providerCode: String?, val message: String) : LLMCompletionError()
+
+    /**
      * Error indicating authentication failed (e.g., invalid API key, missing credentials).
      * 
      * @property message Descriptive error message about the authentication failure

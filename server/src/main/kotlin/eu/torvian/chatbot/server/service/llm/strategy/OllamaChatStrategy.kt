@@ -160,6 +160,12 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
             // 1. Deserialize the raw string body into the API-specific success response DTO
             val successResponse: OllamaApiModels.ChatCompletionResponse = json.decodeFromString(responseBody)
 
+            // The terminal reason declares how the generation ended: a generation the server stopped at the
+            // model's output limit is reported on the result, which keeps the ending inseparable from the partial
+            // content the same body carried. `done` only says that the generation ended, so a `stop` reason, an
+            // absent one or an unknown one declares no ending at all.
+            val providerFailure = providerDeclaredEndingError(successResponse.done_reason)
+
             // 2. Map tool calls from Ollama response if present
             val toolCalls = successResponse.message.tool_calls?.map { ollamaToolCall ->
                 LLMCompletionResult.CompletionChoice.ToolCallRequest(
@@ -203,7 +209,8 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
                     "load_duration" to successResponse.load_duration,
                     "prompt_eval_duration" to successResponse.prompt_eval_duration,
                     "eval_duration" to successResponse.eval_duration
-                ).filterValues { it != null }
+                ).filterValues { it != null },
+                providerFailure = providerFailure
             )
 
             logger.debug("Successfully parsed response")
@@ -246,6 +253,15 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
                                 totalTokens = streamChunk.prompt_eval_count + streamChunk.eval_count
                             ).right()
                         )
+                    }
+
+                    // The terminal reason declares how the generation ended. A generation the server stopped at
+                    // the model's output limit is reported as a failure *before* the terminal chunk, so the stream
+                    // consumer records the failure as the ending of the stream and the completion that follows it
+                    // changes nothing. The content of the same generation was emitted by the preceding chunks, so
+                    // the partial answer travels with the ending.
+                    providerDeclaredEndingError(streamChunk.done_reason)?.let { endingError ->
+                        emit(LLMStreamChunk.Error(endingError).right())
                     }
 
                     emit(LLMStreamChunk.Done.right())
