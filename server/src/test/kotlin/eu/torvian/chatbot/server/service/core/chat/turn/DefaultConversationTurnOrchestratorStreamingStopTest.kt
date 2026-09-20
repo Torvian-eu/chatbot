@@ -4,6 +4,7 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
 import eu.torvian.chatbot.server.data.dao.AssistantMessageCompletionState
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
+import eu.torvian.chatbot.server.service.llm.LLMCompletionError
 import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -98,6 +99,45 @@ class DefaultConversationTurnOrchestratorStreamingStopTest : DefaultConversation
             AssistantMessageIncompleteCause.INTERRUPTED_BY_USER,
             finished.assistantMessage.incompleteCause
         )
+    }
+
+    /**
+     * Verifies that a declared failure cannot outrank the user's stop: the message stays interrupted by the user,
+     * because the cause the user can act on is the interruption itself.
+     */
+    @Test
+    fun `processStreamingTurn keeps an interrupted message when the provider also declared a failure`() = runTest {
+        val turnControlSignal = TurnControlSignal()
+        val userMessage = streamingUserMessage(507L, "Stop with failure")
+        val placeholder = streamingPlaceholder(508L, userMessage.id)
+        stubStreamingTurnStart(userMessage, placeholder)
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flow {
+            emit(LLMStreamChunk.ContentChunk("Partial answer").right())
+            emit(
+                LLMStreamChunk.Error(
+                    LLMCompletionError.ProviderFailureError(
+                        providerCode = "length",
+                        message = "The provider ended the response without completing it."
+                    )
+                ).right()
+            )
+            turnControlSignal.cancel()
+            emit(LLMStreamChunk.Done.right())
+        }
+
+        val events = orchestrator.processStreamingTurn(
+            streamingTurnRequest("Stop with failure", turnControlSignal)
+        ).toList()
+
+        coVerify(exactly = 1) {
+            conversationTurnPersistence.updateAssistantMessageContent(
+                placeholder.id,
+                "Partial answer",
+                AssistantMessageCompletionState.InterruptedByUser
+            )
+        }
+        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+        assertTrue(events.none { it == ConversationTurnEvent.TurnCompleted })
     }
 
     /**

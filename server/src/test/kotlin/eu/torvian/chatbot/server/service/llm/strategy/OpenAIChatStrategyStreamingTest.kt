@@ -261,6 +261,53 @@ class OpenAIChatStrategyStreamingTest : OpenAIChatStrategyTestBase() {
     }
 
     @Test
+    @DisplayName("processStreamingResponse should report a length finish reason as a failure that follows the content")
+    fun processStreamingResponse_lengthFinishReason_emitsOutputLimitFailure() = runTest {
+        // Given - the final chunk of a generation the provider cut at the model's output limit.
+        val streamLines = listOf(
+            "data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Partial answer\"},\"finish_reason\":null}]}",
+            "data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"length\"}]}",
+            "data: [DONE]"
+        )
+        val responseStream = flowOf(*streamLines.toTypedArray())
+
+        // When
+        val emitted = strategy.processStreamingResponse(responseStream).toList().mapNotNull { it.getOrNull() }
+
+        // Then - the partial text is emitted before the failure, so the ending and the answer it explains stay
+        // together, and the flow still terminates with Done (the consumer keeps the failure as the ending).
+        val contentIndex = emitted.indexOfFirst {
+            it is LLMStreamChunk.ContentChunk && it.deltaContent == "Partial answer"
+        }
+        val errorIndex = emitted.indexOfFirst { it is LLMStreamChunk.Error }
+        assertTrue(contentIndex >= 0, "The partial answer of the cut-off generation must be emitted")
+        assertTrue(errorIndex > contentIndex, "The failure must follow the content it explains")
+        val errorChunk = assertIs<LLMStreamChunk.Error>(emitted[errorIndex])
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(errorChunk.llmError)
+        assertEquals("length", providerFailure.providerCode)
+        assertTrue(emitted.last() is LLMStreamChunk.Done)
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should report a content_filter finish reason as a failure")
+    fun processStreamingResponse_contentFilterFinishReason_emitsFailure() = runTest {
+        // Given - the provider stopped the generation on its content policy.
+        val streamLines = listOf(
+            "data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"content_filter\"}]}",
+            "data: [DONE]"
+        )
+        val responseStream = flowOf(*streamLines.toTypedArray())
+
+        // When
+        val emitted = strategy.processStreamingResponse(responseStream).toList().mapNotNull { it.getOrNull() }
+
+        // Then
+        val errorChunk = assertIs<LLMStreamChunk.Error>(emitted.first { it is LLMStreamChunk.Error })
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(errorChunk.llmError)
+        assertEquals("content_filter", providerFailure.providerCode)
+    }
+
+    @Test
     @DisplayName("processStreamingResponse should handle multiple choices in a single chunk")
     fun processStreamingResponse_multipleChoices() = runTest {
         // Given

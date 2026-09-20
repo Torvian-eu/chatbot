@@ -20,10 +20,14 @@ import java.util.concurrent.CancellationException
  * The collector owns the provider-stream half of a streaming assistant step: it applies the assistant-text,
  * per-step tool-call and tool-argument character caps while appending, reports every reached cap back through the
  * [handleLlmStreaming] callbacks (nothing is cut silently), reconstructs tool calls from their streamed deltas,
- * reports streaming errors, and classifies every ending that carries no terminal chunk as an
- * [UnfinalizedAssistantStream] so the caller can persist the matching terminal state exactly once. No content is
- * stored here — the caller owns the [StringBuilder] it passes in and receives the accepted deltas through the
- * [handleLlmStreaming] callbacks, which is what keeps the recorded text and the recorded ending consistent.
+ * reports streaming errors, and classifies the ending of the stream as an [UnfinalizedAssistantStream] so the
+ * caller can persist the matching terminal state exactly once. No content is stored here — the caller owns the
+ * [StringBuilder] it passes in and receives the accepted deltas through the [handleLlmStreaming] callbacks, which
+ * is what keeps the recorded text and the recorded ending consistent.
+ *
+ * Because every dialect converges here, this is the only place that decides how a stream ended: the *first*
+ * terminal signal — a completion, an error chunk or a dialect parse failure — fixes the ending for good, which is
+ * why a strategy neither has to guard its own terminal events nor loses its outcome to a later one.
  *
  * @property llmApiClient Client that exposes the raw provider chunk stream used for generation.
  */
@@ -97,9 +101,18 @@ internal class LlmStreamCollector(
                     if (controlSignal.isCancelled) return@collect
                     llmStreamChunkEither.fold(
                         ifLeft = { llmError ->
-                            logger.error("LLM API streaming error, provider ${provider.name}: $llmError")
-                            state.streamingError = llmError
-                            onError(llmError)
+                            // A dialect that cannot parse a provider event reports it as a failed element of this
+                            // stream, which is a terminal signal like any error chunk: recording it here is what
+                            // keeps a later terminal event of the same stream from completing the message.
+                            if (state.recordEnding(StreamEnding.Failed(llmError))) {
+                                logger.error("LLM API streaming error, provider ${provider.name}: $llmError")
+                                onError(llmError)
+                            } else {
+                                logger.debug(
+                                    "Ignoring a streaming error that arrived after the stream's ending: {}",
+                                    llmError
+                                )
+                            }
                         },
                         ifRight = { chunk ->
                             handleStreamChunk(
@@ -149,25 +162,23 @@ internal class LlmStreamCollector(
             throw unexpected
         }
 
-        // The collect returned without a terminal chunk. Two endings reach this point: the user stopped the
-        // turn and the provider stream happened to end while the client was still connected (drain-completed
-        // stop), or the stream ended early without any signal at all. In both cases the row would stay
-        // not-completed without a cause forever, so the terminal state is written here.
-        if (!state.streamCompleted) {
-            val partialContent = accumulatedContent.toString()
-            val lastStreamingError = state.streamingError
-            onUnfinalized(
-                when {
-                    controlSignal.isCancelled ->
-                        UnfinalizedAssistantStream.CancelledByUser(partialContent)
+        // Whatever ended the collect, this invocation has at most one ending. A completion was already finalized
+        // through its terminal chunk; every other ending leaves the row without a terminal state forever unless it
+        // is written here, so the classification below is the last writer of this step. A declared failure loses
+        // to a user stop, because the user-visible cause of an interrupted turn is the interruption itself.
+        val partialContent = accumulatedContent.toString()
+        val ending = state.ending
+        when {
+            ending is StreamEnding.Completed -> Unit
 
-                    lastStreamingError != null ->
-                        UnfinalizedAssistantStream.Failed(partialContent, lastStreamingError)
+            controlSignal.isCancelled ->
+                onUnfinalized(UnfinalizedAssistantStream.CancelledByUser(partialContent))
 
-                    else ->
-                        UnfinalizedAssistantStream.StreamEndedUnexpectedly(partialContent)
-                }
-            )
+            ending is StreamEnding.Failed ->
+                onUnfinalized(UnfinalizedAssistantStream.Failed(partialContent, ending.error))
+
+            else ->
+                onUnfinalized(UnfinalizedAssistantStream.StreamEndedUnexpectedly(partialContent))
         }
     }
 
@@ -180,6 +191,10 @@ internal class LlmStreamCollector(
      * Nothing about mutation and callback order changes: inside an arm the accumulator is updated before the
      * delta is forwarded, `ToolCallDone` only overrides the authoritative payload, and inside `Done` the
      * completion flag and the finish reason are set before [onStreamComplete] runs.
+     *
+     * A chunk that arrives once the stream has an ending is dropped whole: content would otherwise show text the
+     * already-finalized message never carries, and a second terminal signal would produce a second terminal
+     * outcome. The freeze lives here, at the one point every chunk passes through, instead of in each dialect.
      *
      * @param chunk Chunk emitted by the provider stream.
      * @param state Collection state of the current invocation, updated in place.
@@ -208,6 +223,11 @@ internal class LlmStreamCollector(
         ) -> Unit,
         onError: suspend (error: LLMCompletionError) -> Unit
     ) {
+        if (state.ending != null) {
+            logger.trace("Ignoring a chunk that arrived after the stream's ending: {}", chunk)
+            return
+        }
+
         when (chunk) {
             is LLMStreamChunk.ContentChunk -> {
                 val remainingChars =
@@ -333,8 +353,12 @@ internal class LlmStreamCollector(
 
             LLMStreamChunk.Done -> {
                 // The provider signalled completion: from here on the caller finalizes the message itself and
-                // no abnormal-ending finalizer may run.
-                state.streamCompleted = true
+                // no abnormal-ending finalizer may run. An ending recorded earlier (an error chunk or a dialect
+                // parse failure) already owns the outcome, so this arm then changes nothing.
+                if (!state.recordEnding(StreamEnding.Completed)) {
+                    logger.debug("Ignoring a completion that arrived after the stream's ending")
+                    return
+                }
                 val toolCallRequests = state.survivingToolCalls().map { accumulator ->
                     LLMCompletionResult.CompletionChoice.ToolCallRequest(
                         name = accumulator.name,
@@ -362,12 +386,29 @@ internal class LlmStreamCollector(
             }
 
             is LLMStreamChunk.Error -> {
+                if (!state.recordEnding(StreamEnding.Failed(chunk.llmError))) {
+                    logger.debug("Ignoring a second streaming error of the same stream: {}", chunk.llmError)
+                    return
+                }
                 logger.error("LLM API returned streaming error chunk: ${chunk.llmError}")
-                state.streamingError = chunk.llmError
                 onError(chunk.llmError)
             }
         }
     }
+}
+
+/**
+ * How one collected stream ended.
+ *
+ * Both variants are terminal, and they are the only two outcomes the provider stream itself can declare; a stream
+ * that ends without either of them is classified from the surrounding control state instead.
+ */
+private sealed interface StreamEnding {
+    /** The provider declared that the generation completed. */
+    data object Completed : StreamEnding
+
+    /** The provider, the transport or a dialect parse step reported that the generation did not complete. */
+    data class Failed(val error: LLMCompletionError) : StreamEnding
 }
 
 /**
@@ -382,11 +423,8 @@ internal class LlmStreamCollector(
  *            dropped.
  * @property finishReason Last finish reason reported by the provider, or the derived `tool_calls` value once
  *            the step turned out to carry tool calls.
- * @property streamCompleted Whether the provider delivered its terminal chunk; anything else is an abnormal
- *            ending that the caller has to finalize itself, because nothing else will ever touch the row.
- * @property streamingError Last error reported by the stream, or `null` when none was reported. An error chunk
- *            may be followed by the end of the flow, and the ending then has to be classified as a failure
- *            rather than as a bare stream interruption.
+ * @property ending How this stream ended, or `null` while none of the ending signals has been observed. An ending
+ *            is written once and never replaced, so the value cannot describe two outcomes at the same time.
  * @property toolCallsByIndex Tool-call accumulators of the current step, keyed by its sequential tool-call index;
  *            the insertion order is the order the calls were first seen in, which is the order the requests are
  *            materialized in.
@@ -397,10 +435,24 @@ internal class LlmStreamCollector(
 private class StreamCollectionState {
     var contentTruncated: Boolean = false
     var finishReason: String? = null
-    var streamCompleted: Boolean = false
-    var streamingError: LLMCompletionError? = null
+    var ending: StreamEnding? = null
     val toolCallsByIndex: MutableMap<Int, MutableToolCallAccumulator> = mutableMapOf()
     val droppedToolCallIndices: MutableSet<Int> = mutableSetOf()
+
+    /**
+     * Records [ending] as the ending of this stream, unless one is already recorded.
+     *
+     * The first ending wins, which is what makes a stream produce exactly one outcome: a signal that arrives
+     * later — an error, a completion or more content — cannot change what the caller persists.
+     *
+     * @param ending Ending observed on the provider stream.
+     * @return Whether this call recorded the ending, i.e. whether the caller owns its terminal handling.
+     */
+    fun recordEnding(ending: StreamEnding): Boolean {
+        if (this.ending != null) return false
+        this.ending = ending
+        return true
+    }
 
     /**
      * Selects the tool calls of this step that may be persisted and executed.

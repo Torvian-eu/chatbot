@@ -488,6 +488,26 @@ class ResponsesStrategyTest {
     }
 
     @Test
+    @DisplayName("processStreamingResponse should emit refusal deltas as content that completes normally")
+    fun processStreamingResponse_refusalDeltas_becomeContent() {
+        val events = flowOf(
+            """data: {"type":"response.refusal.delta","delta":"I cannot "}""",
+            """data: {"type":"response.refusal.delta","delta":"help with that."}""",
+            """data: {"type":"response.completed","response":{"id":"resp_refusal","status":"completed","usage":{"input_tokens":1,"output_tokens":5,"total_tokens":6}}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+
+        assertEquals(
+            listOf("I cannot ", "help with that."),
+            chunks.filterIsInstance<LLMStreamChunk.ContentChunk>().map { it.deltaContent }
+        )
+        assertTrue(chunks.any { it is LLMStreamChunk.Done }, "A refusal ends the generation normally")
+        assertTrue(chunks.none { it is LLMStreamChunk.Error }, "A refusal is not a failure")
+    }
+
+    @Test
     @DisplayName("processSuccessResponse should report a completed body without any provider-declared ending")
     fun processSuccessResponse_completedStatus_hasNoProviderFailure() {
         val responseBody = """
@@ -653,6 +673,229 @@ class ResponsesStrategyTest {
         assertTrue(chunks.any { it is LLMStreamChunk.ContentChunk && it.deltaContent == "Hi" })
         assertTrue(chunks.any { it is LLMStreamChunk.ContentChunk && it.deltaContent == " there!" })
         assertTrue(chunks.any { it is LLMStreamChunk.UsageChunk && it.totalTokens == 12 })
+    }
+
+    /**
+     * Drains a streaming response into the chunks a strategy emitted, failing the test when the stream reports
+     * a strategy-level parse error (the left side of the flow).
+     *
+     * @param events Raw SSE lines to feed to the strategy.
+     * @return The emitted chunks, in emission order.
+     */
+    private fun streamingChunks(events: Flow<String>): List<LLMStreamChunk> = runBlocking {
+        val chunks = mutableListOf<LLMStreamChunk>()
+        strategy.processStreamingResponse(events).collect { either ->
+            either.fold(
+                ifLeft = { throw AssertionError("Expected no error, got $it") },
+                ifRight = { chunks.add(it) }
+            )
+        }
+        chunks
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should report response.failed as a provider failure without a Done chunk")
+    fun processStreamingResponse_responseFailed_emitsProviderFailureChunk() {
+        val providerMessage = "The model failed to generate a response."
+        val events = flowOf(
+            """data: {"type":"response.output_text.delta","delta":"Partial"}""",
+            """data: {"type":"response.failed","response":{"id":"resp_fail","status":"failed","output":[],"usage":null,"error":{"code":"server_error","message":"$providerMessage"}}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+
+        // The partial text is emitted before the failure so the collector can persist it.
+        assertEquals("Partial", chunks.filterIsInstance<LLMStreamChunk.ContentChunk>().single().deltaContent)
+        val error = chunks.filterIsInstance<LLMStreamChunk.Error>().single()
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(error.llmError)
+        assertEquals("server_error", providerFailure.providerCode)
+        // No terminal `Done`: the collector must classify the ending as a failure, not as a completion.
+        assertTrue(chunks.none { it is LLMStreamChunk.Done }, "A declared failure must not finalize as success")
+        assertTrue(
+            chunks.none { it.toString().contains(providerMessage) },
+            "The provider message must not reach any emitted chunk"
+        )
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should report response.failed without a provider code")
+    fun processStreamingResponse_responseFailedWithoutCode_emitsProviderFailureChunk() {
+        val events = flowOf(
+            """data: {"type":"response.failed","response":{"id":"resp_fail","status":"failed","output":[],"error":null}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+
+        val error = chunks.filterIsInstance<LLMStreamChunk.Error>().single()
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(error.llmError)
+        assertNull(providerFailure.providerCode, "A payload without a code must not invent one")
+        assertTrue(chunks.none { it is LLMStreamChunk.Done })
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should report response.incomplete with its declared reason")
+    fun processStreamingResponse_responseIncomplete_emitsProviderFailureChunk() {
+        val events = flowOf(
+            """data: {"type":"response.output_text.delta","delta":"Cut off"}""",
+            """data: {"type":"response.incomplete","response":{"id":"resp_inc","status":"incomplete","output":[],"incomplete_details":{"reason":"max_output_tokens"}}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+
+        assertEquals("Cut off", chunks.filterIsInstance<LLMStreamChunk.ContentChunk>().single().deltaContent)
+        val error = chunks.filterIsInstance<LLMStreamChunk.Error>().single()
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(error.llmError)
+        // The reason is carried as the provider code, which the failure mapping turns into the output-limit code.
+        assertEquals("max_output_tokens", providerFailure.providerCode)
+        assertTrue(chunks.none { it is LLMStreamChunk.Done })
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should report the error event by its provider code without completing the stream")
+    fun processStreamingResponse_errorEvent_emitsProviderFailureChunk() {
+        val providerMessage = "You exceeded your current quota, please check your plan and billing details."
+        val events = flowOf(
+            """data: {"type":"error","code":"rate_limit_exceeded","message":"$providerMessage","param":null,"sequence_number":3}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+
+        val error = chunks.filterIsInstance<LLMStreamChunk.Error>().single()
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(error.llmError)
+        assertEquals("rate_limit_exceeded", providerFailure.providerCode)
+        // The arm translates the event and nothing else: it emits no `Done`, so the ending the stream consumer
+        // records for it is the failure.
+        assertTrue(chunks.none { it is LLMStreamChunk.Done })
+        assertTrue(
+            chunks.none { it.toString().contains(providerMessage) },
+            "The provider message must not reach any emitted chunk"
+        )
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should translate events that follow a terminal event")
+    fun processStreamingResponse_translatesEventsAfterATerminalEvent() {
+        val events = flowOf(
+            """data: {"type":"response.output_text.delta","delta":"Complete"}""",
+            """data: {"type":"response.completed","response":{"id":"resp_ok","status":"completed","usage":{"input_tokens":5,"output_tokens":7,"total_tokens":12}}}""",
+            // Provider/proxy anomalies after the terminal event: a late content delta, a late error and a second
+            // completion. This strategy translates all of them; discarding them is the stream consumer's job,
+            // which keeps the first ending it sees.
+            """data: {"type":"response.output_text.delta","delta":" Late"}""",
+            """data: {"type":"error","code":"server_error","message":"late failure"}""",
+            """data: {"type":"response.completed","response":{"id":"resp_ok2","status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+
+        assertEquals(
+            listOf("Complete", " Late"),
+            chunks.filterIsInstance<LLMStreamChunk.ContentChunk>().map { it.deltaContent }
+        )
+        assertEquals(2, chunks.count { it is LLMStreamChunk.Done })
+        assertEquals(2, chunks.count { it is LLMStreamChunk.UsageChunk })
+        val lateError = chunks.filterIsInstance<LLMStreamChunk.Error>().single()
+        val lateProviderFailure = assertIs<LLMCompletionError.ProviderFailureError>(lateError.llmError)
+        assertEquals("server_error", lateProviderFailure.providerCode)
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should treat a completed event with a non-completed status as a failure")
+    fun processStreamingResponse_completedWithFailedStatus_emitsProviderFailureChunk() {
+        val events = flowOf(
+            """data: {"type":"response.completed","response":{"id":"resp_proxy","status":"failed","error":{"code":"content_filter","message":"blocked"},"usage":null}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+
+        val error = chunks.filterIsInstance<LLMStreamChunk.Error>().single()
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(error.llmError)
+        assertEquals("content_filter", providerFailure.providerCode)
+        assertTrue(chunks.none { it is LLMStreamChunk.Done }, "A non-completed status must not finalize as success")
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should complete normally when the terminal event reports null usage")
+    fun processStreamingResponse_completedEventWithNullUsage_stillCompletes() {
+        val events = flowOf(
+            """data: {"type":"response.output_text.delta","delta":"Done"}""",
+            // Providers do report a JSON-null usage on a completed event; that must not fail the stream.
+            """data: {"type":"response.completed","response":{"id":"resp_ok","status":"completed","usage":null}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+
+        assertEquals("Done", chunks.filterIsInstance<LLMStreamChunk.ContentChunk>().single().deltaContent)
+        assertTrue(chunks.any { it is LLMStreamChunk.Done }, "A null usage must not change the ending")
+        assertTrue(chunks.none { it is LLMStreamChunk.UsageChunk }, "A null usage contributes no token counts")
+        assertTrue(chunks.none { it is LLMStreamChunk.Error })
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should treat a non-primitive error field as absent and stay terminal")
+    fun processStreamingResponse_nonPrimitiveErrorFields_stayTerminal() {
+        val events = flowOf(
+            """data: {"type":"error","code":{"value":"server_error"},"message":["blocked"]}""",
+            """data: [DONE]"""
+        )
+
+        // A malformed payload must produce the terminal provider ending rather than a strategy-level parse error.
+        val chunks = streamingChunks(events)
+
+        val error = chunks.filterIsInstance<LLMStreamChunk.Error>().single()
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(error.llmError)
+        assertNull(providerFailure.providerCode, "A non-primitive code is treated as absent")
+        assertTrue(chunks.none { it is LLMStreamChunk.Done })
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should compare the response status case-insensitively")
+    fun processStreamingResponse_treatsTheResponseStatusCaseInsensitively() {
+        val completedChunks = streamingChunks(
+            flowOf(
+                """data: {"type":"response.completed","response":{"id":"resp_ok","status":"Completed","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}""",
+                """data: [DONE]"""
+            )
+        )
+        // A capitalised status must neither fail a completed generation nor complete a failed one.
+        assertTrue(completedChunks.none { it is LLMStreamChunk.Error })
+        assertTrue(completedChunks.any { it is LLMStreamChunk.Done })
+
+        val failedChunks = streamingChunks(
+            flowOf(
+                """data: {"type":"response.completed","response":{"id":"resp_bad","status":"Failed","output":[],"usage":null}}""",
+                """data: [DONE]"""
+            )
+        )
+        val error = failedChunks.filterIsInstance<LLMStreamChunk.Error>().single()
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(error.llmError)
+        // The status is normalised before it becomes the classification token.
+        assertEquals("failed", providerFailure.providerCode)
+        assertTrue(failedChunks.none { it is LLMStreamChunk.Done })
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should classify an incomplete event without a reason by its status token")
+    fun processStreamingResponse_incompleteWithoutReason_reportsTheStatusToken() {
+        val events = flowOf(
+            """data: {"type":"response.incomplete","response":{"id":"resp_inc","status":"incomplete","output":[]}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+
+        val error = chunks.filterIsInstance<LLMStreamChunk.Error>().single()
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(error.llmError)
+        // The status is the classification token, so the persisted failure can name the ended-early generation
+        // instead of degrading to a provider outage.
+        assertEquals("incomplete", providerFailure.providerCode)
     }
 
     @Test

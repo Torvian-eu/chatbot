@@ -64,6 +64,9 @@ object OllamaApiModels {
      * Each line in an Ollama stream is a JSON object matching this structure (except for the final 'done: true' object).
      * The 'done' property indicates if the stream is finished.
      * The 'message' property contains the delta content.
+     *
+     * @property done_reason Terminal reason the server reports on the final chunk (`stop`, `length`, …), or `null`
+     *            when it reports none or the chunk is not the final one.
      */
     @Serializable
     data class ChatCompletionStreamResponse(
@@ -71,6 +74,7 @@ object OllamaApiModels {
         val created_at: String,
         val message: Message? = null, // message can be null for the final done chunk (which contains stats)
         val done: Boolean,
+        val done_reason: String? = null,
         val total_duration: Long? = null,
         val load_duration: Long? = null,
         val prompt_eval_count: Int? = null,

@@ -513,6 +513,14 @@ class ResponsesStrategy(
                         }
                     }
 
+                    "response.refusal.delta" -> {
+                        // A refusal is the model's answer, not a failure: its text is accumulated and persisted
+                        // as the content of a completed message, exactly like generated text.
+                        if (!delta.isNullOrEmpty()) {
+                            emit(LLMStreamChunk.ContentChunk(deltaContent = delta).right())
+                        }
+                    }
+
                     "response.output_item.added" -> {
                         // A function call is announced here with its name and call_id. Capture them keyed
                         // by the event's output_index so subsequent argument deltas can be attributed to it,
@@ -587,8 +595,31 @@ class ResponsesStrategy(
                     }
 
                     "response.completed" -> {
-                        // Usage is delivered on this terminal event in the embedded response snapshot.
-                        val usage = event["response"]?.jsonObject?.get("usage")?.jsonObject
+                        val response = event["response"] as? JsonObject
+                        val responseStatus = response?.get("status")?.jsonPrimitive?.contentOrNull
+                        // The status enum is not case-stable across providers and proxies, so it is normalised
+                        // before it is compared and before it becomes the classification token, exactly as the
+                        // status of a non-streaming body is.
+                        val normalizedStatus = responseStatus?.lowercase(Locale.ROOT)
+                        // The success event of the API is only a success when the embedded response says so:
+                        // OpenAI-compatible proxies route a failed/incomplete/cancelled response through this
+                        // event as well, and such a payload must not finalize the message as completed.
+                        if (normalizedStatus != null && normalizedStatus != "completed") {
+                            emit(
+                                LLMStreamChunk.Error(
+                                    providerDeclaredResponseFailure(
+                                        source = "response.completed with status '$responseStatus'",
+                                        response = response,
+                                        fallbackCode = normalizedStatus
+                                    )
+                                ).right()
+                            )
+                            return@collect
+                        }
+                        // Usage is delivered on this terminal event in the embedded response snapshot. A missing
+                        // or JSON-null usage (providers do report `usage: null` on non-completions) must not fail
+                        // the whole stream, so only a real object contributes a usage chunk.
+                        val usage = response?.get("usage") as? JsonObject
                         if (usage != null) {
                             emit(
                                 LLMStreamChunk.UsageChunk(
@@ -604,21 +635,65 @@ class ResponsesStrategy(
                         return@collect
                     }
 
-                    "error" -> {
+                    "response.failed" -> {
+                        // Terminal failure event: the provider streams a 2xx response and then declares that the
+                        // generation failed (its `output[]` is empty and `usage` is null). Not emitting `Done`
+                        // lets the collector persist the partial content as a failure instead of as a
+                        // completion, while the provider code/message go to the logs only.
                         emit(
                             LLMStreamChunk.Error(
-                                LLMCompletionError.ApiError(
-                                    statusCode = 500,
-                                    message = event["message"]?.jsonPrimitive?.contentOrNull
-                                        ?: "Unknown Responses streaming error",
-                                    errorBody = dataContent
+                                providerDeclaredResponseFailure(
+                                    source = "response.failed",
+                                    response = event["response"] as? JsonObject,
+                                    fallbackCode = null
                                 )
                             ).right()
                         )
+                        return@collect
+                    }
+
+                    "response.incomplete" -> {
+                        // Terminal incomplete event: the provider stopped the generation before it was finished
+                        // (`incomplete_details.reason`, e.g. `max_output_tokens`). Handled like
+                        // `response.failed` — the answer is cut off and must not look complete — and the reason
+                        // selects the persisted classification (`max_output_tokens` has its own error code).
+                        emit(
+                            LLMStreamChunk.Error(
+                                providerDeclaredResponseFailure(
+                                    source = "response.incomplete",
+                                    response = event["response"] as? JsonObject,
+                                    // An event without a reason of its own is still an explicitly incomplete
+                                    // generation, so the status itself is reported as its classification token.
+                                    fallbackCode = "incomplete"
+                                )
+                            ).right()
+                        )
+                        return@collect
+                    }
+
+                    "error" -> {
+                        // Terminal error event of the stream (the documented `ResponseErrorEvent`): the provider
+                        // code classifies the failure instead of a fabricated HTTP status and the provider message
+                        // is log-only. No `Done` follows, so the collector — which keeps the first ending of a
+                        // stream — cannot turn this failure into a completed message.
+                        val providerCode = providerDeclaredCode(
+                            response = null,
+                            fallbackCode = (event["code"] as? JsonPrimitive)?.contentOrNull
+                        )
+                        logProviderDeclaredEnding(
+                            source = "error",
+                            responseId = null,
+                            providerCode = providerCode,
+                            providerMessage = (event["message"] as? JsonPrimitive)?.contentOrNull
+                        )
+                        emit(LLMStreamChunk.Error(providerDeclaredFailure(providerCode)).right())
+                        return@collect
                     }
 
                     else -> {
-                        // Ignore lifecycle events (created, in_progress, output_item.added, etc.).
+                        // Ignore the remaining lifecycle and content-mapping events (created, in_progress,
+                        // queued, content_part.added/done, output_text.done, reasoning summary deltas, …): they
+                        // carry neither content to accumulate nor a terminal outcome.
                     }
                 }
             } catch (e: Exception) {

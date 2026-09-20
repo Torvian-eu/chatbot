@@ -267,6 +267,67 @@ class OllamaChatStrategyTest {
     }
 
     /**
+     * Verifies the streaming order: the failure of a cut-off generation is emitted after the content of the same
+     * generation and before the terminal chunk, so a consumer that keeps the first ending records the truncation.
+     */
+    @Test
+    fun `processStreamingResponse emits a length terminal reason before the terminal chunk`() = runTest {
+        val streamLines = listOf(
+            "{\"model\":\"llama3.2\",\"created_at\":\"2023-12-07T09:32:18Z\"," +
+                "\"message\":{\"role\":\"assistant\",\"content\":\"Partial answer\"},\"done\":false}",
+            "{\"model\":\"llama3.2\",\"created_at\":\"2023-12-07T09:32:18Z\"," +
+                "\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true," +
+                "\"done_reason\":\"length\",\"prompt_eval_count\":26,\"eval_count\":15}"
+        )
+
+        val emitted = strategy.processStreamingResponse(flowOf(*streamLines.toTypedArray()))
+            .toList()
+            .mapNotNull { it.getOrNull() }
+
+        val contentIndex = emitted.indexOfFirst {
+            it is LLMStreamChunk.ContentChunk && it.deltaContent == "Partial answer"
+        }
+        val errorIndex = emitted.indexOfFirst { it is LLMStreamChunk.Error }
+        val doneIndex = emitted.indexOfFirst { it is LLMStreamChunk.Done }
+        assertTrue(contentIndex >= 0, "The partial answer of the cut-off generation must be emitted")
+        assertTrue(errorIndex in (contentIndex + 1) until doneIndex, "The failure must sit between content and Done")
+        val errorChunk = assertIs<LLMStreamChunk.Error>(emitted[errorIndex])
+        val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(errorChunk.llmError)
+        assertEquals("length", providerFailure.providerCode)
+        // The usage of the terminal chunk is still reported, ahead of the failure it qualifies.
+        assertTrue(emitted.any { it is LLMStreamChunk.UsageChunk })
+    }
+
+    /**
+     * Verifies that a streaming generation with a normal or absent terminal reason ends without any failure chunk.
+     */
+    @Test
+    fun `processStreamingResponse declares no failure without a non-success terminal reason`() = runTest {
+        val stoppedLines = listOf(
+            "{\"model\":\"llama3.2\",\"created_at\":\"2023-12-07T09:32:18Z\"," +
+                "\"message\":{\"role\":\"assistant\",\"content\":\"Complete\"},\"done\":false}",
+            "{\"model\":\"llama3.2\",\"created_at\":\"2023-12-07T09:32:18Z\"," +
+                "\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true,\"done_reason\":\"stop\"}"
+        )
+        val reasonlessLines = stoppedLines.map { line ->
+            line.replace(",\"done_reason\":\"stop\"", "")
+        }
+
+        listOf(stoppedLines, reasonlessLines).forEach { streamLines ->
+            val emitted = strategy.processStreamingResponse(flowOf(*streamLines.toTypedArray()))
+                .toList()
+                .mapNotNull { it.getOrNull() }
+
+            assertEquals(
+                listOf("Complete"),
+                emitted.filterIsInstance<LLMStreamChunk.ContentChunk>().map { it.deltaContent }
+            )
+            assertTrue(emitted.none { it is LLMStreamChunk.Error }, "A finished generation is not a failure")
+            assertTrue(emitted.any { it is LLMStreamChunk.Done })
+        }
+    }
+
+    /**
      * Verifies the input projection shared with the token counter equals the input-bearing fields
      * actually embedded in the prepared request body, so counting can never drift from the payload.
      */

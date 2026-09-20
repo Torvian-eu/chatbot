@@ -384,6 +384,15 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                             ).right()
                         )
                     }
+
+                    // 4. A stop token that means the generation was cut short rather than finished (`length`,
+                    // `content_filter`) is reported as a failure, so the answer cannot be persisted as completed.
+                    // The content of this choice is emitted above, which keeps the partial answer with the ending;
+                    // the flow still ends with its terminal `Done` chunk, which the consumer ignores because the
+                    // failure is already the ending of the stream.
+                    providerDeclaredEndingError(choice.finish_reason)?.let { endingError ->
+                        emit(LLMStreamChunk.Error(endingError).right())
+                    }
                 }
             } catch (e: Exception) {
                 logger.error("Failed to parse OpenAI streaming JSON chunk: $rawChunk", e)

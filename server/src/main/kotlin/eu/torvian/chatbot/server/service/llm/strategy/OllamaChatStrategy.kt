@@ -255,6 +255,15 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
                         )
                     }
 
+                    // The terminal reason declares how the generation ended. A generation the server stopped at
+                    // the model's output limit is reported as a failure *before* the terminal chunk, so the stream
+                    // consumer records the failure as the ending of the stream and the completion that follows it
+                    // changes nothing. The content of the same generation was emitted by the preceding chunks, so
+                    // the partial answer travels with the ending.
+                    providerDeclaredEndingError(streamChunk.done_reason)?.let { endingError ->
+                        emit(LLMStreamChunk.Error(endingError).right())
+                    }
+
                     emit(LLMStreamChunk.Done.right())
                     return@collect
                 }
