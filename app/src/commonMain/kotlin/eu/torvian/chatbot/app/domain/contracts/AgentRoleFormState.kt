@@ -30,8 +30,8 @@ import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
  *            profile, or null for a preset-less draft. A preset-less role is legal but non-sendable.
  * @property toolIds Set of tool-definition identifiers attached to the role.
  * @property spawnableAgentRoleIds Unordered role ids this role may spawn; may include the role's own id.
- *            Only roles sharing the role's project scope ([projectId]) are selectable (the server
- *            enforces same-project spawns on save).
+ *            Every role owned by the user is selectable, whichever project it belongs to: `spawn_agent`
+ *            addresses its target by id, so a duplicated role name is harmless.
  * @property projectId Single user-owned project id the role belongs to, or null for an
  *            **unassociated** role. A role belongs to at most one project; the id is a full
  *            replacement on save (mirroring [toolIds]). Unassociated roles are offered by the
@@ -63,26 +63,16 @@ data class AgentRoleFormState(
     fun withError(errorMessage: String?): AgentRoleFormState = copy(errorMessage = errorMessage)
 
     /**
-     * Returns a copy of this draft with [projectId] replaced and any previously selected spawn target
-     * that no longer shares the new scope dropped.
+     * Returns a copy of this draft with [projectId] replaced.
      *
-     * Spawn targets must share the role's project scope (the server rejects a target whose single
-     * project differs from the role's on save). When the user switches the role's project in the
-     * form, targets of the old scope drop out of the chip row but would otherwise stay in
-     * [spawnableAgentRoleIds] and fail with a same-project rejection on save; this helper keeps only
-     * the targets that remain legal under the new scope. The role being edited itself always stays
-     * eligible (self-spawn is same-scope by definition after the save).
+     * The role's project is its own membership and never constrains the spawn allow-list, so switching
+     * projects keeps every selected spawn target: the chips only regroup under their own project's
+     * heading.
      *
      * @param projectId The new single project scope, or null for an unassociated role.
-     * @param roles Same-user roles available as spawn targets, used to resolve each target's scope.
-     * @return The updated draft with the new project scope and a pruned spawn-target set.
+     * @return The updated draft with the new project scope and the spawn-target selection untouched.
      */
-    fun withProjectScope(projectId: Long?, roles: List<AgentRoleDto>): AgentRoleFormState {
-        val keptSpawnTargets = spawnableAgentRoleIds.filter { targetId ->
-            targetId == roleId || roles.any { it.id == targetId && it.projectId == projectId }
-        }.toSet()
-        return copy(projectId = projectId, spawnableAgentRoleIds = keptSpawnTargets)
-    }
+    fun withProjectScope(projectId: Long?): AgentRoleFormState = copy(projectId = projectId)
 
     /**
      * Validates the required fields. Only the name is mandatory: the model preset is optional

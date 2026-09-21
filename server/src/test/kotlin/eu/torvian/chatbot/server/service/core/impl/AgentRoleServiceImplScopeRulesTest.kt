@@ -16,7 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-/** Tests for [AgentRoleServiceImpl] project-scope rules: name uniqueness per scope and the same-project spawn allow-list. */
+/** Tests for [AgentRoleServiceImpl] project-scope rules: name uniqueness per scope and the spawn allow-list. */
 class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
 
     @Test
@@ -179,40 +179,9 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
         coVerify(exactly = 1) { agentRoleDao.updateRole(any()) }
     }
     @Test
-    fun `createRole rejects a spawnable target in a different project`() = runTest {
-        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
-        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
-        // The source role joins project 1; the spawn target lives in project 2.
-        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(1L)) } returns listOf(TestDefaults.project1)
-        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L)) } returns
-            listOf(TestDefaults.agentRole1.copy(id = 5L, projectId = 2L))
-
-        val result = service.createRole(userId, validRequest().copy(projectId = 1L, spawnableAgentRoleIds = setOf(5L)))
-
-        val error = assertIs<CreateAgentRoleError.SpawnableRoleNotInProject>(result.leftOrNull())
-        assertEquals(5L, error.roleId)
-        assertEquals(1L, error.projectId)
-        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) }
-    }
-    @Test
-    fun `createRole rejects a spawnable target when the source is unassociated and the target is in a project`() = runTest {
-        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
-        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
-        // The source role stays unassociated (projectId null); the target belongs to project 1.
-        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L)) } returns
-            listOf(TestDefaults.agentRole1.copy(id = 5L, projectId = 1L))
-
-        val result = service.createRole(userId, validRequest().copy(spawnableAgentRoleIds = setOf(5L)))
-
-        val error = assertIs<CreateAgentRoleError.SpawnableRoleNotInProject>(result.leftOrNull())
-        assertEquals(5L, error.roleId)
-        assertEquals(null, error.projectId)
-    }
-    @Test
     fun `createRole accepts spawn targets sharing the role's project`() = runTest {
         coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
-        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(1L)) } returns listOf(TestDefaults.project1)
         // Both targets are unassociated like the source role -> legal.
         coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L, 6L)) } returns listOf(
             TestDefaults.agentRole1.copy(id = 5L),
@@ -230,11 +199,99 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
         assertTrue(result.isRight())
     }
     @Test
-    fun `updateRole exempts self-spawn when the role moves projects`() = runTest {
+    fun `createRole accepts spawn targets from every project scope`() = runTest {
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(1L)) } returns listOf(TestDefaults.project1)
+        // The role joins project 1; its targets are respectively in the same project, in another project,
+        // and unassociated. Every combination is legal, so the allow-list is stored verbatim.
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L, 6L, 7L)) } returns listOf(
+            TestDefaults.agentRole1.copy(id = 5L, projectId = 1L),
+            TestDefaults.agentRole2.copy(id = 6L, projectId = 2L),
+            TestDefaults.agentRole1.copy(id = 7L, name = "Helper")
+        )
+        coEvery {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+        } returns TestDefaults.agentRole1
+        coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val result = service.createRole(
+            userId,
+            validRequest().copy(projectId = 1L, spawnableAgentRoleIds = setOf(5L, 6L, 7L))
+        )
+
+        assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
+        coVerify(exactly = 1) {
+            agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(TestDefaults.agentRole1.id, setOf(5L, 6L, 7L))
+        }
+        assertEquals(setOf(5L, 6L, 7L), result.getOrNull()?.spawnableAgentRoleIds)
+    }
+    @Test
+    fun `createRole accepts a project-bound spawn target for an unassociated role`() = runTest {
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // The source role stays unassociated; its target belongs to project 1.
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L)) } returns
+            listOf(TestDefaults.agentRole1.copy(id = 5L, projectId = 1L))
+        coEvery {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+        } returns TestDefaults.agentRole1
+        coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val result = service.createRole(userId, validRequest().copy(spawnableAgentRoleIds = setOf(5L)))
+
+        assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
+    }
+    @Test
+    fun `createRole accepts an allow-list with two same-named targets`() = runTest {
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // Two of the user's roles are named "Helper" (disjoint projects, so their names may coexist).
+        // `spawn_agent` addresses its target by id, which cannot be ambiguous, so both ids are accepted
+        // and stored verbatim.
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L, 6L)) } returns listOf(
+            TestDefaults.agentRole1.copy(id = 6L, name = "Helper", projectId = 2L),
+            TestDefaults.agentRole1.copy(id = 5L, name = "Helper", projectId = 1L)
+        )
+        coEvery {
+            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+        } returns TestDefaults.agentRole1
+        coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
+
+        val result = service.createRole(userId, validRequest().copy(spawnableAgentRoleIds = setOf(5L, 6L)))
+
+        assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
+        coVerify(exactly = 1) {
+            agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(TestDefaults.agentRole1.id, setOf(5L, 6L))
+        }
+    }
+    @Test
+    fun `createRole rejects a spawn target that is not owned by the user`() = runTest {
+        coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
+        // 99 is not owned by the user (and therefore not returned by the owner-scoped read): the
+        // ownership collapse reports it as not found and nothing is written.
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L, 99L)) } returns listOf(
+            TestDefaults.agentRole1.copy(id = 5L, name = "Helper")
+        )
+
+        val result = service.createRole(userId, validRequest().copy(spawnableAgentRoleIds = setOf(5L, 99L)))
+
+        assertIs<CreateAgentRoleError.SpawnableRoleNotFound>(result.leftOrNull())
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(any(), any()) }
+    }
+    @Test
+    fun `updateRole keeps self-spawn when the role moves projects`() = runTest {
         // The role currently lives in project 1 and moves to project 2 while keeping itself in its
-        // spawn allow-list: the persisted (stale) membership of the target IS the role being written,
-        // so the same-project check must exempt it (its row is updated with projectId 2 in the same
-        // transaction).
+        // spawn allow-list: the membership is rewritten with projectId 2 in this transaction and the
+        // allow-list no longer depends on the scope, so the update succeeds.
         coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.copy(projectId = 1L).right()
         coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
@@ -261,30 +318,38 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
         coVerify(exactly = 1) { agentRoleDao.updateRole(match { it.projectId == 2L }) }
     }
     @Test
-    fun `updateRole rejects a spawnable target outside the role's new project`() = runTest {
+    fun `updateRole accepts an allow-list with two same-named targets`() = runTest {
+        // The role currently lives in project 1 and moves to project 2 while its allow-list holds two
+        // of the user's roles named "Helper" (disjoint projects, so their names may coexist).
+        // `spawn_agent` addresses its target by id, which cannot be ambiguous, so the update stores
+        // both ids verbatim.
         coEvery { agentRoleDao.getRoleById(1L) } returns TestDefaults.agentRole1.copy(projectId = 1L).right()
         coEvery { agentRoleOwnershipDao.getOwner(1L) } returns userId.right()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
-        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(2L)) } returns listOf(TestDefaults.project2)
-        // The target role stays in project 1 while the source moves to project 2 -> illegal.
-        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L)) } returns
-            listOf(TestDefaults.agentRole1.copy(id = 5L, projectId = 1L))
         coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
+        coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(2L)) } returns listOf(TestDefaults.project2)
+        coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L, 6L)) } returns listOf(
+            TestDefaults.agentRole1.copy(id = 6L, name = "Helper", projectId = 2L),
+            TestDefaults.agentRole1.copy(id = 5L, name = "Helper", projectId = 1L)
+        )
+        coEvery { agentRoleDao.updateRole(any()) } returns Unit.right()
+        coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
+        coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
 
         val request = UpdateAgentRoleRequest(
             name = "Renamed",
             description = "Designs systems",
             modelPresetId = validPreset.id,
             toolIds = emptySet(),
-            spawnableAgentRoleIds = setOf(5L),
+            spawnableAgentRoleIds = setOf(5L, 6L),
             instructions = emptyList(),
             projectId = 2L
         )
         val result = service.updateRole(userId, 1L, request)
 
-        val error = assertIs<UpdateAgentRoleError.SpawnableRoleNotInProject>(result.leftOrNull())
-        assertEquals(5L, error.roleId)
-        assertEquals(2L, error.projectId)
-        coVerify(exactly = 0) { agentRoleDao.updateRole(any()) }
+        assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
+        coVerify(exactly = 1) {
+            agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(1L, setOf(5L, 6L))
+        }
     }
 }

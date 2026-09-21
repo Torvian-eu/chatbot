@@ -27,9 +27,8 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  *            **preset-less** and therefore non-sendable.
  * @property projectId Optional reference to the single project the role belongs to (`SET NULL` on
  *            delete). Null means the role is **unassociated** (offered only for project-less
- *            sessions). Membership was reduced from a set to a single column so same-project
- *            rules (spawn allow-list targets, name-uniqueness scope, Session Legality Invariant)
- *            are exact comparisons.
+ *            sessions). Membership was reduced from a set to a single column so project-sensitive
+ *            rules (name-uniqueness scope, Session Legality Invariant) are exact comparisons.
  * @property instructionsJson JSON array of the flat [eu.torvian.chatbot.common.models.agent.AgentInstructionDto]
  *            list (the same encoding used on the wire).
  * @property createdAt Timestamp when the role was created.

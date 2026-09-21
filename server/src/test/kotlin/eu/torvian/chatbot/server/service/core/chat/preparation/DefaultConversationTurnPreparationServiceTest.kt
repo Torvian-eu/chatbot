@@ -9,6 +9,9 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelCapabilities
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
+import eu.torvian.chatbot.common.models.tool.OperatorToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
@@ -118,6 +121,46 @@ class DefaultConversationTurnPreparationServiceTest {
         tools = emptySet(),
         instructions = emptyList()
     )
+
+    /** Id of the `spawn_agent` operator tool attached by the spawnability-gate tests. */
+    private val spawnToolId = 21L
+
+    /**
+     * Callable operator tool named `spawn_agent`: the marker the turn gate looks for among a role's
+     * resolved tools.
+     */
+    private val spawnTool = OperatorToolDefinition(
+        id = spawnToolId,
+        name = OperatorToolCatalog.SPAWN_AGENT_NAME,
+        description = "Spawns a sub-agent",
+        config = buildJsonObject { },
+        inputSchema = buildJsonObject { },
+        outputSchema = null,
+        isEnabled = true,
+        createdAt = Instant.fromEpochMilliseconds(0L),
+        updatedAt = Instant.fromEpochMilliseconds(0L),
+        userId = userId
+    )
+
+    /**
+     * Stubs the collaborators a sendable role needs besides its own configuration: the role's tool batch
+     * read, the model/settings/provider/credential resolution and the prompt composition.
+     *
+     * @param toolsById Tool definitions the role's tool ids resolve to; empty by default.
+     * @param model Model resolved for the role's model id; the tool-calling fixture by default, so every
+     *            tool-dependent gate is exercised.
+     */
+    private fun stubPreparedTurn(
+        toolsById: Map<Long, ToolDefinition> = emptyMap(),
+        model: LLMModel = toolCallingModel
+    ) {
+        coEvery { llmModelService.getModelById(model.id) } returns model.right()
+        coEvery { modelSettingsService.getSettingsById(testSettings.id) } returns testSettings.right()
+        coEvery { llmProviderService.getProviderById(model.providerId) } returns testProvider.right()
+        coEvery { credentialManager.getCredential(testProvider.apiKeyId!!) } returns "test-api-key".right()
+        coEvery { toolService.getToolsByIds(any()) } returns toolsById
+        coEvery { systemPromptComposer.compose(any()) } returns ""
+    }
 
     /**
      * Recreates the collaborator with fresh mocks for each test.
@@ -437,5 +480,30 @@ class DefaultConversationTurnPreparationServiceTest {
         // (the disabled read is folded into the single-role load, no additional lookup at turn time).
         coVerify(exactly = 1) { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) }
         coVerify(exactly = 0) { llmModelService.getModelById(any()) }
+    }
+
+    /**
+     * Verifies that a role which can actually spawn prepares normally: spawning is addressed by role id,
+     * so no allow-list state (a duplicated name, a rename) can block a turn and the allow-list is never
+     * read at turn time. Pins the absence of the removed spawn gate.
+     */
+    @Test
+    fun `prepareNewMessageTurn should prepare a turn for a role with a spawn allow-list`() = runTest {
+        val sessionId = 1L
+        val roleWithSpawn = testRole.copy(
+            modelId = toolCallingModel.id,
+            tools = setOf(spawnToolId),
+            spawnableAgentRoleIds = setOf(5L, 6L)
+        )
+        coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
+        coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns roleWithSpawn.right()
+        stubPreparedTurn(toolsById = mapOf(spawnToolId to spawnTool))
+
+        val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
+
+        assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
+        // The role's tools reach the model untouched, from one batch read and nothing else.
+        assertEquals(listOf(spawnTool), result.getOrNull()?.llmConfig?.tools)
+        coVerify(exactly = 1) { toolService.getToolsByIds(setOf(spawnToolId)) }
     }
 }

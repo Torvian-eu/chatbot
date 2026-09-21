@@ -17,6 +17,7 @@ import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleFormState
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleSendability
 import eu.torvian.chatbot.app.domain.contracts.FormMode
+import eu.torvian.chatbot.app.domain.contracts.buildSpawnableAgentRoleSections
 import eu.torvian.chatbot.app.domain.contracts.defaultInstructionName
 import eu.torvian.chatbot.app.domain.contracts.resolveAgentRoleSendability
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
@@ -66,8 +67,8 @@ private val EDITABLE_INSTRUCTION_TYPES = listOf(
  * @param settingsById Settings lookup used to resolve the profile a preset references, so the
  *            sendability hint can name the precise reason.
  * @param tools Enabled tool definitions available for the multi-select.
- * @param roles Same-user roles available as spawn targets, including the edited role (self-spawn is
- *            allowed).
+ * @param roles Same-user roles available as spawn targets, grouped by project in the chip picker
+ *            (the edited role included, since self-spawn is allowed).
  * @param projects Same-user projects available for the single-project selector. A role belongs to
  *            at most one project; "No project" (null) means unassociated.
  * @param onFormUpdate Applies an update function to the form draft.
@@ -206,60 +207,55 @@ fun AgentRoleFormDialog(
                             }
                         }
 
-                        // Spawn permissions are an unordered set: toggling a chip simply adds or
-                        // removes the target, and self-spawn is allowed (the edited role is included).
-                        // Spawn targets are an unordered set, but only same-project roles are legal:
-                        // the server rejects a target whose single project differs from the role's
-                        // ([projectId]), so the form only offers roles sharing the chosen project scope
-                        // (plus self — the role being edited is always same-scope after save).
+                        // Spawn permissions are an unordered set: toggling a chip adds or removes the
+                        // target, and self-spawn is allowed (the edited role is offered in the first
+                        // group). Targets may belong to any project, so the chips are grouped by
+                        // project with the role's own scope first to keep a long list navigable.
                         Text("Spawnable agent roles", style = MaterialTheme.typography.titleSmall)
-                        val eligibleSpawnTargets = roles.filter { target ->
-                            target.id == formState.roleId || target.projectId == formState.projectId
-                        }
-                        val hiddenSpawnTargets = roles.size - eligibleSpawnTargets.size
-                        if (eligibleSpawnTargets.isEmpty()) {
+                        if (roles.isEmpty()) {
                             Text(
-                                text = if (roles.isEmpty()) {
-                                    "No agent roles are available."
-                                } else {
-                                    "No spawnable roles share this role's project scope."
-                                },
+                                text = "No agent roles are available.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                eligibleSpawnTargets.forEach { target ->
-                                    val selected = target.id in formState.spawnableAgentRoleIds
-                                    FilterChip(
-                                        selected = selected,
-                                        onClick = {
-                                            onFormUpdate { current ->
-                                                current.copy(
-                                                    spawnableAgentRoleIds = if (selected) {
-                                                        current.spawnableAgentRoleIds - target.id
-                                                    } else {
-                                                        current.spawnableAgentRoleIds + target.id
-                                                    }
-                                                )
-                                            }
-                                        },
-                                        label = {
-                                            val display = target.displayName?.takeIf { it.isNotBlank() }
-                                            Text(if (display == null) target.name else "${target.name} — $display")
-                                        }
-                                    )
-                                }
-                            }
-                            if (hiddenSpawnTargets > 0) {
+                            buildSpawnableAgentRoleSections(
+                                roles = roles,
+                                projects = projects,
+                                ownProjectId = formState.projectId,
+                                editedRoleId = formState.roleId
+                            ).forEach { section ->
                                 Text(
-                                    text = "$hiddenSpawnTargets role(s) in other projects are not shown (spawn targets must share the role's project).",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    text = section.title,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    section.roles.forEach { target ->
+                                        val selected = target.id in formState.spawnableAgentRoleIds
+                                        FilterChip(
+                                            selected = selected,
+                                            onClick = {
+                                                onFormUpdate { current ->
+                                                    current.copy(
+                                                        spawnableAgentRoleIds = if (selected) {
+                                                            current.spawnableAgentRoleIds - target.id
+                                                        } else {
+                                                            current.spawnableAgentRoleIds + target.id
+                                                        }
+                                                    )
+                                                }
+                                            },
+                                            label = {
+                                                val display = target.displayName?.takeIf { it.isNotBlank() }
+                                                Text(if (display == null) target.name else "${target.name} — $display")
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
 
@@ -275,10 +271,10 @@ fun AgentRoleFormDialog(
                             FilterChip(
                                 selected = formState.projectId == null,
                                 onClick = {
-                                    // Project scope change: spawn targets of the old scope would stay
-                                    // selected in the draft but fail the server's same-project rule on
-                                    // save, so the scope switch prunes them (self stays eligible).
-                                    onFormUpdate { current -> current.withProjectScope(null, roles) }
+                                    // The project is the role's own membership and never constrains the
+                                    // spawn allow-list, so this only moves the role; the selected spawn
+                                    // targets stay selected and merely regroup above.
+                                    onFormUpdate { current -> current.withProjectScope(null) }
                                 },
                                 label = { Text("No project", maxLines = 1) }
                             )
@@ -286,9 +282,8 @@ fun AgentRoleFormDialog(
                                 FilterChip(
                                     selected = project.id == formState.projectId,
                                     onClick = {
-                                        // See the "No project" chip: the project switch keeps only
-                                        // spawn targets that share the newly selected project scope.
-                                        onFormUpdate { current -> current.withProjectScope(project.id, roles) }
+                                        // See the "No project" chip: the selection is kept and regrouped.
+                                        onFormUpdate { current -> current.withProjectScope(project.id) }
                                     },
                                     label = { Text(project.name, maxLines = 1) }
                                 )

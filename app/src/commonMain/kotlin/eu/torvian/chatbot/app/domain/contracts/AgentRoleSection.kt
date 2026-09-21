@@ -12,7 +12,8 @@ import eu.torvian.chatbot.common.models.project.ProjectDto
  *
  * @property title Section header text shown above the roles.
  * @property projectId Project scope of the section, or `null` for the "No project" section.
- * @property roles Roles belonging to this section, in repository order.
+ * @property roles Roles belonging to this section. The order is producer-defined: the Settings list
+ *            keeps the repository order, whereas the spawn-target sections sort by name.
  */
 data class AgentRoleSection(
     val title: String,
@@ -117,3 +118,91 @@ fun buildAgentRoleSections(roles: List<AgentRoleDto>, projects: List<ProjectDto>
         )
     }
 }
+
+/**
+ * Builds the spawn-target chip groups of the agent-role form, one group per project.
+ *
+ * The chips offer every role the user owns — spawn targets may belong to any project — so they are
+ * grouped to keep a long list navigable. Because the role's own scope is where a target is most likely
+ * to come from, that group comes first: every role whose project equals [ownProjectId], plus the role
+ * being edited (self-spawn), which is forced into the first group because the draft's project is where
+ * it will be saved. Remaining projects follow by name, and roles without a resolvable project —
+ * unassociated ones and those whose project id is not in [projects] — trail in a "No project" group.
+ * When the draft itself is unassociated, those roles join the first group instead of repeating the
+ * same heading. Roles are name-sorted inside a group (id tie-break), so the order never depends on the
+ * order the role stream arrived in.
+ *
+ * @param roles All roles owned by the current user, offered as spawn targets.
+ * @param projects All projects owned by the current user, used for the group headings.
+ * @param ownProjectId The draft's current project scope, or `null` when the draft is unassociated.
+ * @param editedRoleId The role being edited, or `null` while creating a role. Forced into the first
+ *            group even when its persisted project differs from [ownProjectId].
+ * @return The groups in display order, omitting groups without roles.
+ */
+fun buildSpawnableAgentRoleSections(
+    roles: List<AgentRoleDto>,
+    projects: List<ProjectDto>,
+    ownProjectId: Long?,
+    editedRoleId: Long?
+): List<AgentRoleSection> {
+    val projectsById = projects.associateBy { it.id }
+    val rolesById = roles.associateBy { it.id }
+
+    // A role belongs to the "No project" group when it has no project or its project is missing from
+    // the stream (deleted project, or not loaded yet), so no role is ever dropped from the picker.
+    fun groupOf(role: AgentRoleDto): Long? = role.projectId?.takeIf(projectsById::containsKey)
+
+    val ownScopeRoles = if (ownProjectId == null) {
+        roles.filter { groupOf(it) == null }
+    } else {
+        roles.filter { it.projectId == ownProjectId }
+    }
+    val firstGroupRoles = (ownScopeRoles + listOfNotNull(editedRoleId?.let(rolesById::get)))
+        .distinctBy { it.id }
+        .sortedWith(roleNameOrder)
+    val firstGroupIds = firstGroupRoles.mapTo(mutableSetOf()) { it.id }
+    val firstTitle = if (ownProjectId == null) {
+        NO_PROJECT_SECTION_TITLE
+    } else {
+        projectsById[ownProjectId]?.name ?: "Project #$ownProjectId"
+    }
+    val firstSection = firstGroupRoles
+        .takeIf { it.isNotEmpty() }
+        ?.let { AgentRoleSection(title = firstTitle, projectId = ownProjectId, roles = it) }
+
+    val remaining = roles.filterNot { it.id in firstGroupIds }
+    val projectSections = remaining
+        .mapNotNull { role -> groupOf(role)?.let { projectId -> projectId to role } }
+        .groupBy({ it.first }, { it.second })
+        .entries
+        .sortedWith(
+            compareBy<Map.Entry<Long, List<AgentRoleDto>>>(
+                { entry -> projectsById.getValue(entry.key).name },
+                { entry -> entry.key }
+            )
+        )
+        .map { (projectId, sectionRoles) ->
+            AgentRoleSection(
+                title = projectsById.getValue(projectId).name,
+                projectId = projectId,
+                roles = sectionRoles.sortedWith(roleNameOrder)
+            )
+        }
+    val noProjectSection = remaining
+        .filter { groupOf(it) == null }
+        .takeIf { it.isNotEmpty() }
+        ?.let {
+            AgentRoleSection(
+                title = NO_PROJECT_SECTION_TITLE,
+                projectId = null,
+                roles = it.sortedWith(roleNameOrder)
+            )
+        }
+
+    return listOfNotNull(firstSection) + projectSections + listOfNotNull(noProjectSection)
+}
+
+/**
+ * Deterministic chip order inside a spawn-target group: name ascending (case-insensitive), then id.
+ */
+private val roleNameOrder = compareBy<AgentRoleDto>({ it.name.lowercase() }, { it.id })

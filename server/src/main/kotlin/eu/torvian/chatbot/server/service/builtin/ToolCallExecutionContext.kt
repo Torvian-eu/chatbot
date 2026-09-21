@@ -12,10 +12,11 @@ package eu.torvian.chatbot.server.service.builtin
  * populated context is guaranteed for every dispatch path — operator execution, server built-in
  * tools, and (structurally) the Local MCP and worker built-in paths that intentionally ignore it.
  *
- * [projectId] is nullable because a session may legitimately have no project selected; it carries
- * the project scope (if any) of the current turn so project-aware handlers — most notably the
- * `spawn_agent` role-by-name lookup — resolve against the session's project instead of the
- * unassociated scope.
+ * [projectId] is nullable because a session may legitimately have no project selected; it describes
+ * the project scope (if any) of the current turn, so project-aware handlers resolve against the
+ * session's project instead of the unassociated scope. Spawn-target resolution deliberately ignores
+ * it: `spawn_agent` resolves its target by role id inside the source role's allow-list, which is
+ * independent of the session's project.
  *
  * @property userId The user whose tool calls are being executed; the ownership scope for every
  *   handler.
@@ -23,7 +24,7 @@ package eu.torvian.chatbot.server.service.builtin
  * @property sessionName Name of the chat session the current turn belongs to.
  * @property agentRoleId Id of the agent role selected for the current session.
  * @property projectId Id of the project selected for the current session, or `null` when the
- *   session has no project (unassociated scope for project-scoped lookups).
+ *   session has no project.
  */
 data class ToolCallExecutionContext(
     val userId: Long,

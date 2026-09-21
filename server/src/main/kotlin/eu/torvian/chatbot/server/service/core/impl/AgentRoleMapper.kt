@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.agent.modelSpecificId
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
+import eu.torvian.chatbot.server.data.dao.ProjectDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
 import eu.torvian.chatbot.server.data.entities.ModelPresetEntity
@@ -16,6 +17,7 @@ import eu.torvian.chatbot.server.service.core.agent.CustomInstruction
 import eu.torvian.chatbot.server.service.core.agent.MainInstruction
 import eu.torvian.chatbot.server.service.core.agent.ModelSpecificInstruction
 import eu.torvian.chatbot.server.service.core.agent.RoleInstruction
+import eu.torvian.chatbot.server.service.core.agent.SpawnableAgentsAdvertisement
 import eu.torvian.chatbot.server.service.core.agent.SpawnableAgentsInstruction
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -34,15 +36,18 @@ import org.apache.logging.log4j.Logger
  * the mapper never performs its own preset lookup, so the list path keeps its single batch read and
  * the write paths keep their validated-preset reuse without a second read.
  *
- * @property agentRoleDao DAO used by the dynamic target-summary loader of spawn allow-list
- *            instructions (owner-scoped role reads).
+ * @property agentRoleDao DAO used by the spawn allow-list advertisement loader (owner-scoped role
+ *            reads).
  * @property toolDefinitionDao DAO used by the `spawn_agent`-availability loader (tool reads scoped
  *            to the role's tool ids).
+ * @property projectDao DAO used to resolve the project labels of the advertisement (one batched read
+ *            covering the targets' projects and the owning role's own project).
  * @property json Shared JSON codec used to (de)serialize the `instructions_json` column.
  */
 internal class AgentRoleMapper(
     private val agentRoleDao: AgentRoleDao,
     private val toolDefinitionDao: ToolDefinitionDao,
+    private val projectDao: ProjectDao,
     private val json: Json
 ) {
     companion object {
@@ -95,7 +100,8 @@ internal class AgentRoleMapper(
                 dto = it,
                 ownerId = ownerId,
                 spawnableRoleIds = spawnableRoleIds,
-                roleToolIds = tools
+                roleToolIds = tools,
+                currentProjectId = projectId
             )
         },
         disabled = disabled
@@ -144,6 +150,52 @@ internal class AgentRoleMapper(
     fun encodeInstructions(instructions: List<AgentInstructionDto>): String = json.encodeToString(instructions)
 
     /**
+     * Loads the advertisement of a role's spawn allow-list: the resolvable targets (with their project
+     * data) plus the owning role's own project.
+     *
+     * The allow-list itself is the authority: targets from any project scope are returned, and ids that
+     * do not resolve to a role of [ownerId] are dropped, so the table lists exactly what
+     * `spawn_agent` accepts. Project labels come from a single batched read covering the targets'
+     * distinct projects and [currentProjectId] together (no per-target query). The returned targets are
+     * sorted by displayed label (id ascending as the tie-break), so the rendered order never depends on
+     * query or map order.
+     *
+     * @param ownerId Owner whose roles and projects may be resolved.
+     * @param spawnableAgentRoleIds Unordered target role ids of the role's allow-list.
+     * @param currentProjectId Project of the role owning the instruction, or null when unassociated.
+     * @return The advertisement, targets already ordered for rendering.
+     */
+    suspend fun loadSpawnableAgentsAdvertisement(
+        ownerId: Long,
+        spawnableAgentRoleIds: Set<Long>,
+        currentProjectId: Long?
+    ): SpawnableAgentsAdvertisement {
+        val targets = agentRoleDao.getRolesByIdsForUser(ownerId, spawnableAgentRoleIds.toList())
+        // The allow-list is a set, so no persisted order exists; the project ids are distinct so the
+        // single batched project read stays proportional to the number of projects, not targets.
+        val projectIds = (targets.mapNotNull { it.projectId } + listOfNotNull(currentProjectId)).distinct()
+        val projectsById = if (projectIds.isEmpty()) {
+            emptyMap()
+        } else {
+            projectDao.getProjectsByIdsForUser(ownerId, projectIds).associateBy { it.id }
+        }
+        return SpawnableAgentsAdvertisement(
+            currentProjectId = currentProjectId,
+            currentProjectName = currentProjectId?.let { projectsById[it]?.name },
+            targets = targets.map { target ->
+                AgentRoleSummary(
+                    id = target.id,
+                    name = target.name,
+                    displayName = target.displayName,
+                    description = target.description,
+                    projectId = target.projectId,
+                    projectName = target.projectId?.let { projectsById[it]?.name }
+                )
+            }.sortedWith(compareBy({ it.displayLabel.lowercase() }, { it.id }))
+        )
+    }
+
+    /**
      * Converts a server domain [AgentRole] into a wire [AgentRoleDto], resolving every instruction
      * message first so the DTO always carries non-null, current text.
      *
@@ -173,9 +225,10 @@ internal class AgentRoleMapper(
      * so forward-compatible payloads don't silently apply unrecognized semantics.
      *
      * @param dto The DTO to map.
-     * @param ownerId Owner scope for dynamic target-summary resolution.
+     * @param ownerId Owner scope for dynamic advertisement resolution.
      * @param spawnableRoleIds Unordered target ids used by the dynamic marker.
      * @param roleToolIds Tool ids used to determine whether `spawn_agent` is enabled.
+     * @param currentProjectId Project of the role being mapped, used by the advertisement's intro.
      * @return The corresponding [AgentInstruction], or null when the kind is unrecognized or a
      *         `model_specific` instruction is missing its `modelId` in `custom` (both logged as
      *         warnings — they indicate a database inconsistency).
@@ -184,23 +237,13 @@ internal class AgentRoleMapper(
         dto: AgentInstructionDto,
         ownerId: Long,
         spawnableRoleIds: Set<Long>,
-        roleToolIds: Set<Long>
+        roleToolIds: Set<Long>,
+        currentProjectId: Long?
     ): AgentInstruction? = when (dto.type) {
         AgentInstructionTypes.SPAWNABLE_AGENTS -> SpawnableAgentsInstruction(
             name = dto.name,
-            roleSummaryLoader = {
-                // The allow-list is a set, so no persisted order exists; sort by name to keep the
-                // generated prompt deterministic across reads.
-                agentRoleDao.getRolesByIdsForUser(ownerId, spawnableRoleIds.toList())
-                    .sortedBy { it.name.lowercase() }
-                    .map { target ->
-                        AgentRoleSummary(
-                            id = target.id,
-                            name = target.name,
-                            displayName = target.displayName,
-                            description = target.description
-                        )
-                    }
+            advertisementLoader = {
+                loadSpawnableAgentsAdvertisement(ownerId, spawnableRoleIds, currentProjectId)
             },
             spawnAgentToolAvailableLoader = {
                 toolDefinitionDao.getToolDefinitionsByIds(roleToolIds)

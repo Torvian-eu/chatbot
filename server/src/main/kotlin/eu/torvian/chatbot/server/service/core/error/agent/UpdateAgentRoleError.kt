@@ -90,18 +90,6 @@ sealed interface UpdateAgentRoleError {
     data class SpawnableRoleNotFound(val roleId: Long) : UpdateAgentRoleError
 
     /**
-     * A requested spawn target exists but belongs to a different project scope than the role.
-     *
-     * Spawn targets must be same-project: an in-project role may only spawn roles of the same
-     * project, an unassociated role only unassociated roles.
-     *
-     * @property roleId The offending target role identifier.
-     * @property projectId The scope the source role occupies (null = unassociated); the target does
-     *            not occupy this scope.
-     */
-    data class SpawnableRoleNotInProject(val roleId: Long, val projectId: Long?) : UpdateAgentRoleError
-
-    /**
      * One of the referenced projects does not exist or is not owned by the requesting user.
      *
      * @property projectId The missing or foreign project identifier.
@@ -155,14 +143,6 @@ fun UpdateAgentRoleError.toApiError(): ApiError = when (this) {
 
     is UpdateAgentRoleError.SpawnableRoleNotFound ->
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Spawnable agent role not found", "roleId" to roleId.toString())
-
-    is UpdateAgentRoleError.SpawnableRoleNotInProject ->
-        apiError(
-            CommonApiErrorCodes.INVALID_ARGUMENT,
-            "Spawnable agent role does not belong to the role's project",
-            "roleId" to roleId.toString(),
-            "projectId" to (projectId?.toString() ?: "null")
-        )
 
     is UpdateAgentRoleError.ProjectNotFound ->
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Project not found", "projectId" to projectId.toString())

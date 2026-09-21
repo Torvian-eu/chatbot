@@ -50,7 +50,7 @@ import org.apache.logging.log4j.Logger
  * @property agentRoleToolDao DAO used to copy each source role's tool set onto its clone (the
  *            `agent_role_tools` join table).
  * @property agentRoleSpawnableRoleDao DAO used to copy each source role's spawn allow-list onto its
- *            clone, remapped to the cloned role ids.
+ *            clone, remapped to the cloned role ids (targets outside the cloned set are kept as-is).
  * @property agentRoleOwnershipDao DAO used to give every cloned role its own ownership row.
  * @property agentRoleDisabledDao DAO used to copy each source role's per-user disabled marker onto
  *            its clone (a source role disabled for the user stays disabled in the clone).
@@ -303,16 +303,16 @@ class ProjectServiceImpl(
             }
 
             // Phase 2: copy each source role's relations onto its clone. The spawn allow-list is
-            // remapped old-id -> new-id: a target in the cloned set maps to the corresponding new role
-            // id (legal under the same-project spawn rule), and any stale target outside the cloned
-            // set is DROPPED rather than copied verbatim (it would be a cross-project grant).
+            // remapped old-id -> new-id: a target inside the cloned set maps to the corresponding new
+            // role id, while a target outside the cloned set is kept verbatim, so the clone keeps the
+            // source role's full delegation configuration (cross-project grants included).
             for (sourceRole in sourceRoles) {
                 val newRoleId = requireNotNull(oldToNewRoleIds[sourceRole.id])
                 agentRoleToolDao.replaceToolsForRole(newRoleId, sourceToolIdsByRole[sourceRole.id].orEmpty())
                 agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(
                     newRoleId,
                     sourceSpawnableIdsByRole[sourceRole.id].orEmpty()
-                        .mapNotNull { targetId -> oldToNewRoleIds[targetId] }
+                        .map { targetId -> oldToNewRoleIds[targetId] ?: targetId }
                         .toSet()
                 )
                 // Deliberate deviation from the create-role path (which never inserts disabled rows):

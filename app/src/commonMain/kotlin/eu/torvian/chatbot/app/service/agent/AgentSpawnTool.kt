@@ -117,40 +117,26 @@ class AgentSpawnTool(
         try {
             // The Session Legality Invariant forbids attaching a project-scoped role to a session
             // whose project selection does not contain it, and `createSession` produces a
-            // project-less session. Spawns are strictly same-scope: the request's project always
-            // equals the calling session's project and equals the role's single project (null only
-            // for unassociated roles from project-less sessions), so mirror it before attaching the
-            // role. Anything else is a contract violation — the tool refuses instead of guessing a
-            // different project of the role.
-            val targetProjectId = request.projectId
-            if (targetProjectId != null && role.projectId != targetProjectId) {
+            // project-less session. The payload's project is the spawned role's own project, so the
+            // session is scoped to it before the role is attached. A payload whose project disagrees
+            // with the role's is a contract violation: the tool refuses instead of guessing a project.
+            val targetProjectId = role.projectId
+            if (request.projectId != targetProjectId) {
                 logger.error(
-                    "Cannot spawn role ${role.id} for session ${session.id}: " +
-                        "role does not belong to project $targetProjectId"
+                    "Cannot spawn role ${role.id} for session ${session.id}: request project " +
+                        "${request.projectId} does not match the role's project $targetProjectId"
                 )
                 clientEvents(
                     spawnFailure(
                         toolCallId, session.id,
-                        "Failed to spawn: role does not belong to the requested project",
+                        "Failed to spawn: spawn request project does not match the spawned role's project",
                         request.mode
                     )
                 )
                 return
             }
-            if (targetProjectId == null && role.projectId != null) {
-                logger.error(
-                    "Cannot spawn role ${role.id} for session ${session.id}: " +
-                        "project-scoped role arrived without a project scope"
-                )
-                clientEvents(
-                    spawnFailure(
-                        toolCallId, session.id,
-                        "Failed to spawn: project-scoped role carries no project scope",
-                        request.mode
-                    )
-                )
-                return
-            }
+            // An unassociated target needs no scoping: the freshly created session is already
+            // project-less, which is the only legal pairing for such a role.
             if (targetProjectId != null && session.projectId != targetProjectId) {
                 sessionRepository.updateSessionProject(session.id, targetProjectId).fold(
                     ifLeft = { error ->

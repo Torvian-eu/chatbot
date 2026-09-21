@@ -172,37 +172,29 @@ class AgentRoleFormStateTest {
     }
 
     @Test
-    fun `withProjectScope keeps only spawn targets sharing the new project scope`() {
-        // The draft was on project 50 with the edited role (self) and a colleague selected; the user
-        // switches the role to project 60. The colleague belongs to 50 only, so it must be dropped;
-        // self-spawn stays eligible because the edited role is same-scope after the save.
-        val editedRole = roleDto(id = 5L, projectId = 50L)
-        val colleague = roleDto(id = 6L, projectId = 50L)
-        val newProjectRole = roleDto(id = 9L, projectId = 60L)
+    fun `withProjectScope changes the project and keeps every selected spawn target`() {
+        // The role's project never constrains its spawn allow-list, so a project switch only moves the
+        // role: self, a colleague from the old project, a role of the new project and an id that is not
+        // in the role stream any more all stay selected instead of being dropped silently.
         val form = createEmptyAgentRoleForm().copy(
             mode = FormMode.EDIT,
             roleId = 5L,
             name = "Test",
             modelPresetId = 3L,
             projectId = 50L,
-            spawnableAgentRoleIds = setOf(5L, 6L, 9L)
+            spawnableAgentRoleIds = setOf(5L, 6L, 9L, 99L)
         )
 
-        val updated = form.withProjectScope(60L, listOf(editedRole, colleague, newProjectRole))
+        val updated = form.withProjectScope(60L)
 
         assertEquals(60L, updated.projectId)
-        // 6 left the old scope; 9 joins the new scope; 5 (self) is always kept.
-        assertEquals(setOf(5L, 9L), updated.spawnableAgentRoleIds)
+        assertEquals(setOf(5L, 6L, 9L, 99L), updated.spawnableAgentRoleIds)
     }
 
     @Test
-    fun `withProjectScope to no project drops every project-bound spawn target`() {
-        // Switching the role from a project to "No project" must drop targets that belonged to the
-        // old project (they would otherwise fail the same-project check on save), keeping only
-        // unassociated targets plus self.
-        val editedRole = roleDto(id = 5L, projectId = 50L)
-        val colleague = roleDto(id = 6L, projectId = 50L)
-        val unassociated = roleDto(id = 7L, projectId = null)
+    fun `withProjectScope to no project keeps every selected spawn target`() {
+        // Moving the role to the unassociated scope likewise keeps the selection: project-bound targets
+        // remain legal spawn targets for an unassociated role.
         val form = createEmptyAgentRoleForm().copy(
             mode = FormMode.EDIT,
             roleId = 5L,
@@ -212,29 +204,10 @@ class AgentRoleFormStateTest {
             spawnableAgentRoleIds = setOf(5L, 6L, 7L)
         )
 
-        val updated = form.withProjectScope(null, listOf(editedRole, colleague, unassociated))
+        val updated = form.withProjectScope(null)
 
         assertEquals(null, updated.projectId)
-        assertEquals(setOf(5L, 7L), updated.spawnableAgentRoleIds)
-    }
-
-    @Test
-    fun `withProjectScope keeps a target of the new scope already selected`() {
-        // Switching from "No project" to project 50 keeps a target that already belongs to 50 and
-        // drops targets that no longer share the scope; an id absent from the role list is dropped
-        // (stale/deleted target) instead of being saved.
-        val inProject = roleDto(id = 6L, projectId = 50L)
-        val form = createEmptyAgentRoleForm().copy(
-            mode = FormMode.NEW,
-            name = "Test",
-            modelPresetId = 3L,
-            spawnableAgentRoleIds = setOf(6L, 99L)
-        )
-
-        val updated = form.withProjectScope(50L, listOf(inProject))
-
-        assertEquals(50L, updated.projectId)
-        assertEquals(setOf(6L), updated.spawnableAgentRoleIds)
+        assertEquals(setOf(5L, 6L, 7L), updated.spawnableAgentRoleIds)
     }
 
     @Test
@@ -247,23 +220,3 @@ class AgentRoleFormStateTest {
         assertEquals(null, form.errorMessage)
     }
 }
-
-/**
- * Builds a minimal same-user [AgentRoleDto] spawn target for the scope-pruning tests.
- *
- * @param id The role identifier.
- * @param projectId The role's single project membership, or null when unassociated.
- * @return A bare [AgentRoleDto] with the requested id and project scope.
- */
-private fun roleDto(id: Long, projectId: Long?): AgentRoleDto = AgentRoleDto(
-    id = id,
-    name = "role-$id",
-    displayName = null,
-    description = "",
-    modelId = 1L,
-    modelSettingsId = 2L,
-    modelPresetId = 3L,
-    tools = emptySet(),
-    instructions = emptyList(),
-    projectId = projectId
-)

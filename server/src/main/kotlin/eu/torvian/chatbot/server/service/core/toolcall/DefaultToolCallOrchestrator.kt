@@ -459,8 +459,8 @@ class DefaultToolCallOrchestrator(
      * Executes an operator tool by relaying execution to the operator and awaiting the result.
      *
      * The fully-populated [ToolCallExecutionContext] (caller identity plus turn session/role/project
-     * context) is forwarded so the operator executor's payload builders (e.g. spawn-by-name role
-     * lookup) can resolve the turn's project scope without re-deriving it.
+     * context) is forwarded so the operator executor's payload builders (e.g. the owner-scoped role-id
+     * lookup of `spawn_agent`) can resolve the caller and the source role without re-deriving them.
      */
     private suspend fun ProducerScope<ToolCallExecutionEvent>.executeOperatorTool(
         context: ToolCallExecutionContext,

@@ -27,9 +27,8 @@ import kotlin.time.Instant
  * Dispatches on the tool call's name — the discriminator carried in the relay envelope — to the
  * matching payload builder:
  *
- *  - `spawn_agent` → [AgentSpawnRequestBuilder] (input parsing plus a user- and
- *    project-scoped role lookup, and the source role's spawn allow-list) producing an
- *    [AgentSpawnRequest];
+ *  - `spawn_agent` → [AgentSpawnRequestBuilder] (input parsing plus an owner-scoped role-id lookup and
+ *    the source role's spawn allow-list) producing an [AgentSpawnRequest];
  *  - `send_message` → [SendMessageRequestBuilder] (input parsing + target-session existence and
  *    same-user ownership validation) producing a [SendMessageRequest];
  *  - any other name → fail-fast unsupported-tool error.
@@ -48,7 +47,7 @@ import kotlin.time.Instant
  * The wait is cooperative: when the surrounding coroutine is cancelled (socket close, turn stop) the
  * suspension simply unwinds and the orchestrator's cleanup finalizes the call as CANCELLED.
  *
- * @property agentSpawnRequestBuilder Builds the typed spawn payload (role-by-name + ownership +
+ * @property agentSpawnRequestBuilder Builds the typed spawn payload (owner-scoped role-id lookup +
  *            source-role allow-list).
  * @property sendMessageRequestBuilder Builds the typed send-message payload (input parsing +
  *            target-session existence and same-user ownership).
@@ -187,11 +186,9 @@ class DefaultOperatorToolExecutor(
     private fun SpawnRequestBuildError.toUserMessage(): String = when (this) {
         is SpawnRequestBuildError.InvalidInput -> reason
         is SpawnRequestBuildError.RoleNotFound ->
-            "Role '$roleName' not found. You may only spawn agent roles owned by the current user."
+            "Agent role id $roleId not found. You may only spawn agent roles owned by the current user."
         is SpawnRequestBuildError.RoleNotAllowed ->
-            "The current agent role is not permitted to spawn role '$roleName'."
-        is SpawnRequestBuildError.RoleNotInProject ->
-            "Role '$roleName' does not belong to the selected project and cannot be spawned."
+            "The current agent role is not permitted to spawn agent role id $roleId."
     }
 
     /**

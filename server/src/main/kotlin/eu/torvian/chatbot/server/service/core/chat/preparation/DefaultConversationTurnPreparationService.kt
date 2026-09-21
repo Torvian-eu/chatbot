@@ -39,6 +39,9 @@ import eu.torvian.chatbot.server.service.security.error.CredentialError
  * raise a [ValidateNewMessageError.ModelConfigurationError]. There is deliberately no fallback: a
  * broken configuration must never silently run with a different model or default settings.
  *
+ * The role's spawn allow-list never blocks a turn: `spawn_agent` addresses its target by role id, so no
+ * allow-list state (a duplicated name, a rename) can make the role unusable.
+ *
  * @property messageDao DAO used to verify the optional parent message.
  * @property sessionDao DAO used to load the target chat session.
  * @property toolService Service used to load the role's tool definitions by ID.
