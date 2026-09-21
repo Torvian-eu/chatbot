@@ -10,12 +10,14 @@ import eu.torvian.chatbot.app.domain.contracts.createEmptyAgentRoleForm
 import eu.torvian.chatbot.app.domain.contracts.isChatCapable
 import eu.torvian.chatbot.app.domain.contracts.toEditFormState
 import eu.torvian.chatbot.app.repository.AgentRoleRepository
+import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.ModelPresetRepository
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.ModelSettingsRepository
 import eu.torvian.chatbot.app.repository.ProjectRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolRepository
+import eu.torvian.chatbot.app.repository.WorkerRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
@@ -51,6 +53,10 @@ import kotlinx.coroutines.launch
  * @property toolRepository Repository of tool definitions (filtered to enabled tools).
  * @property projectRepository Repository of user-owned projects (used by the role form's single
  *            project selector and loaded together with the role catalog).
+ * @property workerRepository Repository of user-owned workers, used to label the worker tool groups
+ *            of the role form and detail page.
+ * @property mcpServerRepository Repository of local MCP servers, used to label the MCP tool groups
+ *            of the role form and detail page.
  * @property notificationService Service for error/success notifications.
  * @property uiDispatcher Dispatcher used for UI coroutines. Defaults to Main.
  */
@@ -61,6 +67,8 @@ class AgentRolesViewModel(
     private val modelSettingsRepository: ModelSettingsRepository,
     private val toolRepository: ToolRepository,
     private val projectRepository: ProjectRepository,
+    private val workerRepository: WorkerRepository,
+    private val mcpServerRepository: LocalMCPServerRepository,
     private val notificationService: NotificationService,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
@@ -148,13 +156,42 @@ class AgentRolesViewModel(
         toolRepository.tools.map { it.dataOrNull?.associateBy { tool -> tool.id } ?: emptyMap() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
 
+    /**
+     * Worker lookup map (id to display name) labelling the worker tool groups of the role form and
+     * detail page.
+     *
+     * Blank names are kept as-is: the grouping helper applies the `Worker #<id>` fallback, and
+     * filtering them out here would label an existing worker as unresolvable.
+     */
+    val workerDisplayNamesById: StateFlow<Map<Long, String>> =
+        workerRepository.workers
+            .map { it.dataOrNull?.associate { worker -> worker.id to worker.displayName } ?: emptyMap() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
+
+    /**
+     * Local MCP-server lookup map (id to name) labelling the MCP tool groups of the role form and
+     * detail page.
+     *
+     * Blank names are kept as-is for the same reason as [workerDisplayNamesById].
+     */
+    val mcpServerNamesById: StateFlow<Map<Long, String>> =
+        mcpServerRepository.servers
+            .map { it.dataOrNull?.associate { server -> server.id to server.name } ?: emptyMap() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
+
     /** The current dialog state for the tab. */
     val dialogState: StateFlow<AgentRoleDialogState> = _dialogState.asStateFlow()
 
     /**
-     * Loads the role list and the model/preset/settings/tools/project catalogs in parallel.
+     * Loads the role list and the model/preset/settings/tools/project/worker/MCP-server catalogs in
+     * parallel.
+     *
+     * Every loader is non-fatal: a failure is reported through a notification and leaves the form
+     * usable, with the tool groups falling back to their id-based labels.
+     *
+     * @param userId The authenticated user, needed to load the token-scoped MCP-server catalog.
      */
-    fun loadRolesAndCatalogs() {
+    fun loadRolesAndCatalogs(userId: Long) {
         viewModelScope.launch(uiDispatcher) {
             parZip(
                 { agentRoleRepository.loadRoles() },
@@ -162,8 +199,11 @@ class AgentRolesViewModel(
                 { modelRepository.loadModels() },
                 { modelSettingsRepository.loadAllSettings() },
                 { toolRepository.loadTools() },
-                { projectRepository.loadProjects() }
-            ) { rolesResult, presetsResult, modelsResult, settingsResult, toolsResult, projectsResult ->
+                { projectRepository.loadProjects() },
+                { workerRepository.loadWorkers() },
+                { loadMcpServerCatalog(userId) }
+            ) { rolesResult, presetsResult, modelsResult, settingsResult, toolsResult, projectsResult,
+                workersResult, _ ->
                 rolesResult.mapLeft { error ->
                     notificationService.repositoryError(
                         error = error,
@@ -200,7 +240,33 @@ class AgentRolesViewModel(
                         shortMessage = "Failed to load projects"
                     )
                 }
+                workersResult.mapLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load workers"
+                    )
+                }
             }
+        }
+    }
+
+    /**
+     * Loads the MCP-server catalog and reports a failure through the state the load produced.
+     *
+     * [LocalMCPServerRepository.loadServers] returns `Unit` and publishes failures only through its
+     * `servers` state, so the failure is read back from that state to mirror the other catalog
+     * loaders. A concurrent load that returned early leaves the state `Loading` and stays silent, so
+     * each call reports at most once.
+     *
+     * @param userId The authenticated user whose MCP servers are loaded.
+     */
+    private suspend fun loadMcpServerCatalog(userId: Long) {
+        mcpServerRepository.loadServers(userId)
+        mcpServerRepository.servers.value.errorOrNull?.let { error ->
+            notificationService.repositoryError(
+                error = error,
+                shortMessage = "Failed to load MCP servers"
+            )
         }
     }
 

@@ -65,6 +65,11 @@ data class WorkersTabState(
  * @property settingsById Settings lookup map (unfiltered) for the detail page and the form's
  *            sendability hint.
  * @property toolsById Tool lookup map for the detail page.
+ * @property workerDisplayNamesById Worker lookup map (id to display name) labelling the worker tool
+ *            groups of the role form and detail page. Blank names are kept so the grouping helper can
+ *            apply its own fallback label.
+ * @property mcpServerNamesById Local MCP-server lookup map (id to name) labelling the MCP tool groups
+ *            of the role form and detail page.
  * @property projects The user's projects, used both by the role form's single-project selector and
  *            by the list page's project grouping/filter derivation. Non-null (defaults to empty) so
  *            consumers never have to unwrap an optional.
@@ -80,6 +85,8 @@ data class AgentRolesTabState(
     val presetsById: Map<Long, ModelPresetDto> = emptyMap(),
     val settingsById: Map<Long, ModelSettings> = emptyMap(),
     val toolsById: Map<Long, ToolDefinition> = emptyMap(),
+    val workerDisplayNamesById: Map<Long, String> = emptyMap(),
+    val mcpServerNamesById: Map<Long, String> = emptyMap(),
     val projects: List<ProjectDto> = emptyList()
 ) {
     /**
