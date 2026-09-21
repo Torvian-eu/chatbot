@@ -94,6 +94,28 @@ class LocalMCPServerManagerImplOperationsTest {
     }
 
     /**
+     * Verifies a server-configuration load failure stays non-fatal: the other loads still run and
+     * the manager reports success, because the repository publishes that failure through its
+     * `servers` state instead of through this result.
+     */
+    @Test
+    fun `loadServers keeps a server configuration failure non-fatal`() = runTest {
+        coEvery { serverRepository.loadServers() } returns Either.Left(
+            RepositoryError.OtherError("server configuration load failed")
+        )
+        coEvery { runtimeStatusRepository.loadRuntimeStatuses() } returns Either.Right(Unit)
+        coEvery { toolRepository.loadMCPTools() } returns Either.Right(Unit)
+        coEvery { workerRepository.loadWorkers() } returns Either.Right(Unit)
+
+        val result = manager.loadServers()
+
+        assertIs<Either.Right<Unit>>(result)
+        coVerify(exactly = 1) { runtimeStatusRepository.loadRuntimeStatuses() }
+        coVerify(exactly = 1) { toolRepository.loadMCPTools() }
+        coVerify(exactly = 1) { workerRepository.loadWorkers() }
+    }
+
+    /**
      * Verifies delete only calls the repository and clears the local tool cache.
      */
     @Test

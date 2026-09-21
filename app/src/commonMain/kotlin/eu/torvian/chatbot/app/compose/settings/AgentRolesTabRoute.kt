@@ -18,8 +18,8 @@ import org.koin.compose.viewmodel.koinViewModel
  * separate from the underlying role-data selection. Selection state is owned by the
  * [AgentRolesViewModel]; this route only observes it to decide between the list and detail pages.
  *
- * @param authState Authentication context (currently unused by the role tab; roles are
- *   ownership-based per user).
+ * @param authState Authentication context (currently unused by the Agent Roles tab; the role
+ *   catalogs it drives are loaded from token-scoped endpoints).
  * @param viewModel Agent Roles ViewModel resolved from Koin.
  * @param modifier Modifier applied to the presentational tab.
  * @param categoryResetSignal Incremented when the user re-selects this category in the sidebar;
@@ -35,7 +35,8 @@ fun AgentRolesTabRoute(
     categoryResetSignal: Int = 0,
     onBreadcrumbsChanged: (List<String>) -> Unit = {}
 ) {
-    // Tab-local initial load of roles plus the model/settings/tool catalogs the form needs.
+    // Tab-local initial load of roles plus the model/settings/tool/worker/MCP-server catalogs the form
+    // needs to label its tool groups.
     LaunchedEffect(Unit) {
         viewModel.loadRolesAndCatalogs()
     }
@@ -58,6 +59,8 @@ fun AgentRolesTabRoute(
     val presetsById by viewModel.presetsById.collectAsState()
     val settingsById by viewModel.settingsById.collectAsState()
     val toolsById by viewModel.toolsById.collectAsState()
+    val workerDisplayNamesById by viewModel.workerDisplayNamesById.collectAsState()
+    val mcpServerNamesById by viewModel.mcpServerNamesById.collectAsState()
 
     // If a role disappears while its detail page is open, fall back to the list page.
     val roles = rolesState.dataOrNull
@@ -91,6 +94,8 @@ fun AgentRolesTabRoute(
         presetsById = presetsById,
         settingsById = settingsById,
         toolsById = toolsById,
+        workerDisplayNamesById = workerDisplayNamesById,
+        mcpServerNamesById = mcpServerNamesById,
         projects = projectsState.dataOrNull.orEmpty()
     )
 

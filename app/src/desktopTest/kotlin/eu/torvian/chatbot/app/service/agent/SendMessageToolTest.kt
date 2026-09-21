@@ -166,7 +166,7 @@ class SendMessageToolTest {
         every { viewModel.currentModel } returns MutableStateFlow(model)
         every { viewModel.currentSettings } returns MutableStateFlow(settings)
         every { viewModel.displayedMessages } returns displayedMessages
-        every { viewModel.loadSession(targetSession.id, userId) } returns completedJob()
+        every { viewModel.loadSession(targetSession.id) } returns completedJob()
         every { viewModel.updateInput(message) } just runs
         every { viewModel.sendMessage() } answers {
             // The turn completes by appending the new assistant message to the displayed branch.
@@ -205,7 +205,7 @@ class SendMessageToolTest {
         assertEquals(false, result?.isError)
         // The injected turn is driven through the target session's own ViewModel: load → input →
         // send, and the new assistant message is read back from the VM.
-        verify { viewModel.loadSession(targetSession.id, userId) }
+        verify { viewModel.loadSession(targetSession.id) }
         verify { viewModel.updateInput("Hello from the caller") }
         verify { viewModel.sendMessage() }
     }
@@ -329,7 +329,7 @@ class SendMessageToolTest {
         every { viewModel.currentModel } returns MutableStateFlow(null)
         every { viewModel.currentSettings } returns MutableStateFlow(null)
         every { viewModel.displayedMessages } returns MutableStateFlow(emptyList())
-        every { viewModel.loadSession(targetSession.id, userId) } returns completedJob()
+        every { viewModel.loadSession(targetSession.id) } returns completedJob()
         every { viewModel.forceCancelSend() } just runs
 
         val resolver = mockk<SpawnedChatViewModelResolver>()
@@ -364,7 +364,7 @@ class SendMessageToolTest {
         // target); the injected turn must produce a NEW message to be reportable.
         val displayedMessages = MutableStateFlow<List<ChatMessage>>(listOf(assistantMessage(1L, "OLD RESPONSE")))
         every { viewModel.displayedMessages } returns displayedMessages
-        every { viewModel.loadSession(targetSession.id, userId) } returns completedJob()
+        every { viewModel.loadSession(targetSession.id) } returns completedJob()
         every { viewModel.updateInput(any()) } just runs
         // The injected turn produces no new assistant message: the branch keeps the pre-existing one.
         every { viewModel.sendMessage() } returns completedJob()

@@ -13,18 +13,26 @@ import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.llm.ModelPresetDto
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
+import kotlin.time.Instant
 
 /**
  * Tests for [AgentRolesViewModel]: form-draft to request mapping (preset-based, U-28/U-29/U-36),
@@ -40,8 +48,15 @@ class AgentRolesViewModelTest {
     private lateinit var settingsRepository: ModelSettingsRepository
     private lateinit var toolRepository: ToolRepository
     private lateinit var projectRepository: ProjectRepository
+    private lateinit var workerRepository: WorkerRepository
+    private lateinit var mcpServerRepository: LocalMCPServerRepository
     private lateinit var notificationService: NotificationService
     private lateinit var viewModel: AgentRolesViewModel
+
+    // Held as test fields because the ViewModel captures the streams at construction, so re-stubbing a
+    // flow afterwards would have no effect on its lookups.
+    private lateinit var workersFlow: MutableStateFlow<DataState<RepositoryError, List<WorkerDto>>>
+    private lateinit var serversFlow: MutableStateFlow<DataState<RepositoryError, List<LocalMCPServerDto>>>
 
     private fun role(id: Long, name: String, modelPresetId: Long? = 3L) = AgentRoleDto(
         id = id,
@@ -57,6 +72,26 @@ class AgentRolesViewModelTest {
         )
     )
 
+    private fun worker(id: Long, displayName: String) = WorkerDto(
+        id = id,
+        workerUid = "worker-uid-$id",
+        ownerUserId = 1L,
+        displayName = displayName,
+        certificateFingerprint = "fingerprint-$id",
+        allowedScopes = emptyList(),
+        createdAt = Instant.fromEpochSeconds(id)
+    )
+
+    private fun server(id: Long, name: String) = LocalMCPServerDto(
+        id = id,
+        userId = 1L,
+        workerId = 1L,
+        name = name,
+        command = "mcp-server",
+        createdAt = Instant.fromEpochSeconds(id),
+        updatedAt = Instant.fromEpochSeconds(id)
+    )
+
     @BeforeTest
     fun setup() {
         dispatcher = UnconfinedTestDispatcher()
@@ -66,7 +101,12 @@ class AgentRolesViewModelTest {
         settingsRepository = mockk(relaxed = true)
         toolRepository = mockk(relaxed = true)
         projectRepository = mockk(relaxed = true)
+        workerRepository = mockk(relaxed = true)
+        mcpServerRepository = mockk(relaxed = true)
         notificationService = mockk(relaxed = true)
+
+        workersFlow = MutableStateFlow(DataState.Success(emptyList()))
+        serversFlow = MutableStateFlow(DataState.Success(emptyList()))
 
         every { repository.roles } returns MutableStateFlow(DataState.Success(emptyList()))
         every { presetRepository.presets } returns
@@ -75,6 +115,8 @@ class AgentRolesViewModelTest {
         every { settingsRepository.allSettings } returns MutableStateFlow(DataState.Success(emptyList()))
         every { toolRepository.tools } returns MutableStateFlow(DataState.Success(emptyList()))
         every { projectRepository.projects } returns MutableStateFlow(DataState.Success(emptyList()))
+        every { workerRepository.workers } returns workersFlow
+        every { mcpServerRepository.servers } returns serversFlow
         // Stub every catalog load: the ViewModel maps each result's Left branch to a notification, and
         // a relaxed mock would answer with a placeholder Either whose value cannot be mapped.
         coEvery { repository.loadRoles() } returns Either.Right(Unit)
@@ -83,6 +125,9 @@ class AgentRolesViewModelTest {
         coEvery { settingsRepository.loadAllSettings() } returns Either.Right(Unit)
         coEvery { toolRepository.loadTools() } returns Either.Right(Unit)
         coEvery { projectRepository.loadProjects() } returns Either.Right(Unit)
+        coEvery { workerRepository.loadWorkers() } returns Either.Right(Unit)
+        // The MCP-server load reports its outcome through its result as well as the `servers` stream.
+        coEvery { mcpServerRepository.loadServers() } returns Either.Right(Unit)
 
         viewModel = AgentRolesViewModel(
             agentRoleRepository = repository,
@@ -91,6 +136,8 @@ class AgentRolesViewModelTest {
             modelSettingsRepository = settingsRepository,
             toolRepository = toolRepository,
             projectRepository = projectRepository,
+            workerRepository = workerRepository,
+            mcpServerRepository = mcpServerRepository,
             notificationService = notificationService,
             uiDispatcher = dispatcher
         )
@@ -104,7 +151,7 @@ class AgentRolesViewModelTest {
 
     @Test
     fun `loadRolesAndCatalogs - also loads the preset catalog`() = runTest(dispatcher) {
-        // parZip runs the six loaders on Dispatchers.Default, outside this test's scheduler: await the
+        // parZip runs the eight loaders on Dispatchers.Default, outside this test's scheduler: await the
         // launched load so the verifications below observe completed calls instead of racing the pool.
         viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
 
@@ -114,6 +161,72 @@ class AgentRolesViewModelTest {
         coVerify(exactly = 1) { settingsRepository.loadAllSettings() }
         coVerify(exactly = 1) { toolRepository.loadTools() }
         coVerify(exactly = 1) { projectRepository.loadProjects() }
+        coVerify(exactly = 1) { workerRepository.loadWorkers() }
+        coVerify(exactly = 1) { mcpServerRepository.loadServers() }
+    }
+
+    @Test
+    fun `loadRolesAndCatalogs - worker failure is reported without aborting the load`() = runTest(dispatcher) {
+        val error = RepositoryError.OtherError("worker load failed")
+        coEvery { workerRepository.loadWorkers() } returns Either.Left(error)
+
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
+
+        coVerify { notificationService.repositoryError(error, "Failed to load workers") }
+        // The other catalogs still ran: a worker failure only costs the sub-group labels.
+        coVerify(exactly = 1) { mcpServerRepository.loadServers() }
+    }
+
+    @Test
+    fun `loadRolesAndCatalogs - MCP server failure is reported from the load result`() = runTest(dispatcher) {
+        val error = RepositoryError.OtherError("mcp load failed")
+        coEvery { mcpServerRepository.loadServers() } returns Either.Left(error)
+
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
+
+        coVerify(exactly = 1) { notificationService.repositoryError(error, "Failed to load MCP servers") }
+    }
+
+    @Test
+    fun `loadRolesAndCatalogs - a successful MCP server load reports nothing`() = runTest(dispatcher) {
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
+
+        coVerify(exactly = 0) { notificationService.repositoryError(any(), "Failed to load MCP servers") }
+    }
+
+    @Test
+    fun `loadRolesAndCatalogs - an error left in the servers state is not re-reported`() = runTest(dispatcher) {
+        // An error published by an earlier load must not be reported again by a later load that
+        // succeeded or was skipped as a duplicate.
+        serversFlow.value = DataState.Error(RepositoryError.OtherError("stale mcp load failure"))
+
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
+
+        coVerify(exactly = 0) { notificationService.repositoryError(any(), "Failed to load MCP servers") }
+    }
+
+    @Test
+    fun `label lookups expose raw worker and MCP server names including blank ones`() = runTest(dispatcher) {
+        workersFlow.value = DataState.Success(listOf(worker(7L, "Worker A"), worker(8L, "   ")))
+        serversFlow.value = DataState.Success(listOf(server(20L, "Files")))
+
+        // Both lookups are WhileSubscribed and compute on the ViewModel's Main-dispatched scope, so a
+        // Main-based collector drives them and hands the result back to the test coroutine. Blank
+        // display names must survive: the grouping helper owns the fallback label.
+        val workerNames = CompletableDeferred<Map<Long, String>>()
+        val serverNames = CompletableDeferred<Map<Long, String>>()
+        val collectorScope = CoroutineScope(Dispatchers.Main)
+        collectorScope.launch {
+            workerNames.complete(viewModel.workerDisplayNamesById.first { it.isNotEmpty() })
+        }
+        collectorScope.launch {
+            serverNames.complete(viewModel.mcpServerNamesById.first { it.isNotEmpty() })
+        }
+
+        assertEquals(mapOf(7L to "Worker A", 8L to "   "), workerNames.await())
+        assertEquals(mapOf(20L to "Files"), serverNames.await())
+
+        collectorScope.cancel()
     }
 
     @Test

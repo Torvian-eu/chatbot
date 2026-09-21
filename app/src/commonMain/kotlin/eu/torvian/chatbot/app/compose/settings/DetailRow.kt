@@ -20,11 +20,7 @@ fun DetailRow(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-        )
+        DetailLabel(label)
         Spacer(modifier = Modifier.height(4.dp))
         SelectionContainer {
             Text(
@@ -34,4 +30,26 @@ fun DetailRow(
             )
         }
     }
+}
+
+/**
+ * Label of a detail row, in the shared muted style.
+ *
+ * Exposed separately so a page that renders custom content beneath a labelled area — rather than a
+ * single value — reuses the same label styling instead of duplicating it.
+ *
+ * @param label The label text.
+ * @param modifier Modifier applied to the label.
+ */
+@Composable
+fun DetailLabel(
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+        modifier = modifier
+    )
 }

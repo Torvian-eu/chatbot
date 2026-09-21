@@ -35,7 +35,7 @@ data class LocalMCPServersTabState(
  * Actions available in the MCP Servers tab.
  */
 interface LocalMCPServersTabActions {
-    fun onLoadServers(userId: Long)
+    fun onLoadServers()
     fun onSelectServer(serverId: Long?)
     fun onStartAddingNewServer()
     fun onStartEditingServer(server: LocalMCPServerDto)

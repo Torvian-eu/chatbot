@@ -37,8 +37,7 @@ import kotlinx.coroutines.CancellationException
  * different sessions concurrently: each result identifies the session it belongs to. Errors still
  * omit the id (the caller supplied it — it sent the message there), so only successes are tagged.
  *
- * @property authRepository Source of the authenticated user id required by [ChatViewModel.loadSession]
- *            when loading the target session.
+ * @property authRepository Source of the authentication state that gates the tool call.
  * @property spawnedViewModelResolver Resolves the target session's [ChatViewModel], reusing the same
  *            instance the UI resolves for that session.
  */
@@ -62,9 +61,8 @@ class SendMessageTool(
                 return
             }
 
-        // loadSession needs the authenticated user id to fetch user-scoped MCP servers.
-        val userId = (authRepository.authState.value as? AuthState.Authenticated)?.userId
-        if (userId == null) {
+        // The target session's turn is user-scoped, so an authenticated user is required.
+        if (authRepository.authState.value !is AuthState.Authenticated) {
             clientEvents(toolError(toolCallId, "Send message failed: user is not authenticated"))
             return
         }
@@ -87,7 +85,6 @@ class SendMessageTool(
             val outcome = runTurnThroughViewModel(
                 viewModel = targetChatViewModel,
                 sessionId = request.chatSessionId,
-                userId = userId,
                 message = request.message,
                 mode = request.mode
             )

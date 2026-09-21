@@ -125,6 +125,8 @@ fun ChatScreen(
     val agentRoleToolsState by agentRoleManagementViewModel.toolsState.collectAsState()
     val agentRoleCatalogState by agentRoleManagementViewModel.rolesState.collectAsState()
     val agentRoleProjectsState by agentRoleManagementViewModel.projectsState.collectAsState()
+    val agentRoleWorkerDisplayNamesById by agentRoleManagementViewModel.workerDisplayNamesById.collectAsState()
+    val agentRoleMcpServerNamesById by agentRoleManagementViewModel.mcpServerNamesById.collectAsState()
 
     // --- Collect states for cross-session search ---
     val crossSessionSearchState by crossSessionSearchViewModel.uiState.collectAsState()
@@ -192,7 +194,7 @@ fun ChatScreen(
             && authState is AuthState.Authenticated
             && activeChatSessionId != selectedSessionId
         ) {
-            chatViewModel.loadSession(selectedSessionId, authState.userId)
+            chatViewModel.loadSession(selectedSessionId)
         }
     }
 
@@ -378,7 +380,7 @@ fun ChatScreen(
             override fun onRetryLoadingSession() {
                 selectedSession?.id?.let { sessionId ->
                     if (authState is AuthState.Authenticated) {
-                        chatViewModel.loadSession(sessionId, authState.userId)
+                        chatViewModel.loadSession(sessionId)
                     }
                 }
             }
@@ -389,7 +391,9 @@ fun ChatScreen(
     // unused here (they belong to the Settings tab) but are forwarded for interface completeness.
     val agentRoleManagementActions = remember(agentRoleManagementViewModel) {
         object : AgentRolesTabActions {
-            override fun onLoadRolesAndCatalogs() = agentRoleManagementViewModel.loadRolesAndCatalogs()
+            override fun onLoadRolesAndCatalogs() {
+                agentRoleManagementViewModel.loadRolesAndCatalogs()
+            }
             override fun onSelectRole(role: AgentRoleDto?) = agentRoleManagementViewModel.selectRole(role)
             override fun onStartAddingNewRole() = agentRoleManagementViewModel.startAddingNewRole()
             override fun onStartEditingRole(role: AgentRoleDto) = agentRoleManagementViewModel.startEditingRole(role)
@@ -428,6 +432,8 @@ fun ChatScreen(
         settingsById = agentRoleSettingsById,
         tools = agentRoleToolsState.dataOrNull.orEmpty(),
         roles = agentRoleCatalogState.dataOrNull.orEmpty(),
-        projects = agentRoleProjectsState.dataOrNull.orEmpty()
+        projects = agentRoleProjectsState.dataOrNull.orEmpty(),
+        workerDisplayNamesById = agentRoleWorkerDisplayNamesById,
+        mcpServerNamesById = agentRoleMcpServerNamesById
     )
 }

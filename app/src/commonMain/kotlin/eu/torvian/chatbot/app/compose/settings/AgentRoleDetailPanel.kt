@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -10,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleSendability
+import eu.torvian.chatbot.app.domain.contracts.buildAgentToolSections
 import eu.torvian.chatbot.app.domain.contracts.resolveAgentRoleSendability
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
@@ -38,6 +40,10 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  * @param settingsById Settings lookup for the role's resolved settings id (unfiltered, so the row
  *            always reports what the preset actually references).
  * @param toolsById Tool lookup for the role's tool ids.
+ * @param workerDisplayNamesById Worker lookup (id to display name) labelling the worker tool groups;
+ *            a missing or blank name falls back to `Worker #<id>`.
+ * @param mcpServerNamesById Local MCP-server lookup (id to name) labelling the MCP tool groups; a
+ *            missing or blank name falls back to `MCP server #<id>`.
  * @param onBackToList Callback invoked when the user returns to the role list.
  * @param onEdit Callback invoked when the user starts editing the role.
  * @param onDelete Callback invoked when the user starts deleting the role.
@@ -50,6 +56,8 @@ fun AgentRoleDetailPage(
     presetsById: Map<Long, ModelPresetDto>,
     settingsById: Map<Long, ModelSettings>,
     toolsById: Map<Long, ToolDefinition>,
+    workerDisplayNamesById: Map<Long, String>,
+    mcpServerNamesById: Map<Long, String>,
     onBackToList: () -> Unit,
     onEdit: (AgentRoleDto) -> Unit,
     onDelete: (AgentRoleDto) -> Unit,
@@ -125,11 +133,38 @@ fun AgentRoleDetailPage(
                 value = settings?.name ?: "Not configured"
             )
 
-            val tools = role.tools.mapNotNull { toolsById[it] }
-            DetailRow(
-                label = "Tools",
-                value = if (tools.isEmpty()) "None" else tools.joinToString { it.name }
-            )
+            // The role's tools, grouped the same way as the form's picker but rendered as read-only
+            // text: the page is not a tool editor, and its lookup is unfiltered (it may list disabled
+            // tools), so a chip affordance would be misleading. Unresolved ids are dropped.
+            val resolvedTools = role.tools.mapNotNull { toolsById[it] }
+            if (resolvedTools.isEmpty()) {
+                DetailRow(label = "Tools", value = "None")
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DetailLabel("Tools")
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        buildAgentToolSections(
+                            tools = resolvedTools,
+                            workerDisplayNamesById = workerDisplayNamesById,
+                            mcpServerNamesById = mcpServerNamesById
+                        ).forEach { section ->
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                AgentToolBucketHeader(section.title)
+                                if (section.tools.isNotEmpty()) {
+                                    AgentToolNames(section.tools)
+                                }
+                                section.subGroups.forEach { subGroup ->
+                                    // Same block as the dialog's chips, so the sub-group indentation of
+                                    // both surfaces cannot diverge.
+                                    AgentToolSubGroupBlock(title = subGroup.title) {
+                                        AgentToolNames(subGroup.tools)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             HorizontalDivider()
 
@@ -155,6 +190,22 @@ fun AgentRoleDetailPage(
                 }
             }
         }
+    }
+}
+
+/**
+ * Read-only names of one tool group, rendered as selectable text so the page stays non-interactive.
+ *
+ * @param tools The group's tools, in display order.
+ */
+@Composable
+private fun AgentToolNames(tools: List<ToolDefinition>) {
+    SelectionContainer {
+        Text(
+            text = tools.joinToString { it.name },
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

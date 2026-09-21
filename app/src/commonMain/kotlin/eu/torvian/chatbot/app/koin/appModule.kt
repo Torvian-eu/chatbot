@@ -607,6 +607,8 @@ fun appModule(config: AppConfiguration): Module = module {
             modelSettingsRepository = get(),
             toolRepository = get(),
             projectRepository = get(),
+            workerRepository = get(),
+            mcpServerRepository = get(),
             notificationService = get()
         )
     }

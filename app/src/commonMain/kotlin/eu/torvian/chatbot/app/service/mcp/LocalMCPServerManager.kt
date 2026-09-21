@@ -51,16 +51,15 @@ interface LocalMCPServerManager {
     val serverOverviews: Flow<DataState<RepositoryError, List<LocalMCPServerOverview>>>
 
     /**
-     * Loads all MCP servers and their tools for a specific user.
+     * Loads all MCP servers and their tools.
      *
      * This operation:
-     * 1. Calls LocalMCPServerRepository to load servers for the user
+     * 1. Calls LocalMCPServerRepository to load the servers of the authenticated user
      * 2. Calls LocalMCPToolRepository to load all MCP tools
      *
-     * @param userId The ID of the user whose servers to load
      * @return Either.Right(Unit) on success, or Either.Left(RepositoryError) on failure
      */
-    suspend fun loadServers(userId: Long): Either<RepositoryError, Unit>
+    suspend fun loadServers(): Either<RepositoryError, Unit>
 
     /**
      * Tests connection to a new MCP server and returns the count of discovered tools.
