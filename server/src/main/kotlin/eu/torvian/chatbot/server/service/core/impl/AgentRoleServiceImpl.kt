@@ -110,6 +110,7 @@ class AgentRoleServiceImpl(
     private val mapper = AgentRoleMapper(
         agentRoleDao = agentRoleDao,
         toolDefinitionDao = toolDefinitionDao,
+        projectDao = projectDao,
         json = json
     )
 
@@ -304,7 +305,7 @@ class AgentRoleServiceImpl(
             // the scope-sensitive uniqueness check below and to compare against the request's value.
             val currentProjectId = existing.projectId
 
-            val preset = requestValidator.validateUpdate(userId, roleId, request).bind()
+            val preset = requestValidator.validateUpdate(userId, request).bind()
 
             // Name uniqueness is scoped per (user, project scope). The check is scope-sensitive: it
             // runs whenever the update changes the name and/or the project. The role being updated is

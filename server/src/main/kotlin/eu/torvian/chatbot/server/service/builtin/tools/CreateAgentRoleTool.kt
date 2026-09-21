@@ -137,12 +137,6 @@ private fun CreateAgentRoleError.toHandlerError(): ServerBuiltInToolHandlerError
             "spawnable_role_not_found",
             "Spawnable agent role $roleId not found or not owned by the current user."
         )
-    is CreateAgentRoleError.SpawnableRoleNotInProject ->
-        ServerBuiltInToolHandlerError.OperationFailed(
-            "spawnable_role_not_in_project",
-            "Spawnable agent role $roleId does not belong to the role's project " +
-                "(project id: ${projectId ?: "none"}) — spawn targets must share the role's project scope."
-        )
     is CreateAgentRoleError.ProjectNotFound ->
         ServerBuiltInToolHandlerError.OperationFailed(
             "project_not_found",

@@ -781,7 +781,7 @@ class ProjectServiceImplTest {
     }
 
     @Test
-    fun `cloneProject deep-copies member roles with configuration, tools and remapped spawn ids`() = runTest {
+    fun `cloneProject deep-copies member roles with configuration, tools and preserved cross-project spawn grants`() = runTest {
         val source = TestDefaults.project1
         val sourceRoleA = TestDefaults.agentRole1.copy(
             id = 10L,
@@ -802,8 +802,9 @@ class ProjectServiceImplTest {
         coEvery { projectDao.projectNameExistsForUser(userId, "Copy of Acme Web App") } returns false
         coEvery { projectAgentRoleDao.getRoleIdsForProject(source.id) } returns setOf(10L, 11L)
         coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(10L, 11L)) } returns listOf(sourceRoleA, sourceRoleB)
-        // Role 10 carries a tool set and a spawn grant to role 11, plus a stale target 99 that is NOT
-        // part of the cloned set — it must be dropped, not copied verbatim.
+        // Role 10 carries a tool set and a spawn grant to role 11 plus a target 99 that is NOT part of
+        // the cloned set — the cloned grant is remapped and the external target is kept verbatim, so the
+        // clone keeps the source role's full delegation configuration.
         coEvery { agentRoleToolDao.getToolsForRoles(listOf(10L, 11L)) } returns mapOf(10L to setOf(100L, 101L))
         coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(listOf(10L, 11L)) } returns
             mapOf(10L to setOf(11L, 99L))
@@ -847,9 +848,9 @@ class ProjectServiceImplTest {
         }
         // The tool set is copied as-is.
         coVerify(exactly = 1) { agentRoleToolDao.replaceToolsForRole(30L, setOf(100L, 101L)) }
-        // The spawn allow-list is remapped old-id -> new-id (11 -> 31), and the stale target 99 is
-        // dropped rather than copied verbatim (it would be an illegal cross-project grant).
-        coVerify(exactly = 1) { agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(30L, setOf(31L)) }
+        // The spawn allow-list is remapped where the target is cloned (11 -> 31), while the target
+        // outside the cloned set (99) is preserved verbatim.
+        coVerify(exactly = 1) { agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(30L, setOf(31L, 99L)) }
         // Every cloned role gets its own ownership row.
         coVerify(exactly = 1) { agentRoleOwnershipDao.setOwner(30L, userId) }
         coVerify(exactly = 1) { agentRoleOwnershipDao.setOwner(31L, userId) }

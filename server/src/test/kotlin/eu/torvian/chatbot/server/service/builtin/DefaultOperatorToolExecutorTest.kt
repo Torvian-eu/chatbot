@@ -64,7 +64,7 @@ class DefaultOperatorToolExecutorTest {
     private fun toolCall(
         id: Long = 1L,
         toolName: String = OperatorToolCatalog.SPAWN_AGENT_NAME,
-        input: String = """{"agent_role_name":"writer","prompt":"Write a summary"}"""
+        input: String = """{"agent_role_id":5,"prompt":"Write a summary"}"""
     ): ToolCall = ToolCall(
         id = id,
         messageId = 100L,
@@ -198,7 +198,7 @@ class DefaultOperatorToolExecutorTest {
     @Test
     fun `spawn payload build failure maps to a readable tool error`() = runTest {
         val spawnBuilder = mockk<AgentSpawnRequestBuilder>()
-        coEvery { spawnBuilder.build(any(), any()) } returns SpawnRequestBuildError.RoleNotFound("writer").left()
+        coEvery { spawnBuilder.build(any(), any()) } returns SpawnRequestBuildError.RoleNotFound(5L).left()
 
         val executor = DefaultOperatorToolExecutor(spawnBuilder, mockk(), json)
         val result = executor.executeTool(
@@ -209,7 +209,28 @@ class DefaultOperatorToolExecutorTest {
         )
 
         assertEquals(ToolCallStatus.ERROR, result.status)
-        assertTrue(result.errorMessage.orEmpty().contains("writer"))
+        assertTrue(result.errorMessage.orEmpty().contains("5"))
+    }
+
+    /**
+     * Verifies that an owned role id outside the source role's allow-list is reported with that id, so the
+     * calling model learns which target was refused instead of receiving a generic failure.
+     */
+    @Test
+    fun `spawn payload not-allowed failure maps to a readable tool error naming the role id`() = runTest {
+        val spawnBuilder = mockk<AgentSpawnRequestBuilder>()
+        coEvery { spawnBuilder.build(any(), any()) } returns SpawnRequestBuildError.RoleNotAllowed(7L).left()
+
+        val executor = DefaultOperatorToolExecutor(spawnBuilder, mockk(), json)
+        val result = executor.executeTool(
+            context = context(),
+            toolCall = toolCall(),
+            emitEvent = {},
+            operatorToolResultFlow = flowOf()
+        )
+
+        assertEquals(ToolCallStatus.ERROR, result.status)
+        assertTrue(result.errorMessage.orEmpty().contains("7"))
     }
 
     /**

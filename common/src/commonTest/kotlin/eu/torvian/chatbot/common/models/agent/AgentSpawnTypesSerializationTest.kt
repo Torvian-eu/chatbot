@@ -232,8 +232,10 @@ class AgentSpawnTypesSerializationTest {
     }
 
     /**
-     * Verifies that the LLM-facing schema requires the subject, role name, and prompt — and that the
-     * optional `mode` property is deliberately kept out of `required`.
+     * Verifies that the LLM-facing schema requires the subject, the target's integer role id and the
+     * prompt — that the id property is an integer, that the removed `agent_role_name` property is gone
+     * from both `properties` and `required`, and that the optional `mode` property stays out of
+     * `required`.
      */
     @Test
     fun `OperatorToolCatalog spawn_agent schema declares all required parameters`() {
@@ -241,10 +243,18 @@ class AgentSpawnTypesSerializationTest {
         assertEquals(OperatorToolCatalog.SPAWN_AGENT_NAME, spec.name)
         val required = (spec.inputSchema["required"] as JsonArray).map { it.jsonPrimitive.content }.toSet()
         assertTrue(required.contains(OperatorToolCatalog.SPAWN_AGENT_SUBJECT_PROPERTY))
-        assertTrue(required.contains(OperatorToolCatalog.SPAWN_AGENT_ROLE_NAME_PROPERTY))
+        assertTrue(required.contains(OperatorToolCatalog.SPAWN_AGENT_ROLE_ID_PROPERTY))
         assertTrue(required.contains(OperatorToolCatalog.SPAWN_AGENT_PROMPT_PROPERTY))
         // The mode property is optional; making it required would break default-mode calls.
         assertFalse(required.contains(OperatorToolCatalog.SPAWN_AGENT_MODE_PROPERTY))
+        // The target is addressed by id, so the integer property replaces the removed name property.
+        val properties = spec.inputSchema["properties"] as JsonObject
+        assertEquals(
+            "integer",
+            (properties[OperatorToolCatalog.SPAWN_AGENT_ROLE_ID_PROPERTY] as JsonObject)["type"]?.jsonPrimitive?.content
+        )
+        assertNull(properties["agent_role_name"])
+        assertFalse(required.contains("agent_role_name"))
     }
 
     /**

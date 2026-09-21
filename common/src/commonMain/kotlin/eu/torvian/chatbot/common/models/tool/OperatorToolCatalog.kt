@@ -33,8 +33,13 @@ object OperatorToolCatalog {
     /** Public, LLM-facing name of the `spawn_agent` operator tool. */
     const val SPAWN_AGENT_NAME = "spawn_agent"
 
-    /** JSON property holding the agent-role name for a spawn request (snake_case, see report §5.1.6). */
-    const val SPAWN_AGENT_ROLE_NAME_PROPERTY = "agent_role_name"
+    /**
+     * JSON property holding the id of the agent role to spawn.
+     *
+     * The id is the addressing key the model reads from the `spawnable_agents` prompt table; it is
+     * stable across renames, so it never becomes ambiguous.
+     */
+    const val SPAWN_AGENT_ROLE_ID_PROPERTY = "agent_role_id"
 
     /** JSON property holding the user-facing subject for the spawned session. */
     const val SPAWN_AGENT_SUBJECT_PROPERTY = "subject"
@@ -92,7 +97,7 @@ object OperatorToolCatalog {
     val allTools: List<OperatorToolSpec> = listOf(
         OperatorToolSpec(
             name = SPAWN_AGENT_NAME,
-            description = "Spawns a new agent conversation from a user-defined agent role. Both modes return the spawned chat session id; wait mode also returns the spawned agent's final summary, fire-and-forget mode returns immediately while the spawned conversation runs in the background.",
+            description = "Spawns a new agent conversation from a user-defined agent role. Pass the id of one of the agent roles listed in the available agents table in `agent_role_id`. Both modes return the spawned chat session id; wait mode also returns the spawned agent's final summary, fire-and-forget mode returns immediately while the spawned conversation runs in the background.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -100,9 +105,12 @@ object OperatorToolCatalog {
                         put("type", "string")
                         put("description", "Subject used to name the spawned session. The client adds a spawned-session prefix.")
                     })
-                    put(SPAWN_AGENT_ROLE_NAME_PROPERTY, buildJsonObject {
-                        put("type", "string")
-                        put("description", "Name of the agent role to spawn. The role must be owned by the current user.")
+                    put(SPAWN_AGENT_ROLE_ID_PROPERTY, buildJsonObject {
+                        put("type", "integer")
+                        put(
+                            "description",
+                            "Id of the agent role to spawn, exactly as listed in the available agents table. The role must be owned by the current user."
+                        )
                     })
                     put(SPAWN_AGENT_PROMPT_PROPERTY, buildJsonObject {
                         put("type", "string")
@@ -124,7 +132,7 @@ object OperatorToolCatalog {
                 })
                 put("required", buildJsonArray {
                     add(SPAWN_AGENT_SUBJECT_PROPERTY)
-                    add(SPAWN_AGENT_ROLE_NAME_PROPERTY)
+                    add(SPAWN_AGENT_ROLE_ID_PROPERTY)
                     add(SPAWN_AGENT_PROMPT_PROPERTY)
                 })
             }

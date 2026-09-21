@@ -80,11 +80,11 @@ interface ProjectService {
      *
      * Validates the new name (reusing the non-blank/≤255/unique-per-owner rules of create/update),
      * deep-copies every member agent role of the source as a new role row (configuration including the
-     * model-preset reference, tools, spawn allow-list remapped to the cloned role ids, per-user
-     * disabled markers), and persists the new project, its ownership, and all role copies atomically
-     * in a single transaction. The source project, its roles, and their disabled state remain
-     * untouched. A foreign or nonexistent source collapses to [CloneProjectError.NotFound] (no
-     * existence leak).
+     * model-preset reference, tools, spawn allow-list with the cloned targets remapped to the new role
+     * ids and targets outside the cloned set kept verbatim, per-user disabled markers), and persists
+     * the new project, its ownership, and all role copies atomically in a single transaction. The
+     * source project, its roles, and their disabled state remain untouched. A foreign or nonexistent
+     * source collapses to [CloneProjectError.NotFound] (no existence leak).
      *
      * @param userId The ID of the requesting user (must own the source project).
      * @param sourceProjectId The ID of the project to clone.

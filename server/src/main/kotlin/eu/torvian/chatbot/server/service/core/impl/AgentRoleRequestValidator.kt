@@ -30,8 +30,7 @@ import eu.torvian.chatbot.server.service.llm.isChatLikeSettings
  * `LocalMCPServerServiceImpl.validateRequest(...).bind()`; the `Raise`-based core stays private per
  * the Arrow typed-error conventions.
  *
- * @property agentRoleDao DAO used to validate spawn allow-list targets (existence, ownership and
- *            persisted project scope).
+ * @property agentRoleDao DAO used to validate spawn allow-list targets (existence and ownership).
  * @property modelPresetDao DAO used to resolve and validate an attached preset (ownership-scoped
  *            read doubling as the ownership check).
  * @property settingsDao DAO used to validate an attached preset's settings reference
@@ -62,9 +61,6 @@ internal class AgentRoleRequestValidator(
             },
             toolNotFound = { toolId -> CreateAgentRoleError.ToolNotFound(toolId) },
             spawnableRoleNotFound = { roleId -> CreateAgentRoleError.SpawnableRoleNotFound(roleId) },
-            spawnableRoleNotInProject = { roleId, projectId ->
-                CreateAgentRoleError.SpawnableRoleNotInProject(roleId, projectId)
-            },
             projectNotFound = { projectId -> CreateAgentRoleError.ProjectNotFound(projectId) },
             instructionValidationFailed = { reason -> CreateAgentRoleError.InstructionValidationFailed(reason) }
         )
@@ -81,9 +77,6 @@ internal class AgentRoleRequestValidator(
             },
             toolNotFound = { toolId -> UpdateAgentRoleError.ToolNotFound(toolId) },
             spawnableRoleNotFound = { roleId -> UpdateAgentRoleError.SpawnableRoleNotFound(roleId) },
-            spawnableRoleNotInProject = { roleId, projectId ->
-                UpdateAgentRoleError.SpawnableRoleNotInProject(roleId, projectId)
-            },
             projectNotFound = { projectId -> UpdateAgentRoleError.ProjectNotFound(projectId) },
             instructionValidationFailed = { reason -> UpdateAgentRoleError.InstructionValidationFailed(reason) }
         )
@@ -91,8 +84,6 @@ internal class AgentRoleRequestValidator(
 
     /**
      * Validates a create-role request against all shared role configuration invariants.
-     *
-     * A new role cannot be its own spawn target, so the self-spawn exemption id is null.
      *
      * @param userId User whose role, preset, tool and project ownership is required.
      * @param request The create request to validate.
@@ -108,7 +99,6 @@ internal class AgentRoleRequestValidator(
                 toolIds = request.toolIds,
                 spawnableAgentRoleIds = request.spawnableAgentRoleIds,
                 projectId = request.projectId,
-                roleId = null,
                 instructions = request.instructions,
                 userId = userId
             )
@@ -118,15 +108,12 @@ internal class AgentRoleRequestValidator(
      * Validates an update-role request against all shared role configuration invariants.
      *
      * @param userId User whose role, preset, tool and project ownership is required.
-     * @param roleId The role's own id, used to exempt self-spawn from the persisted (stale)
-     *            membership comparison while the role moves projects.
      * @param request The update request to validate.
      * @return The resolved preset entity (null when no preset is attached), so the caller can build
      *         the derived model/settings ids without a second read.
      */
     suspend fun validateUpdate(
         userId: Long,
-        roleId: Long,
         request: UpdateAgentRoleRequest
     ): Either<UpdateAgentRoleError, ModelPresetEntity?> =
         either {
@@ -137,7 +124,6 @@ internal class AgentRoleRequestValidator(
                 toolIds = request.toolIds,
                 spawnableAgentRoleIds = request.spawnableAgentRoleIds,
                 projectId = request.projectId,
-                roleId = roleId,
                 instructions = request.instructions,
                 userId = userId
             )
@@ -160,13 +146,11 @@ internal class AgentRoleRequestValidator(
      *            same not-found error, so an attach attempt cannot be told apart from a plain
      *            non-existent id.
      * @param spawnableAgentRoleIds Target role identifiers to validate; duplicates are impossible at
-     *            the wire level (a set) and self-referencing is allowed. Every target must exist,
-     *            belong to [userId], and have the **same project scope** as the role ([projectId]):
-     *            the same project id, or both unassociated.
+     *            the wire level (a set) and self-referencing is allowed. Every target must exist and
+     *            belong to [userId]; targets may belong to any project scope of that user.
      * @param projectId The single project id the role belongs to; a non-null id must reference a
-     *            user-owned project. A missing or foreign id raises the same not-found error.
-     * @param roleId The role's own id while editing, used to exempt self-spawn from the persisted
-     *            (stale) membership comparison; null on create.
+     *            user-owned project. A missing or foreign id raises the same not-found error. It never
+     *            constrains the spawn allow-list.
      * @param instructions The instruction DTOs to validate.
      * @param userId User whose role and tool ownership is required.
      * @return The resolved preset entity (null when no preset is attached), so the caller can build the
@@ -180,7 +164,6 @@ internal class AgentRoleRequestValidator(
         toolIds: Set<Long>,
         spawnableAgentRoleIds: Set<Long>,
         projectId: Long?,
-        roleId: Long?,
         instructions: List<AgentInstructionDto>,
         userId: Long
     ): ModelPresetEntity? {
@@ -252,27 +235,17 @@ internal class AgentRoleRequestValidator(
             }
         }
 
-        // Targets must exist, belong to the requesting user, and share the role's project scope:
-        // an in-project role may only spawn roles of the same project, an unassociated role only
-        // unassociated roles. The set wire shape already rules out duplicates and self-referencing
-        // is intentionally allowed (a role spawned from itself is trivially same-scope because the
-        // role's own membership is written with the same [projectId] in this transaction). The
-        // owned-target load doubles as the membership source (the single `project_id` column rides
-        // the loaded entities), so no separate project read is needed.
+        // Every target must exist and belong to the requesting user; the set wire shape rules out
+        // duplicate ids and self-referencing is intentionally allowed. Targets may live in any of the
+        // user's project scopes, so project membership is deliberately not compared here: a spawn target
+        // is addressed by its id at runtime, which cannot be ambiguous. The owned-target load doubles as
+        // the ownership check.
         if (spawnableAgentRoleIds.isNotEmpty()) {
             val ownedTargets = agentRoleDao.getRolesByIdsForUser(userId, spawnableAgentRoleIds.toList())
             val ownedTargetIds = ownedTargets.map { it.id }.toSet()
             spawnableAgentRoleIds.firstOrNull { it !in ownedTargetIds }?.let { missingId ->
                 raise(errors.spawnableRoleNotFound(missingId))
             }
-            // Same-project enforcement: every target must occupy exactly the role's project scope —
-            // the same project id, or both null. Self-spawn is exempt from the persisted comparison:
-            // the target IS the role being written, and its stored (stale) membership may legally
-            // differ from [projectId] until this transaction writes the new one.
-            ownedTargets
-                .filterNot { it.id == roleId }
-                .firstOrNull { it.projectId != projectId }
-                ?.let { target -> raise(errors.spawnableRoleNotInProject(target.id, projectId)) }
         }
 
         // The role's project must be user-owned; a missing or foreign id collapses to the same
@@ -336,8 +309,6 @@ internal class AgentRoleRequestValidator(
      * @property modelPresetSettingsModelMismatch Builds an attached-preset/settings-model mismatch error.
      * @property toolNotFound Builds a tool-not-found error.
      * @property spawnableRoleNotFound Builds an inaccessible-target error.
-     * @property spawnableRoleNotInProject Builds a same-project-spawn enforcement error (a target
-     *            role does not occupy the source role's project scope).
      * @property projectNotFound Builds a project-not-found error.
      * @property instructionValidationFailed Builds an instruction-validation error.
      */
@@ -348,7 +319,6 @@ internal class AgentRoleRequestValidator(
         val modelPresetSettingsModelMismatch: (presetId: Long, presetModelId: Long, settingsModelId: Long) -> E,
         val toolNotFound: (toolId: Long) -> E,
         val spawnableRoleNotFound: (roleId: Long) -> E,
-        val spawnableRoleNotInProject: (roleId: Long, projectId: Long?) -> E,
         val projectNotFound: (projectId: Long) -> E,
         val instructionValidationFailed: (reason: String) -> E
     )

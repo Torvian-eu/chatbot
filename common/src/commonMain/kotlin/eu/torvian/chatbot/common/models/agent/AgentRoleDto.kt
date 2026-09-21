@@ -37,10 +37,10 @@ import kotlinx.serialization.Serializable
  * @property tools Set of tool-definition identifiers attached to the role. Referential integrity is
  *            enforced at the database level (the server stores the ids in the `agent_role_tools` join
  *            table); the wire shape is a plain set of ids, so duplicates are impossible.
- * @property spawnableAgentRoleIds Unordered identifiers of roles this role may spawn. The server validates
- *            that targets belong to the same user **and to the same project scope** as the role
- *            (same project id, or both unassociated — see [projectId]); self-spawn (the role granting
- *            itself) is allowed.
+ * @property spawnableAgentRoleIds Unordered identifiers of roles this role may spawn. Targets must be
+ *            owned by the same user and may belong to any project scope; `spawn_agent` addresses a
+ *            target by id, so same-named targets are simply distinct entries. Self-spawn (the role
+ *            granting itself) is allowed.
  * @property instructions Flat, type-tagged instruction list (see [AgentInstructionDto]) that is
  *            composed into the role's system prompt at turn time.
  * @property disabled Whether the role is disabled **for the current user**. The flag is derived from
@@ -49,11 +49,10 @@ import kotlinx.serialization.Serializable
  *            and to render the settings enable/disable switch; it defaults to false so payloads
  *            produced before this property existed (and fresh roles) decode as enabled.
  * @property projectId Identifier of the single user-owned project the role belongs to, or `null` for
- *            an **unassociated** role. A role belongs to at most one project — the relation was
- *            deliberately reduced from a set to a single id so `spawnableAgentRoleIds` can be
- *            enforced as same-project. Unassociated roles are offered by the session role selector
- *            only while the session has no project selected. Project membership also scopes the
- *            role-name uniqueness rule: same-named roles of the same user conflict only when they
+ *            an **unassociated** role. A role belongs to at most one project. A spawned session adopts
+ *            the target role's project, and unassociated roles are offered by the session role
+ *            selector only while the session has no project selected. Project membership also scopes
+ *            the role-name uniqueness rule: same-named roles of the same user conflict only when they
  *            share the same scope (the same project id, or both unassociated). The default keeps
  *            payloads produced before this property existed decoding as unassociated.
  */
