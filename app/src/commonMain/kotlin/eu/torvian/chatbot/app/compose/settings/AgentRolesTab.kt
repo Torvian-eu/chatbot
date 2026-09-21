@@ -51,7 +51,6 @@ fun AgentRolesTab(
             }
 
             is DataState.Success -> {
-                val roles = uiState.data
                 val selectedRole = state.selectedRole
 
                 if (selectedRole != null) {
@@ -61,6 +60,8 @@ fun AgentRolesTab(
                         presetsById = state.presetsById,
                         settingsById = state.settingsById,
                         toolsById = state.toolsById,
+                        workerDisplayNamesById = state.workerDisplayNamesById,
+                        mcpServerNamesById = state.mcpServerNamesById,
                         onBackToList = onBackToRoleList,
                         onEdit = { actions.onStartEditingRole(it) },
                         onDelete = { actions.onStartDeletingRole(it) },
@@ -110,6 +111,8 @@ fun AgentRolesTab(
         settingsById = state.settingsById,
         tools = state.tools,
         roles = state.rolesUiState.dataOrNull.orEmpty(),
-        projects = state.projects
+        projects = state.projects,
+        workerDisplayNamesById = state.workerDisplayNamesById,
+        mcpServerNamesById = state.mcpServerNamesById
     )
 }

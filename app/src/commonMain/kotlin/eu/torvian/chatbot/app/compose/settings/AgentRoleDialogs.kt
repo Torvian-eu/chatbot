@@ -31,6 +31,10 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  * @param roles Same-user roles available as spawn targets.
  * @param projects Same-user projects available for the form's single project selector (a role
  *            belongs to at most one project; null = unassociated).
+ * @param workerDisplayNamesById Worker lookup (id to display name) labelling the form's worker tool
+ *            groups; a missing or blank name falls back to `Worker #<id>`.
+ * @param mcpServerNamesById Local MCP-server lookup (id to name) labelling the form's MCP tool
+ *            groups; a missing or blank name falls back to `MCP server #<id>`.
  */
 @Composable
 fun AgentRoleDialogs(
@@ -41,7 +45,9 @@ fun AgentRoleDialogs(
     settingsById: Map<Long, ModelSettings>,
     tools: List<ToolDefinition>,
     roles: List<AgentRoleDto>,
-    projects: List<ProjectDto>
+    projects: List<ProjectDto>,
+    workerDisplayNamesById: Map<Long, String>,
+    mcpServerNamesById: Map<Long, String>
 ) {
     when (dialogState) {
         is AgentRoleDialogState.AddRole -> {
@@ -54,6 +60,8 @@ fun AgentRoleDialogs(
                 tools = tools,
                 roles = roles,
                 projects = projects,
+                workerDisplayNamesById = workerDisplayNamesById,
+                mcpServerNamesById = mcpServerNamesById,
                 onFormUpdate = actions::onUpdateRoleForm,
                 onSave = actions::onSaveRole,
                 onCancel = actions::onCancelDialog
@@ -70,6 +78,8 @@ fun AgentRoleDialogs(
                 tools = tools,
                 roles = roles,
                 projects = projects,
+                workerDisplayNamesById = workerDisplayNamesById,
+                mcpServerNamesById = mcpServerNamesById,
                 onFormUpdate = actions::onUpdateRoleForm,
                 onSave = actions::onSaveRole,
                 onCancel = actions::onCancelDialog

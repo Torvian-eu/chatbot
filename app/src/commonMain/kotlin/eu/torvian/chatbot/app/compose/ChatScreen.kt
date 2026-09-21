@@ -125,6 +125,8 @@ fun ChatScreen(
     val agentRoleToolsState by agentRoleManagementViewModel.toolsState.collectAsState()
     val agentRoleCatalogState by agentRoleManagementViewModel.rolesState.collectAsState()
     val agentRoleProjectsState by agentRoleManagementViewModel.projectsState.collectAsState()
+    val agentRoleWorkerDisplayNamesById by agentRoleManagementViewModel.workerDisplayNamesById.collectAsState()
+    val agentRoleMcpServerNamesById by agentRoleManagementViewModel.mcpServerNamesById.collectAsState()
 
     // The dialog's tool groups are labelled from the worker/MCP-server catalogs, whose MCP half is
     // loaded with the authenticated user id. The id only gates that reload: the dialogs themselves
@@ -445,6 +447,8 @@ fun ChatScreen(
         settingsById = agentRoleSettingsById,
         tools = agentRoleToolsState.dataOrNull.orEmpty(),
         roles = agentRoleCatalogState.dataOrNull.orEmpty(),
-        projects = agentRoleProjectsState.dataOrNull.orEmpty()
+        projects = agentRoleProjectsState.dataOrNull.orEmpty(),
+        workerDisplayNamesById = agentRoleWorkerDisplayNamesById,
+        mcpServerNamesById = agentRoleMcpServerNamesById
     )
 }

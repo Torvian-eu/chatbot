@@ -17,6 +17,7 @@ import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleFormState
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleSendability
 import eu.torvian.chatbot.app.domain.contracts.FormMode
+import eu.torvian.chatbot.app.domain.contracts.buildAgentToolSections
 import eu.torvian.chatbot.app.domain.contracts.buildSpawnableAgentRoleSections
 import eu.torvian.chatbot.app.domain.contracts.defaultInstructionName
 import eu.torvian.chatbot.app.domain.contracts.resolveAgentRoleSendability
@@ -67,6 +68,10 @@ private val EDITABLE_INSTRUCTION_TYPES = listOf(
  * @param settingsById Settings lookup used to resolve the profile a preset references, so the
  *            sendability hint can name the precise reason.
  * @param tools Enabled tool definitions available for the multi-select.
+ * @param workerDisplayNamesById Worker lookup (id to display name) labelling the worker tool groups;
+ *            a missing or blank name falls back to `Worker #<id>`.
+ * @param mcpServerNamesById Local MCP-server lookup (id to name) labelling the MCP tool groups; a
+ *            missing or blank name falls back to `MCP server #<id>`.
  * @param roles Same-user roles available as spawn targets, grouped by project in the chip picker
  *            (the edited role included, since self-spawn is allowed).
  * @param projects Same-user projects available for the single-project selector. A role belongs to
@@ -83,6 +88,8 @@ fun AgentRoleFormDialog(
     presets: List<ModelPresetDto>,
     settingsById: Map<Long, ModelSettings>,
     tools: List<ToolDefinition>,
+    workerDisplayNamesById: Map<Long, String>,
+    mcpServerNamesById: Map<Long, String>,
     roles: List<AgentRoleDto>,
     projects: List<ProjectDto>,
     onFormUpdate: ((AgentRoleFormState) -> AgentRoleFormState) -> Unit,
@@ -173,7 +180,9 @@ fun AgentRoleFormDialog(
                             )
                         }
 
-                        // Tools multi-select (FilterChip row).
+                        // Tools multi-select, grouped by tool origin: one header per non-empty bucket
+                        // plus one indented sub-group per worker / MCP server. Each chip toggles exactly
+                        // its own id; the selected ids stay an unordered set.
                         Text("Tools", style = MaterialTheme.typography.titleSmall)
                         if (tools.isEmpty()) {
                             Text(
@@ -182,27 +191,36 @@ fun AgentRoleFormDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                tools.forEach { tool ->
-                                    val selected = tool.id in formState.toolIds
-                                    FilterChip(
-                                        selected = selected,
-                                        onClick = {
-                                            onFormUpdate { current ->
-                                                current.copy(
-                                                    toolIds = if (selected) {
-                                                        current.toolIds - tool.id
-                                                    } else {
-                                                        current.toolIds + tool.id
-                                                    }
+                            // Buckets keep the dialog's 16.dp section rhythm; the header, the bucket-level
+                            // chips and the sub-groups of one bucket sit 8.dp apart so each origin reads
+                            // as a single block.
+                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                buildAgentToolSections(
+                                    tools = tools,
+                                    workerDisplayNamesById = workerDisplayNamesById,
+                                    mcpServerNamesById = mcpServerNamesById
+                                ).forEach { section ->
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        AgentToolBucketHeader(section.title)
+                                        if (section.tools.isNotEmpty()) {
+                                            AgentToolChips(
+                                                tools = section.tools,
+                                                selectedToolIds = formState.toolIds,
+                                                onFormUpdate = onFormUpdate
+                                            )
+                                        }
+                                        section.subGroups.forEach { subGroup ->
+                                            // The block supplies the indentation of the sub-header and its
+                                            // chips, so the hierarchy matches the detail page.
+                                            AgentToolSubGroupBlock(title = subGroup.title) {
+                                                AgentToolChips(
+                                                    tools = subGroup.tools,
+                                                    selectedToolIds = formState.toolIds,
+                                                    onFormUpdate = onFormUpdate
                                                 )
                                             }
-                                        },
-                                        label = { Text(tool.name, maxLines = 1) }
-                                    )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -408,6 +426,44 @@ fun AgentRoleFormDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Filter-chip row of one tool group, toggling the ids of its tools in the form draft.
+ *
+ * @param tools The group's tools, in display order.
+ * @param selectedToolIds Tool ids selected in the current draft.
+ * @param onFormUpdate Applies an update function to the form draft.
+ */
+@Composable
+private fun AgentToolChips(
+    tools: List<ToolDefinition>,
+    selectedToolIds: Set<Long>,
+    onFormUpdate: ((AgentRoleFormState) -> AgentRoleFormState) -> Unit
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        tools.forEach { tool ->
+            val selected = tool.id in selectedToolIds
+            FilterChip(
+                selected = selected,
+                onClick = {
+                    onFormUpdate { current ->
+                        current.copy(
+                            toolIds = if (selected) {
+                                current.toolIds - tool.id
+                            } else {
+                                current.toolIds + tool.id
+                            }
+                        )
+                    }
+                },
+                label = { Text(tool.name, maxLines = 1) }
+            )
         }
     }
 }
