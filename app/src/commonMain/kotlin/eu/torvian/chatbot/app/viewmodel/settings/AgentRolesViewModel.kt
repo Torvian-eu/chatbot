@@ -188,10 +188,8 @@ class AgentRolesViewModel(
      *
      * Every loader is non-fatal: a failure is reported through a notification and leaves the form
      * usable, with the tool groups falling back to their id-based labels.
-     *
-     * @param userId The authenticated user, needed to load the token-scoped MCP-server catalog.
      */
-    fun loadRolesAndCatalogs(userId: Long) {
+    fun loadRolesAndCatalogs() {
         viewModelScope.launch(uiDispatcher) {
             parZip(
                 { agentRoleRepository.loadRoles() },
@@ -201,9 +199,9 @@ class AgentRolesViewModel(
                 { toolRepository.loadTools() },
                 { projectRepository.loadProjects() },
                 { workerRepository.loadWorkers() },
-                { loadMcpServerCatalog(userId) }
+                { mcpServerRepository.loadServers() }
             ) { rolesResult, presetsResult, modelsResult, settingsResult, toolsResult, projectsResult,
-                workersResult, _ ->
+                workersResult, serverConfigsResult ->
                 rolesResult.mapLeft { error ->
                     notificationService.repositoryError(
                         error = error,
@@ -246,27 +244,13 @@ class AgentRolesViewModel(
                         shortMessage = "Failed to load workers"
                     )
                 }
+                serverConfigsResult.mapLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load MCP servers"
+                    )
+                }
             }
-        }
-    }
-
-    /**
-     * Loads the MCP-server catalog and reports a failure through the state the load produced.
-     *
-     * [LocalMCPServerRepository.loadServers] returns `Unit` and publishes failures only through its
-     * `servers` state, so the failure is read back from that state to mirror the other catalog
-     * loaders. A concurrent load that returned early leaves the state `Loading` and stays silent, so
-     * each call reports at most once.
-     *
-     * @param userId The authenticated user whose MCP servers are loaded.
-     */
-    private suspend fun loadMcpServerCatalog(userId: Long) {
-        mcpServerRepository.loadServers(userId)
-        mcpServerRepository.servers.value.errorOrNull?.let { error ->
-            notificationService.repositoryError(
-                error = error,
-                shortMessage = "Failed to load MCP servers"
-            )
         }
     }
 

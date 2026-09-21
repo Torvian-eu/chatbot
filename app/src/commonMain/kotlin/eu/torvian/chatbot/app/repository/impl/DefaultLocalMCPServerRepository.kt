@@ -1,8 +1,10 @@
 package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
+import arrow.core.left
 import arrow.core.raise.either
 import arrow.core.raise.withError
+import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.app.domain.models.toUpdateRequest
@@ -51,19 +53,23 @@ class DefaultLocalMCPServerRepository(
     private val _servers = MutableStateFlow<DataState<RepositoryError, List<LocalMCPServerDto>>>(DataState.Idle)
     override val servers: StateFlow<DataState<RepositoryError, List<LocalMCPServerDto>>> = _servers.asStateFlow()
 
-    override suspend fun loadServers(userId: Long) {
+    override suspend fun loadServers(): Either<RepositoryError, Unit> {
         // Prevent duplicate loading operations
-        if (_servers.value.isLoading) return
+        if (_servers.value.isLoading) return Unit.right()
+
         _servers.update { DataState.Loading }
 
-        val result = api.getServers()
-        _servers.update {
-            result.fold(
-                ifLeft = { apiError -> DataState.Error(apiError.toRepositoryError("Failed to load MCP servers")) },
-                ifRight = { servers -> DataState.Success(servers) }
-            )
-        }
-
+        return api.getServers().fold(
+            ifLeft = { apiError ->
+                val repositoryError = apiError.toRepositoryError("Failed to load MCP servers")
+                _servers.update { DataState.Error(repositoryError) }
+                repositoryError.left()
+            },
+            ifRight = { servers ->
+                _servers.update { DataState.Success(servers) }
+                Unit.right()
+            }
+        )
     }
 
     override suspend fun createServer(

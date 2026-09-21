@@ -126,8 +126,8 @@ class AgentRolesViewModelTest {
         coEvery { toolRepository.loadTools() } returns Either.Right(Unit)
         coEvery { projectRepository.loadProjects() } returns Either.Right(Unit)
         coEvery { workerRepository.loadWorkers() } returns Either.Right(Unit)
-        // The MCP-server load returns Unit and publishes its outcome through the `servers` stream.
-        coEvery { mcpServerRepository.loadServers(any()) } returns Unit
+        // The MCP-server load reports its outcome through its result as well as the `servers` stream.
+        coEvery { mcpServerRepository.loadServers() } returns Either.Right(Unit)
 
         viewModel = AgentRolesViewModel(
             agentRoleRepository = repository,
@@ -153,7 +153,7 @@ class AgentRolesViewModelTest {
     fun `loadRolesAndCatalogs - also loads the preset catalog`() = runTest(dispatcher) {
         // parZip runs the eight loaders on Dispatchers.Default, outside this test's scheduler: await the
         // launched load so the verifications below observe completed calls instead of racing the pool.
-        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs(userId = 1L) }
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
 
         coVerify(exactly = 1) { repository.loadRoles() }
         coVerify(exactly = 1) { presetRepository.loadPresets() }
@@ -162,7 +162,7 @@ class AgentRolesViewModelTest {
         coVerify(exactly = 1) { toolRepository.loadTools() }
         coVerify(exactly = 1) { projectRepository.loadProjects() }
         coVerify(exactly = 1) { workerRepository.loadWorkers() }
-        coVerify(exactly = 1) { mcpServerRepository.loadServers(1L) }
+        coVerify(exactly = 1) { mcpServerRepository.loadServers() }
     }
 
     @Test
@@ -170,32 +170,37 @@ class AgentRolesViewModelTest {
         val error = RepositoryError.OtherError("worker load failed")
         coEvery { workerRepository.loadWorkers() } returns Either.Left(error)
 
-        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs(userId = 1L) }
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
 
         coVerify { notificationService.repositoryError(error, "Failed to load workers") }
         // The other catalogs still ran: a worker failure only costs the sub-group labels.
-        coVerify(exactly = 1) { mcpServerRepository.loadServers(1L) }
+        coVerify(exactly = 1) { mcpServerRepository.loadServers() }
     }
 
     @Test
-    fun `loadRolesAndCatalogs - MCP server failure is reported from the published state`() = runTest(dispatcher) {
+    fun `loadRolesAndCatalogs - MCP server failure is reported from the load result`() = runTest(dispatcher) {
         val error = RepositoryError.OtherError("mcp load failed")
-        coEvery { mcpServerRepository.loadServers(any()) } answers {
-            serversFlow.value = DataState.Error(error)
-        }
+        coEvery { mcpServerRepository.loadServers() } returns Either.Left(error)
 
-        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs(userId = 1L) }
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
 
         coVerify(exactly = 1) { notificationService.repositoryError(error, "Failed to load MCP servers") }
     }
 
     @Test
     fun `loadRolesAndCatalogs - a successful MCP server load reports nothing`() = runTest(dispatcher) {
-        coEvery { mcpServerRepository.loadServers(any()) } answers {
-            serversFlow.value = DataState.Success(emptyList())
-        }
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
 
-        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs(userId = 1L) }
+        coVerify(exactly = 0) { notificationService.repositoryError(any(), "Failed to load MCP servers") }
+    }
+
+    @Test
+    fun `loadRolesAndCatalogs - an error left in the servers state is not re-reported`() = runTest(dispatcher) {
+        // An error published by an earlier load must not be reported again by a later load that
+        // succeeded or was skipped as a duplicate.
+        serversFlow.value = DataState.Error(RepositoryError.OtherError("stale mcp load failure"))
+
+        viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
 
         coVerify(exactly = 0) { notificationService.repositoryError(any(), "Failed to load MCP servers") }
     }

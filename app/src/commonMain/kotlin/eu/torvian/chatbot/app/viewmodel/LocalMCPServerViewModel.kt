@@ -129,9 +129,9 @@ class LocalMCPServerViewModel(
     /**
      * Loads all configured MCP servers from the repository.
      */
-    fun loadServers(userId: Long) {
+    fun loadServers() {
         viewModelScope.launch(uiDispatcher) {
-            serverManager.loadServers(userId)
+            serverManager.loadServers()
                 .onLeft { repoError ->
                     // Notify user about repository failure when loading MCP tools
                     notificationService.repositoryError(

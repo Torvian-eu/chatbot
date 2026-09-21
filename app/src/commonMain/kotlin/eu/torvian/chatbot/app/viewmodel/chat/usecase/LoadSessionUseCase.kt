@@ -41,7 +41,6 @@ class LoadSessionUseCase(
     // Internal retry state
     private var lastAttemptedSessionId: Long? = null
     private var lastFailedLoadEventId: String? = null
-    private var lastUserId: Long? = null
 
     init {
         // Handle retry functionality via EventBus
@@ -64,9 +63,8 @@ class LoadSessionUseCase(
      * Note: State should be reset via clearSession() before calling this method.
      *
      * @param sessionId The ID of the session to load
-     * @param userId The ID of the user, required for loading MCP servers
      */
-    suspend fun execute(sessionId: Long, userId: Long) {
+    suspend fun execute(sessionId: Long) {
         logger.info("Loading session $sessionId")
 
         // Set the active session ID to trigger reactive state updates
@@ -75,7 +73,6 @@ class LoadSessionUseCase(
         // Store retry state internally
         lastAttemptedSessionId = sessionId
         lastFailedLoadEventId = null
-        lastUserId = userId
 
         // Load all dependencies in parallel. Agent roles, projects, models, settings and tools feed
         // the top-bar role/project selectors and the role-derived current model/settings derivations.
@@ -87,7 +84,7 @@ class LoadSessionUseCase(
             { toolRepository.loadTools() },
             { agentRoleRepository.loadRoles() },
             { projectRepository.loadProjects() },
-            { mcpServerRepository.loadServers(userId) },
+            { mcpServerRepository.loadServers() },
             { toolRepository.loadUserToolApprovalPreferences() }
         ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, agentRolesResult, projectsResult, _, preferencesResult ->
             sessionResult
@@ -162,11 +159,11 @@ class LoadSessionUseCase(
      * @param eventId The event ID from the retry interaction
      */
     private suspend fun handleRetry(eventId: String) {
-        if (lastFailedLoadEventId == eventId && lastAttemptedSessionId != null && lastUserId != null) {
+        if (lastFailedLoadEventId == eventId && lastAttemptedSessionId != null) {
             logger.info("Retrying loadSession for session $lastAttemptedSessionId due to Snackbar action!")
             // Clear the failed event ID before retrying
             lastFailedLoadEventId = null
-            execute(lastAttemptedSessionId!!, lastUserId!!)
+            execute(lastAttemptedSessionId!!)
         }
     }
 
@@ -177,6 +174,5 @@ class LoadSessionUseCase(
     fun resetState() {
         lastAttemptedSessionId = null
         lastFailedLoadEventId = null
-        lastUserId = null
     }
 }

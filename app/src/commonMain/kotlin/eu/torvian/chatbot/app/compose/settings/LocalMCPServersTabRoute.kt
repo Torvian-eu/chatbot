@@ -24,7 +24,8 @@ import org.koin.compose.viewmodel.koinViewModel
  * observes [LocalMCPServerViewModel.selectedServerOverview] to decide whether
  * to show the list or detail page.
  *
- * @param authState Authentication context for permission-sensitive server actions.
+ * @param authState Authentication context (currently unused by the MCP Servers tab; the server
+ *   list is token-scoped on the backend).
  * @param viewModel MCP server ViewModel resolved from Koin.
  * @param modifier Modifier applied to the presentational tab.
  * @param categoryResetSignal Incremented when the user re-selects this category
@@ -42,7 +43,7 @@ fun LocalMCPServersTabRoute(
 ) {
     // Tab-local initial load
     LaunchedEffect(Unit) {
-        viewModel.loadServers(authState.userId)
+        viewModel.loadServers()
     }
 
     // Reset to list view when the category is re-selected in the sidebar.
@@ -95,7 +96,7 @@ fun LocalMCPServersTabRoute(
 
     // Build actions forwarding to VM
     val actions = object : LocalMCPServersTabActions {
-        override fun onLoadServers(userId: Long) = viewModel.loadServers(userId)
+        override fun onLoadServers() = viewModel.loadServers()
         override fun onSelectServer(serverId: Long?) = viewModel.selectServer(serverId)
         override fun onStartAddingNewServer() = viewModel.startAddingNewServer()
         override fun onStartEditingServer(server: LocalMCPServerDto) =
@@ -132,7 +133,6 @@ fun LocalMCPServersTabRoute(
     LocalMCPServersTab(
         state = state,
         actions = actions,
-        authState = authState,
         selectedServerId = selectedServerOverview?.serverId,
         onOpenServerDetails = { serverId ->
             actions.onSelectServer(serverId)

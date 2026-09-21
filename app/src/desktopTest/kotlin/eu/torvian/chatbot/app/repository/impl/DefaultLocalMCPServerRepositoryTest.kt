@@ -15,6 +15,10 @@ import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectio
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,6 +29,7 @@ import kotlin.time.Clock
 /**
  * Tests API-backed behavior of [DefaultLocalMCPServerRepository].
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class DefaultLocalMCPServerRepositoryTest {
     private val api: LocalMCPServerApi = mockk()
     private val repository = DefaultLocalMCPServerRepository(api)
@@ -56,8 +61,9 @@ class DefaultLocalMCPServerRepositoryTest {
         val expected = listOf(server(11L), server(12L))
         coEvery { api.getServers() } returns Either.Right(expected)
 
-        repository.loadServers(userId = 1L)
+        val result = repository.loadServers()
 
+        assertIs<Either.Right<Unit>>(result)
         val state = repository.servers.value
         assertIs<DataState.Success<List<LocalMCPServerDto>>>(state)
         assertEquals(expected, state.data)
@@ -78,7 +84,7 @@ class DefaultLocalMCPServerRepositoryTest {
         coEvery { api.updateServer(created.id, any()) } returns Either.Right(updated)
         coEvery { api.deleteServer(updated.id) } returns Either.Right(Unit)
 
-        repository.loadServers(userId = 1L)
+        repository.loadServers()
         repository.createServer(
             workerId = created.workerId,
             name = created.name,
@@ -109,12 +115,38 @@ class DefaultLocalMCPServerRepositoryTest {
         )
         coEvery { api.getServers() } returns Either.Left(apiError)
 
-        repository.loadServers(userId = 1L)
+        val result = repository.loadServers()
 
         val state = repository.servers.value
         assertIs<DataState.Error<RepositoryError>>(state)
+        assertEquals(state.error, result.leftOrNull())
         assertIs<RepositoryError.DataFetchError>(state.error)
         assertTrue(state.error.message.contains("Failed to load MCP servers"))
+    }
+
+    /**
+     * Verifies that a load requested while another load is in flight reports success without a
+     * second API call: the in-flight load owns the outcome published through the `servers` state.
+     */
+    @Test
+    fun `loadServers reports success without a second API call when a load is in flight`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        coEvery { api.getServers() } coAnswers {
+            gate.await()
+            Either.Right(listOf(server(30L)))
+        }
+
+        val inFlightLoad = async { repository.loadServers() }
+        advanceUntilIdle()
+        assertTrue(repository.servers.value.isLoading)
+
+        val duplicateResult = repository.loadServers()
+
+        assertIs<Either.Right<Unit>>(duplicateResult)
+        coVerify(exactly = 1) { api.getServers() }
+
+        gate.complete(Unit)
+        assertIs<Either.Right<Unit>>(inFlightLoad.await())
     }
 
     /**

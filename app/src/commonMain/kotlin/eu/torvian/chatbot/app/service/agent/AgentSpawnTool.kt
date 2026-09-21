@@ -52,8 +52,7 @@ import kotlinx.coroutines.CancellationException
  *
  * @property sessionRepository Repository used to create the spawned session, scope its project when
  *            the spawned role is project-associated, and attach the role.
- * @property authRepository Source of the authenticated user id required by [ChatViewModel.loadSession]
- *            when loading the spawned session.
+ * @property authRepository Source of the authentication state that gates the tool call.
  * @property spawnedViewModelResolver Resolves the spawned session's [ChatViewModel], reusing the same
  *            instance the UI resolves for that session.
  */
@@ -171,9 +170,8 @@ class AgentSpawnTool(
                 ifRight = { }
             )
 
-            // loadSession needs the authenticated user id to fetch user-scoped MCP servers.
-            val userId = (authRepository.authState.value as? AuthState.Authenticated)?.userId
-            if (userId == null) {
+            // The spawned session's turn is user-scoped, so an authenticated user is required.
+            if (authRepository.authState.value !is AuthState.Authenticated) {
                 clientEvents(
                     spawnFailure(
                         toolCallId, session.id,
@@ -207,7 +205,6 @@ class AgentSpawnTool(
             val outcome = runTurnThroughViewModel(
                 viewModel = spawnedChatViewModel,
                 sessionId = session.id,
-                userId = userId,
                 message = prompt,
                 mode = request.mode
             )

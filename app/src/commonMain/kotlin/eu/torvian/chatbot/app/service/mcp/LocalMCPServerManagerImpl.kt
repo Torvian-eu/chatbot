@@ -77,25 +77,29 @@ class LocalMCPServerManagerImpl(
             }
     }
 
-    override suspend fun loadServers(userId: Long): Either<RepositoryError, Unit> = either {
-        logger.info("Loading MCP servers for user $userId")
+    override suspend fun loadServers(): Either<RepositoryError, Unit> = either {
+        logger.info("Loading MCP servers")
 
-        // Load server configurations.
-        serverRepository.loadServers(userId)
+        // Load server configurations. A failure stays non-fatal and is only logged here: the
+        // repository publishes the same error through its `servers` state, which the settings tab
+        // renders with a retry action, so binding it would escalate it into a fatal load failure.
+        serverRepository.loadServers().onLeft { repoErr ->
+            logger.error("Failed to load MCP server configurations: ${repoErr.message}")
+        }
 
         // Load worker-backed runtime statuses.
         runtimeStatusRepository.loadRuntimeStatuses().onLeft { repoErr ->
-            logger.error("Failed to load runtime statuses for user $userId: ${repoErr.message}")
+            logger.error("Failed to load runtime statuses: ${repoErr.message}")
         }.bind()
 
         // Load tools.
         toolRepository.loadMCPTools().onLeft { repoErr ->
-            logger.error("Failed to load MCP tools for user $userId: ${repoErr.message}")
+            logger.error("Failed to load MCP tools: ${repoErr.message}")
         }.bind()
 
         // Load workers for display name lookup.
         workerRepository.loadWorkers().onLeft { repoErr ->
-            logger.error("Failed to load workers for user $userId: ${repoErr.message}")
+            logger.error("Failed to load workers: ${repoErr.message}")
         }
     }
 

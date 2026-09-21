@@ -190,7 +190,7 @@ class AgentSpawnToolTest {
         every { viewModel.currentModel } returns MutableStateFlow(model)
         every { viewModel.currentSettings } returns MutableStateFlow(settings)
         every { viewModel.displayedMessages } returns displayedMessages
-        every { viewModel.loadSession(session.id, userId) } returns completedJob()
+        every { viewModel.loadSession(session.id) } returns completedJob()
         every { viewModel.updateInput(message) } just runs
         every { viewModel.sendMessage() } answers {
             // The turn completes by appending the new assistant message to the displayed branch.
@@ -276,7 +276,7 @@ class AgentSpawnToolTest {
         coVerify { sessionRepository.updateSessionAgentRole(session.id, role.id) }
         // The spawned conversation is driven through the session's own ViewModel with user-facing
         // methods: load → input → send, and the turn's final state is read back from the VM.
-        verify { viewModel.loadSession(session.id, userId) }
+        verify { viewModel.loadSession(session.id) }
         verify { viewModel.updateInput("Do the thing") }
         verify { viewModel.sendMessage() }
     }
@@ -349,7 +349,7 @@ class AgentSpawnToolTest {
         // The tool returned while the spawned turn's send job is still pending.
         assertTrue(pendingSend.isActive)
         // The first turn still started with the prompt through the session's own ViewModel.
-        verify { viewModel.loadSession(session.id, userId) }
+        verify { viewModel.loadSession(session.id) }
         verify { viewModel.updateInput("Do the thing") }
         verify { viewModel.sendMessage() }
         // Fire-and-forget never force-cancels the background turn it just started.
@@ -553,7 +553,7 @@ class AgentSpawnToolTest {
         every { viewModel.currentModel } returns MutableStateFlow(null)
         every { viewModel.currentSettings } returns MutableStateFlow(null)
         every { viewModel.displayedMessages } returns MutableStateFlow(emptyList())
-        every { viewModel.loadSession(session.id, userId) } returns completedJob()
+        every { viewModel.loadSession(session.id) } returns completedJob()
         every { viewModel.forceCancelSend() } just runs
 
         val resolver = mockk<SpawnedChatViewModelResolver>()
@@ -659,7 +659,7 @@ class AgentSpawnToolTest {
         // A load that never completes keeps the executor coroutine suspended until it is cancelled,
         // giving the test a deterministic mid-execution cancellation point.
         val neverCompletingLoad = CompletableDeferred<Unit>()
-        every { viewModel.loadSession(session.id, userId) } returns neverCompletingLoad
+        every { viewModel.loadSession(session.id) } returns neverCompletingLoad
         val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
 
         val executorJob = launch {

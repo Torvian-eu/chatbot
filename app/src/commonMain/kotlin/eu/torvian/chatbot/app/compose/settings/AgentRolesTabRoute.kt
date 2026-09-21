@@ -18,8 +18,8 @@ import org.koin.compose.viewmodel.koinViewModel
  * separate from the underlying role-data selection. Selection state is owned by the
  * [AgentRolesViewModel]; this route only observes it to decide between the list and detail pages.
  *
- * @param authState Authentication context; the authenticated user's id is needed to load the
- *   token-scoped MCP-server catalog the tool groups are labelled from.
+ * @param authState Authentication context (currently unused by the Agent Roles tab; the role
+ *   catalogs it drives are loaded from token-scoped endpoints).
  * @param viewModel Agent Roles ViewModel resolved from Koin.
  * @param modifier Modifier applied to the presentational tab.
  * @param categoryResetSignal Incremented when the user re-selects this category in the sidebar;
@@ -38,7 +38,7 @@ fun AgentRolesTabRoute(
     // Tab-local initial load of roles plus the model/settings/tool/worker/MCP-server catalogs the form
     // needs to label its tool groups.
     LaunchedEffect(Unit) {
-        viewModel.loadRolesAndCatalogs(authState.userId)
+        viewModel.loadRolesAndCatalogs()
     }
 
     // Reset to list view when the category is re-selected in the sidebar.
@@ -100,7 +100,7 @@ fun AgentRolesTabRoute(
     )
 
     val actions = object : AgentRolesTabActions {
-        override fun onLoadRolesAndCatalogs() = viewModel.loadRolesAndCatalogs(authState.userId)
+        override fun onLoadRolesAndCatalogs() = viewModel.loadRolesAndCatalogs()
         override fun onSelectRole(role: AgentRoleDto?) = viewModel.selectRole(role)
         override fun onStartAddingNewRole() = viewModel.startAddingNewRole()
         override fun onStartEditingRole(role: AgentRoleDto) = viewModel.startEditingRole(role)

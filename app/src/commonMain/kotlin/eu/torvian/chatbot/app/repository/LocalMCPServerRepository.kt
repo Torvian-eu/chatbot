@@ -48,9 +48,11 @@ interface LocalMCPServerRepository {
      * If a load operation is already in progress, this method returns immediately
      * without starting a duplicate operation.
      *
-     * @param userId The ID of the current user whose MCP servers should be loaded.
+     * @return Either.Right with Unit when the configurations are loaded (or when an in-flight load
+     * makes this call a no-op), or Either.Left with the same RepositoryError that a failure is
+     * published with through [servers].
      */
-    suspend fun loadServers(userId: Long)
+    suspend fun loadServers(): Either<RepositoryError, Unit>
 
     /**
      * Creates a new MCP server configuration.

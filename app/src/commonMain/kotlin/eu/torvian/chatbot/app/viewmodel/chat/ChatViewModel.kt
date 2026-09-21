@@ -322,15 +322,14 @@ class ChatViewModel(
      * Resets all state before loading the new session.
      *
      * @param sessionId The identifier of the session to load.
-     * @param userId The authenticated user's identifier, required for loading user-scoped MCP servers.
      * @return The [Job] that performs the load and completes once the session and its dependencies
      *         (models, settings, roles, tools, tool approval preferences) have been loaded.
      */
-    fun loadSession(sessionId: Long, userId: Long): Job {
+    fun loadSession(sessionId: Long): Job {
         return normalScope.launch {
             // Clear all state (shared and use case internal state) before loading
             clearSession()
-            loadSessionUC.execute(sessionId, userId)
+            loadSessionUC.execute(sessionId)
         }
     }
 

@@ -79,7 +79,6 @@ internal sealed interface TurnOutcome {
  *
  * @param viewModel The target session's ChatViewModel (same instance the UI uses).
  * @param sessionId The target session's identifier.
- * @param userId The authenticated user's identifier.
  * @param message The user message to inject into the target session.
  * @param mode The shared operator-tool execution mode.
  * @return The [TurnOutcome] the calling tool executor formats into its exact result strings.
@@ -87,7 +86,6 @@ internal sealed interface TurnOutcome {
 internal suspend fun runTurnThroughViewModel(
     viewModel: ChatViewModel,
     sessionId: Long,
-    userId: Long,
     message: String,
     mode: OperatorToolMode
 ): TurnOutcome = coroutineScope {
@@ -104,7 +102,7 @@ internal suspend fun runTurnThroughViewModel(
         warmUpScope.launch { viewModel.currentSettings.collect {} }
         warmUpScope.launch { viewModel.displayedMessages.collect {} }
 
-        val loadJob = viewModel.loadSession(sessionId, userId)
+        val loadJob = viewModel.loadSession(sessionId)
         loadJob.join()
 
         // The load use case completes before the derived ChatState flows propagate; wait (bounded)

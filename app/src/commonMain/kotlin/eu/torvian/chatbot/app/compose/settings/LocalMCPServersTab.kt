@@ -9,7 +9,6 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.repository.AuthState
 
 /**
  * MCP Servers management tab with separate list and detail pages.
@@ -22,7 +21,6 @@ import eu.torvian.chatbot.app.repository.AuthState
 fun LocalMCPServersTab(
     state: LocalMCPServersTabState,
     actions: LocalMCPServersTabActions,
-    authState: AuthState.Authenticated,
     selectedServerId: Long?,
     onOpenServerDetails: (Long) -> Unit,
     onBackToServerList: () -> Unit,
@@ -41,7 +39,7 @@ fun LocalMCPServersTab(
                 ErrorStateDisplay(
                     title = "Failed to load MCP servers",
                     error = overviewsState.error,
-                    onRetry = { actions.onLoadServers(authState.userId) },
+                    onRetry = { actions.onLoadServers() },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -95,7 +93,7 @@ fun LocalMCPServersTab(
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { actions.onLoadServers(authState.userId) }) {
+                        Button(onClick = { actions.onLoadServers() }) {
                             Text("Load MCP Servers")
                         }
                     }

@@ -128,11 +128,6 @@ fun ChatScreen(
     val agentRoleWorkerDisplayNamesById by agentRoleManagementViewModel.workerDisplayNamesById.collectAsState()
     val agentRoleMcpServerNamesById by agentRoleManagementViewModel.mcpServerNamesById.collectAsState()
 
-    // The dialog's tool groups are labelled from the worker/MCP-server catalogs, whose MCP half is
-    // loaded with the authenticated user id. The id only gates that reload: the dialogs themselves
-    // open regardless of the authentication state.
-    val authenticatedUserId = (authState as? AuthState.Authenticated)?.userId
-
     // --- Collect states for cross-session search ---
     val crossSessionSearchState by crossSessionSearchViewModel.uiState.collectAsState()
 
@@ -163,15 +158,11 @@ fun ChatScreen(
                 onSelectRole = { chatViewModel.selectAgentRole(it) },
                 onRetryLoadRoles = { chatViewModel.loadAgentRoles() },
                 onAddRole = {
-                    authenticatedUserId?.let { userId ->
-                        agentRoleManagementViewModel.loadRolesAndCatalogs(userId)
-                    }
+                    agentRoleManagementViewModel.loadRolesAndCatalogs()
                     agentRoleManagementViewModel.startAddingNewRole()
                 },
                 onEditRole = {
-                    authenticatedUserId?.let { userId ->
-                        agentRoleManagementViewModel.loadRolesAndCatalogs(userId)
-                    }
+                    agentRoleManagementViewModel.loadRolesAndCatalogs()
                     chatViewModel.currentAgentRole.value?.let(agentRoleManagementViewModel::startEditingRole)
                 },
                 currentProject = currentProject,
@@ -203,7 +194,7 @@ fun ChatScreen(
             && authState is AuthState.Authenticated
             && activeChatSessionId != selectedSessionId
         ) {
-            chatViewModel.loadSession(selectedSessionId, authState.userId)
+            chatViewModel.loadSession(selectedSessionId)
         }
     }
 
@@ -293,7 +284,7 @@ fun ChatScreen(
             isSearchActive = isSearchActive,
         )
     }
-    val chatAreaActions = remember(chatViewModel, sessionListViewModel, authenticatedUserId) {
+    val chatAreaActions = remember(chatViewModel, sessionListViewModel) {
         object : ChatAreaActions {
             override fun onUpdateInput(newText: String) = chatViewModel.updateInput(newText)
             override fun onSendMessage() {
@@ -327,15 +318,11 @@ fun ChatScreen(
             override fun onSelectProject(projectId: Long?) = chatViewModel.selectProject(projectId)
             override fun onRetryLoadProjects() = chatViewModel.loadProjects()
             override fun onAddRole() {
-                authenticatedUserId?.let { userId ->
-                    agentRoleManagementViewModel.loadRolesAndCatalogs(userId)
-                }
+                agentRoleManagementViewModel.loadRolesAndCatalogs()
                 agentRoleManagementViewModel.startAddingNewRole()
             }
             override fun onEditRole() {
-                authenticatedUserId?.let { userId ->
-                    agentRoleManagementViewModel.loadRolesAndCatalogs(userId)
-                }
+                agentRoleManagementViewModel.loadRolesAndCatalogs()
                 chatViewModel.currentAgentRole.value?.let(agentRoleManagementViewModel::startEditingRole)
             }
             override fun onShowToolCallDetails(toolCall: ToolCall) =
@@ -393,7 +380,7 @@ fun ChatScreen(
             override fun onRetryLoadingSession() {
                 selectedSession?.id?.let { sessionId ->
                     if (authState is AuthState.Authenticated) {
-                        chatViewModel.loadSession(sessionId, authState.userId)
+                        chatViewModel.loadSession(sessionId)
                     }
                 }
             }
@@ -402,12 +389,10 @@ fun ChatScreen(
 
     // Actions for the chat-screen agent-role add/edit dialogs. Selection and delete flows are
     // unused here (they belong to the Settings tab) but are forwarded for interface completeness.
-    val agentRoleManagementActions = remember(agentRoleManagementViewModel, authenticatedUserId) {
+    val agentRoleManagementActions = remember(agentRoleManagementViewModel) {
         object : AgentRolesTabActions {
             override fun onLoadRolesAndCatalogs() {
-                authenticatedUserId?.let { userId ->
-                    agentRoleManagementViewModel.loadRolesAndCatalogs(userId)
-                }
+                agentRoleManagementViewModel.loadRolesAndCatalogs()
             }
             override fun onSelectRole(role: AgentRoleDto?) = agentRoleManagementViewModel.selectRole(role)
             override fun onStartAddingNewRole() = agentRoleManagementViewModel.startAddingNewRole()
