@@ -15,6 +15,8 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementDialogState
 import eu.torvian.chatbot.common.models.user.UserWithDetails
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 
 /**
  * User management tab with master-detail layout.
@@ -29,6 +31,8 @@ import eu.torvian.chatbot.common.models.user.UserWithDetails
  * @param usersDataState The current state of user data (Loading, Error, Success, Idle)
  * @param selectedUser The currently selected user, or null if none selected
  * @param dialogState The current dialog state (which dialog to show, if any)
+ * @param passwordValidationConfig Password rules used to render requirement hints in the create dialog
+ * @param usernameValidationConfig Username rules used to render requirement hints in the create dialog
  * @param actions Interface for handling user interactions
  * @param modifier Modifier for styling and layout
  */
@@ -37,6 +41,8 @@ fun UserManagementTab(
     usersDataState: DataState<RepositoryError, List<UserWithDetails>>,
     selectedUser: UserWithDetails?,
     dialogState: UserManagementDialogState,
+    passwordValidationConfig: PasswordValidationConfig,
+    usernameValidationConfig: UsernameValidationConfig,
     actions: UserManagementActions,
     modifier: Modifier = Modifier
 ) {
@@ -67,6 +73,7 @@ fun UserManagementTab(
                         users = users,
                         selectedUser = selectedUser,
                         onUserSelected = { actions.onSelectUser(it) },
+                        onAddUser = { actions.onStartCreatingUser() },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -119,6 +126,8 @@ fun UserManagementTab(
         // Render dialogs on top
         UserManagementDialogs(
             dialogState = dialogState,
+            passwordValidationConfig = passwordValidationConfig,
+            usernameValidationConfig = usernameValidationConfig,
             actions = actions
         )
     }

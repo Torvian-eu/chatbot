@@ -33,6 +33,15 @@ sealed interface UserManagementDialogState {
     ) : UserManagementDialogState
 
     /**
+     * Create user dialog is shown.
+     *
+     * @property formState The form state for the new account
+     */
+    data class CreateUser(
+        val formState: CreateUserFormState
+    ) : UserManagementDialogState
+
+    /**
      * Delete user confirmation dialog is shown.
      *
      * @property user The user to be deleted
@@ -147,5 +156,48 @@ data class PasswordFormState(
                 confirmPassword.isNotBlank() &&
                 newPassword == confirmPassword &&
                 newPasswordError == null &&
+                confirmPasswordError == null
+}
+
+/**
+ * Form state for creating a new user account.
+ *
+ * @property username The username input
+ * @property email The optional email input (blank means no email)
+ * @property password The initial password input
+ * @property confirmPassword The password confirmation input
+ * @property requiresPasswordChange Whether the new user must set a password on first login (default: true)
+ * @property usernameError Validation error for username
+ * @property emailError Validation error for email
+ * @property passwordError Validation error for the initial password
+ * @property confirmPasswordError Validation error for confirmation
+ * @property isLoading Whether the form is being submitted
+ * @property generalError General error message
+ */
+data class CreateUserFormState(
+    val username: String = "",
+    val email: String = "",
+    val password: String = "",
+    val confirmPassword: String = "",
+    val requiresPasswordChange: Boolean = true,
+    val usernameError: String? = null,
+    val emailError: String? = null,
+    val passwordError: String? = null,
+    val confirmPasswordError: String? = null,
+    val isLoading: Boolean = false,
+    val generalError: String? = null
+) {
+    /**
+     * Whether the form is ready to submit: required fields are filled and no field error is set.
+     *
+     * Password confirmation is deliberately not compared here; a mismatch surfaces as a specific
+     * [confirmPasswordError] message on submit so the reason stays visible to the user.
+     */
+    val isValid: Boolean
+        get() = username.isNotBlank() &&
+                password.isNotBlank() &&
+                usernameError == null &&
+                emailError == null &&
+                passwordError == null &&
                 confirmPasswordError == null
 }

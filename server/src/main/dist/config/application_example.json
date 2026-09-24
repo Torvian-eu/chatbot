@@ -106,6 +106,7 @@
       "allowedRegexPattern": "^[a-zA-Z0-9_-]+$"
     },
     "maxFailedAttempts": 10,
-    "lockoutWindowMinutes": 5
+    "lockoutWindowMinutes": 5,
+    "selfRegistrationEnabled": false
   }
 }

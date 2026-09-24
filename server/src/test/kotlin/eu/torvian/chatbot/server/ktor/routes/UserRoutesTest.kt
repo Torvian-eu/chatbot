@@ -4,6 +4,7 @@ import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.CommonRoles
+import eu.torvian.chatbot.common.api.CommonUserGroups
 import eu.torvian.chatbot.common.api.resources.UserResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
@@ -13,8 +14,12 @@ import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
 import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.admin.CreateUserRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
+import eu.torvian.chatbot.server.data.dao.OperatorToolDefinitionDao
 import eu.torvian.chatbot.server.data.entities.*
+import eu.torvian.chatbot.server.service.core.UserGroupService
+import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
@@ -128,8 +133,23 @@ class UserRoutesTest {
                 Table.USER_ROLE_ASSIGNMENTS,
                 Table.USER_GROUP_MEMBERSHIPS,
                 Table.ROLE_PERMISSIONS,
-                Table.USER_SESSIONS
+                Table.USER_SESSIONS,
+                // User creation seeds per-user tools and resolves the per-user prefix preference,
+                // so the tool and preference tables (and its device FK) must exist.
+                Table.USER_DEVICES,
+                Table.USER_PREFERENCES,
+                Table.TOOL_DEFINITIONS,
+                Table.BUILT_IN_TOOL_DEFINITIONS,
+                Table.OPERATOR_TOOL_DEFINITIONS,
+                Table.SERVER_BUILTIN_TOOL_DEFINITIONS
             )
+        )
+
+        // User creation assigns the "All Users" group
+        val userGroupService: UserGroupService = container.get()
+        userGroupService.createGroup(
+            name = CommonUserGroups.ALL_USERS,
+            description = "Special group for all users"
         )
     }
 
@@ -224,6 +244,232 @@ class UserRoutesTest {
     fun `GET users - unauthenticated returns 401`() = userTestApplication {
         // Act
         val response = client.get(href(UserResource()))
+
+        // Assert
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    // ========== Create User Tests ==========
+
+    @Test
+    fun `POST users - creates active user with password change required by default`() = userTestApplication {
+        // Arrange (self-registration is disabled in this container; admin creation must still work)
+        setupAdminUserWithPermissions()
+        val adminToken = authHelper.createSessionAndGetToken(adminUser.id)
+
+        val createUserRequest = CreateUserRequest(
+            username = "newuser",
+            password = "Gsfaf^3gd",
+            email = "newuser@example.com"
+        )
+
+        // Act
+        val response = client.post(href(UserResource())) {
+            bearerAuth(adminToken)
+            contentType(ContentType.Application.Json)
+            setBody(createUserRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Created, response.status)
+        val user = response.body<User>()
+        assertEquals("newuser", user.username)
+        assertEquals(UserStatus.ACTIVE, user.status)
+        assertEquals(true, user.requiresPasswordChange)
+
+        // The account is fully provisioned: "All Users" membership, per-user tool rows,
+        // and no roles (roles are assigned explicitly afterwards)
+        val userService: UserService = container.get()
+        val details = userService.getUserWithDetails(user.id).getOrNull()!!
+        assertTrue(details.userGroups.any { it.name == CommonUserGroups.ALL_USERS })
+        assertTrue(details.roles.isEmpty())
+
+        val operatorToolDefinitionDao: OperatorToolDefinitionDao = container.get()
+        assertTrue(operatorToolDefinitionDao.getToolsByUserId(user.id).isNotEmpty())
+    }
+
+    @Test
+    fun `POST users - honors explicit requiresPasswordChange false`() = userTestApplication {
+        // Arrange
+        setupAdminUserWithPermissions()
+        val adminToken = authHelper.createSessionAndGetToken(adminUser.id)
+
+        val createUserRequest = CreateUserRequest(
+            username = "newuser",
+            password = "Gsfaf^3gd",
+            requiresPasswordChange = false
+        )
+
+        // Act
+        val response = client.post(href(UserResource())) {
+            bearerAuth(adminToken)
+            contentType(ContentType.Application.Json)
+            setBody(createUserRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Created, response.status)
+        val user = response.body<User>()
+        assertEquals(false, user.requiresPasswordChange)
+
+        // The flag is persisted, not just echoed back
+        val userService: UserService = container.get()
+        val persisted = userService.getUserById(user.id).getOrNull()!!
+        assertEquals(false, persisted.requiresPasswordChange)
+    }
+
+    @Test
+    fun `POST users - duplicate username returns 409 with username field`() = userTestApplication {
+        // Arrange
+        setupAdminUserWithPermissions()
+        val adminToken = authHelper.createSessionAndGetToken(adminUser.id)
+
+        val createUserRequest = CreateUserRequest(
+            username = adminUser.username,
+            password = "Gsfaf^3gd"
+        )
+
+        // Act
+        val response = client.post(href(UserResource())) {
+            bearerAuth(adminToken)
+            contentType(ContentType.Application.Json)
+            setBody(createUserRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Conflict, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.ALREADY_EXISTS.code, error.code)
+        assertEquals("username", error.details?.get("field"))
+        assertEquals(adminUser.username, error.details?.get("username"))
+    }
+
+    @Test
+    fun `POST users - duplicate email returns 409 with email field`() = userTestApplication {
+        // Arrange
+        val dataSet = TestDataSet(
+            users = listOf(adminUser, otherUser),
+            roles = listOf(adminRole),
+            permissions = listOf(manageUsersPermission),
+            rolePermissions = listOf(
+                RolePermissionEntity(
+                    roleId = adminRole.id,
+                    permissionId = manageUsersPermission.id
+                )
+            ),
+            userRoleAssignments = listOf(
+                UserRoleAssignmentEntity(
+                    userId = adminUser.id,
+                    roleId = adminRole.id,
+                    assignedAt = TestDefaults.DEFAULT_INSTANT
+                )
+            )
+        )
+        testDataManager.setup(dataSet)
+        val adminToken = authHelper.createSessionAndGetToken(adminUser.id)
+
+        val createUserRequest = CreateUserRequest(
+            username = "freshuser",
+            password = "Gsfaf^3gd",
+            email = otherUser.email
+        )
+
+        // Act
+        val response = client.post(href(UserResource())) {
+            bearerAuth(adminToken)
+            contentType(ContentType.Application.Json)
+            setBody(createUserRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Conflict, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.ALREADY_EXISTS.code, error.code)
+        assertEquals("email", error.details?.get("field"))
+        assertEquals(otherUser.email, error.details?.get("email"))
+    }
+
+    @Test
+    fun `POST users - weak password returns 400`() = userTestApplication {
+        // Arrange
+        setupAdminUserWithPermissions()
+        val adminToken = authHelper.createSessionAndGetToken(adminUser.id)
+
+        val createUserRequest = CreateUserRequest(
+            username = "newuser",
+            password = "abc"
+        )
+
+        // Act
+        val response = client.post(href(UserResource())) {
+            bearerAuth(adminToken)
+            contentType(ContentType.Application.Json)
+            setBody(createUserRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
+        assertEquals("Password too weak", error.message)
+    }
+
+    @Test
+    fun `POST users - invalid input returns 400`() = userTestApplication {
+        // Arrange
+        setupAdminUserWithPermissions()
+        val adminToken = authHelper.createSessionAndGetToken(adminUser.id)
+
+        val createUserRequest = CreateUserRequest(
+            username = "",
+            password = "Gsfaf^3gd"
+        )
+
+        // Act
+        val response = client.post(href(UserResource())) {
+            bearerAuth(adminToken)
+            contentType(ContentType.Application.Json)
+            setBody(createUserRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
+        assertEquals("Invalid input", error.message)
+    }
+
+    @Test
+    fun `POST users - non-admin returns 403`() = userTestApplication {
+        // Arrange
+        setupStandardUser()
+        val userToken = authHelper.createSessionAndGetToken(standardUser.id)
+
+        val createUserRequest = CreateUserRequest(
+            username = "newuser",
+            password = "Gsfaf^3gd"
+        )
+
+        // Act
+        val response = client.post(href(UserResource())) {
+            bearerAuth(userToken)
+            contentType(ContentType.Application.Json)
+            setBody(createUserRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+    }
+
+    @Test
+    fun `POST users - unauthenticated returns 401`() = userTestApplication {
+        // Act
+        val response = client.post(href(UserResource())) {
+            contentType(ContentType.Application.Json)
+            setBody(CreateUserRequest(username = "newuser", password = "Gsfaf^3gd"))
+        }
 
         // Assert
         assertEquals(HttpStatusCode.Unauthorized, response.status)

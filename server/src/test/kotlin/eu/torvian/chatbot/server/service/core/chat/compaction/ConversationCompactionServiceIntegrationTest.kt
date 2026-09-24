@@ -309,6 +309,10 @@ class ConversationCompactionServiceIntegrationTest {
         assertTrue(chunkDao.getChunksBySessionId(session.id).isEmpty())
     }
 
+    /**
+     * Verifies that window init seeds the ledger from an eligible chunk and that the next compaction
+     * extends the coverage with the newly appended leaf.
+     */
     @Test
     fun `window init with an eligible chunk seeds the ledger and the next compaction extends coverage`() =
         runTest {
@@ -336,7 +340,9 @@ class ConversationCompactionServiceIntegrationTest {
 
             val chunks = chunkDao.getChunksBySessionId(session.id)
             assertEquals(2, chunks.size, "The superseded prefix chunk must be retained")
-            val newest = chunks.maxBy { it.createdAt }
+            // createdAt is millisecond-resolution and both chunks can share the same value; chunk ids
+            // increase monotonically with insertion, so max id deterministically finds the newest chunk.
+            val newest = chunks.maxBy { it.id }
             // The newest chunk's coverage equals the tracked ledger: prior prefix + the new leaf.
             assertEquals(listOf(1L, 2L, 3L, 4L), newest.coverage.map { it.messageId })
             assertEquals(listOf(0, 1, 2, 3), newest.coverage.map { it.ordinal })
@@ -409,6 +415,10 @@ class ConversationCompactionServiceIntegrationTest {
         )
     }
 
+    /**
+     * Verifies that editing a covered message invalidates the old chunk and yields a replacement
+     * chunk while the superseded row remains retained.
+     */
     @Test
     fun `edited covered message invalidates the old chunk and a replacement is persisted while the old row remains`() =
         runTest {
@@ -442,7 +452,9 @@ class ConversationCompactionServiceIntegrationTest {
 
             val chunks = chunkDao.getChunksBySessionId(session.id)
             assertEquals(2, chunks.size, "The superseded old chunk must be retained alongside the replacement")
-            val newest = chunks.maxBy { it.createdAt }
+            // createdAt is millisecond-resolution and both chunks can share the same value; chunk ids
+            // increase monotonically with insertion, so max id deterministically finds the newest chunk.
+            val newest = chunks.maxBy { it.id }
             // The replacement records the NEW observed timestamp for the edited message.
             val editedCoverage = newest.coverage.first { it.messageId == m2.id }
             val editedRow = messageDao.getMessageById(m2.id).getOrNull() as ChatMessage.AssistantMessage

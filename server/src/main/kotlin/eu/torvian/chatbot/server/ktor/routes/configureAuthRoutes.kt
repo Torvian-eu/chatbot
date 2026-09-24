@@ -33,6 +33,9 @@ import kotlin.time.Instant.Companion.fromEpochMilliseconds
 
 /**
  * Configures routes related to Authentication (/api/v1/auth) using Ktor Resources.
+ *
+ * Public self-registration is only served when the configured account policy enables it;
+ * the policy gate lives here so [UserService.registerUser] can stay toggle-agnostic.
  */
 fun Route.configureAuthRoutes(
     authenticationService: AuthenticationService,
@@ -52,6 +55,15 @@ fun Route.configureAuthRoutes(
 
     // POST /api/v1/auth/register - User registration
     post<AuthResource.Register> {
+        // Gate before body parsing so a disabled sign-up path can never reach the database.
+        if (!authPolicy.selfRegistrationEnabled) {
+            call.respond(
+                HttpStatusCode.Forbidden,
+                apiError(CommonApiErrorCodes.FEATURE_DISABLED, "Self-registration is disabled on this server")
+            )
+            return@post
+        }
+
         val request = call.receive<RegisterRequest>()
         call.respondEither(
             userService.registerUser(request.username, request.password, request.email),

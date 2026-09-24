@@ -17,6 +17,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Tests for [ProjectDaoExposed].
@@ -121,20 +123,31 @@ class ProjectDaoExposedTest {
         assertEquals(false, projectDao.projectNameExistsForUser(TestDefaults.user1.id, "Other"))
     }
 
+    /**
+     * Verifies that an update replaces name and description and moves `updatedAt` forward.
+     *
+     * The row is seeded slightly behind the current wall clock so the refreshed value is strictly
+     * greater regardless of the machine's clock setting or how soon the update runs.
+     */
     @Test
     fun `updateProject replaces name and description and bumps updatedAt`() = runTest {
-        val inserted = projectDao.insertProject("Acme Web App", "Flagship")
+        // Wall-clock milliseconds cannot show a strict bump within the same millisecond; seeding
+        // one second behind the same clock the DAO stamps is deterministic and independent of the
+        // machine's absolute clock setting.
+        val seededAt = Clock.System.now() - 1.seconds
+        val seeded = TestDefaults.project1.copy(createdAt = seededAt, updatedAt = seededAt)
+        testDataManager.insertProject(seeded)
 
         val result = projectDao.updateProject(
-            inserted.copy(name = "Renamed", description = "Updated")
+            seeded.copy(name = "Renamed", description = "Updated")
         )
 
         assertTrue(result.isRight())
-        val stored = testDataManager.getProject(inserted.id)
+        val stored = testDataManager.getProject(seeded.id)
         assertNotNull(stored)
         assertEquals("Renamed", stored.name)
         assertEquals("Updated", stored.description)
-        assertTrue(stored.updatedAt > inserted.updatedAt, "updatedAt must be bumped")
+        assertTrue(stored.updatedAt > seeded.updatedAt, "updatedAt must be bumped")
     }
 
     @Test

@@ -630,7 +630,13 @@ fun appModule(config: AppConfiguration): Module = module {
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
         val normalScope = scopeProvider.createNormalScope()
-        UserManagementViewModel(get<UserRepository>(), get<RoleRepository>(), get<NotificationService>(), normalScope)
+        UserManagementViewModel(
+            get<UserRepository>(),
+            get<RoleRepository>(),
+            get<NotificationService>(),
+            get<AuthValidationService>(),
+            normalScope
+        )
     }
     viewModel {
         UserGroupManagementViewModel(

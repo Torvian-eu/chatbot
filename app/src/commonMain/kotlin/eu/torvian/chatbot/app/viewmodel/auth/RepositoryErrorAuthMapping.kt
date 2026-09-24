@@ -40,6 +40,9 @@ fun RepositoryError.mapLoginError(): String = when {
  * @return A user-friendly error message suitable for display in the registration form.
  */
 fun RepositoryError.mapRegistrationError(): String = when {
+    matches(CommonApiErrorCodes.FEATURE_DISABLED) ->
+        "Self-registration is disabled on this server."
+
     matches(CommonApiErrorCodes.ALREADY_EXISTS) -> {
         val isEmailConflict = getStringDetail("field") == "email"
 

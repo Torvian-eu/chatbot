@@ -173,7 +173,8 @@ private fun mergeAuthPolicy(base: AuthPolicyDto?, overlay: AuthPolicyDto?) = Aut
     passwordConfig = overlay?.passwordConfig ?: base?.passwordConfig,
     usernameConfig = overlay?.usernameConfig ?: base?.usernameConfig,
     maxFailedAttempts = overlay?.maxFailedAttempts ?: base?.maxFailedAttempts,
-    lockoutWindowMinutes = overlay?.lockoutWindowMinutes ?: base?.lockoutWindowMinutes
+    lockoutWindowMinutes = overlay?.lockoutWindowMinutes ?: base?.lockoutWindowMinutes,
+    selfRegistrationEnabled = overlay?.selfRegistrationEnabled ?: base?.selfRegistrationEnabled
 )
 
 /**
@@ -458,7 +459,10 @@ private fun Raise<ConfigError.ValidationError>.parseAuthPolicy(dto: AuthPolicyDt
         passwordConfig = required("authPolicy.passwordConfig", dto?.passwordConfig),
         usernameConfig = required("authPolicy.usernameConfig", dto?.usernameConfig),
         maxFailedAttempts = required("authPolicy.maxFailedAttempts", dto?.maxFailedAttempts),
-        lockoutWindowMinutes = required("authPolicy.lockoutWindowMinutes", dto?.lockoutWindowMinutes)
+        lockoutWindowMinutes = required("authPolicy.lockoutWindowMinutes", dto?.lockoutWindowMinutes),
+        // Optional with a fail-closed default so pre-existing config files keep loading while
+        // self-registration stays disabled until explicitly enabled.
+        selfRegistrationEnabled = dto?.selfRegistrationEnabled ?: false
     )
 }
 

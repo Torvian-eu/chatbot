@@ -31,12 +31,14 @@ fun LoginScreen(
     accountManagementViewModel: AccountManagementViewModel = koinViewModel()
 ) {
     val loginFormState by authEntryViewModel.loginFormState.collectAsState()
+    val selfRegistrationEnabled by authEntryViewModel.selfRegistrationEnabled.collectAsState()
     val availableAccounts by accountManagementViewModel.availableAccounts.collectAsState()
     val accountSwitchInProgress by accountManagementViewModel.accountSwitchInProgress.collectAsState()
     val scrollState = rememberScrollState()
 
     LoginScreenContent(
         loginFormState = loginFormState,
+        selfRegistrationEnabled = selfRegistrationEnabled,
         availableAccounts = availableAccounts,
         accountSwitchInProgress = accountSwitchInProgress,
         scrollState = scrollState,
@@ -59,9 +61,26 @@ fun LoginScreen(
     )
 }
 
+/**
+ * Stateless content of the login screen, including account switching and device verification UI.
+ *
+ * @param loginFormState Current state of the login form
+ * @param selfRegistrationEnabled Whether the sign-up entry should be offered; hidden when the
+ *   server disallows public self-registration
+ * @param availableAccounts Locally known accounts offered for quick switching
+ * @param accountSwitchInProgress Whether an account switch is currently running
+ * @param scrollState Scroll state of the screen's vertical column
+ * @param onUsernameChange Callback invoked with the edited username
+ * @param onPasswordChange Callback invoked with the edited password
+ * @param onLogin Callback that submits the login form
+ * @param onNavigateToRegister Callback that navigates to the registration screen
+ * @param onSwitchAccount Callback that switches to the given locally known account
+ * @param onRequestVerification Callback that requests email verification for this device
+ */
 @Composable
 fun LoginScreenContent(
     loginFormState: LoginFormState,
+    selfRegistrationEnabled: Boolean,
     availableAccounts: List<AccountData>,
     accountSwitchInProgress: Boolean,
     scrollState: ScrollState,
@@ -230,21 +249,23 @@ fun LoginScreenContent(
         }
 
         // Register Link
-        Row(
-            modifier = Modifier.padding(top = 24.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Don't have an account? ",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            TextButton(
-                onClick = onNavigateToRegister,
-                enabled = !loginFormState.isLoading && !loginFormState.isVerifying
+        if (selfRegistrationEnabled) {
+            Row(
+                modifier = Modifier.padding(top = 24.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Sign Up")
+                Text(
+                    text = "Don't have an account? ",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(
+                    onClick = onNavigateToRegister,
+                    enabled = !loginFormState.isLoading && !loginFormState.isVerifying
+                ) {
+                    Text("Sign Up")
+                }
             }
         }
     }

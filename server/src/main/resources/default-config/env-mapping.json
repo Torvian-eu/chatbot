@@ -120,6 +120,7 @@
       "allowedRegexPattern": "AUTH_USERNAME_ALLOWED_REGEX"
     },
     "maxFailedAttempts": "AUTH_MAX_FAILED_ATTEMPTS",
-    "lockoutWindowMinutes": "AUTH_LOCKOUT_WINDOW_MINUTES"
+    "lockoutWindowMinutes": "AUTH_LOCKOUT_WINDOW_MINUTES",
+    "selfRegistrationEnabled": "CHATBOT_SELF_REGISTRATION_ENABLED"
   }
 }

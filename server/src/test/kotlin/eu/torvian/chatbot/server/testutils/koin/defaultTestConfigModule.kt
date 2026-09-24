@@ -17,8 +17,12 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
  * and provides default encryption settings for testing purposes.
  *
  * @param accountSecurityMode The account security policy to expose to authentication tests.
+ * @param selfRegistrationEnabled Whether the test server allows public self-registration.
  */
-fun defaultTestConfigModule(accountSecurityMode: AccountSecurityMode = AccountSecurityMode.DISABLED) = configModule(
+fun defaultTestConfigModule(
+    accountSecurityMode: AccountSecurityMode = AccountSecurityMode.DISABLED,
+    selfRegistrationEnabled: Boolean = false
+) = configModule(
     config = AppConfiguration(
         serverUrl = "http://localhost:8080",
         setupRequired = false,
@@ -37,7 +41,8 @@ fun defaultTestConfigModule(accountSecurityMode: AccountSecurityMode = AccountSe
         reverseProxy = TestDefaults.getDefaultReverseProxyConfig(),
         authPolicy = AccountValidationPolicy(
             passwordConfig = PasswordValidationConfig(),
-            usernameConfig = UsernameValidationConfig()
+            usernameConfig = UsernameValidationConfig(),
+            selfRegistrationEnabled = selfRegistrationEnabled
         )
     )
 )

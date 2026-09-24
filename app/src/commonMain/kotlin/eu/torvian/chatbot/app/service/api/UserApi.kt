@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.admin.CreateUserRequest
 import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
@@ -47,6 +48,18 @@ interface UserApi {
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
     suspend fun getAllUsersWithDetails(): Either<ApiResourceError, List<UserWithDetails>>
+
+    /**
+     * Creates a new user account (admin-provisioned).
+     *
+     * Corresponds to `POST /api/v1/users`.
+     * Requires admin permission: MANAGE_USERS
+     *
+     * @param request The account details, including the initial password and password-change flag.
+     * @return [Either.Right] containing the created public [User] on success,
+     *         or [Either.Left] containing an [ApiResourceError] on failure.
+     */
+    suspend fun createUser(request: CreateUserRequest): Either<ApiResourceError, User>
 
     /**
      * Retrieves details for a specific user, including roles and groups.

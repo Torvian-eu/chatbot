@@ -61,6 +61,10 @@ class DefaultAuthRepository(
     private val _availableAccounts = MutableStateFlow<List<AccountData>>(emptyList())
     override val availableAccounts: StateFlow<List<AccountData>> = _availableAccounts.asStateFlow()
 
+    // Fail-closed default: sign-up stays hidden until the server policy explicitly allows it.
+    private val _selfRegistrationEnabled = MutableStateFlow(false)
+    override val selfRegistrationEnabled: StateFlow<Boolean> = _selfRegistrationEnabled.asStateFlow()
+
     private val repositoryScope = CoroutineScope(Dispatchers.Default)
 
     init {
@@ -245,6 +249,7 @@ class DefaultAuthRepository(
             },
             ifRight = { policy ->
                 authValidationService.updatePolicy(policy)
+                _selfRegistrationEnabled.value = policy.selfRegistrationEnabled
                 logger.info("Updated auth validation policy from server")
             }
         )

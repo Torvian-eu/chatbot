@@ -7,6 +7,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -22,12 +25,16 @@ import org.koin.compose.viewmodel.koinViewModel
 
 /**
  * Authentication flow navigation for unauthenticated users.
+ *
+ * The register destination is guarded: when the server disallows public self-registration,
+ * navigation to it redirects back to the login screen.
  */
 @Composable
 fun AuthenticationFlow(
     snackbarHostState: SnackbarHostState,
 ) {
     val authEntryViewModel: AuthEntryViewModel = koinViewModel()
+    val selfRegistrationEnabled by authEntryViewModel.selfRegistrationEnabled.collectAsState()
     val navController = rememberNavController()
 
     Scaffold(
@@ -56,19 +63,28 @@ fun AuthenticationFlow(
                 }
 
                 composable<Register> {
-                    RegisterScreen(
-                        onNavigateToLogin = {
+                    // Guard: stale or deep navigation must not reach registration while it is disabled.
+                    if (selfRegistrationEnabled) {
+                        RegisterScreen(
+                            onNavigateToLogin = {
+                                navController.navigate(Login) {
+                                    popUpTo(Register) { inclusive = true }
+                                }
+                            },
+                            onRegistrationSuccess = {
+                                navController.navigate(Login) {
+                                    popUpTo(Register) { inclusive = true }
+                                }
+                            },
+                            authEntryViewModel = authEntryViewModel
+                        )
+                    } else {
+                        LaunchedEffect(Unit) {
                             navController.navigate(Login) {
                                 popUpTo(Register) { inclusive = true }
                             }
-                        },
-                        onRegistrationSuccess = {
-                            navController.navigate(Login) {
-                                popUpTo(Register) { inclusive = true }
-                            }
-                        },
-                        authEntryViewModel = authEntryViewModel
-                    )
+                        }
+                    }
                 }
             }
         }

@@ -43,7 +43,34 @@ interface UserManagementActions {
      * Submits the user edit form to save changes.
      */
     fun onSubmitEditUser()
-    
+
+    /**
+     * Starts creating a user by opening the create dialog.
+     */
+    fun onStartCreatingUser()
+
+    /**
+     * Updates the create user form fields.
+     *
+     * @param username The new username value, or null to keep current
+     * @param email The new email value, or null to keep current
+     * @param password The new password value, or null to keep current
+     * @param confirmPassword The new confirmation value, or null to keep current
+     * @param requiresPasswordChange The new password-change-required value, or null to keep current
+     */
+    fun onUpdateCreateUserForm(
+        username: String? = null,
+        email: String? = null,
+        password: String? = null,
+        confirmPassword: String? = null,
+        requiresPasswordChange: Boolean? = null
+    )
+
+    /**
+     * Submits the create user form to provision a new account.
+     */
+    fun onSubmitCreateUser()
+
     /**
      * Starts deleting a user by opening the delete confirmation dialog.
      * 

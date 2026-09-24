@@ -82,19 +82,26 @@ class JwtConfigTest {
         assertEquals(jwtConfig.workerAudience, decodedJWT.audience.first())
     }
 
+    /**
+     * Verifies that issuing at different times yields different tokens for the same user and session.
+     *
+     * JWT issued-at and expiration claims are whole seconds and no unique claim is embedded, so two
+     * calls within the same wall-clock second can serialize to identical tokens; distinctness is only
+     * guaranteed across second boundaries, which the explicit issue times pin deterministically.
+     */
     @Test
-    fun `generateAccessToken should create different tokens for same input`() {
+    fun `generateAccessToken should create different tokens for different issued-at times`() {
         // Given
         val userId = 123L
         val sessionId = 456L
+        val baseTime = 1_700_000_000_000L
 
-        // When
-        val token1 = jwtConfig.generateAccessToken(userId, sessionId)
-        Thread.sleep(1000) // Ensure different issued at time (JWT uses seconds)
-        val token2 = jwtConfig.generateAccessToken(userId, sessionId)
+        // When: one second apart, the smallest interval that changes the serialized claims.
+        val token1 = jwtConfig.generateAccessToken(userId, sessionId, currentTime = baseTime)
+        val token2 = jwtConfig.generateAccessToken(userId, sessionId, currentTime = baseTime + 1_000L)
 
         // Then
-        assertNotEquals(token1, token2) // Different due to different issuedAt times
+        assertNotEquals(token1, token2)
     }
 
     @Test
