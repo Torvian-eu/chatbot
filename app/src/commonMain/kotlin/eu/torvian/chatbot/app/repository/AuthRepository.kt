@@ -30,6 +30,12 @@ interface AuthRepository {
     val availableAccounts: StateFlow<List<AccountData>>
 
     /**
+     * Whether the server currently allows public self-registration, sourced from the auth policy.
+     * Fail-closed: remains `false` until the policy reports otherwise (including on fetch failure).
+     */
+    val selfRegistrationEnabled: StateFlow<Boolean>
+
+    /**
      * Authenticates a user with the provided credentials.
      * Updates the auth state and stores tokens on successful login.
      *

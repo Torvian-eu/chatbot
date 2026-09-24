@@ -54,6 +54,12 @@ class AuthEntryViewModel(
      */
     val authState: StateFlow<AuthState> = authRepository.authState
 
+    /**
+     * Whether the server currently allows public self-registration.
+     * The unauthenticated flow uses it to hide the sign-up entry when registration is disabled.
+     */
+    val selfRegistrationEnabled: StateFlow<Boolean> = authRepository.selfRegistrationEnabled
+
     // --- Form State Management ---
 
     private val _loginFormState = MutableStateFlow(LoginFormState())

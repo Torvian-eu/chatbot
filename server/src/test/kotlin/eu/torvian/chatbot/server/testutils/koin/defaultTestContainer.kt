@@ -19,14 +19,18 @@ import org.koin.dsl.koinApplication
  * and supports resolving and managing lifecycle-aware components.
  *
  * @param accountSecurityMode The account security mode to bind into the container for feature tests.
+ * @param selfRegistrationEnabled Whether the test server allows public self-registration.
  * @return An instance of `KoinDIContainer` configured with the default test modules.
  */
-fun defaultTestContainer(accountSecurityMode: AccountSecurityMode = AccountSecurityMode.DISABLED) = KoinDIContainer(
+fun defaultTestContainer(
+    accountSecurityMode: AccountSecurityMode = AccountSecurityMode.DISABLED,
+    selfRegistrationEnabled: Boolean = false
+) = KoinDIContainer(
     koinApplication {
         // Uncomment for debugging:
         // printLogger(Level.DEBUG)
         modules(
-            defaultTestConfigModule(accountSecurityMode),
+            defaultTestConfigModule(accountSecurityMode, selfRegistrationEnabled),
             testDatabaseModule(),
             daoModule(),
             serviceModule(),

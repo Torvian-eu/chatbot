@@ -18,9 +18,11 @@ import eu.torvian.chatbot.common.models.api.auth.ServiceTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.ServiceTokenResponse
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.service.core.UserGroupService
+import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.WorkerService
 import eu.torvian.chatbot.server.service.security.CertificateService
 import eu.torvian.chatbot.server.service.security.PasswordService
@@ -31,6 +33,7 @@ import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
+import eu.torvian.chatbot.server.testutils.ktor.CustomApplicationTestBuilder
 import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
 import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
 import com.auth0.jwt.JWT
@@ -83,7 +86,9 @@ class AuthRoutesTest {
 
     @BeforeEach
     fun setUp() = runTest {
-        container = defaultTestContainer()
+        // Registration tests exercise the enabled path; the toggle gate has dedicated tests
+        // against a disabled instance.
+        container = defaultTestContainer(selfRegistrationEnabled = true)
         val apiRoutesKtor: ApiRoutesKtor = container.get()
 
         authTestApplication = myTestApplication(
@@ -137,6 +142,88 @@ class AuthRoutesTest {
         testDataManager.cleanup()
         container.close()
     }
+
+    // ========== Self-Registration Toggle Tests ==========
+
+    /**
+     * Runs [block] against a self-contained server instance with self-registration disabled.
+     *
+     * The suite default enables registration, so gate tests bring up their own container and
+     * release all of its resources afterwards.
+     *
+     * @param block Test body receiving the disabled instance's DI container
+     */
+    private fun withSelfRegistrationDisabled(block: suspend CustomApplicationTestBuilder.(DIContainer) -> Unit) {
+        val disabledContainer = defaultTestContainer(selfRegistrationEnabled = false)
+        val disabledTestDataManager: TestDataManager = disabledContainer.get()
+        val disabledApiRoutes: ApiRoutesKtor = disabledContainer.get()
+        val disabledApp = myTestApplication(
+            container = disabledContainer,
+            routing = { disabledApiRoutes.configureAuthRoutes(this) }
+        )
+        try {
+            runTest { disabledTestDataManager.createTables(setOf(Table.USERS)) }
+            disabledApp { block(this, disabledContainer) }
+        } finally {
+            runTest {
+                disabledTestDataManager.cleanup()
+                disabledContainer.close()
+            }
+        }
+    }
+
+    @Test
+    fun `GET auth policy - reports selfRegistrationEnabled true when enabled`() = authTestApplication {
+        // Act
+        val response = client.get(href(AuthResource.Policy()))
+
+        // Assert
+        assertEquals(HttpStatusCode.OK, response.status)
+        val policy = response.body<AccountValidationPolicy>()
+        assertTrue(policy.selfRegistrationEnabled)
+        // Existing validation fields keep their values alongside the new flag
+        assertEquals(10, policy.maxFailedAttempts)
+        assertEquals(5, policy.lockoutWindowMinutes)
+    }
+
+    @Test
+    fun `GET auth policy - reports selfRegistrationEnabled false when disabled`() = withSelfRegistrationDisabled {
+        // Act
+        val response = client.get(href(AuthResource.Policy()))
+
+        // Assert
+        assertEquals(HttpStatusCode.OK, response.status)
+        val policy = response.body<AccountValidationPolicy>()
+        assertFalse(policy.selfRegistrationEnabled)
+    }
+
+    @Test
+    fun `POST auth register - returns 403 feature-disabled and creates no user when disabled`() =
+        withSelfRegistrationDisabled { disabledContainer ->
+            // Arrange
+            val registerRequest = RegisterRequest(
+                username = "newuser",
+                password = "Gsfaf^3gd",
+                email = "newuser@example.com"
+            )
+
+            // Act
+            val response = client.post(href(AuthResource.Register())) {
+                contentType(ContentType.Application.Json)
+                setBody(registerRequest)
+            }
+
+            // Assert
+            assertEquals(HttpStatusCode.Forbidden, response.status)
+            val error = response.body<ApiError>()
+            assertEquals(CommonApiErrorCodes.FEATURE_DISABLED.code, error.code)
+            assertEquals(403, error.statusCode)
+            assertEquals("Self-registration is disabled on this server", error.message)
+
+            // The gate rejects before any persistence happens
+            val userService: UserService = disabledContainer.get()
+            assertTrue(userService.getUserByUsername("newuser").isLeft())
+        }
 
     // ========== Registration Tests ==========
 

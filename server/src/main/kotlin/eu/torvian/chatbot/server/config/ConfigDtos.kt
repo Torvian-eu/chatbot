@@ -60,13 +60,15 @@ data class AppConfigDto(
  * @property usernameConfig Optional username validation configuration.
  * @property maxFailedAttempts Maximum number of failed login attempts allowed within the lockout window.
  * @property lockoutWindowMinutes Duration in minutes for the sliding lockout window.
+ * @property selfRegistrationEnabled Whether public self-registration is allowed; absent means disabled.
  */
 @Serializable
 data class AuthPolicyDto(
     val passwordConfig: PasswordValidationConfig? = null,
     val usernameConfig: UsernameValidationConfig? = null,
     val maxFailedAttempts: Int? = null,
-    val lockoutWindowMinutes: Int? = null
+    val lockoutWindowMinutes: Int? = null,
+    val selfRegistrationEnabled: Boolean? = null
 )
 
 /**
