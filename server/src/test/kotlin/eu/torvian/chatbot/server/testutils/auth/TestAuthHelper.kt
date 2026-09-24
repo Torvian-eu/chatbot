@@ -16,6 +16,14 @@ import io.ktor.http.HttpHeaders
 import kotlin.time.Instant
 
 /**
+ * How far behind the wall clock fixture tokens are issued.
+ *
+ * The margin covers whole-second claim resolution plus observed sub-second wall-clock adjustments,
+ * while staying far below the token lifetime so tokens remain fresh for every assertion.
+ */
+private const val TOKEN_ISSUED_AT_BACKDATE_MS: Long = 30_000L
+
+/**
  * Helper class for setting up authentication in tests.
  * 
  * This class provides utilities for creating test users, sessions, and JWT tokens
@@ -24,6 +32,18 @@ import kotlin.time.Instant
 class TestAuthHelper(private val container: DIContainer) {
     private val jwtConfig: JwtConfig = container.get()
     private val testDataManager: TestDataManager = container.get()
+
+    /**
+     * Issue time for fixture tokens, safely behind the current wall clock.
+     *
+     * JWT issued-at values are whole seconds and token verification rejects anything issued in the
+     * future, so stamping at the call instant can fail when the wall clock steps backwards between
+     * minting and verification.
+     *
+     * @return Epoch milliseconds to use as the token issue time.
+     */
+    private fun backdatedIssueTime(): Long =
+        System.currentTimeMillis() - TOKEN_ISSUED_AT_BACKDATE_MS
     
     /**
      * Default test user for authentication tests.
@@ -68,9 +88,9 @@ class TestAuthHelper(private val container: DIContainer) {
         // Insert test user and session
         testDataManager.insertUser(user)
         testDataManager.insertUserSession(session)
-        
+
         // Generate JWT token
-        return jwtConfig.generateAccessToken(user.id, session.id)
+        return jwtConfig.generateAccessToken(user.id, session.id, currentTime = backdatedIssueTime())
     }
 
     /**
@@ -96,7 +116,7 @@ class TestAuthHelper(private val container: DIContainer) {
         ))
 
         // Generate JWT token
-        return jwtConfig.generateAccessToken(userId, sessionId)
+        return jwtConfig.generateAccessToken(userId, sessionId, currentTime = backdatedIssueTime())
     }
     
     /**
@@ -107,7 +127,7 @@ class TestAuthHelper(private val container: DIContainer) {
      * @return A valid JWT access token
      */
     fun generateToken(userId: Long, sessionId: Long): String {
-        return jwtConfig.generateAccessToken(userId, sessionId)
+        return jwtConfig.generateAccessToken(userId, sessionId, currentTime = backdatedIssueTime())
     }
     
 
