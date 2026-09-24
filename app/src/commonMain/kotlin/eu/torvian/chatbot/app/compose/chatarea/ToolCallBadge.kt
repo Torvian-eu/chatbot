@@ -99,7 +99,7 @@ fun ToolCallBadge(
             // Show execution time if available
             toolCall.durationMs?.let { duration ->
                 Text(
-                    text = "(${duration}ms)",
+                    text = "(${formatToolCallDuration(duration)})",
                     style = MaterialTheme.typography.labelSmall,
                     color = color.copy(alpha = 0.7f)
                 )

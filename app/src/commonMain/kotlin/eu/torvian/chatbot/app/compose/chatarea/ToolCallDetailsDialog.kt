@@ -38,7 +38,7 @@ fun ToolCallDetailsDialog(
                 Text("Tool: ${toolCall.toolName}")
                 toolCall.durationMs?.let { duration ->
                     Text(
-                        text = "Executed in ${duration}ms",
+                        text = "Executed in ${formatToolCallDuration(duration)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
