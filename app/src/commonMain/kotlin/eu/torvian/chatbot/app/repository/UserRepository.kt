@@ -53,6 +53,25 @@ interface UserRepository {
     suspend fun loadUserDetails(userId: Long): Either<RepositoryError, UserWithDetails>
 
     /**
+     * Creates a new user account with an administrator-chosen initial password.
+     *
+     * Upon successful creation, the users StateFlow is refreshed from the backend so the new
+     * account appears with authoritative role and group details.
+     *
+     * @param username Unique username for the new account
+     * @param password Plaintext initial password (hashed server-side)
+     * @param email Optional email address (must be unique if provided)
+     * @param requiresPasswordChange Whether the user must set a new password on first login
+     * @return Either.Right with the created public User on success, or Either.Left with RepositoryError on failure
+     */
+    suspend fun createUser(
+        username: String,
+        password: String,
+        email: String?,
+        requiresPasswordChange: Boolean
+    ): Either<RepositoryError, User>
+
+    /**
      * Updates a user's profile information (username, email).
      * Does NOT update password (use [changeUserPassword] for that).
      *

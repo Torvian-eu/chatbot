@@ -9,6 +9,7 @@ import eu.torvian.chatbot.app.repository.UserRepository
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.UserApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.api.admin.CreateUserRequest
 import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
@@ -55,6 +56,27 @@ class DefaultUserRepository(
                 _users.update { DataState.Success(usersWithDetails) }
                 logger.debug("Successfully loaded ${usersWithDetails.size} users")
                 Unit.right()
+            }
+        )
+    }
+
+    override suspend fun createUser(
+        username: String,
+        password: String,
+        email: String?,
+        requiresPasswordChange: Boolean
+    ): Either<RepositoryError, User> {
+        logger.info("Creating user: $username")
+        return userApi.createUser(CreateUserRequest(username, password, email, requiresPasswordChange)).fold(
+            ifLeft = { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to create user")
+                logger.warn("Failed to create user $username: ${repositoryError.message}")
+                repositoryError.left()
+            },
+            ifRight = { createdUser ->
+                logger.info("Successfully created user: ${createdUser.username}")
+                loadUsers()
+                createdUser.right()
             }
         )
     }

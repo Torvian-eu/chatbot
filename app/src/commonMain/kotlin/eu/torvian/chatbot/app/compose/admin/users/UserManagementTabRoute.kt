@@ -19,6 +19,7 @@ import org.koin.compose.viewmodel.koinViewModel
  * collecting state flows and mapping ViewModel methods to UI actions.
  *
  * @param authState The current authentication state (passed from AdminScreen)
+ * @param viewModel The ViewModel holding user management state and handling UI actions
  */
 @Composable
 fun UserManagementTabRoute(
@@ -47,6 +48,25 @@ fun UserManagementTabRoute(
         }
 
         override fun onSubmitEditUser() = viewModel.submitEditUser()
+
+        override fun onStartCreatingUser() = viewModel.startCreatingUser()
+        override fun onUpdateCreateUserForm(
+            username: String?,
+            email: String?,
+            password: String?,
+            confirmPassword: String?,
+            requiresPasswordChange: Boolean?
+        ) {
+            viewModel.updateCreateUserForm(
+                username = username,
+                email = email,
+                password = password,
+                confirmPassword = confirmPassword,
+                requiresPasswordChange = requiresPasswordChange
+            )
+        }
+
+        override fun onSubmitCreateUser() = viewModel.submitCreateUser()
 
         override fun onStartDeletingUser(user: UserWithDetails) = viewModel.startDeletingUser(user)
         override fun onConfirmDeleteUser() = viewModel.confirmDeleteUser()
@@ -77,6 +97,8 @@ fun UserManagementTabRoute(
         usersDataState = usersDataState,
         selectedUser = selectedUser,
         dialogState = dialogState,
+        passwordValidationConfig = viewModel.passwordValidationConfig,
+        usernameValidationConfig = viewModel.usernameValidationConfig,
         actions = actions
     )
 }

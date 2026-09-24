@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.resources.UserResource
 import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
 import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.admin.CreateUserRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdatePasswordChangeRequiredRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateUserStatusRequest
@@ -41,6 +42,26 @@ fun Route.configureUserRoutes(
                 userService.getAllUsers()
             }
             call.respondEither(result)
+        }
+
+        // POST /api/v1/users - Create user account (admin-provisioned, unaffected by the
+        // self-registration toggle)
+        post<UserResource> {
+            val requestingUserId = call.getUserId()
+            val request = call.receive<CreateUserRequest>()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: CreateUserError -> e.toApiError() }) {
+                    userService.createUser(
+                        request.username,
+                        request.password,
+                        request.email,
+                        request.requiresPasswordChange
+                    ).bind()
+                }
+            }
+            call.respondEither(result, HttpStatusCode.Created)
         }
 
         // GET /api/v1/users/{userId} - Get user by ID

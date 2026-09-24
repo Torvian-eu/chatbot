@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -13,18 +15,16 @@ import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.common.models.user.UserWithDetails
 
 /**
- * Displays a scrollable list of users with a header showing the user count.
+ * Displays a scrollable list of users with a header showing the user count and an add button.
  *
  * This panel shows all users in a scrollable list on the left side of the
- * master-detail layout. It includes a header with the user count and handles
- * empty states gracefully.
- *
- * Note: Users are created through registration, not from this UI, so there
- * is no "Add User" button.
+ * master-detail layout. It includes a header with the user count, an "Add User"
+ * button, and handles empty states gracefully.
  *
  * @param users The list of users to display
  * @param selectedUser The currently selected user, or null if none selected
  * @param onUserSelected Callback invoked when a user is selected
+ * @param onAddUser Callback invoked when the add user button is clicked
  * @param modifier Modifier for styling and layout
  */
 @Composable
@@ -32,6 +32,7 @@ fun UserListPanel(
     users: List<UserWithDetails>,
     selectedUser: UserWithDetails?,
     onUserSelected: (UserWithDetails) -> Unit,
+    onAddUser: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -43,7 +44,7 @@ fun UserListPanel(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Header
+            // Header with count and add button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -53,11 +54,20 @@ fun UserListPanel(
                     text = "Users",
                     style = MaterialTheme.typography.headlineSmall
                 )
-                Text(
-                    text = "${users.size} user${if (users.size != 1) "s" else ""}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${users.size} user${if (users.size != 1) "s" else ""}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    IconButton(onClick = onAddUser) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Add User",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

@@ -62,51 +62,65 @@ class UserServiceImpl(
         username: String,
         password: String,
         email: String?
-    ): Either<RegisterUserError, User> = transactionScope.transaction {
-        either {
-            logger.info("Registering new user: $username")
+    ): Either<RegisterUserError, User> {
+        logger.info("Registering new user: $username")
 
+        return provisionUserAccount(
+            username = username,
+            password = password,
+            email = email,
+            status = UserStatus.DISABLED,
+            requiresPasswordChange = false
+        ).mapLeft(::toRegisterUserError)
+    }
+
+    override suspend fun createUser(
+        username: String,
+        password: String,
+        email: String?,
+        requiresPasswordChange: Boolean
+    ): Either<CreateUserError, User> {
+        logger.info("Creating user account: $username (requiresPasswordChange=$requiresPasswordChange)")
+
+        return provisionUserAccount(
+            username = username,
+            password = password,
+            email = email,
+            status = UserStatus.ACTIVE,
+            requiresPasswordChange = requiresPasswordChange
+        ).mapLeft(::toCreateUserError)
+    }
+
+    /**
+     * Runs the shared account provisioning pipeline: policy validation, password hashing, account
+     * insert, "All Users" group membership, and per-user tool seeding inside one transaction so any
+     * failure leaves no partially provisioned account behind.
+     *
+     * @param username Unique username for the new account
+     * @param password Plaintext password (validated against the policy, then hashed)
+     * @param email Optional email address (must be unique if provided)
+     * @param status Initial account status chosen by the calling creation path
+     * @param requiresPasswordChange Whether the user must set a new password on first login
+     * @return Either [UserProvisioningError] on failure, or the newly created [User]
+     */
+    private suspend fun provisionUserAccount(
+        username: String,
+        password: String,
+        email: String?,
+        status: UserStatus,
+        requiresPasswordChange: Boolean
+    ): Either<UserProvisioningError, User> = transactionScope.transaction {
+        either {
             // Validate username using the shared policy validator
             val usernameValidator = UsernameValidator(policy.usernameConfig)
             usernameValidator.validate(username)?.let { errorMessage ->
-                raise(RegisterUserError.InvalidInput(errorMessage))
+                raise(UserProvisioningError.InvalidInput(errorMessage))
             }
 
-            ensure(email?.isBlank() != true) { RegisterUserError.InvalidInput("Email cannot be blank if provided") }
+            ensure(email?.isBlank() != true) { UserProvisioningError.InvalidInput("Email cannot be blank if provided") }
 
             // Validate password strength (uses policy config via passwordService)
-            withError({ passwordError ->
-                when (passwordError) {
-                    is PasswordValidationError.Empty ->
-                        RegisterUserError.PasswordTooWeak("Password cannot be empty")
-
-                    is PasswordValidationError.OnlyWhitespace ->
-                        RegisterUserError.PasswordTooWeak("Password cannot contain only whitespace")
-
-                    is PasswordValidationError.TooShort ->
-                        RegisterUserError.PasswordTooWeak("Password must be at least ${passwordError.minLength} characters long")
-
-                    is PasswordValidationError.TooLong ->
-                        RegisterUserError.PasswordTooWeak("Password must be no more than ${passwordError.maxLength} characters long")
-
-                    is PasswordValidationError.MissingCharacterTypes ->
-                        RegisterUserError.PasswordTooWeak(
-                            "Password must contain: ${
-                                passwordError.missingTypes.joinToString(", ") { characterType ->
-                                    when (characterType) {
-                                        CharacterType.UPPERCASE -> "uppercase letters"
-                                        CharacterType.LOWERCASE -> "lowercase letters"
-                                        CharacterType.DIGITS -> "digits"
-                                        CharacterType.SPECIAL_CHARACTERS -> "special characters"
-                                    }
-                                }
-                            }"
-                        )
-
-                    is PasswordValidationError.TooCommon ->
-                        RegisterUserError.PasswordTooWeak(passwordError.reason)
-                }
-            }) {
+            withError(PasswordValidationError::toProvisioningError) {
                 passwordService.validatePasswordStrength(password).bind()
             }
 
@@ -117,52 +131,58 @@ class UserServiceImpl(
             val newUser = withError({ userError ->
                 when (userError) {
                     is UserError.UsernameAlreadyExists ->
-                        RegisterUserError.UsernameAlreadyExists(userError.username)
+                        UserProvisioningError.UsernameAlreadyExists(userError.username)
 
                     is UserError.EmailAlreadyExists ->
-                        RegisterUserError.EmailAlreadyExists(userError.email)
+                        UserProvisioningError.EmailAlreadyExists(userError.email)
 
-                    else -> RegisterUserError.InvalidInput("Failed to create user account")
+                    else -> UserProvisioningError.InvalidInput("Failed to create user account")
                 }
             }) {
-                userDao.insertUser(username, hashedPassword, email, status = UserStatus.DISABLED).bind()
+                userDao.insertUser(
+                    username,
+                    hashedPassword,
+                    email,
+                    status = status,
+                    requiresPasswordChange = requiresPasswordChange
+                ).bind()
             }
 
             // Add user to the "All Users" group
             val allUsersGroup = withError({ error ->
                 logger.error("Failed to get All Users group for new user $username: $error")
-                RegisterUserError.GroupAssignmentFailed("Failed to add user to All Users group")
+                UserProvisioningError.GroupAssignmentFailed("Failed to add user to All Users group")
             }) {
                 userGroupService.getAllUsersGroup().bind()
             }
 
             withError({ error ->
                 logger.error("Failed to add user $username to All Users group: $error")
-                RegisterUserError.GroupAssignmentFailed("Failed to add user to All Users group")
+                UserProvisioningError.GroupAssignmentFailed("Failed to add user to All Users group")
             }) {
                 userGroupService.addUserToGroup(newUser.id, allUsersGroup.id).bind()
             }
 
             // Seed the new user's operator-tool instances (e.g. spawn_agent) so their per-user tool
-            // rows exist before they ever open a chat. The seeder joins the active registration
+            // rows exist before they ever open a chat. The seeder joins the active provisioning
             // transaction, keeping account creation atomic.
             withError({ error ->
                 logger.error("Failed to seed operator tools for new user $username: $error")
-                RegisterUserError.InvalidInput("Failed to initialize user tool configuration")
+                UserProvisioningError.ToolProvisioningFailed("Failed to initialize user tool configuration")
             }) {
                 operatorToolDefinitionSeeder.ensureForUser(newUser.id).bind()
             }
 
             // Seed the new user's server built-in tool instances (e.g. list_agent_roles) in the same
-            // registration transaction, mirroring the operator-tool hook above.
+            // provisioning transaction, mirroring the operator-tool hook above.
             withError({ error ->
                 logger.error("Failed to seed server built-in tools for new user $username: $error")
-                RegisterUserError.InvalidInput("Failed to initialize user tool configuration")
+                UserProvisioningError.ToolProvisioningFailed("Failed to initialize user tool configuration")
             }) {
                 serverBuiltInToolDefinitionSeeder.ensureForUser(newUser.id).bind()
             }
 
-            logger.info("Successfully registered user: $username (ID: ${newUser.id})")
+            logger.info("Successfully provisioned user: $username (ID: ${newUser.id}, status=$status)")
             newUser.toUser()
         }
     }
@@ -452,4 +472,134 @@ class UserServiceImpl(
         val adminUserIds = userRoleAssignmentDao.getUserIdsByRoleId(adminRole.id)
         return adminUserIds.size == 1 && adminUserIds.contains(userId)
     }
+}
+
+/**
+ * Logical failure modes of the shared account provisioning pipeline, independent of the
+ * calling creation path.
+ */
+private sealed interface UserProvisioningError {
+    /**
+     * Input rejected by the account validation policy.
+     *
+     * @property reason Description of what input was invalid
+     */
+    data class InvalidInput(val reason: String) : UserProvisioningError
+
+    /**
+     * Password rejected by the strength policy.
+     *
+     * @property reason Description of why the password is too weak
+     */
+    data class PasswordTooWeak(val reason: String) : UserProvisioningError
+
+    /**
+     * Username uniqueness constraint violated.
+     *
+     * @property username The username that already exists
+     */
+    data class UsernameAlreadyExists(val username: String) : UserProvisioningError
+
+    /**
+     * Email uniqueness constraint violated.
+     *
+     * @property email The email that already exists
+     */
+    data class EmailAlreadyExists(val email: String) : UserProvisioningError
+
+    /**
+     * "All Users" group lookup or membership assignment failed.
+     *
+     * @property reason Description of the failure
+     */
+    data class GroupAssignmentFailed(val reason: String) : UserProvisioningError
+
+    /**
+     * Per-user operator or server built-in tool seeding failed.
+     *
+     * @property reason Description of the failure
+     */
+    data class ToolProvisioningFailed(val reason: String) : UserProvisioningError
+}
+
+/**
+ * Converts a password strength violation into the provisioning error family while keeping the
+ * user-facing reason strings identical across all account creation paths.
+ *
+ * @receiver The password validation failure to convert
+ * @return The corresponding [UserProvisioningError.PasswordTooWeak]
+ */
+private fun PasswordValidationError.toProvisioningError(): UserProvisioningError.PasswordTooWeak = when (this) {
+    is PasswordValidationError.Empty ->
+        UserProvisioningError.PasswordTooWeak("Password cannot be empty")
+
+    is PasswordValidationError.OnlyWhitespace ->
+        UserProvisioningError.PasswordTooWeak("Password cannot contain only whitespace")
+
+    is PasswordValidationError.TooShort ->
+        UserProvisioningError.PasswordTooWeak("Password must be at least $minLength characters long")
+
+    is PasswordValidationError.TooLong ->
+        UserProvisioningError.PasswordTooWeak("Password must be no more than $maxLength characters long")
+
+    is PasswordValidationError.MissingCharacterTypes ->
+        UserProvisioningError.PasswordTooWeak(
+            "Password must contain: ${
+                missingTypes.joinToString(", ") { characterType ->
+                    when (characterType) {
+                        CharacterType.UPPERCASE -> "uppercase letters"
+                        CharacterType.LOWERCASE -> "lowercase letters"
+                        CharacterType.DIGITS -> "digits"
+                        CharacterType.SPECIAL_CHARACTERS -> "special characters"
+                    }
+                }
+            }"
+        )
+
+    is PasswordValidationError.TooCommon ->
+        UserProvisioningError.PasswordTooWeak(reason)
+}
+
+/**
+ * Maps provisioning failures onto the self-registration error contract. Group and tool seeding
+ * failures keep their canonical self-registration messages regardless of provisioning details.
+ *
+ * @param error The provisioning failure to convert
+ * @return The corresponding [RegisterUserError]
+ */
+private fun toRegisterUserError(error: UserProvisioningError): RegisterUserError = when (error) {
+    is UserProvisioningError.UsernameAlreadyExists -> RegisterUserError.UsernameAlreadyExists(error.username)
+
+    is UserProvisioningError.EmailAlreadyExists -> RegisterUserError.EmailAlreadyExists(error.email)
+
+    is UserProvisioningError.InvalidInput -> RegisterUserError.InvalidInput(error.reason)
+
+    is UserProvisioningError.PasswordTooWeak -> RegisterUserError.PasswordTooWeak(error.reason)
+
+    is UserProvisioningError.GroupAssignmentFailed ->
+        RegisterUserError.GroupAssignmentFailed("Failed to add user to All Users group")
+
+    is UserProvisioningError.ToolProvisioningFailed ->
+        RegisterUserError.InvalidInput("Failed to initialize user tool configuration")
+}
+
+/**
+ * Maps provisioning failures onto the admin-creation error contract; group and tool seeding
+ * failures surface as a single provisioning failure.
+ *
+ * @param error The provisioning failure to convert
+ * @return The corresponding [CreateUserError]
+ */
+private fun toCreateUserError(error: UserProvisioningError): CreateUserError = when (error) {
+    is UserProvisioningError.UsernameAlreadyExists -> CreateUserError.UsernameAlreadyExists(error.username)
+
+    is UserProvisioningError.EmailAlreadyExists -> CreateUserError.EmailAlreadyExists(error.email)
+
+    is UserProvisioningError.InvalidInput -> CreateUserError.InvalidInput(error.reason)
+
+    is UserProvisioningError.PasswordTooWeak -> CreateUserError.PasswordTooWeak(error.reason)
+
+    is UserProvisioningError.GroupAssignmentFailed -> CreateUserError.ProvisioningFailed(error.reason)
+
+    is UserProvisioningError.ToolProvisioningFailed -> CreateUserError.ProvisioningFailed(error.reason)
 }

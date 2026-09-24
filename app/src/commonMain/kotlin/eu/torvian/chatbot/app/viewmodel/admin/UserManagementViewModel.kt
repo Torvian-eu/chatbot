@@ -6,11 +6,17 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.RoleRepository
 import eu.torvian.chatbot.app.repository.UserRepository
+import eu.torvian.chatbot.app.repository.getStringDetail
+import eu.torvian.chatbot.app.repository.matches
+import eu.torvian.chatbot.app.service.auth.AuthValidationService
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.models.user.UserWithDetails
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.*
@@ -18,11 +24,19 @@ import kotlinx.coroutines.launch
 
 /**
  * Manages the UI state and logic for User Management (admin only).
+ *
+ * @param userRepository Repository for user account operations
+ * @param roleRepository Repository providing roles for the role assignment dialog
+ * @param notificationService Service for surfacing operations that have no dialog surface
+ * @param authValidationService Shared account policy validator used to check create-user input
+ *   against the same rules as public registration
+ * @param normalScope Coroutine scope for normal operations
  */
 class UserManagementViewModel(
     private val userRepository: UserRepository,
     private val roleRepository: RoleRepository,
     private val notificationService: NotificationService,
+    private val authValidationService: AuthValidationService,
     private val normalScope: CoroutineScope
 ) : ViewModel(normalScope) {
 
@@ -43,6 +57,18 @@ class UserManagementViewModel(
 
     val dialogState: StateFlow<UserManagementDialogState> = _state.map { it.dialogState }
         .stateIn(viewModelScope, SharingStarted.Eagerly, UserManagementDialogState.None)
+
+    // --- Validation Policy (for requirement hints) ---
+
+    /**
+     * The password rules in effect, exposed so UI components can render requirement hints.
+     */
+    val passwordValidationConfig: PasswordValidationConfig = authValidationService.passwordValidationConfig
+
+    /**
+     * The username rules in effect, exposed so UI components can render requirement hints.
+     */
+    val usernameValidationConfig: UsernameValidationConfig = authValidationService.usernameValidationConfig
 
     // --- Initialization ---
     init {
@@ -172,6 +198,140 @@ class UserManagementViewModel(
                             dialogState = UserManagementDialogState.None
                         )
                     }
+                }
+            )
+        }
+    }
+
+    /**
+     * Starts creating a user by opening the create dialog.
+     */
+    fun startCreatingUser() {
+        _state.update {
+            it.copy(
+                dialogState = UserManagementDialogState.CreateUser(
+                    // Fresh form each time; requiresPasswordChange defaults to ON.
+                    formState = CreateUserFormState()
+                )
+            )
+        }
+    }
+
+    /**
+     * Updates the create user form fields; edits that change a value clear that field's validation
+     * error, and calls are ignored while the create dialog is closed.
+     *
+     * Changing the password also clears the confirmation error because the two fields are judged
+     * as a pair and re-checked together on the next submit.
+     *
+     * @param username The new username value, or null to keep current
+     * @param email The new email value, or null to keep current
+     * @param password The new password value, or null to keep current
+     * @param confirmPassword The new confirmation value, or null to keep current
+     * @param requiresPasswordChange The new password-change-required value, or null to keep current
+     */
+    fun updateCreateUserForm(
+        username: String? = null,
+        email: String? = null,
+        password: String? = null,
+        confirmPassword: String? = null,
+        requiresPasswordChange: Boolean? = null
+    ) {
+        _state.update { currentState ->
+            val currentDialog = currentState.dialogState
+            if (currentDialog is UserManagementDialogState.CreateUser) {
+                val formState = currentDialog.formState
+                val updatedForm = formState.copy(
+                    username = username ?: formState.username,
+                    email = email ?: formState.email,
+                    password = password ?: formState.password,
+                    confirmPassword = confirmPassword ?: formState.confirmPassword,
+                    requiresPasswordChange = requiresPasswordChange ?: formState.requiresPasswordChange,
+                    usernameError = if (username != null && username != formState.username) null else formState.usernameError,
+                    emailError = if (email != null && email != formState.email) null else formState.emailError,
+                    passwordError = if (password != null && password != formState.password) null else formState.passwordError,
+                    confirmPasswordError = if (
+                        (password != null && password != formState.password) ||
+                        (confirmPassword != null && confirmPassword != formState.confirmPassword)
+                    ) null else formState.confirmPasswordError
+                )
+                currentState.copy(
+                    dialogState = currentDialog.copy(formState = updatedForm)
+                )
+            } else {
+                currentState
+            }
+        }
+    }
+
+    /**
+     * Submits the create user form to provision a new account.
+     *
+     * Fields are validated against the shared account policy before anything is sent; validation
+     * failures are reported per field and block the request.
+     */
+    fun submitCreateUser() {
+        val currentDialog = _state.value.dialogState
+        if (currentDialog !is UserManagementDialogState.CreateUser) return
+
+        val formState = currentDialog.formState
+
+        viewModelScope.launch {
+            // Gate submission on the same policy-driven checks as public registration so invalid
+            // input is explained up front with field-level messages.
+            val usernameError = authValidationService.validateUsername(formState.username)
+            val emailError = authValidationService.validateEmail(formState.email)
+            val passwordError = authValidationService.validatePassword(formState.password)
+            val confirmPasswordError =
+                authValidationService.validateConfirmPassword(formState.password, formState.confirmPassword)
+
+            if (usernameError != null || emailError != null || passwordError != null || confirmPasswordError != null) {
+                _state.update {
+                    it.copy(
+                        dialogState = currentDialog.copy(
+                            formState = formState.copy(
+                                usernameError = usernameError,
+                                emailError = emailError,
+                                passwordError = passwordError,
+                                confirmPasswordError = confirmPasswordError,
+                                generalError = null
+                            )
+                        )
+                    )
+                }
+                return@launch
+            }
+
+            // Set loading state
+            _state.update {
+                it.copy(
+                    dialogState = currentDialog.copy(
+                        formState = formState.copy(isLoading = true)
+                    )
+                )
+            }
+
+            userRepository.createUser(
+                username = formState.username,
+                password = formState.password,
+                // Blank email means "no email"; the server rejects empty non-null values.
+                email = formState.email.trim().ifBlank { null },
+                requiresPasswordChange = formState.requiresPasswordChange
+            ).fold(
+                ifLeft = { error ->
+                    logger.warn("Failed to create user: ${error.message}")
+                    _state.update {
+                        it.copy(
+                            dialogState = currentDialog.copy(
+                                formState = formState.withCreateUserFailure(error)
+                            )
+                        )
+                    }
+                },
+                ifRight = { createdUser ->
+                    logger.info("Successfully created user: ${createdUser.username}")
+                    // The reactive users StateFlow is refreshed by the repository.
+                    _state.update { it.copy(dialogState = UserManagementDialogState.None) }
                 }
             )
         }
@@ -563,4 +723,24 @@ class UserManagementViewModel(
         super.onCleared()
         normalScope.cancel()
     }
+}
+
+/**
+ * Applies a failed create-user request to this form state.
+ *
+ * Duplicate-account conflicts are routed to the field named by the server-provided `field` detail
+ * so the user sees which value collided; every other failure stays in the general error area.
+ *
+ * @receiver The pre-submission form state
+ * @param error The failure returned by the create-user request
+ * @return The form state with the error placed and loading cleared
+ */
+private fun CreateUserFormState.withCreateUserFailure(error: RepositoryError): CreateUserFormState = when {
+    error.matches(CommonApiErrorCodes.ALREADY_EXISTS) && error.getStringDetail("field") == "username" ->
+        copy(isLoading = false, usernameError = "Username is already taken. Please choose a different one.")
+
+    error.matches(CommonApiErrorCodes.ALREADY_EXISTS) && error.getStringDetail("field") == "email" ->
+        copy(isLoading = false, emailError = "Email is already registered. Please use a different one.")
+
+    else -> copy(isLoading = false, generalError = error.message)
 }

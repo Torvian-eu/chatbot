@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.models.user.UserWithDetails
 import eu.torvian.chatbot.server.service.core.error.auth.AssignRoleError
 import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
+import eu.torvian.chatbot.server.service.core.error.auth.CreateUserError
 import eu.torvian.chatbot.server.service.core.error.auth.DeleteUserError
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
 import eu.torvian.chatbot.server.service.core.error.auth.RevokeRoleError
@@ -29,6 +30,9 @@ interface UserService {
      * 2. Hashes the password securely
      * 3. Creates the user account (disabled by default)
      * 4. Automatically adds the user to the "All Users" group
+     *
+     * This is the public self-registration path: callers must enforce the self-registration
+     * policy gate before invoking it, because the service intentionally does not check the toggle.
      *
      * @param username Unique username for the new user
      * @param password Plaintext password (will be hashed)
@@ -75,6 +79,26 @@ interface UserService {
     suspend fun getAllUsers(): List<User>
 
     // --- Admin Operations ---
+
+    /**
+     * Creates a user account on behalf of an administrator.
+     *
+     * The account is active immediately and receives the same validation and post-creation wiring
+     * as [registerUser] ("All Users" group membership and per-user tool seeding), but no roles.
+     * This path is never gated by the self-registration toggle.
+     *
+     * @param username Unique username for the new user
+     * @param password Plaintext initial password (will be hashed)
+     * @param email Optional email address (must be unique if provided)
+     * @param requiresPasswordChange Whether the user must set a new password on first login
+     * @return Either [CreateUserError] if creation fails, or the newly created [User]
+     */
+    suspend fun createUser(
+        username: String,
+        password: String,
+        email: String? = null,
+        requiresPasswordChange: Boolean = true
+    ): Either<CreateUserError, User>
 
     /**
      * Returns all users with their roles and group memberships for admin UI.

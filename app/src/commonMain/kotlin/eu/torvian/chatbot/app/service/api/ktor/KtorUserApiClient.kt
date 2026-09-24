@@ -18,6 +18,7 @@ import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.models.user.UserWithDetails
 import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
 import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.admin.CreateUserRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateUserStatusRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdatePasswordChangeRequiredRequest
@@ -52,6 +53,14 @@ class KtorUserApiClient(client: HttpClient) : BaseApiResourceClient(client), Use
     override suspend fun getAllUsersWithDetails(): Either<ApiResourceError, List<UserWithDetails>> {
         return safeApiCall {
             client.get(UsersDetailed()).body<List<UserWithDetails>>()
+        }
+    }
+
+    override suspend fun createUser(request: CreateUserRequest): Either<ApiResourceError, User> {
+        return safeApiCall {
+            client.post(UserResource()) {
+                setBody(request)
+            }.body<User>()
         }
     }
 
