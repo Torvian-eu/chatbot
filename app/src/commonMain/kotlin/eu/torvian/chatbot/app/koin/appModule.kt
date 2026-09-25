@@ -32,6 +32,8 @@ import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.app.viewmodel.common.CoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.DefaultCoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.app.viewmodel.sessionstatus.InMemorySessionTurnStatusRegistry
+import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionTurnStatusRegistry
 import eu.torvian.chatbot.app.viewmodel.settings.*
 import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import io.ktor.client.*
@@ -171,6 +173,11 @@ fun appModule(config: AppConfiguration): Module = module {
     // Provide SessionSelectionController for shared session selection state
     single<SessionSelectionController> {
         DefaultSessionSelectionController()
+    }
+
+    // In-memory registry driving the per-session turn status indicators in the session list
+    single<SessionTurnStatusRegistry> {
+        InMemorySessionTurnStatusRegistry(get())
     }
 
     // Provide SearchNavigationState for durable navigation intent
@@ -458,7 +465,15 @@ fun appModule(config: AppConfiguration): Module = module {
     }
 
     factory<SendMessageUseCase> { (chatState: ChatState) ->
-        SendMessageUseCase(get<SessionRepository>(), get<ToolRepository>(), get(), get(), chatState, get())
+        SendMessageUseCase(
+            get<SessionRepository>(),
+            get<ToolRepository>(),
+            get(),
+            get(),
+            chatState,
+            get(),
+            get<SessionTurnStatusRegistry>()
+        )
     }
 
     factory<EditMessageUseCase> { (chatState: ChatState) ->
@@ -573,7 +588,8 @@ fun appModule(config: AppConfiguration): Module = module {
             get<GroupRepository>(),
             get<EventBus>(),
             get<SessionSelectionController>(),
-            get()
+            get(),
+            get<SessionTurnStatusRegistry>()
         )
     }
     viewModel {

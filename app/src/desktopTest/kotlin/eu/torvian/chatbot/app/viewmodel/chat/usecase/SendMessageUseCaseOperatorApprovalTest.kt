@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.service.security.RequestSigningService
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionTurnStatusRegistry
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
@@ -173,7 +174,8 @@ class SendMessageUseCaseOperatorApprovalTest {
             requestSigningService = mockk<RequestSigningService>(),
             operatorToolExecutor = mockk(),
             state = harness.state,
-            notificationService = mockk<NotificationService>()
+            notificationService = mockk<NotificationService>(),
+            sessionTurnStatusRegistry = mockk<SessionTurnStatusRegistry>(relaxed = true)
         )
         useCase.execute()
     }
@@ -280,7 +282,8 @@ class SendMessageUseCaseOperatorApprovalTest {
         requestSigningService = mockk<RequestSigningService>(),
         operatorToolExecutor = mockk(),
         state = harness.state,
-        notificationService = mockk<NotificationService>()
+        notificationService = mockk<NotificationService>(),
+        sessionTurnStatusRegistry = mockk<SessionTurnStatusRegistry>(relaxed = true)
     )
 
     /** Builds the parent message the streaming start event refers to. */

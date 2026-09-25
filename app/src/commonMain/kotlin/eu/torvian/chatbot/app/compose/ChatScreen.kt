@@ -87,6 +87,7 @@ fun ChatScreen(
 
     // --- Collect States for SessionListPanel ---
     val sessionListUiState by sessionListViewModel.listState.collectAsState()
+    val sessionIndicators by sessionListViewModel.sessionIndicators.collectAsState()
     // selectedSession is already collected above
     val isCreatingNewGroup by sessionListViewModel.isCreatingNewGroup.collectAsState()
     val newGroupNameInput by sessionListViewModel.newGroupNameInput.collectAsState()
@@ -200,12 +201,13 @@ fun ChatScreen(
 
     // --- SessionListPanel Contract Construction ---
     val sessionListPanelUiState = remember(
-        sessionListUiState, selectedSession, isCreatingNewGroup,
+        sessionListUiState, selectedSession, sessionIndicators, isCreatingNewGroup,
         newGroupNameInput, editingGroup, editingGroupNameInput, dialogState
     ) {
         SessionListState(
             listUiState = sessionListUiState,
             selectedSessionId = selectedSession?.id,
+            sessionIndicators = sessionIndicators,
             isCreatingNewGroup = isCreatingNewGroup,
             newGroupNameInput = newGroupNameInput,
             editingGroup = editingGroup,

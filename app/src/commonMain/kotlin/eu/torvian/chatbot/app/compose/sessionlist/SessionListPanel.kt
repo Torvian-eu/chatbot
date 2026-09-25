@@ -16,6 +16,7 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
 import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
 import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchUiState
+import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionIndicator
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
 import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatGroup
@@ -80,6 +81,7 @@ fun SessionListPanel(
                 editingGroup = state.editingGroup,
                 editingGroupNameInput = state.editingGroupNameInput,
                 selectedSessionId = state.selectedSessionId,
+                sessionIndicators = state.sessionIndicators,
                 dialogState = state.dialogState,
                 sessionListActions = actions,
                 onSearchClick = actions::onSearchClick,
@@ -108,6 +110,7 @@ fun SessionListPanel(
  * @param editingGroup The group being edited, if any.
  * @param editingGroupNameInput The current input for editing group name.
  * @param selectedSessionId The ID of the currently selected session.
+ * @param sessionIndicators Per-session status indicator keyed by session ID.
  * @param dialogState The current dialog state from the ViewModel.
  * @param sessionListActions The actions contract for the session list panel.
  * @param onSearchClick Callback invoked when the user opens the cross-session search dialog.
@@ -120,6 +123,7 @@ private fun SessionListSuccessPanelContent(
     editingGroup: ChatGroup?,
     editingGroupNameInput: String,
     selectedSessionId: Long?,
+    sessionIndicators: Map<Long, SessionIndicator>,
     dialogState: SessionListDialogState,
     sessionListActions: SessionListActions,
     onSearchClick: () -> Unit,
@@ -164,6 +168,7 @@ private fun SessionListSuccessPanelContent(
         MainContent(
             groupedSessions = sessionListData.groupedSessions,
             selectedSessionId = selectedSessionId,
+            sessionIndicators = sessionIndicators,
             editingGroup = editingGroup,
             editingGroupNameInput = editingGroupNameInput,
             onSessionSelected = sessionListActions::onSessionSelected,

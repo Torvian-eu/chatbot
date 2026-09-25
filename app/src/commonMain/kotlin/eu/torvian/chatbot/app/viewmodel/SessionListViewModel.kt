@@ -16,6 +16,8 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionIndicator
+import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionTurnStatusRegistry
 import eu.torvian.chatbot.common.misc.normalizeSingleLine
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -43,10 +45,13 @@ import kotlinx.coroutines.launch
  * @param eventBus The event bus for emitting global events.
  * @param sessionSelectionController The shared controller for session selection.
  * @param notificationService The error notifier for handling repository errors.
+ * @param sessionTurnStatusRegistry The registry holding per-session turn status for the indicators.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
  * @property listState The state of the chat session list and groups.
  * @property selectedSession The currently selected session.
+ * @property sessionIndicators Per-session status indicator keyed by session ID; sessions without an
+ *           active indicator are absent.
  * @property isCreatingNewGroup UI state indicating if the new group input field is visible.
  * @property newGroupNameInput Content of the new group input field.
  * @property editingGroup The group currently being edited/renamed. Null if none.
@@ -59,6 +64,7 @@ class SessionListViewModel(
     private val eventBus: EventBus,
     private val sessionSelectionController: SessionSelectionController,
     private val notificationService: NotificationService,
+    private val sessionTurnStatusRegistry: SessionTurnStatusRegistry,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main,
 ) : ViewModel() {
 
@@ -116,6 +122,16 @@ class SessionListViewModel(
     ) { sessionsList, currentSelectedId ->
         sessionsList?.find { it.id == currentSelectedId }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
+
+    /**
+     * Per-session status indicator keyed by session ID, derived from the turn status registry.
+     * Sessions without an active indicator are absent from the map.
+     */
+    val sessionIndicators: StateFlow<Map<Long, SessionIndicator>> = sessionTurnStatusRegistry.statuses
+        .map { statuses ->
+            statuses.mapNotNull { (sessionId, status) -> status.indicator?.let { sessionId to it } }.toMap()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
 
     /**
      * UI state indicating if the new group input field is visible.
