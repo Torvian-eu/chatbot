@@ -11,12 +11,15 @@ import eu.torvian.chatbot.app.utils.misc.isStreamingEnabled
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionTurnStatusRegistry
+import eu.torvian.chatbot.app.viewmodel.sessionstatus.TurnOutcome
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionAuthorization
+import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.*
 import eu.torvian.chatbot.common.security.SignedRequest
@@ -25,8 +28,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -44,6 +49,8 @@ import kotlinx.coroutines.withContext
  *            tools).
  * @property state Shared chat UI state observed and updated during message sending.
  * @property notificationService Notification sink for repository, API, and signing errors.
+ * @property sessionTurnStatusRegistry Registry that receives the turn lifecycle signals backing the
+ *           session list status indicators.
  */
 class SendMessageUseCase(
     private val sessionRepository: SessionRepository,
@@ -51,7 +58,8 @@ class SendMessageUseCase(
     private val requestSigningService: RequestSigningService,
     private val operatorToolExecutor: OperatorToolExecutor,
     private val state: ChatState,
-    private val notificationService: NotificationService
+    private val notificationService: NotificationService,
+    private val sessionTurnStatusRegistry: SessionTurnStatusRegistry
 ) {
 
     private val logger = kmpLogger<SendMessageUseCase>()
@@ -64,6 +72,63 @@ class SendMessageUseCase(
      * [ChatClientEvent.Cancel].
      */
     private val clientEventFlow = MutableSharedFlow<ChatClientEvent>()
+
+    /**
+     * Bookkeeping for the most recently started turn on this instance, or `null` between turns.
+     *
+     * The tracker lives at instance level because tool-approval decisions arrive through
+     * [approveToolCall] / [denyToolCall], outside [execute]'s call stack, so every started turn
+     * simply replaces the slot. Nothing here enforces single-flight: when the chat view model that
+     * owns this use case is re-targeted to another session while a turn is still running, only the
+     * newer turn stays tracked and the older turn's deferred approvals are not reported to the
+     * status registry. That overlap is a known, accepted limitation.
+     */
+    private val turnStatusTracking = MutableStateFlow<TurnStatusTracking?>(null)
+
+    /**
+     * Per-turn signals that decide the session status indicator for one running turn.
+     *
+     * @property sessionId Session the tracked turn belongs to.
+     * @property pendingApprovalIds Tool calls deferred to a manual user decision; the turn is
+     *           "requesting input" while this set is non-empty.
+     * @property lastTerminalMessage Final assistant message delivered for the turn, if any.
+     * @property turnEndedInError Whether a turn-ending error was observed before the turn ended.
+     */
+    private class TurnStatusTracking(val sessionId: Long) {
+        val pendingApprovalIds = MutableStateFlow<Set<Long>>(emptySet())
+        var lastTerminalMessage: ChatMessage.AssistantMessage? = null
+        var turnEndedInError: Boolean = false
+
+        /**
+         * Records that the turn ended through a failed send or receive rather than a terminal frame.
+         *
+         * Such an ending carries no terminal message of its own, so it is an error ending for the
+         * badge unless a completed message already arrived during the turn.
+         */
+        fun markEndedInError() {
+            turnEndedInError = true
+        }
+
+        /**
+         * Computes the completion badge this turn earns, or `null` when it earns none.
+         *
+         * Cancellation and user interruption are checked before message completeness so an
+         * interrupted turn is never misread as a success; a turn-ending error counts as failure only
+         * when no completed final message arrived, and tool errors inside a normally finishing turn
+         * are ignored.
+         *
+         * @param wasCancelled Whether the client coroutine running the turn was cancelled.
+         * @return The terminal outcome badge, or `null` for interrupted or inconclusive endings.
+         */
+        fun resolveOutcome(wasCancelled: Boolean): TurnOutcome? = when {
+            wasCancelled -> null
+            lastTerminalMessage?.incompleteCause == AssistantMessageIncompleteCause.INTERRUPTED_BY_USER -> null
+            lastTerminalMessage?.incompleteCause == AssistantMessageIncompleteCause.FAILED -> TurnOutcome.FAILURE
+            turnEndedInError && lastTerminalMessage?.isComplete != true -> TurnOutcome.FAILURE
+            lastTerminalMessage?.isComplete == true -> TurnOutcome.SUCCESS
+            else -> null
+        }
+    }
 
     /**
      * Approves a tool call and allows it to execute.
@@ -125,6 +190,9 @@ class SendMessageUseCase(
         approved: Boolean,
         denialReason: String?
     ) {
+        // The user has made their decision, so the call leaves the "requesting input" set before the
+        // outcome is relayed, even if the relay below cannot be emitted.
+        resolvePendingApproval(toolCall)
         when (val toolDefinition = findToolDefinition(toolCall)) {
             is BuiltInWorkerToolDefinition -> {
                 // Built-in worker tools require an on-device cryptographic signature before execution.
@@ -356,14 +424,16 @@ class SendMessageUseCase(
      * the Local MCP trust chain.
      *
      * @param toolCall Tool call now awaiting approval on the server.
+     * @return Whether the decision was deferred to the user because no stored preference could
+     *         resolve it.
      */
-    private suspend fun handleToolCallApprovalRequested(toolCall: ToolCall) {
+    private suspend fun handleToolCallApprovalRequested(toolCall: ToolCall): Boolean {
         logger.debug("Tool call approval requested: ${toolCall.toolName}")
 
         when (val toolDefinition = findToolDefinition(toolCall)) {
             is BuiltInWorkerToolDefinition -> {
                 // Built-in worker approvals must be signed locally before they are relayed to a worker.
-                val preference = findApprovalPreference(toolDefinition.id) ?: return
+                val preference = findApprovalPreference(toolDefinition.id) ?: return true
                 val denialReason = if (preference.autoApprove) {
                     null
                 } else {
@@ -380,7 +450,7 @@ class SendMessageUseCase(
 
             is OperatorToolDefinition -> {
                 // Operator tools are relayed over the chat socket and do not need an on-device signature.
-                val preference = findApprovalPreference(toolDefinition.id) ?: return
+                val preference = findApprovalPreference(toolDefinition.id) ?: return true
                 val denialReason = if (preference.autoApprove) {
                     null
                 } else {
@@ -399,7 +469,7 @@ class SendMessageUseCase(
             is ServerBuiltInToolDefinition -> {
                 // Server built-in tools are executed in-process on the server; the approval is plain
                 // and driven by the same per-user preference store as operator tools.
-                val preference = findApprovalPreference(toolDefinition.id) ?: return
+                val preference = findApprovalPreference(toolDefinition.id) ?: return true
                 val denialReason = if (preference.autoApprove) {
                     null
                 } else {
@@ -416,7 +486,7 @@ class SendMessageUseCase(
             }
 
             is LocalMCPToolDefinition -> {
-                val preference = findApprovalPreference(toolDefinition.id) ?: return
+                val preference = findApprovalPreference(toolDefinition.id) ?: return true
                 val denialReason = if (preference.autoApprove) {
                     null
                 } else {
@@ -432,8 +502,37 @@ class SendMessageUseCase(
             }
 
             // Unknown or unresolved definitions cannot be auto-approved safely.
-            else -> return
+            else -> return true
         }
+
+        // A stored preference decided the call instantly, so the user is never asked.
+        return false
+    }
+
+    /**
+     * Records a tool call deferred to a manual user decision and flags the session as awaiting input.
+     *
+     * @param sessionId Session whose turn deferred the decision.
+     * @param toolCallId Tool call left for the user to decide.
+     */
+    private fun noteApprovalDeferred(sessionId: Long, toolCallId: Long) {
+        val tracking = turnStatusTracking.value?.takeIf { it.sessionId == sessionId } ?: return
+        tracking.pendingApprovalIds.update { it + toolCallId }
+        sessionTurnStatusRegistry.onTurnAwaitingInput(sessionId, true)
+    }
+
+    /**
+     * Resolves one pending manual decision and refreshes the session's awaiting-input state.
+     *
+     * @param toolCall Tool call the user just approved or denied.
+     */
+    private fun resolvePendingApproval(toolCall: ToolCall) {
+        val tracking = turnStatusTracking.value ?: return
+        tracking.pendingApprovalIds.update { it - toolCall.id }
+        sessionTurnStatusRegistry.onTurnAwaitingInput(
+            tracking.sessionId,
+            tracking.pendingApprovalIds.value.isNotEmpty()
+        )
     }
 
     /**
@@ -488,20 +587,40 @@ class SendMessageUseCase(
             fileReferences = fileReferences
         )
 
-        if (isStreamingEnabled) {
-            handleStreamingMessage(currentSession.id, request)
-        } else {
-            handleNonStreamingMessage(currentSession.id, request)
+        // The turn spans the whole tool loop; its status is tracked from here to the terminal event.
+        val turnTracking = TurnStatusTracking(currentSession.id)
+        turnStatusTracking.value = turnTracking
+        sessionTurnStatusRegistry.onTurnStarted(currentSession.id)
+        try {
+            if (isStreamingEnabled) {
+                handleStreamingMessage(currentSession.id, request, turnTracking)
+            } else {
+                handleNonStreamingMessage(currentSession.id, request, turnTracking)
+            }
+        } finally {
+            // Runs for every ending of the turn, including cancellation; the registry calls are plain
+            // state writes and therefore safe in a cancelled coroutine.
+            val wasCancelled = !currentCoroutineContext().isActive
+            sessionTurnStatusRegistry.onTurnFinished(
+                currentSession.id,
+                turnTracking.resolveOutcome(wasCancelled)
+            )
+            turnStatusTracking.compareAndSet(turnTracking, null)
         }
     }
 
     /**
      * Handles streaming message processing using SessionRepository.
      * This function orchestrates the bidirectional flow of events for the WebSocket connection.
+     *
+     * @param sessionId Session the turn belongs to.
+     * @param request New-message request that starts the turn.
+     * @param turnTracking Per-turn bookkeeping updated with the turn's terminal signals.
      */
     private suspend fun handleStreamingMessage(
         sessionId: Long,
-        request: ProcessNewMessageRequest
+        request: ProcessNewMessageRequest,
+        turnTracking: TurnStatusTracking
     ) {
         // Create the main client-to-server event flow by merging the initial message request
         // with any approval responses produced by the UI.
@@ -525,6 +644,9 @@ class SendMessageUseCase(
                 sessionRepository.processNewMessageStreaming(sessionId, clientEvents).collect { eitherUpdate ->
                     eitherUpdate.fold(
                         ifLeft = { repositoryError ->
+                            // A failed transport prevents the terminal frame from arriving, so the
+                            // ending is recorded as an error end.
+                            turnTracking.markEndedInError()
                             logger.error("Streaming message repository error: ${repositoryError.message}")
                             notificationService.repositoryError(
                                 error = repositoryError,
@@ -544,6 +666,7 @@ class SendMessageUseCase(
                                 is ChatStreamEvent.AssistantMessageEnd -> {
                                     // Terminal state delivered live, so there is nothing left to settle.
                                     unfinalizedAssistantMessageId = null
+                                    turnTracking.lastTerminalMessage = chatUpdate.assistantMessage
                                 }
 
                                 is ChatStreamEvent.UserMessageSaved -> {
@@ -554,7 +677,9 @@ class SendMessageUseCase(
                                 }
 
                                 is ChatStreamEvent.ToolCallApprovalRequested -> {
-                                    handleToolCallApprovalRequested(chatUpdate.toolCall)
+                                    if (handleToolCallApprovalRequested(chatUpdate.toolCall)) {
+                                        noteApprovalDeferred(sessionId, chatUpdate.toolCall.id)
+                                    }
                                 }
 
                                 is ChatStreamEvent.OperatorToolExecutionRequested -> {
@@ -569,6 +694,7 @@ class SendMessageUseCase(
                                 }
 
                                 is ChatStreamEvent.ErrorOccurred -> {
+                                    turnTracking.turnEndedInError = true
                                     notificationService.apiError(
                                         error = chatUpdate.error,
                                         shortMessageRes = Res.string.error_sending_message_short
@@ -610,10 +736,15 @@ class SendMessageUseCase(
     /**
      * Handles non-streaming message processing using SessionRepository.
      * This function orchestrates the bidirectional flow of events for the WebSocket connection.
+     *
+     * @param sessionId Session the turn belongs to.
+     * @param request New-message request that starts the turn.
+     * @param turnTracking Per-turn bookkeeping updated with the turn's terminal signals.
      */
     private suspend fun handleNonStreamingMessage(
         sessionId: Long,
-        request: ProcessNewMessageRequest
+        request: ProcessNewMessageRequest,
+        turnTracking: TurnStatusTracking
     ) {
         // Create the main client-to-server event flow by merging the initial message request
         // with any approval responses produced by the UI.
@@ -630,6 +761,9 @@ class SendMessageUseCase(
             sessionRepository.processNewMessage(sessionId, clientEvents).collect { eitherEvent ->
                 eitherEvent.fold(
                     ifLeft = { repositoryError ->
+                        // A failed transport prevents the terminal frame from arriving, so the
+                        // ending is recorded as an error end.
+                        turnTracking.markEndedInError()
                         logger.error("Non-streaming message repository error: ${repositoryError.message}")
                         notificationService.repositoryError(
                             error = repositoryError,
@@ -646,8 +780,14 @@ class SendMessageUseCase(
                                 state.updateFileReferences { emptyList() }
                             }
 
+                            is ChatEvent.AssistantMessageSaved -> {
+                                turnTracking.lastTerminalMessage = event.assistantMessage
+                            }
+
                             is ChatEvent.ToolCallApprovalRequested -> {
-                                handleToolCallApprovalRequested(event.toolCall)
+                                if (handleToolCallApprovalRequested(event.toolCall)) {
+                                    noteApprovalDeferred(sessionId, event.toolCall.id)
+                                }
                             }
 
                             is ChatEvent.OperatorToolExecutionRequested -> {
@@ -662,6 +802,7 @@ class SendMessageUseCase(
                             }
 
                             is ChatEvent.ErrorOccurred -> {
+                                turnTracking.turnEndedInError = true
                                 notificationService.apiError(
                                     error = event.error,
                                     shortMessageRes = Res.string.error_sending_message_short
@@ -680,7 +821,7 @@ class SendMessageUseCase(
                             }
 
                             else -> {
-                                // Other events (e.g., AssistantMessageSaved, StreamCompleted) are handled
+                                // Other events (e.g., StreamCompleted) are handled
                                 // by the repository, which updates the UI state reactively.
                             }
                         }

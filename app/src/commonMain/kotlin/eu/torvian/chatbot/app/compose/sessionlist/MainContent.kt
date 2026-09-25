@@ -9,16 +9,27 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
+import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionIndicator
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 
 /**
  * Main content section displaying the list of sessions and groups.
+ *
+ * @param groupedSessions Sessions grouped by their group; `null` key is the ungrouped section.
+ * @param selectedSessionId The ID of the currently selected session.
+ * @param sessionIndicators Per-session status indicator keyed by session ID.
+ * @param editingGroup The group being edited, if any.
+ * @param editingGroupNameInput The current input for the editing group name.
+ * @param onSessionSelected Callback invoked when a session row is selected.
+ * @param groupEditingActions Actions for renaming groups.
+ * @param dialogRequestActions Actions that open the session/group dialogs.
  */
 @Composable
 fun MainContent(
     groupedSessions: Map<ChatGroup?, List<ChatSessionSummary>>,
     selectedSessionId: Long?,
+    sessionIndicators: Map<Long, SessionIndicator>,
     editingGroup: ChatGroup?,
     editingGroupNameInput: String,
     onSessionSelected: (Long?) -> Unit,
@@ -95,6 +106,7 @@ fun MainContent(
                         SessionListItem(
                             session = session,
                             isSelected = session.id == selectedSessionId,
+                            status = sessionIndicators[session.id],
                             onClick = onSessionSelected,
                             onRename = dialogRequestActions.onRenameSessionRequested,
                             onDelete = dialogRequestActions.onDeleteSessionRequested,
