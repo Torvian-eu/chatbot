@@ -226,6 +226,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<ModelPresetApi> {
         KtorModelPresetApiClient(get())
     }
+    single<InstructionApi> {
+        KtorInstructionApiClient(get())
+    }
     single<UserGroupApi> {
         KtorUserGroupApiClient(get())
     }
@@ -292,7 +295,10 @@ fun appModule(config: AppConfiguration): Module = module {
     single<AgentRoleRepository> {
         DefaultAgentRoleRepository(
             agentRoleApi = get(),
-            projectRepository = get()
+            projectRepository = get(),
+            // The two instruction-link operations are role mutations; their HTTP methods live on the
+            // instruction client because one side of the pair is an instruction row.
+            instructionApi = get()
         )
     }
     single<ProjectRepository> {
@@ -306,6 +312,9 @@ fun appModule(config: AppConfiguration): Module = module {
             presetApi = get(),
             agentRoleRepository = get()
         )
+    }
+    single<InstructionRepository> {
+        DefaultInstructionRepository(get())
     }
     single<UserGroupRepository> {
         DefaultUserGroupRepository(get())
@@ -618,6 +627,7 @@ fun appModule(config: AppConfiguration): Module = module {
     viewModel {
         AgentRolesViewModel(
             agentRoleRepository = get(),
+            instructionRepository = get(),
             modelPresetRepository = get(),
             modelRepository = get(),
             modelSettingsRepository = get(),

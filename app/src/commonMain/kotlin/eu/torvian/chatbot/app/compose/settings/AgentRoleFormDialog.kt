@@ -15,16 +15,19 @@ import eu.torvian.chatbot.app.compose.common.ConfigDropdown
 import eu.torvian.chatbot.app.compose.common.ConfigTextField
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleFormState
+import eu.torvian.chatbot.app.domain.contracts.AgentRoleInstructionDraft
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleSendability
 import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.app.domain.contracts.buildAgentToolSections
 import eu.torvian.chatbot.app.domain.contracts.buildSpawnableAgentRoleSections
 import eu.torvian.chatbot.app.domain.contracts.defaultInstructionName
+import eu.torvian.chatbot.app.domain.contracts.editableInstructionTypes
 import eu.torvian.chatbot.app.domain.contracts.resolveAgentRoleSendability
+import eu.torvian.chatbot.app.domain.contracts.selectableLibraryInstructions
+import eu.torvian.chatbot.app.domain.contracts.toDraft
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
-import eu.torvian.chatbot.common.models.agent.modelSpecificId
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelPresetDto
 import eu.torvian.chatbot.common.models.llm.ModelSettings
@@ -34,28 +37,16 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * The instruction types offered in the role form's type selector.
- *
- * Every well-known, client-editable kind is included here. `ROLE`, `MAIN` and `SPAWNABLE_AGENTS`
- * are single-instance (mirroring the server's validation); `CUSTOM` and `MODEL_SPECIFIC` may
- * appear more than once (each `MODEL_SPECIFIC` row must target a distinct model, enforced by
- * the per-row model picker).
- */
-private val EDITABLE_INSTRUCTION_TYPES = listOf(
-    AgentInstructionTypes.ROLE,
-    AgentInstructionTypes.MAIN,
-    AgentInstructionTypes.CUSTOM,
-    AgentInstructionTypes.SPAWNABLE_AGENTS,
-    AgentInstructionTypes.MODEL_SPECIFIC
-)
-
-/**
  * Form dialog for creating or editing an agent role.
  *
  * The dialog binds the role's model preset, tools and ordered instruction list. A role's LLM
  * configuration is the preset's (U-28/U-29), so the form offers a single preset picker instead of the
  * removed direct model/settings pickers; all owned presets are offered — including incomplete ones the
  * server accepts — because validation stays server-side.
+ *
+ * Instruction rows come in two ways: a new row is authored inline, while a row the user picks from
+ * [instructions] is only linked. Both end up as drafts that the save maps to the role's ordered
+ * instruction specs, which the server materializes atomically with the role.
  *
  * A preset-less (or unusable-preset) draft is legal and savable (U-36/RQ-2): the Save button is only
  * gated on the name, and the non-sendability is reported inline through the shared
@@ -68,6 +59,7 @@ private val EDITABLE_INSTRUCTION_TYPES = listOf(
  * @param settingsById Settings lookup used to resolve the profile a preset references, so the
  *            sendability hint can name the precise reason.
  * @param tools Enabled tool definitions available for the multi-select.
+ * @param instructions The user's instruction library, offering existing rows as link targets.
  * @param workerDisplayNamesById Worker lookup (id to display name) labelling the worker tool groups;
  *            a missing or blank name falls back to `Worker #<id>`.
  * @param mcpServerNamesById Local MCP-server lookup (id to name) labelling the MCP tool groups; a
@@ -76,6 +68,8 @@ private val EDITABLE_INSTRUCTION_TYPES = listOf(
  *            (the edited role included, since self-spawn is allowed).
  * @param projects Same-user projects available for the single-project selector. A role belongs to
  *            at most one project; "No project" (null) means unassociated.
+ * @param saving Whether a save is in flight; while true the Save button is disabled so a second save
+ *            cannot start.
  * @param onFormUpdate Applies an update function to the form draft.
  * @param onSave Saves the form.
  * @param onCancel Cancels the dialog.
@@ -88,10 +82,12 @@ fun AgentRoleFormDialog(
     presets: List<ModelPresetDto>,
     settingsById: Map<Long, ModelSettings>,
     tools: List<ToolDefinition>,
+    instructions: List<AgentInstructionDto>,
     workerDisplayNamesById: Map<Long, String>,
     mcpServerNamesById: Map<Long, String>,
     roles: List<AgentRoleDto>,
     projects: List<ProjectDto>,
+    saving: Boolean = false,
     onFormUpdate: ((AgentRoleFormState) -> AgentRoleFormState) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit
@@ -315,28 +311,60 @@ fun AgentRoleFormDialog(
                             )
                         }
 
-                        // Instruction list editor.
+                        // Instruction list editor: each row is either authored inline (and written on
+                        // save) or picked from the library (and linked as it is).
+                        val linkableInstructions = selectableLibraryInstructions(
+                            library = instructions,
+                            instructions = formState.instructions
+                        )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text("Instructions", style = MaterialTheme.typography.titleSmall)
-                            TextButton(onClick = {
-                                onFormUpdate { current ->
-                                    current.copy(
-                                        instructions = current.instructions + AgentInstructionDto(
-                                            type = AgentInstructionTypes.CUSTOM,
-                                            name = defaultInstructionName(AgentInstructionTypes.CUSTOM),
-                                            message = ""
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Linking an existing row instead of retyping it is the point of the
+                                // library: the row stays shared, so one edit reaches every linked role.
+                                InstructionLibraryPicker(
+                                    linkableInstructions = linkableInstructions,
+                                    onPick = { row ->
+                                        onFormUpdate { current ->
+                                            // The row is appended last; the reorder buttons position it.
+                                            current.copy(
+                                                instructions = current.instructions + row.toDraft()
+                                            )
+                                        }
+                                    }
+                                )
+                                TextButton(onClick = {
+                                    onFormUpdate { current ->
+                                        current.copy(
+                                            instructions = current.instructions + AgentRoleInstructionDraft(
+                                                type = AgentInstructionTypes.CUSTOM,
+                                                name = defaultInstructionName(AgentInstructionTypes.CUSTOM),
+                                                message = ""
+                                            )
                                         )
-                                    )
+                                    }
+                                }) {
+                                    Icon(imageVector = Icons.Default.Add, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Add")
                                 }
-                            }) {
-                                Icon(imageVector = Icons.Default.Add, contentDescription = null)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Add")
                             }
+                        }
+                        // A disabled picker needs a reason: without one the user cannot tell an empty
+                        // library from one whose rows all break a per-role rule.
+                        if (instructions.isNotEmpty() && linkableInstructions.isEmpty()) {
+                            Text(
+                                text = "No other library instruction can be linked to this role.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
 
                         if (formState.instructions.isEmpty()) {
@@ -348,8 +376,8 @@ fun AgentRoleFormDialog(
                         } else {
                             formState.instructions.forEachIndexed { index, instruction ->
                                 val isSpawnableAgents = instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS
-                                // Types not in EDITABLE_INSTRUCTION_TYPES render as fully read-only.
-                                val isUnknownType = instruction.type !in EDITABLE_INSTRUCTION_TYPES
+                                // Types outside the editable set render as fully read-only.
+                                val isUnknownType = instruction.type !in editableInstructionTypes
                                 // Types already used by OTHER rows. ROLE/MAIN/SPAWNABLE_AGENTS
                                 // are single-instance (the server rejects duplicates); CUSTOM and
                                 // MODEL_SPECIFIC are multi-instance.
@@ -419,7 +447,7 @@ fun AgentRoleFormDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = onSave,
-                            enabled = formState.name.isNotBlank()
+                            enabled = formState.name.isNotBlank() && !saving
                         ) {
                             Text(if (formState.mode == FormMode.NEW) "Add Role" else "Save Changes")
                         }
@@ -469,6 +497,45 @@ private fun AgentToolChips(
 }
 
 /**
+ * Picker that links an existing library instruction to the role being edited.
+ *
+ * Offers exactly the rows [selectableLibraryInstructions] returns, so a pick can never produce a draft
+ * the server would reject. Picking appends the row's draft, which carries the row's stored id: saving
+ * the role then links that very row instead of authoring a copy of it. The control stays disabled while
+ * no row qualifies, and the caller states the reason.
+ *
+ * @param linkableInstructions The library rows that may still be linked to this role.
+ * @param onPick Called with the picked row.
+ */
+@Composable
+private fun InstructionLibraryPicker(
+    linkableInstructions: List<AgentInstructionDto>,
+    onPick: (AgentInstructionDto) -> Unit
+) {
+    // Hoisted so the menu closes on a pick as well as on a dismiss.
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        TextButton(onClick = { expanded = true }, enabled = linkableInstructions.isNotEmpty()) {
+            Text("Add existing")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            linkableInstructions.forEach { row ->
+                DropdownMenuItem(
+                    // The kind disambiguates rows that share a label; both are shown because the
+                    // library keeps no uniqueness on names.
+                    text = { Text("${row.name} — ${row.type}", maxLines = 1) },
+                    onClick = {
+                        expanded = false
+                        onPick(row)
+                    }
+                )
+            }
+        }
+    }
+}
+
+/**
  * Editor row for a single instruction entry.
  *
  * `ROLE`/`MAIN`/`CUSTOM` instructions are fully editable. `SPAWNABLE_AGENTS`
@@ -499,7 +566,7 @@ private fun AgentToolChips(
 @Composable
 private fun InstructionEditorRow(
     index: Int,
-    instruction: AgentInstructionDto,
+    instruction: AgentRoleInstructionDraft,
     models: List<LLMModel>,
     usedModelIds: Set<Long>,
     roleModelId: Long?,
@@ -508,7 +575,7 @@ private fun InstructionEditorRow(
     unavailableTypes: Set<String>,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
-    onUpdate: (AgentInstructionDto) -> Unit,
+    onUpdate: (AgentRoleInstructionDraft) -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onRemove: () -> Unit
@@ -549,6 +616,7 @@ private fun InstructionEditorRow(
                             if (type != instruction.type) {
                                 onUpdate(
                                     buildInstructionForType(
+                                        current = instruction,
                                         type = type,
                                         models = models,
                                         usedModelIds = usedModelIds,
@@ -557,7 +625,7 @@ private fun InstructionEditorRow(
                                 )
                             }
                         },
-                        items = EDITABLE_INSTRUCTION_TYPES,
+                        items = editableInstructionTypes,
                         label = "Type",
                         modifier = Modifier.weight(1f),
                         itemText = { it },
@@ -573,6 +641,11 @@ private fun InstructionEditorRow(
                             }
                         }
                     )
+                }
+                // A row linked by more than one role is shared content: what the user edits here
+                // reaches every role that links it, so the marker is shown before the edit.
+                if (instruction.shared) {
+                    SharedInstructionBadge()
                 }
                 IconButton(
                     onClick = onRemove,
@@ -677,10 +750,10 @@ private fun InstructionEditorRow(
 /**
  * Short user-facing hint describing what an instruction does, shown in the row's footer.
  *
- * @param instruction The instruction DTO to describe.
+ * @param instruction The instruction draft to describe.
  * @return A one- to two-line hint; unknown kinds get a generic read-only note.
  */
-private fun instructionHint(instruction: AgentInstructionDto): String = when (instruction.type) {
+private fun instructionHint(instruction: AgentRoleInstructionDraft): String = when (instruction.type) {
     AgentInstructionTypes.ROLE ->
         "Defines the assistant's role — e.g. 'You are a senior software architect'."
     AgentInstructionTypes.MAIN ->
@@ -695,43 +768,47 @@ private fun instructionHint(instruction: AgentInstructionDto): String = when (in
 }
 
 /**
- * Copies this instruction with a new [AgentInstructionDto.name], preserving all other fields.
+ * Copies this draft with a new [AgentRoleInstructionDraft.name], preserving all other fields.
  *
- * @receiver The instruction to copy.
+ * @receiver The draft to copy.
  * @param name The new label.
- * @return A copy of the same DTO with the updated name.
+ * @return A copy of the same draft with the updated name.
  */
-private fun AgentInstructionDto.withName(name: String): AgentInstructionDto = copy(name = name)
+private fun AgentRoleInstructionDraft.withName(name: String): AgentRoleInstructionDraft = copy(name = name)
 
 /**
- * Copies this instruction with a new [AgentInstructionDto.message], preserving all other fields.
+ * Copies this draft with a new [AgentRoleInstructionDraft.message], preserving all other fields.
  *
- * @receiver The instruction to copy.
+ * @receiver The draft to copy.
  * @param message The new message text.
- * @return A copy of the same DTO with the updated message.
+ * @return A copy of the same draft with the updated message.
  */
-private fun AgentInstructionDto.withMessage(message: String): AgentInstructionDto = copy(message = message)
+private fun AgentRoleInstructionDraft.withMessage(message: String): AgentRoleInstructionDraft =
+    copy(message = message)
 
 /**
- * Builds a fresh [AgentInstructionDto] with default values for the given [type].
+ * Re-expresses a draft as another instruction kind, keeping the row it is backed by.
  *
- * Unlike [withName] / [withMessage] (which preserve all other fields), this always starts with an
- * empty message and type-specific defaults — switching a row's kind should not carry over stale
- * text or custom data from the previous type.
+ * The content starts fresh with type-specific defaults — switching a row's kind must not carry over
+ * stale text or custom data from the previous type — while the identity of [current] is preserved, so
+ * the saved role keeps linking the same row instead of leaking an orphaned one.
  *
+ * @param current The draft being re-typed.
  * @param type The target [AgentInstructionTypes] key.
  * @param models Chat-capable models available for `model_specific` target selection.
  * @param usedModelIds Model ids already targeted by other `model_specific` rows.
  * @param roleModelId The role's current model id, used as a fallback target when the type is
  *            `MODEL_SPECIFIC` and no unused model is available.
- * @return A new [AgentInstructionDto] with defaults for the given [type].
+ * @return A new draft with defaults for the given [type] and the identity of [current].
  */
 private fun buildInstructionForType(
+    current: AgentRoleInstructionDraft,
     type: String,
     models: List<LLMModel>,
     usedModelIds: Set<Long>,
     roleModelId: Long?
-): AgentInstructionDto = AgentInstructionDto(
+): AgentRoleInstructionDraft = AgentRoleInstructionDraft(
+    id = current.id,
     type = type,
     name = defaultInstructionName(type),
     message = "",
@@ -746,7 +823,9 @@ private fun buildInstructionForType(
         targetId?.let { buildJsonObject { put("modelId", it) } }
     } else {
         null
-    }
+    },
+    linkedRoleIds = current.linkedRoleIds,
+    original = current.original
 )
 
 /**

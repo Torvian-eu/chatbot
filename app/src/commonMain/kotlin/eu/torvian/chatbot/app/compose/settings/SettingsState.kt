@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.compose.settings
 
 import eu.torvian.chatbot.app.domain.contracts.*
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
@@ -73,6 +74,12 @@ data class WorkersTabState(
  * @property projects The user's projects, used both by the role form's single-project selector and
  *            by the list page's project grouping/filter derivation. Non-null (defaults to empty) so
  *            consumers never have to unwrap an optional.
+ * @property instructions The user's instruction library, fed to the role form's existing-instruction
+ *            picker. Rows report the roles that link them, so a consumer can tell content shared by
+ *            several roles from content one role owns. Non-null (defaults to empty) for the same
+ *            reason as [projects].
+ * @property saving Whether a role save is in flight; the form disables its Save button while true so
+ *            a second save cannot start.
  */
 data class AgentRolesTabState(
     val rolesUiState: DataState<RepositoryError, List<AgentRoleDto>>,
@@ -87,7 +94,9 @@ data class AgentRolesTabState(
     val toolsById: Map<Long, ToolDefinition> = emptyMap(),
     val workerDisplayNamesById: Map<Long, String> = emptyMap(),
     val mcpServerNamesById: Map<Long, String> = emptyMap(),
-    val projects: List<ProjectDto> = emptyList()
+    val projects: List<ProjectDto> = emptyList(),
+    val instructions: List<AgentInstructionDto> = emptyList(),
+    val saving: Boolean = false
 ) {
     /**
      * The Settings → Agent Roles list grouped by project scope (project sections first, ordered by

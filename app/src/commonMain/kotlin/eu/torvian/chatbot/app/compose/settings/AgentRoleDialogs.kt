@@ -8,6 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleDialogState
+import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelPresetDto
@@ -28,6 +29,8 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  * @param settingsById Settings lookup used by the form's non-sendability hint to resolve the profile a
  *            preset references.
  * @param tools Enabled tools available for the form's multi-select.
+ * @param instructions The user's instruction library, offering existing rows for the form's
+ *            existing-instruction picker.
  * @param roles Same-user roles available as spawn targets.
  * @param projects Same-user projects available for the form's single project selector (a role
  *            belongs to at most one project; null = unassociated).
@@ -35,6 +38,7 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  *            groups; a missing or blank name falls back to `Worker #<id>`.
  * @param mcpServerNamesById Local MCP-server lookup (id to name) labelling the form's MCP tool
  *            groups; a missing or blank name falls back to `MCP server #<id>`.
+ * @param saving Whether a save is in flight; forwarded to the form so its Save button can disable.
  */
 @Composable
 fun AgentRoleDialogs(
@@ -44,10 +48,12 @@ fun AgentRoleDialogs(
     presets: List<ModelPresetDto>,
     settingsById: Map<Long, ModelSettings>,
     tools: List<ToolDefinition>,
+    instructions: List<AgentInstructionDto>,
     roles: List<AgentRoleDto>,
     projects: List<ProjectDto>,
     workerDisplayNamesById: Map<Long, String>,
-    mcpServerNamesById: Map<Long, String>
+    mcpServerNamesById: Map<Long, String>,
+    saving: Boolean = false
 ) {
     when (dialogState) {
         is AgentRoleDialogState.AddRole -> {
@@ -58,10 +64,12 @@ fun AgentRoleDialogs(
                 presets = presets,
                 settingsById = settingsById,
                 tools = tools,
+                instructions = instructions,
                 roles = roles,
                 projects = projects,
                 workerDisplayNamesById = workerDisplayNamesById,
                 mcpServerNamesById = mcpServerNamesById,
+                saving = saving,
                 onFormUpdate = actions::onUpdateRoleForm,
                 onSave = actions::onSaveRole,
                 onCancel = actions::onCancelDialog
@@ -76,10 +84,12 @@ fun AgentRoleDialogs(
                 presets = presets,
                 settingsById = settingsById,
                 tools = tools,
+                instructions = instructions,
                 roles = roles,
                 projects = projects,
                 workerDisplayNamesById = workerDisplayNamesById,
                 mcpServerNamesById = mcpServerNamesById,
+                saving = saving,
                 onFormUpdate = actions::onUpdateRoleForm,
                 onSave = actions::onSaveRole,
                 onCancel = actions::onCancelDialog

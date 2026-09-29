@@ -381,4 +381,39 @@ class KtorAgentRoleApiClientTest {
             }
         }
     }
+
+    // --- Instruction identity fields (additive; absent fields decode with their defaults) ---
+
+    @Test
+    fun `getRoleById - decodes instruction entries with their identity and link fields`() = runTest {
+        val mockEngine = MockEngine { _ ->
+            respond(
+                content = """
+                    {
+                        "id": 7, "name": "reviewer", "displayName": null, "description": "",
+                        "modelId": null, "modelSettingsId": null, "tools": [], "instructions": [
+                            {"id": 4, "type": "custom", "name": "No links", "message": "Unlinked entry"},
+                            {"id": 5, "type": "custom", "name": "Shared", "message": "Linked entry",
+                             "linkedRoleIds": [1, 2, 7]}
+                        ]
+                    }
+                """.trimIndent(),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+
+        when (val result = apiClient.getRoleById(7L)) {
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+            is Either.Right -> {
+                val (unlinked, shared) = result.value.instructions
+                assertEquals(4L, unlinked.id)
+                // Absent links decode to the empty set: the reported row is simply not shared yet.
+                assertEquals(emptySet(), unlinked.linkedRoleIds)
+                assertEquals(5L, shared.id)
+                assertEquals(setOf(1L, 2L, 7L), shared.linkedRoleIds)
+            }
+        }
+    }
 }

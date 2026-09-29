@@ -3,6 +3,9 @@ package eu.torvian.chatbot.app.domain.contracts
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
+import eu.torvian.chatbot.common.models.api.instruction.CreateInstructionRequest
+import eu.torvian.chatbot.common.models.api.instruction.UpdateInstructionRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -80,7 +83,11 @@ class AgentRoleFormStateTest {
             spawnableAgentRoleIds = setOf(30L),
             projectId = 100L,
             instructions = listOf(
-                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are awesome")
+                AgentRoleInstructionDraft(
+                    type = AgentInstructionTypes.ROLE,
+                    name = "Role",
+                    message = "You are awesome"
+                )
             )
         )
         val request = form.toCreateRequest()
@@ -91,8 +98,19 @@ class AgentRoleFormStateTest {
         assertEquals(setOf(10L, 20L), request.toolIds)
         assertEquals(setOf(30L), request.spawnableAgentRoleIds)
         assertEquals(100L, request.projectId)
-        assertEquals(1, request.instructions.size)
-        assertEquals(AgentInstructionTypes.ROLE, request.instructions[0].type)
+        // The new draft rides along as an inline create spec.
+        assertEquals(
+            listOf(
+                InstructionSlot.Create(
+                    CreateInstructionRequest(
+                        type = AgentInstructionTypes.ROLE,
+                        name = "Role",
+                        message = "You are awesome"
+                    )
+                )
+            ),
+            request.instructionSpecs
+        )
     }
 
     @Test
@@ -126,6 +144,162 @@ class AgentRoleFormStateTest {
         assertEquals(5L, edit.toUpdateRequest().projectId)
         assertEquals(3L, edit.toUpdateRequest().modelPresetId)
         assertEquals(null, createEmptyAgentRoleForm().projectId)
+    }
+
+    @Test
+    fun `toSlot maps new edited and untouched drafts to create update and link slots`() {
+        val stored = AgentInstructionDto(
+            id = 10L,
+            type = AgentInstructionTypes.CUSTOM,
+            name = "Style",
+            message = "Be concise."
+        )
+        val untouched = stored.toDraft()
+        val edited = untouched.copy(message = "Be friendly.")
+        val added = AgentRoleInstructionDraft(
+            type = AgentInstructionTypes.ROLE,
+            name = "Role",
+            message = "You are awesome"
+        )
+
+        assertEquals(
+            InstructionSlot.Create(
+                CreateInstructionRequest(
+                    type = AgentInstructionTypes.ROLE,
+                    name = "Role",
+                    message = "You are awesome"
+                )
+            ),
+            added.toSlot()
+        )
+        assertEquals(
+            InstructionSlot.Update(
+                UpdateInstructionRequest(
+                    id = 10L,
+                    type = AgentInstructionTypes.CUSTOM,
+                    name = "Style",
+                    message = "Be friendly."
+                )
+            ),
+            edited.toSlot()
+        )
+        assertEquals(InstructionSlot.Link(10L), untouched.toSlot())
+    }
+
+    @Test
+    fun `the request carries the drafts as the role's full ordered link set`() {
+        val form = AgentRoleFormState(
+            mode = FormMode.EDIT,
+            roleId = 7L,
+            name = "Test",
+            instructions = listOf(
+                AgentRoleInstructionDraft(
+                    type = AgentInstructionTypes.ROLE,
+                    name = "Role",
+                    message = "You are awesome"
+                ),
+                AgentInstructionDto(
+                    id = 10L,
+                    type = AgentInstructionTypes.CUSTOM,
+                    name = "Style",
+                    message = "Be concise."
+                ).toDraft()
+            )
+        )
+
+        // Draft order is the role's order; the whole list is one atomic save's input.
+        assertEquals(form.instructions.map { it.toSlot() }, form.toUpdateRequest().instructionSpecs)
+        assertEquals(form.instructions.map { it.toSlot() }, form.toCreateRequest().instructionSpecs)
+    }
+
+    @Test
+    fun `toEditFormState keeps reported instructions as drafts that already have rows`() {
+        val role = AgentRoleDto(
+            id = 9L,
+            name = "writer",
+            displayName = "Writer",
+            description = "Writes",
+            modelId = null,
+            modelSettingsId = null,
+            modelPresetId = null,
+            tools = emptySet(),
+            instructions = listOf(
+                AgentInstructionDto(
+                    id = 10L,
+                    type = AgentInstructionTypes.CUSTOM,
+                    name = "Style",
+                    message = "Be concise.",
+                    linkedRoleIds = setOf(1L, 2L)
+                )
+            )
+        )
+
+        val draft = role.toEditFormState().instructions.single()
+
+        assertEquals(10L, draft.id)
+        assertEquals(setOf(1L, 2L), draft.linkedRoleIds)
+        // Unchanged content is not rewritten when the role is saved again.
+        assertEquals(false, draft.needsWrite)
+    }
+
+    @Test
+    fun `a new draft needs a write and an untouched stored draft does not`() {
+        val newDraft = AgentRoleInstructionDraft(
+            type = AgentInstructionTypes.CUSTOM,
+            name = "Tone",
+            message = "Be concise."
+        )
+        val stored = AgentInstructionDto(
+            id = 42L,
+            type = AgentInstructionTypes.CUSTOM,
+            name = "Tone",
+            message = "Be concise."
+        ).toDraft()
+
+        assertEquals(true, newDraft.needsWrite)
+        assertEquals(false, stored.needsWrite)
+        // An edit after the write is detected again, so the row is rewritten on the next save.
+        assertEquals(true, stored.copy(message = "Be friendly.").needsWrite)
+    }
+
+    @Test
+    fun `toUpdateRequest names the stored row and is absent for an unwritten draft`() {
+        val newDraft = AgentRoleInstructionDraft(
+            type = AgentInstructionTypes.CUSTOM,
+            name = "Tone",
+            message = "Be concise."
+        )
+        val storedDraft = AgentRoleInstructionDraft(
+            id = 42L,
+            type = AgentInstructionTypes.CUSTOM,
+            name = "Tone",
+            message = "Be concise."
+        )
+
+        // Nothing to update before the row exists: the draft has to be created first.
+        assertNull(newDraft.toUpdateRequest())
+        val request = storedDraft.toUpdateRequest()
+        assertEquals(42L, request?.id)
+        assertEquals("Be concise.", request?.message)
+    }
+
+    @Test
+    fun `a spawnable_agents draft ignores its generated message when detecting changes`() {
+        // The server regenerates the marker text per role, so a redisplayed draft must not look edited.
+        val draft = AgentRoleInstructionDraft(
+            id = 10L,
+            type = AgentInstructionTypes.SPAWNABLE_AGENTS,
+            name = "Available agents",
+            message = "generated text",
+            original = AgentInstructionDto(
+                id = 10L,
+                type = AgentInstructionTypes.SPAWNABLE_AGENTS,
+                name = "Available agents",
+                message = ""
+            )
+        )
+
+        assertEquals(false, draft.needsWrite)
     }
 
     @Test

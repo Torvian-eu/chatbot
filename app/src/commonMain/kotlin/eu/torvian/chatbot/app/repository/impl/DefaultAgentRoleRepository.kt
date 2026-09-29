@@ -9,6 +9,7 @@ import eu.torvian.chatbot.app.repository.ProjectRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.AgentRoleApi
+import eu.torvian.chatbot.app.service.api.InstructionApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
@@ -28,10 +29,15 @@ import kotlinx.coroutines.flow.update
  * @property projectRepository Repository used to refresh ProjectDto.agentRoleIds after role CRUD
  *            (roles and projects share the membership relation). This is the only cross-repository
  *            dependency, keeping the refresh cycle-free.
+ * @property instructionApi Client of the two instruction-link operations, which mutate this role's
+ *            ordered instruction list and answer with the updated role. They are issued from here
+ *            because they are role mutations: the echo replaces the cached role, so the role stream
+ *            never reports a stale instruction list.
  */
 class DefaultAgentRoleRepository(
     private val agentRoleApi: AgentRoleApi,
-    private val projectRepository: ProjectRepository
+    private val projectRepository: ProjectRepository,
+    private val instructionApi: InstructionApi
 ) : AgentRoleRepository {
 
     companion object {
@@ -157,6 +163,61 @@ class DefaultAgentRoleRepository(
                 // so ProjectDto.agentRoleIds no longer references the removed role.
                 projectRepository.loadProjects()
                 Unit.right()
+            }
+        )
+    }
+
+    override suspend fun assignInstruction(roleId: Long, instructionId: Long): Either<RepositoryError, AgentRoleDto> {
+        logger.info("Assigning instruction ID $instructionId to agent role ID: $roleId")
+
+        return instructionApi.assignInstruction(roleId, instructionId).fold(
+            ifLeft = { error ->
+                val repoError = error.toRepositoryError(
+                    "Failed to assign instruction ID $instructionId to agent role ID: $roleId"
+                )
+                logger.warn("Failed to assign instruction ID $instructionId to agent role ID $roleId: ${repoError.message}")
+                repoError.left()
+            },
+            ifRight = { updatedRole ->
+                logger.info("Successfully assigned instruction ID $instructionId to agent role ID: $roleId")
+                // The echo carries the role's new instruction list, so the role stream stays consistent
+                // without a second read; instruction links do not affect project membership.
+                updateRolesState { list ->
+                    if (list.any { it.id == updatedRole.id }) {
+                        list.map { if (it.id == updatedRole.id) updatedRole else it }
+                    } else {
+                        list + updatedRole
+                    }
+                }
+                updatedRole.right()
+            }
+        )
+    }
+
+    override suspend fun unassignInstruction(roleId: Long, instructionId: Long): Either<RepositoryError, AgentRoleDto> {
+        logger.info("Unassigning instruction ID $instructionId from agent role ID: $roleId")
+
+        return instructionApi.unassignInstruction(roleId, instructionId).fold(
+            ifLeft = { error ->
+                val repoError = error.toRepositoryError(
+                    "Failed to unassign instruction ID $instructionId from agent role ID: $roleId"
+                )
+                logger.warn(
+                    "Failed to unassign instruction ID $instructionId from agent role ID $roleId: ${repoError.message}"
+                )
+                repoError.left()
+            },
+            ifRight = { updatedRole ->
+                logger.info("Successfully unassigned instruction ID $instructionId from agent role ID: $roleId")
+                // See [assignInstruction]: the echo is the role's state after the link was removed.
+                updateRolesState { list ->
+                    if (list.any { it.id == updatedRole.id }) {
+                        list.map { if (it.id == updatedRole.id) updatedRole else it }
+                    } else {
+                        list + updatedRole
+                    }
+                }
+                updatedRole.right()
             }
         )
     }

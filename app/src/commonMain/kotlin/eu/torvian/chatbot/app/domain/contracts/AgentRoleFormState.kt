@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
@@ -10,10 +9,14 @@ import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
  * Mutable draft of an agent role being created or edited in the management form.
  *
  * All fields are held as plain values so the form can build a [CreateAgentRoleRequest] or
- * [UpdateAgentRoleRequest] on save. The role's LLM configuration is expressed by [modelPresetId]
- * alone: [AgentRoleDto.modelId] and [AgentRoleDto.modelSettingsId] are *derived*, read-only values
- * the server resolves from the referenced preset, so they are never part of the draft and the form
- * offers no direct model/settings pickers.
+ * [UpdateAgentRoleRequest] on save. A save is one request: [toCreateRequest] / [toUpdateRequest] map
+ * the instruction drafts to the role's ordered link set, which the server materializes atomically
+ * with the role row.
+ *
+ * The role's LLM configuration is expressed by [modelPresetId] alone: [AgentRoleDto.modelId] and
+ * [AgentRoleDto.modelSettingsId] are *derived*, read-only values the server resolves from the
+ * referenced preset, so they are never part of the draft and the form offers no direct model/settings
+ * pickers.
  *
  * [modelPresetId] is optional (U-36/RQ-2): a preset-less draft is valid and savable, and the
  * resulting role is merely non-sendable until a preset is attached. [validate] therefore checks the
@@ -36,7 +39,7 @@ import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
  *            **unassociated** role. A role belongs to at most one project; the id is a full
  *            replacement on save (mirroring [toolIds]). Unassociated roles are offered by the
  *            session role selector only while the session has no project selected.
- * @property instructions Ordered instruction list ([AgentInstructionDto] flat entries). A
+ * @property instructions Ordered instruction drafts ([AgentRoleInstructionDraft]). A
  *            `spawnable_agents` entry can be placed anywhere and reordered like any other instruction;
  *            only its `message` is read-only (the server generates it from the selected spawn targets).
  *            `model_specific` entries are multi-instance (one per target model) and carry their own
@@ -53,7 +56,7 @@ data class AgentRoleFormState(
     val toolIds: Set<Long> = emptySet(),
     val spawnableAgentRoleIds: Set<Long> = emptySet(),
     val projectId: Long? = null,
-    val instructions: List<AgentInstructionDto> = emptyList(),
+    val instructions: List<AgentRoleInstructionDraft> = emptyList(),
     val errorMessage: String? = null
 ) {
 
@@ -92,8 +95,10 @@ data class AgentRoleFormState(
      * [validate] returns null.
      *
      * The request carries [modelPresetId] and nothing else configuration-related: the removed
-     * `modelId`/`modelSettingsId` inputs must never be sent back (U-28/U-29). A null preset id is a
-     * legitimate payload (the role is then non-sendable until a preset is attached).
+     * `modelId`/`modelSettingsId` inputs must never be sent back (U-28/U-29). A null preset id is
+     * a legitimate payload (the role is then non-sendable until a preset is attached). The instruction
+     * drafts ride along as the role's full ordered link set ([AgentRoleInstructionDraft.toSlot]), so
+     * the server writes them and the role in one transaction.
      */
     fun toCreateRequest(): CreateAgentRoleRequest = CreateAgentRoleRequest(
         name = name.trim(),
@@ -103,15 +108,16 @@ data class AgentRoleFormState(
         toolIds = toolIds,
         spawnableAgentRoleIds = spawnableAgentRoleIds,
         projectId = projectId,
-        instructions = instructions
+        instructionSpecs = instructions.map { it.toSlot() }
     )
 
     /**
-     * Builds a [UpdateAgentRoleRequest] from this draft. Only valid when [mode] is EDIT and
+     * Builds an [UpdateAgentRoleRequest] from this draft. Only valid when [mode] is EDIT and
      * [validate] returns null.
      *
      * Like [toCreateRequest], the payload carries only [modelPresetId] as configuration; a null id
-     * detaches the preset and leaves the role non-sendable.
+     * detaches the preset and leaves the role non-sendable. The instruction specs are a full
+     * replacement of the role's previous links.
      */
     fun toUpdateRequest(): UpdateAgentRoleRequest = UpdateAgentRoleRequest(
         name = name.trim(),
@@ -121,7 +127,7 @@ data class AgentRoleFormState(
         toolIds = toolIds,
         spawnableAgentRoleIds = spawnableAgentRoleIds,
         projectId = projectId,
-        instructions = instructions
+        instructionSpecs = instructions.map { it.toSlot() }
     )
 }
 
@@ -155,22 +161,22 @@ fun defaultInstructionName(type: String): String = when (type) {
 fun createEmptyAgentRoleForm(): AgentRoleFormState = AgentRoleFormState(
     mode = FormMode.NEW,
     instructions = listOf(
-        AgentInstructionDto(
+        AgentRoleInstructionDraft(
             type = AgentInstructionTypes.ROLE,
             name = defaultInstructionName(AgentInstructionTypes.ROLE),
             message = ""
         ),
-        AgentInstructionDto(
+        AgentRoleInstructionDraft(
             type = AgentInstructionTypes.MAIN,
             name = defaultInstructionName(AgentInstructionTypes.MAIN),
             message = ""
         ),
-        AgentInstructionDto(
+        AgentRoleInstructionDraft(
             type = AgentInstructionTypes.SPAWNABLE_AGENTS,
             name = defaultInstructionName(AgentInstructionTypes.SPAWNABLE_AGENTS),
             message = ""
         ),
-        AgentInstructionDto(
+        AgentRoleInstructionDraft(
             type = AgentInstructionTypes.CUSTOM,
             name = defaultInstructionName(AgentInstructionTypes.CUSTOM),
             message = ""
@@ -197,7 +203,9 @@ fun AgentRoleDto.toEditFormState(): AgentRoleFormState = AgentRoleFormState(
     toolIds = tools,
     spawnableAgentRoleIds = spawnableAgentRoleIds,
     projectId = projectId,
-    instructions = instructions
+    // Reported instructions become drafts that keep their identity, so saving an unedited draft links
+    // the same rows instead of creating copies.
+    instructions = instructions.map { it.toDraft() }
 )
 
 /**

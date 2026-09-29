@@ -55,12 +55,14 @@ fun AgentRolesTabRoute(
     val presetsState by viewModel.presetsState.collectAsState()
     val toolsState by viewModel.toolsState.collectAsState()
     val projectsState by viewModel.projectsState.collectAsState()
+    val instructionsState by viewModel.instructionsState.collectAsState()
     val modelsById by viewModel.modelsById.collectAsState()
     val presetsById by viewModel.presetsById.collectAsState()
     val settingsById by viewModel.settingsById.collectAsState()
     val toolsById by viewModel.toolsById.collectAsState()
     val workerDisplayNamesById by viewModel.workerDisplayNamesById.collectAsState()
     val mcpServerNamesById by viewModel.mcpServerNamesById.collectAsState()
+    val saving by viewModel.saving.collectAsState()
 
     // If a role disappears while its detail page is open, fall back to the list page.
     val roles = rolesState.dataOrNull
@@ -96,7 +98,9 @@ fun AgentRolesTabRoute(
         toolsById = toolsById,
         workerDisplayNamesById = workerDisplayNamesById,
         mcpServerNamesById = mcpServerNamesById,
-        projects = projectsState.dataOrNull.orEmpty()
+        projects = projectsState.dataOrNull.orEmpty(),
+        instructions = instructionsState.dataOrNull.orEmpty(),
+        saving = saving
     )
 
     val actions = object : AgentRolesTabActions {
