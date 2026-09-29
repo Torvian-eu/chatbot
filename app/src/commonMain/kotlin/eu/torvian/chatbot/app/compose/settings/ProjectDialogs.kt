@@ -65,8 +65,9 @@ fun ProjectDialogs(
                 text = {
                     Text(
                         "Are you sure you want to delete the project '${dialogState.project.name}'? " +
-                                "Its member roles are kept; sessions using the project will be unassigned " +
-                                "from it and become project-less."
+                                "This deletes the project's agent roles and the instructions used only by " +
+                                "those roles. Sessions using the project will be unassigned from it and " +
+                                "become project-less."
                     )
                 },
                 confirmButton = {

@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.api.resources.ProjectResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
+import eu.torvian.chatbot.common.models.api.project.DeleteProjectResponse
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import io.ktor.client.HttpClient
@@ -292,14 +293,24 @@ class KtorProjectApiClientTest {
 
     @Test
     fun `deleteProject - success`() = runTest {
+        val impact = DeleteProjectResponse(
+            projectId = 10L,
+            deletedAgentRoleIds = listOf(1L, 2L),
+            deletedInstructionIds = listOf(3L),
+            retainedInstructionIds = listOf(4L)
+        )
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Delete, request.method)
             assertEquals(href(ProjectResource.ById(projectId = 10L)), request.url.fullPath)
-            respond(content = "", status = HttpStatusCode.NoContent)
+            respond(
+                content = json.encodeToString(impact),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
         }
         val apiClient = createTestClient(mockEngine)
         when (val result = apiClient.deleteProject(10L)) {
-            is Either.Right -> assertEquals(Unit, result.value)
+            is Either.Right -> assertEquals(impact, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
     }

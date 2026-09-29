@@ -16,11 +16,11 @@ import kotlinx.serialization.json.JsonObject
 /**
  * `delete_project` server built-in tool.
  *
- * Deletes the ownership-checked project with the given id. Deleting is non-destructive for the
- * project's member agent roles (the service nulls their membership, so they become unassociated)
- * and corrects affected sessions in the same transaction. Not-found and not-accessible collapse
- * into a single message so the tool never leaks the existence of another user's project
- * (id-enumeration guard).
+ * Deletes the ownership-checked project with the given id. Deleting is destructive for the
+ * project's member agent roles: the service deletes them and, with them, every instruction row that
+ * loses its last link, while correcting affected sessions in the same transaction. Not-found and
+ * not-accessible collapse into a single message so the tool never leaks the existence of another
+ * user's project (id-enumeration guard).
  *
  * Returns a concise one-line summary of the completed operation (see [formatDeletedProject])
  * instead of the full project JSON.
@@ -58,10 +58,15 @@ class DeleteProjectTool(
         }
         // projectId is non-null here: a null result always coincides with a recorded validation
         // error, and we bail out above when any error was recorded.
-        projectService.deleteProject(context.userId, projectId!!)
+        val deleted = projectService.deleteProject(context.userId, projectId!!)
             .mapLeft { error -> error.toHandlerError() }
             .bind()
-        formatDeletedProject(projectId)
+        formatDeletedProject(
+            projectId = projectId,
+            deletedAgentRoleIds = deleted.deletedAgentRoleIds,
+            deletedInstructionIds = deleted.deletedInstructionIds,
+            retainedInstructionIds = deleted.retainedInstructionIds
+        )
     }
 }
 

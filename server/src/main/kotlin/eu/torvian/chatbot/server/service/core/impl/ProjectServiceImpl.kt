@@ -25,12 +25,15 @@ import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.project.ProjectError as ProjectDaoError
 import eu.torvian.chatbot.server.data.entities.ProjectEntity
+import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.ProjectService
+import eu.torvian.chatbot.server.service.core.agent.DeleteAgentRoleResult
 import eu.torvian.chatbot.server.service.core.error.project.CloneProjectError
 import eu.torvian.chatbot.server.service.core.error.project.CreateProjectError
 import eu.torvian.chatbot.server.service.core.error.project.DeleteProjectError
 import eu.torvian.chatbot.server.service.core.error.project.ProjectError
 import eu.torvian.chatbot.server.service.core.error.project.UpdateProjectError
+import eu.torvian.chatbot.server.service.core.project.DeleteProjectResult
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
@@ -59,6 +62,8 @@ import org.apache.logging.log4j.Logger
  *            instruction rows as its source role (clones share rows; ownership is untouched).
  * @property sessionDao DAO used to restore the Session Legality Invariant when a project is deleted or
  *            its role membership is edited.
+ * @property agentRoleService Role service used to delete the project's member roles through the
+ *            delivered role-deletion path (dependent-row cascade + last-link instruction sweep).
  * @property transactionScope Transaction wrapper that keeps validation + persistence atomic.
  */
 class ProjectServiceImpl(
@@ -72,6 +77,7 @@ class ProjectServiceImpl(
     private val agentRoleDisabledDao: AgentRoleDisabledDao,
     private val agentRoleInstructionDao: AgentRoleInstructionDao,
     private val sessionDao: SessionDao,
+    private val agentRoleService: AgentRoleService,
     private val transactionScope: TransactionScope
 ) : ProjectService {
 
@@ -352,17 +358,41 @@ class ProjectServiceImpl(
         }
     }
 
-    override suspend fun deleteProject(userId: Long, projectId: Long): Either<DeleteProjectError, Unit> =
+    override suspend fun deleteProject(
+        userId: Long,
+        projectId: Long
+    ): Either<DeleteProjectError, DeleteProjectResult> =
         transactionScope.transaction {
             either {
                 logger.info("Deleting project $projectId for user $userId")
 
                 val existing = loadOwnedProject(userId, projectId, DeleteProjectError.NotFound(projectId))
 
-                // Capture the affected sessions BEFORE the delete: after the FK nulls their
-                // `project_id`, they would no longer be addressable by project. Their roles must be
-                // cleared in the same transaction (uniform clear) so no session is left illegal.
+                // Capture the member role ids and the affected sessions BEFORE any write: deleting
+                // the project row nulls `agent_roles.project_id` and `chat_sessions.project_id` via
+                // the FK, so afterwards neither the roles nor the sessions are addressable by
+                // project. Sorting the role ids keeps the summaries deterministic.
+                val roleIds = projectAgentRoleDao.getRoleIdsForProject(existing.id).sorted()
                 val affectedSessionIds = sessionDao.getSessionIdsByProject(existing.id)
+
+                // Delete each member role through the delivered role-deletion path (snapshot links ->
+                // delete role -> sweep last-link instructions). The call joins this transaction
+                // through the shared TransactionScope, so the role deletions and their instruction
+                // sweeps commit or roll back together with the project.
+                val roleResults = roleIds.map { roleId ->
+                    agentRoleService.deleteRole(userId, roleId).fold(
+                        ifLeft = { error ->
+                            // A member role is owned by the project owner by construction, so the
+                            // ownership failure cannot occur here. Skipping it silently would leave a
+                            // role alive under a deleted project, so fail fast and roll back instead.
+                            logger.error("Project $projectId member role $roleId could not be deleted: $error")
+                            throw IllegalStateException(
+                                "Project $projectId member role $roleId could not be deleted: $error"
+                            )
+                        },
+                        ifRight = { it }
+                    )
+                }
 
                 withError({ _: ProjectDaoError.NotFound -> DeleteProjectError.NotFound(projectId) }) {
                     projectDao.deleteProject(projectId).bind()
@@ -373,12 +403,47 @@ class ProjectServiceImpl(
                 // affected sessions inert until a role is re-selected.
                 sessionDao.clearAgentRoleForSessions(affectedSessionIds)
 
+                val result = aggregateDeletion(roleIds, roleResults)
+
                 logger.info(
-                    "Deleted project $projectId for user $userId" +
+                    "Deleted project $projectId for user $userId (deleted " +
+                        "${result.deletedAgentRoleIds.size} role(s), removed " +
+                        "${result.deletedInstructionIds.size} instruction(s), kept " +
+                        "${result.retainedInstructionIds.size} instruction(s))" +
                         if (affectedSessionIds.isEmpty()) "" else " (cleared ${affectedSessionIds.size} session role(s))"
                 )
+                result
             }
         }
+
+    /**
+     * Merges the per-role sweep results into the project-level summary.
+     *
+     * A row shared by two member roles is first reported retained (the other role still linked it)
+     * and then reported deleted by the later role's sweep; subtracting the deleted ids from the
+     * retained set makes the aggregate describe the post-commit state, where such a row no longer
+     * exists. The deleted role ids are the captured list, because every capture deletion succeeded
+     * or the transaction was aborted.
+     *
+     * @param roleIds The member role ids in the order they were deleted.
+     * @param roleResults The per-role sweep results, in the same order.
+     * @return The project-level summary of the cascade.
+     */
+    private fun aggregateDeletion(
+        roleIds: List<Long>,
+        roleResults: List<DeleteAgentRoleResult>
+    ): DeleteProjectResult {
+        val deletedInstructionIds = roleResults.flatMap { it.deletedInstructionIds }.distinct()
+        val deletedSet = deletedInstructionIds.toSet()
+        val retainedInstructionIds = roleResults.flatMap { it.retainedInstructionIds }
+            .distinct()
+            .filterNot { it in deletedSet }
+        return DeleteProjectResult(
+            deletedAgentRoleIds = roleIds,
+            deletedInstructionIds = deletedInstructionIds,
+            retainedInstructionIds = retainedInstructionIds
+        )
+    }
 
     // --- Validation helpers ---
 

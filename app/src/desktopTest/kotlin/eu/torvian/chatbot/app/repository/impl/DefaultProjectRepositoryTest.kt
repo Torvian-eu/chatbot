@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ProjectApi
 import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
+import eu.torvian.chatbot.common.models.api.project.DeleteProjectResponse
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import io.mockk.coEvery
@@ -122,19 +123,43 @@ class DefaultProjectRepositoryTest {
     }
 
     @Test
-    fun `deleteProject - removes entry from state`() = runTest {
+    fun `deleteProject - returns the impact and removes entry from state`() = runTest {
         coEvery { api.getAllProjects() } returns Either.Right(listOf(project(1, "Research"), project(2, "Writing")))
         repository.loadProjects()
 
-        coEvery { api.deleteProject(1L) } returns Either.Right(Unit)
+        val impact = DeleteProjectResponse(
+            projectId = 1L,
+            deletedAgentRoleIds = listOf(10L, 11L),
+            deletedInstructionIds = listOf(3L),
+            retainedInstructionIds = listOf(5L)
+        )
+        coEvery { api.deleteProject(1L) } returns Either.Right(impact)
 
         val result = repository.deleteProject(1L)
 
-        assertTrue(result.isRight())
+        assertEquals(impact, result.getOrNull())
         val state = repository.projects.value
         assertTrue(state is DataState.Success)
         assertEquals(1, state.data.size)
         assertEquals("Writing", state.data.single().name)
+    }
+
+    @Test
+    fun `deleteProject - failure leaves state unchanged`() = runTest {
+        coEvery { api.getAllProjects() } returns Either.Right(listOf(project(1, "Research")))
+        repository.loadProjects()
+
+        coEvery { api.deleteProject(1L) } returns Either.Left(
+            ApiResourceError.UnknownError("boom", null)
+        )
+
+        val result = repository.deleteProject(1L)
+
+        assertTrue(result.isLeft())
+        val state = repository.projects.value
+        assertTrue(state is DataState.Success)
+        assertEquals(1, state.data.size)
+        assertEquals("Research", state.data.single().name)
     }
 
     @Test

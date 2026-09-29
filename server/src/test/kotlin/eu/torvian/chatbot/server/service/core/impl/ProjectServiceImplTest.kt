@@ -21,6 +21,9 @@ import eu.torvian.chatbot.server.data.dao.SessionRolePair
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.project.ProjectError as ProjectDaoError
 import eu.torvian.chatbot.server.data.dao.AgentRoleInstructionDao.InstructionRef
+import eu.torvian.chatbot.server.service.core.AgentRoleService
+import eu.torvian.chatbot.server.service.core.agent.DeleteAgentRoleResult
+import eu.torvian.chatbot.server.service.core.error.agent.DeleteAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.project.CloneProjectError
 import eu.torvian.chatbot.server.service.core.error.project.CreateProjectError
 import eu.torvian.chatbot.server.service.core.error.project.DeleteProjectError
@@ -46,9 +49,10 @@ import kotlin.test.assertTrue
  * Unit tests for [ProjectServiceImpl].
  *
  * This suite verifies the owner-scoped CRUD behavior, the per-owner name-uniqueness rule
- * (including self-exclusion on rename), the batch-loaded member role ids on DTOs, and the uniform
- * Legality-restoring project deletion: affected sessions are captured before the delete and their
- * roles are cleared after it, in the same transaction, without touching the roles themselves.
+ * (including self-exclusion on rename), the batch-loaded member role ids on DTOs, and the cascade
+ * project deletion: member role ids and affected sessions are captured before the project row
+ * delete, each member role is deleted through [AgentRoleService.deleteRole], and the affected
+ * sessions' roles are cleared uniformly in the same transaction.
  */
 class ProjectServiceImplTest {
 
@@ -62,6 +66,7 @@ class ProjectServiceImplTest {
     private lateinit var agentRoleDisabledDao: AgentRoleDisabledDao
     private lateinit var agentRoleInstructionDao: AgentRoleInstructionDao
     private lateinit var sessionDao: SessionDao
+    private lateinit var agentRoleService: AgentRoleService
     private lateinit var transactionScope: TransactionScope
 
     private lateinit var service: ProjectServiceImpl
@@ -81,6 +86,7 @@ class ProjectServiceImplTest {
         agentRoleDisabledDao = mockk()
         agentRoleInstructionDao = mockk()
         sessionDao = mockk()
+        agentRoleService = mockk()
         transactionScope = mockk()
 
         service = ProjectServiceImpl(
@@ -94,6 +100,7 @@ class ProjectServiceImplTest {
             agentRoleDisabledDao = agentRoleDisabledDao,
             agentRoleInstructionDao = agentRoleInstructionDao,
             sessionDao = sessionDao,
+            agentRoleService = agentRoleService,
             transactionScope = transactionScope
         )
 
@@ -107,6 +114,10 @@ class ProjectServiceImplTest {
         // "no session uses any role" so focused tests only stub it when they verify the sweep.
         coEvery { sessionDao.getSessionProjectPairsForRoles(any()) } returns emptyList()
         coEvery { sessionDao.clearAgentRoleForSessions(any()) } returns Unit
+        // The project cascade deletes each member role through the role service; default it to a
+        // no-op sweep so focused tests only stub the roles they verify.
+        coEvery { agentRoleService.deleteRole(any(), any()) } returns
+            DeleteAgentRoleResult(emptyList(), emptyList()).right()
         // The membership replacement is invoked unconditionally by create/update (a full replacement
         // of the member set); default it so focused tests only override when they verify arguments.
         coEvery { projectAgentRoleDao.replaceRolesForProject(any(), any()) } returns Unit
@@ -145,6 +156,7 @@ class ProjectServiceImplTest {
             agentRoleDisabledDao,
             agentRoleInstructionDao,
             sessionDao,
+            agentRoleService,
             transactionScope
         )
     }
@@ -963,7 +975,7 @@ class ProjectServiceImplTest {
         }
     }
 
-    // --- deleteProject (legality cleanup) ---
+    // --- deleteProject (cascade cleanup) ---
 
     @Test
     fun `deleteProject captures affected sessions, deletes and clears their roles uniformly`() = runTest {
@@ -977,6 +989,12 @@ class ProjectServiceImplTest {
         val result = service.deleteProject(userId, project.id)
 
         assertTrue(result.isRight())
+        // A project with no member roles draws no role deletion and reports an empty impact.
+        coVerify(exactly = 0) { agentRoleService.deleteRole(any(), any()) }
+        val summary = assertNotNull(result.getOrNull())
+        assertEquals(emptyList<Long>(), summary.deletedAgentRoleIds)
+        assertEquals(emptyList<Long>(), summary.deletedInstructionIds)
+        assertEquals(emptyList<Long>(), summary.retainedInstructionIds)
         // Order matters: the affected set is captured before the delete (after it, the sessions would
         // no longer be addressable by project), then the roles are cleared uniformly after the delete
         // inside the same transaction.
@@ -985,6 +1003,75 @@ class ProjectServiceImplTest {
             projectDao.deleteProject(project.id)
             sessionDao.clearAgentRoleForSessions(listOf(101L, 102L))
         }
+    }
+
+    @Test
+    fun `deleteProject captures member role ids and affected sessions before the project row delete`() = runTest {
+        val project = TestDefaults.project1
+        coEvery { projectDao.getProjectById(project.id) } returns project.right()
+        coEvery { projectOwnershipDao.getOwner(project.id) } returns userId.right()
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(project.id) } returns setOf(10L)
+        coEvery { sessionDao.getSessionIdsByProject(project.id) } returns listOf(101L, 102L)
+        coEvery { projectDao.deleteProject(project.id) } returns Unit.right()
+        coEvery { agentRoleService.deleteRole(userId, 10L) } returns
+            DeleteAgentRoleResult(emptyList(), emptyList()).right()
+
+        val result = service.deleteProject(userId, project.id)
+
+        assertTrue(result.isRight())
+        // Both captures happen before any write (the FK nulls the membership information), then each
+        // role is deleted, then the project row, then the session clear.
+        coVerifyOrder {
+            projectAgentRoleDao.getRoleIdsForProject(project.id)
+            sessionDao.getSessionIdsByProject(project.id)
+            agentRoleService.deleteRole(userId, 10L)
+            projectDao.deleteProject(project.id)
+            sessionDao.clearAgentRoleForSessions(listOf(101L, 102L))
+        }
+    }
+
+    @Test
+    fun `deleteProject deletes every member role once and aggregates the sweep results`() = runTest {
+        val project = TestDefaults.project1
+        coEvery { projectDao.getProjectById(project.id) } returns project.right()
+        coEvery { projectOwnershipDao.getOwner(project.id) } returns userId.right()
+        // Unordered set: the service deletes the member roles in sorted id order.
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(project.id) } returns setOf(11L, 10L)
+        coEvery { projectDao.deleteProject(project.id) } returns Unit.right()
+        // Instruction 2 is linked by both member roles: the first role retains it, the second removes
+        // it. The aggregate must report it deleted only, never retained.
+        coEvery { agentRoleService.deleteRole(userId, 10L) } returns
+            DeleteAgentRoleResult(deletedInstructionIds = listOf(1L), retainedInstructionIds = listOf(2L)).right()
+        coEvery { agentRoleService.deleteRole(userId, 11L) } returns
+            DeleteAgentRoleResult(deletedInstructionIds = listOf(2L, 3L), retainedInstructionIds = listOf(4L)).right()
+
+        val result = service.deleteProject(userId, project.id)
+
+        val summary = assertNotNull(result.getOrNull())
+        assertEquals(listOf(10L, 11L), summary.deletedAgentRoleIds)
+        assertEquals(listOf(1L, 2L, 3L), summary.deletedInstructionIds)
+        assertEquals(listOf(4L), summary.retainedInstructionIds)
+        // Each member role is deleted exactly once through the delivered role-deletion path.
+        coVerify(exactly = 1) { agentRoleService.deleteRole(userId, 10L) }
+        coVerify(exactly = 1) { agentRoleService.deleteRole(userId, 11L) }
+    }
+
+    @Test
+    fun `deleteProject with no member roles deletes the project without calling deleteRole`() = runTest {
+        val project = TestDefaults.project1
+        coEvery { projectDao.getProjectById(project.id) } returns project.right()
+        coEvery { projectOwnershipDao.getOwner(project.id) } returns userId.right()
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(project.id) } returns emptySet()
+        coEvery { projectDao.deleteProject(project.id) } returns Unit.right()
+
+        val result = service.deleteProject(userId, project.id)
+
+        assertTrue(result.isRight())
+        coVerify(exactly = 0) { agentRoleService.deleteRole(any(), any()) }
+        val summary = assertNotNull(result.getOrNull())
+        assertEquals(emptyList<Long>(), summary.deletedAgentRoleIds)
+        assertEquals(emptyList<Long>(), summary.deletedInstructionIds)
+        assertEquals(emptyList<Long>(), summary.retainedInstructionIds)
     }
 
     @Test
@@ -1001,21 +1088,23 @@ class ProjectServiceImplTest {
 
         assertTrue(result.isRight())
         coVerify(exactly = 1) { sessionDao.clearAgentRoleForSessions(emptyList()) }
+        assertNotNull(result.getOrNull())
     }
 
     @Test
-    fun `deleteProject never deletes roles`() = runTest {
+    fun `deleteProject fails fast when a member role cannot be deleted`() = runTest {
         val project = TestDefaults.project1
         coEvery { projectDao.getProjectById(project.id) } returns project.right()
         coEvery { projectOwnershipDao.getOwner(project.id) } returns userId.right()
-        coEvery { projectDao.deleteProject(project.id) } returns Unit.right()
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(project.id) } returns setOf(10L)
+        // Impossible for a captured member role (it is owned by the project owner); the service must
+        // abort rather than silently skip, leaving the project row untouched.
+        coEvery { agentRoleService.deleteRole(userId, 10L) } returns DeleteAgentRoleError.NotFound(10L).left()
 
-        val result = service.deleteProject(userId, project.id)
+        assertFailsWith<IllegalStateException> { service.deleteProject(userId, project.id) }
 
-        assertTrue(result.isRight())
-        // The service surface has no role-deletion capability; only the project row and the session
-        // role clears may be invoked (role rows survive via cascade semantics in the DB).
-        coVerify(exactly = 0) { projectAgentRoleDao.replaceRolesForProject(any(), any()) }
+        coVerify(exactly = 0) { projectDao.deleteProject(any()) }
+        coVerify(exactly = 0) { sessionDao.clearAgentRoleForSessions(any()) }
     }
 
     @Test
@@ -1025,6 +1114,8 @@ class ProjectServiceImplTest {
         val result = service.deleteProject(userId, 9L)
 
         assertIs<DeleteProjectError.NotFound>(result.leftOrNull())
+        coVerify(exactly = 0) { agentRoleService.deleteRole(any(), any()) }
+        coVerify(exactly = 0) { projectDao.deleteProject(any()) }
         coVerify(exactly = 0) { sessionDao.clearAgentRoleForSessions(any()) }
     }
 }

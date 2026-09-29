@@ -447,8 +447,10 @@ object ServerBuiltInToolCatalog {
         ServerBuiltInToolSpec(
             name = DELETE_PROJECT_NAME,
             description = "Deletes one project owned by the current user by its id. The project's " +
-                "member agent roles are not deleted: their project membership is removed, so they " +
-                "become unassociated. Returns a concise one-line summary of the operation.",
+                "member agent roles are deleted with it, and every instruction row that loses its " +
+                "last link through those role deletions is removed as well; instructions still linked " +
+                "by a role outside the project survive. Returns a concise one-line summary of the " +
+                "operation.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {

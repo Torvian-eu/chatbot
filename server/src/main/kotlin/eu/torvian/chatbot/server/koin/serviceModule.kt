@@ -349,6 +349,7 @@ fun serviceModule() = module {
             agentRoleDisabledDao = get(),
             agentRoleInstructionDao = get(),
             sessionDao = get(),
+            agentRoleService = get(),
             transactionScope = get()
         )
     }

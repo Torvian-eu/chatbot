@@ -7,6 +7,7 @@ import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.ProjectService
 import eu.torvian.chatbot.server.service.core.error.project.DeleteProjectError
+import eu.torvian.chatbot.server.service.core.project.DeleteProjectResult
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -14,6 +15,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -72,13 +74,38 @@ class DeleteProjectToolTest {
     @Test
     fun `returns a confirmation mentioning the project id on success`() = runTest {
         val projectService = mockk<ProjectService>()
-        coEvery { projectService.deleteProject(userId, 7L) } returns Unit.right()
+        coEvery { projectService.deleteProject(userId, 7L) } returns
+            DeleteProjectResult(emptyList(), emptyList(), emptyList()).right()
         val tool = DeleteProjectTool(projectService)
 
         val output = assertSuccess(tool.execute(buildJsonObject { put("project_id", 7L) }, context()))
 
-        assertTrue(output.contains("Deleted project (id: 7)"))
+        assertEquals("Deleted project (id: 7).", output)
         coVerify(exactly = 1) { projectService.deleteProject(userId, 7L) }
+    }
+
+    /**
+     * Verifies that the summary mirrors `formatDeletedAgentRole`: the deleted role ids and the removed
+     * and kept instruction ids are folded into the single-line confirmation.
+     */
+    @Test
+    fun `reports the deleted roles and the instruction impact in one line`() = runTest {
+        val projectService = mockk<ProjectService>()
+        coEvery { projectService.deleteProject(userId, 7L) } returns DeleteProjectResult(
+            deletedAgentRoleIds = listOf(10L, 11L),
+            deletedInstructionIds = listOf(3L),
+            retainedInstructionIds = listOf(5L)
+        ).right()
+        val tool = DeleteProjectTool(projectService)
+
+        val output = assertSuccess(tool.execute(buildJsonObject { put("project_id", 7L) }, context()))
+
+        assertTrue(output.startsWith("Deleted project (id: 7);"))
+        assertTrue(output.contains("deleted 2 agent role(s) (ids: 10, 11)"))
+        assertTrue(output.contains("removed 1 instruction(s) that lost their last link (ids: 3)"))
+        assertTrue(output.contains("kept 1 instruction(s) still linked by other role(s) (ids: 5)"))
+        // A one-line summary: no embedded newlines.
+        assertTrue(output.none { it == '\n' })
     }
 
     /**

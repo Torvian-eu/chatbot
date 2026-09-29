@@ -11,6 +11,7 @@ import eu.torvian.chatbot.app.service.api.ProjectApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
+import eu.torvian.chatbot.common.models.api.project.DeleteProjectResponse
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -139,7 +140,7 @@ class DefaultProjectRepository(
         )
     }
 
-    override suspend fun deleteProject(projectId: Long): Either<RepositoryError, Unit> {
+    override suspend fun deleteProject(projectId: Long): Either<RepositoryError, DeleteProjectResponse> {
         logger.info("Deleting project ID: $projectId")
 
         return projectApi.deleteProject(projectId).fold(
@@ -148,10 +149,10 @@ class DefaultProjectRepository(
                 logger.warn("Failed to delete project ID: $projectId: ${repoError.message}")
                 repoError.left()
             },
-            ifRight = {
+            ifRight = { response ->
                 logger.info("Successfully deleted project ID: $projectId")
                 updateProjectsState { list -> list.filterNot { it.id == projectId } }
-                Unit.right()
+                response.right()
             }
         )
     }
