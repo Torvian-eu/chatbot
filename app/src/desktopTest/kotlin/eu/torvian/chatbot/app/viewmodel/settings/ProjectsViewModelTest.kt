@@ -5,11 +5,13 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.ProjectDialogState
 import eu.torvian.chatbot.app.repository.AgentRoleRepository
+import eu.torvian.chatbot.app.repository.InstructionRepository
 import eu.torvian.chatbot.app.repository.ProjectRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
+import eu.torvian.chatbot.common.models.api.project.DeleteProjectResponse
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import io.mockk.coEvery
@@ -35,6 +37,7 @@ class ProjectsViewModelTest {
     private lateinit var dispatcher: TestDispatcher
     private lateinit var projectRepository: ProjectRepository
     private lateinit var agentRoleRepository: AgentRoleRepository
+    private lateinit var instructionRepository: InstructionRepository
     private lateinit var notificationService: NotificationService
     private lateinit var viewModel: ProjectsViewModel
 
@@ -51,15 +54,18 @@ class ProjectsViewModelTest {
         dispatcher = UnconfinedTestDispatcher()
         projectRepository = mockk(relaxed = true)
         agentRoleRepository = mockk(relaxed = true)
+        instructionRepository = mockk(relaxed = true)
         notificationService = mockk(relaxed = true)
 
         every { projectRepository.projects } returns MutableStateFlow(DataState.Success(emptyList()))
         every { agentRoleRepository.roles } returns MutableStateFlow(DataState.Success(emptyList()))
         coEvery { agentRoleRepository.loadRoles() } returns Either.Right(Unit)
+        coEvery { instructionRepository.loadInstructions() } returns Either.Right(Unit)
 
         viewModel = ProjectsViewModel(
             projectRepository = projectRepository,
             agentRoleRepository = agentRoleRepository,
+            instructionRepository = instructionRepository,
             notificationService = notificationService,
             uiDispatcher = dispatcher
         )
@@ -217,18 +223,50 @@ class ProjectsViewModelTest {
     }
 
     @Test
-    fun `deleteProject - success - reloads roles, clears selection and closes dialog`() = runTest(dispatcher) {
-        coEvery { projectRepository.deleteProject(7L) } returns Either.Right(Unit)
+    fun `deleteProject - success - toasts the impact, reloads roles and instructions, clears selection and closes dialog`() =
+        runTest(dispatcher) {
+            coEvery { projectRepository.deleteProject(7L) } returns Either.Right(
+                DeleteProjectResponse(
+                    projectId = 7L,
+                    deletedAgentRoleIds = listOf(10L, 11L),
+                    deletedInstructionIds = listOf(3L),
+                    retainedInstructionIds = emptyList()
+                )
+            )
 
-        viewModel.selectProject(project(7, "Research"))
+            viewModel.selectProject(project(7, "Research"))
+            viewModel.startDeletingProject(project(7, "Research"))
+            viewModel.deleteProject(7L)
+
+            // Counts only, no ids: the tool output carries the ids for the LLM.
+            coVerify(exactly = 1) {
+                notificationService.genericSuccess(
+                    "Deleted project 'Research'. Deleted 2 agent role(s). " +
+                        "Removed 1 instruction(s) that lost their last link."
+                )
+            }
+            // The cascade removed roles and instruction rows, so both caches are refreshed.
+            coVerify(exactly = 1) { agentRoleRepository.loadRoles() }
+            coVerify(exactly = 1) { instructionRepository.loadInstructions() }
+            assertNull(viewModel.selectedProject.value)
+            assertEquals(ProjectDialogState.None, viewModel.dialogState.value)
+        }
+
+    @Test
+    fun `deleteProject - success with an empty impact toasts only the base sentence`() = runTest(dispatcher) {
+        coEvery { projectRepository.deleteProject(7L) } returns Either.Right(
+            DeleteProjectResponse(
+                projectId = 7L,
+                deletedAgentRoleIds = emptyList(),
+                deletedInstructionIds = emptyList(),
+                retainedInstructionIds = emptyList()
+            )
+        )
+
         viewModel.startDeletingProject(project(7, "Research"))
         viewModel.deleteProject(7L)
 
-        // reverse direction: the deleted project's links cascade server-side, so the role stream
-        // is refreshed to drop the stale projectId.
-        coVerify(exactly = 1) { agentRoleRepository.loadRoles() }
-        assertNull(viewModel.selectedProject.value)
-        assertEquals(ProjectDialogState.None, viewModel.dialogState.value)
+        coVerify(exactly = 1) { notificationService.genericSuccess("Deleted project 'Research'.") }
     }
 
     @Test
@@ -245,5 +283,6 @@ class ProjectsViewModelTest {
         }
         assertTrue(viewModel.dialogState.value is ProjectDialogState.DeleteProject)
         coVerify(exactly = 0) { agentRoleRepository.loadRoles() }
+        coVerify(exactly = 0) { instructionRepository.loadInstructions() }
     }
 }

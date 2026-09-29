@@ -231,8 +231,8 @@ class DatabaseMigratorModelPresetsTest {
                 // updates sqlite_sequence, so the next role gets id 3 rather than reusing a freed id.
                 connection.createStatement().use { statement ->
                     statement.executeUpdate(
-                        "INSERT INTO agent_roles (name, description, instructions_json, created_at, updated_at) " +
-                            "VALUES ('new-role', '', '[]', 0, 0)"
+                        "INSERT INTO agent_roles (name, description, created_at, updated_at) " +
+                            "VALUES ('new-role', '', 0, 0)"
                     )
                     statement.executeQuery("SELECT MAX(id) FROM agent_roles").use { resultSet ->
                         resultSet.next()
@@ -279,8 +279,8 @@ class DatabaseMigratorModelPresetsTest {
                     statement.executeUpdate("INSERT INTO model_preset_owners (preset_id, user_id) VALUES (1, 1)")
                     statement.executeUpdate(
                         "INSERT INTO agent_roles " +
-                            "(id, name, description, model_preset_id, instructions_json, created_at, updated_at) " +
-                            "VALUES (1, 'architect', '', 1, '[]', 0, 0)"
+                            "(id, name, description, model_preset_id, created_at, updated_at) " +
+                            "VALUES (1, 'architect', '', 1, 0, 0)"
                     )
                     statement.executeUpdate("INSERT INTO agent_role_owners (role_id, user_id) VALUES (1, 1)")
 

@@ -8,7 +8,9 @@ import org.flywaydb.core.Flyway
 /**
  * Runs versioned schema migrations for the server database.
  *
- * Migrations are plain SQL. Rebuild migrations (e.g. `V10`, `V20`) drop and rename a parent table to
+ * Migrations are plain SQL scripts or Java migrations (`BaseJavaMigration` subclasses in the
+ * `db.migration` package). Flyway discovers both kinds from the same `classpath:db/migration`
+ * location. Rebuild migrations (e.g. `V10`, `V20`) drop and rename a parent table to
  * work around SQLite's lack of `ALTER TABLE ... DROP COLUMN` for foreign-key columns; the official
  * 12-step procedure requires `PRAGMA foreign_keys=OFF` while the old table is dropped so the implicit
  * DELETE performed by `DROP TABLE` cannot cascade into child tables. These migrations are safe because

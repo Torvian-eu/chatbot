@@ -20,9 +20,9 @@ class DefaultSystemPromptComposerTest {
     @Test
     fun `only the model_specific instance matching the role model is composed`() = runTest {
         val instructions = listOf(
-            CustomInstruction("Tone", "Be concise"),
-            ModelSpecificInstruction("Swift mode", "Write idiomatic Swift", modelId = 2L),
-            ModelSpecificInstruction("Kotlin mode", "Write idiomatic Kotlin", modelId = 3L)
+            CustomInstruction(id = 1L, name = "Tone", message = "Be concise"),
+            ModelSpecificInstruction(id = 2L, name = "Swift mode", message = "Write idiomatic Swift", modelId = 2L),
+            ModelSpecificInstruction(id = 3L, name = "Kotlin mode", message = "Write idiomatic Kotlin", modelId = 3L)
         )
         val role = AgentRole(
             id = 1L,
@@ -42,8 +42,8 @@ class DefaultSystemPromptComposerTest {
     @Test
     fun `model_specific instructions are omitted when the role model is null`() = runTest {
         val instructions = listOf(
-            CustomInstruction("Tone", "Be concise"),
-            ModelSpecificInstruction("Swift mode", "Write idiomatic Swift", modelId = 2L)
+            CustomInstruction(id = 1L, name = "Tone", message = "Be concise"),
+            ModelSpecificInstruction(id = 2L, name = "Swift mode", message = "Write idiomatic Swift", modelId = 2L)
         )
         val role = AgentRole(
             id = 1L,
@@ -61,7 +61,7 @@ class DefaultSystemPromptComposerTest {
     @Test
     fun `model_specific never matches when the role runs on a different model`() = runTest {
         val instructions = listOf(
-            ModelSpecificInstruction("Swift mode", "Write idiomatic Swift", modelId = 2L)
+            ModelSpecificInstruction(id = 2L, name = "Swift mode", message = "Write idiomatic Swift", modelId = 2L)
         )
         val role = AgentRole(
             id = 1L,

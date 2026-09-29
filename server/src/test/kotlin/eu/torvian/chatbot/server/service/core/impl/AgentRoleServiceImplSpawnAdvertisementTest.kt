@@ -1,8 +1,10 @@
 package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.right
+import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import eu.torvian.chatbot.common.models.tool.OperatorToolDefinition
+import eu.torvian.chatbot.server.data.dao.AgentRoleInstructionDao.InstructionRef
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -40,13 +42,38 @@ class AgentRoleServiceImplSpawnAdvertisementTest : AgentRoleServiceImplTestBase(
         userId = userId
     )
 
+    /**
+     * Stored `spawnable_agents` marker row the tests link to their role. Its message is NULL: the
+     * text is generated per role at read time from the role's current allow-list and tool set.
+     */
+    private val spawnableRow = TestDefaults.instruction1.copy(
+        id = 10L,
+        type = AgentInstructionTypes.SPAWNABLE_AGENTS,
+        name = "Available agents",
+        message = null
+    )
+
+    /**
+     * Installs the link, row and reverse-link stubs so [roleId] carries only [spawnableRow].
+     *
+     * @param roleId The role under test.
+     */
+    private fun stubSpawnableInstruction(roleId: Long) {
+        coEvery {
+            agentRoleInstructionDao.getLinksForRoles(listOf(roleId))
+        } returns mapOf(roleId to listOf(InstructionRef(instructionId = spawnableRow.id, sequence = 0)))
+        coEvery { instructionDao.getInstructionsByIds(listOf(spawnableRow.id)) } returns listOf(spawnableRow)
+        coEvery {
+            agentRoleInstructionDao.getLinkedRoleIdsForInstructions(listOf(spawnableRow.id))
+        } returns mapOf(spawnableRow.id to setOf(roleId))
+    }
+
     @Test
     fun `getRoleById renders the advertisement with one batched project read`() = runTest {
         val roleId = 1L
-        val instructionsJson = """[{"type":"spawnable_agents","name":"Available agents","message":""}]"""
+        stubSpawnableInstruction(roleId)
         coEvery { agentRoleDao.getRoleById(roleId) } returns TestDefaults.agentRole1.copy(
             id = roleId,
-            instructionsJson = instructionsJson,
             // The role itself lives in a third project, so the batched read must cover all three ids.
             projectId = 3L
         ).right()
@@ -80,10 +107,9 @@ class AgentRoleServiceImplSpawnAdvertisementTest : AgentRoleServiceImplTestBase(
     @Test
     fun `getRoleById renders an unassociated advertisement without a project read`() = runTest {
         val roleId = 1L
-        val instructionsJson = """[{"type":"spawnable_agents","name":"Available agents","message":""}]"""
+        stubSpawnableInstruction(roleId)
         coEvery { agentRoleDao.getRoleById(roleId) } returns TestDefaults.agentRole1.copy(
             id = roleId,
-            instructionsJson = instructionsJson,
             projectId = null
         ).right()
         coEvery { agentRoleOwnershipDao.getOwner(roleId) } returns userId.right()
@@ -109,10 +135,9 @@ class AgentRoleServiceImplSpawnAdvertisementTest : AgentRoleServiceImplTestBase(
     @Test
     fun `getRoleById skips the allow-list reads when spawn_agent is not available`() = runTest {
         val roleId = 1L
-        val instructionsJson = """[{"type":"spawnable_agents","name":"Available agents","message":""}]"""
+        stubSpawnableInstruction(roleId)
         coEvery { agentRoleDao.getRoleById(roleId) } returns TestDefaults.agentRole1.copy(
             id = roleId,
-            instructionsJson = instructionsJson,
             projectId = 3L
         ).right()
         coEvery { agentRoleOwnershipDao.getOwner(roleId) } returns userId.right()

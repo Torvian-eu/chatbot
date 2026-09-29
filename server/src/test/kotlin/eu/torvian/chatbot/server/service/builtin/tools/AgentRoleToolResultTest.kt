@@ -9,11 +9,10 @@ import kotlin.test.assertFalse
 
 /**
  * Unit tests for the operation summaries returned by the mutating agent-role tools
- * ([formatCreatedAgentRole], [formatUpdatedAgentRole], [formatInsertedInstruction],
- * [formatRemovedInstruction]).
+ * ([formatCreatedAgentRole], [formatUpdatedAgentRole], [formatDeletedAgentRole]).
  *
- * Covers the concise non-JSON format: the action phrase, the role identity (name and id), the
- * instruction type/name and position for the insert/remove tools, and the guarantee that no full
+ * Covers the concise non-JSON format (the action phrase plus the role identity), the deletion
+ * summary's sweep notes (removed and still-linked instruction ids), and the guarantee that no full
  * role payload leaks into the output.
  */
 class AgentRoleToolResultTest {
@@ -28,8 +27,8 @@ class AgentRoleToolResultTest {
         tools = setOf(6L, 5L),
         spawnableAgentRoleIds = setOf(2L),
         instructions = listOf(
-            AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a writer."),
-            AgentInstructionDto(AgentInstructionTypes.CUSTOM, "Style", "Be concise.")
+            AgentInstructionDto(id = 10L, type = AgentInstructionTypes.ROLE, name = "Role", message = "You are a writer."),
+            AgentInstructionDto(id = 11L, type = AgentInstructionTypes.CUSTOM, name = "Style", message = "Be concise.")
         )
     )
 
@@ -48,24 +47,42 @@ class AgentRoleToolResultTest {
     }
 
     @Test
-    fun `formats the inserted instruction summary with type name and position`() {
-        val role = sampleRole()
-        val summary = formatInsertedInstruction(role, 1, role.instructions[0])
+    fun `formats the deleted operation summary`() {
+        val summary = formatDeletedAgentRole(7L)
+
+        assertEquals("Deleted agent role (id: 7).", summary, "unexpected: $summary")
+    }
+
+    @Test
+    fun `deleted summary names removed and still-linked instructions`() {
+        val summary = formatDeletedAgentRole(
+            roleId = 7L,
+            deletedInstructionIds = listOf(3L, 5L),
+            retainedInstructionIds = listOf(9L)
+        )
 
         assertEquals(
-            "Inserted instruction (type=role, name=Role) at 0-based position 1 " +
-                    "in agent role 'writer' (id: 1).", summary, "unexpected: $summary"
+            "Deleted agent role (id: 7); removed 2 instruction(s) that lost their last link " +
+                "(ids: 3, 5); kept 1 instruction(s) still linked by other role(s) (ids: 9).",
+            summary,
+            "unexpected: $summary"
         )
     }
 
     @Test
-    fun `formats the removed instruction summary with type name and position`() {
-        val role = sampleRole()
-        val summary = formatRemovedInstruction(role, 0, role.instructions[1])
+    fun `deleted summary omits empty sweep clauses`() {
+        val deletedOnly = formatDeletedAgentRole(roleId = 7L, deletedInstructionIds = listOf(3L))
+        val keptOnly = formatDeletedAgentRole(roleId = 7L, retainedInstructionIds = listOf(9L))
 
         assertEquals(
-            "Removed instruction (type=custom, name=Style) at 0-based position 0 " +
-                    "from agent role 'writer' (id: 1).", summary, "unexpected: $summary"
+            "Deleted agent role (id: 7); removed 1 instruction(s) that lost their last link (ids: 3).",
+            deletedOnly,
+            "unexpected: $deletedOnly"
+        )
+        assertEquals(
+            "Deleted agent role (id: 7); kept 1 instruction(s) still linked by other role(s) (ids: 9).",
+            keptOnly,
+            "unexpected: $keptOnly"
         )
     }
 
@@ -75,8 +92,7 @@ class AgentRoleToolResultTest {
         val summaries = listOf(
             formatCreatedAgentRole(role),
             formatUpdatedAgentRole(role),
-            formatInsertedInstruction(role, 0, role.instructions[0]),
-            formatRemovedInstruction(role, 0, role.instructions[0])
+            formatDeletedAgentRole(role.id)
         )
 
         summaries.forEach { summary ->

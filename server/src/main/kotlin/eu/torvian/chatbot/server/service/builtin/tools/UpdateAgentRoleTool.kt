@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.builtin.tools
 
 import arrow.core.Either
 import arrow.core.raise.either
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
@@ -9,8 +10,8 @@ import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.builtin.addUnknownParameterErrors
 import eu.torvian.chatbot.server.service.builtin.invalidInputError
-import eu.torvian.chatbot.server.service.builtin.parseOptionalInstructions
 import eu.torvian.chatbot.server.service.builtin.parseOptionalLong
+import eu.torvian.chatbot.server.service.builtin.parseOptionalLongList
 import eu.torvian.chatbot.server.service.builtin.parseOptionalLongSet
 import eu.torvian.chatbot.server.service.builtin.parseOptionalString
 import eu.torvian.chatbot.server.service.builtin.parseRequiredLong
@@ -22,9 +23,14 @@ import kotlinx.serialization.json.JsonObject
  *
  * Implements PATCH semantics: `role_id` plus only the provided fields. The persisted role is loaded
  * via the ownership-checked role lookup and each provided field is merged over it; omitted fields
- * (including `tools`, `spawnable_agent_role_ids`, and `instructions`) are preserved, so a partial
+ * (including `tools`, `spawnable_agent_role_ids`, and `instruction_ids`) are preserved, so a partial
  * payload never wipes the role's configuration. The merged state is then applied through the
  * existing full-replacement role update.
+ *
+ * Instructions are referenced by id only: the argument carries the ids of existing instruction rows in
+ * the role's order, because instruction content is authored through the instruction surfaces, not
+ * through a role write. The ids map to `InstructionSlot.Link` entries in-process, so tool traffic can
+ * only reference rows.
  *
  * Returns a concise one-line summary of the completed operation (see [formatUpdatedAgentRole])
  * instead of the full role JSON to keep the LLM context lean; `read_agent_role` returns the full role.
@@ -62,7 +68,7 @@ class UpdateAgentRoleTool(
                 ServerBuiltInToolCatalog.TOOL_IDS_PROPERTY,
                 ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY,
                 ServerBuiltInToolCatalog.PROJECT_ID_PROPERTY,
-                ServerBuiltInToolCatalog.INSTRUCTIONS_PROPERTY
+                ServerBuiltInToolCatalog.INSTRUCTION_IDS_PROPERTY
             ),
             validationErrors
         )
@@ -76,8 +82,8 @@ class UpdateAgentRoleTool(
         val spawnableAgentRoleIds =
             parseOptionalLongSet(input, ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY, validationErrors)
         val projectId = parseOptionalLong(input, ServerBuiltInToolCatalog.PROJECT_ID_PROPERTY, validationErrors)
-        val instructions =
-            parseOptionalInstructions(input, ServerBuiltInToolCatalog.INSTRUCTIONS_PROPERTY, validationErrors)
+        val instructionIds =
+            parseOptionalLongList(input, ServerBuiltInToolCatalog.INSTRUCTION_IDS_PROPERTY, validationErrors)
         if (validationErrors.isNotEmpty()) {
             raise(invalidInputError(validationErrors))
         }
@@ -113,6 +119,10 @@ class UpdateAgentRoleTool(
             else -> modelPresetId
         }
 
+        // An omitted instruction_ids list is a patch that leaves the role's existing links untouched;
+        // a supplied list replaces them in the given order.
+        val targetInstructionIds = instructionIds ?: persisted.instructions.map { it.id }
+
         val request = UpdateAgentRoleRequest(
             name = name ?: persisted.name,
             displayName = displayName ?: persisted.displayName,
@@ -120,7 +130,9 @@ class UpdateAgentRoleTool(
             modelPresetId = targetModelPresetId,
             toolIds = toolIds ?: persisted.tools,
             spawnableAgentRoleIds = spawnableAgentRoleIds ?: persisted.spawnableAgentRoleIds,
-            instructions = instructions ?: persisted.instructions,
+            // Each id becomes a plain reference: an LLM-facing tool call never creates or edits
+            // instruction content implicitly.
+            instructionSpecs = targetInstructionIds.map(InstructionSlot::Link),
             projectId = targetProjectId
         )
 

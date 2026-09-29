@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.service.api.ProjectApi
 import eu.torvian.chatbot.common.api.resources.ProjectResource
 import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
+import eu.torvian.chatbot.common.models.api.project.DeleteProjectResponse
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import io.ktor.client.*
@@ -57,8 +58,8 @@ class KtorProjectApiClient(
             }.body<ProjectDto>()
         }
 
-    override suspend fun deleteProject(projectId: Long): Either<ApiResourceError, Unit> =
+    override suspend fun deleteProject(projectId: Long): Either<ApiResourceError, DeleteProjectResponse> =
         safeApiCall {
-            client.delete(ProjectResource.ById(projectId = projectId))
+            client.delete(ProjectResource.ById(projectId = projectId)).body<DeleteProjectResponse>()
         }
 }

@@ -3,14 +3,15 @@ package eu.torvian.chatbot.server.service.builtin.tools
 import arrow.core.Either
 import arrow.core.raise.either
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolCatalog
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
 import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.builtin.addUnknownParameterErrors
 import eu.torvian.chatbot.server.service.builtin.invalidInputError
-import eu.torvian.chatbot.server.service.builtin.parseOptionalInstructions
 import eu.torvian.chatbot.server.service.builtin.parseOptionalLong
+import eu.torvian.chatbot.server.service.builtin.parseOptionalLongList
 import eu.torvian.chatbot.server.service.builtin.parseOptionalLongSet
 import eu.torvian.chatbot.server.service.builtin.parseOptionalString
 import eu.torvian.chatbot.server.service.builtin.parseRequiredString
@@ -24,6 +25,10 @@ import kotlinx.serialization.json.JsonObject
  * Creates a role from the parsed input, reusing [CreateAgentRoleRequest]. `model_preset_id` is
  * optional: a role may be created without a model preset and completed later via `update_agent_role`;
  * such a role is non-sendable until set (the preset supplies both the model and the settings profile).
+ *
+ * Instructions are referenced by id only: the argument carries the ids of existing instruction rows,
+ * because instruction content is authored through the instruction surfaces, not through a role write.
+ * The ids map to `InstructionSlot.Link` entries in-process, so tool traffic can only reference rows.
  *
  * Returns a concise one-line summary of the completed operation (see [formatCreatedAgentRole])
  * instead of the full role JSON to keep the LLM context lean; `read_agent_role` returns the full role.
@@ -60,7 +65,7 @@ class CreateAgentRoleTool(
                 ServerBuiltInToolCatalog.TOOL_IDS_PROPERTY,
                 ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY,
                 ServerBuiltInToolCatalog.PROJECT_ID_PROPERTY,
-                ServerBuiltInToolCatalog.INSTRUCTIONS_PROPERTY
+                ServerBuiltInToolCatalog.INSTRUCTION_IDS_PROPERTY
             ),
             validationErrors
         )
@@ -73,8 +78,8 @@ class CreateAgentRoleTool(
         val spawnableAgentRoleIds =
             parseOptionalLongSet(input, ServerBuiltInToolCatalog.SPAWNABLE_AGENT_ROLE_IDS_PROPERTY, validationErrors)
         val projectId = parseOptionalLong(input, ServerBuiltInToolCatalog.PROJECT_ID_PROPERTY, validationErrors)
-        val instructions =
-            parseOptionalInstructions(input, ServerBuiltInToolCatalog.INSTRUCTIONS_PROPERTY, validationErrors)
+        val instructionIds =
+            parseOptionalLongList(input, ServerBuiltInToolCatalog.INSTRUCTION_IDS_PROPERTY, validationErrors)
         if (validationErrors.isNotEmpty()) {
             raise(invalidInputError(validationErrors))
         }
@@ -87,7 +92,9 @@ class CreateAgentRoleTool(
             toolIds = toolIds ?: emptySet(),
             spawnableAgentRoleIds = spawnableAgentRoleIds ?: emptySet(),
             projectId = projectId,
-            instructions = instructions ?: emptyList()
+            // Each tool-supplied id becomes a plain reference: an LLM-facing tool call is an explicit,
+            // model-visible action and never creates or edits instruction content implicitly.
+            instructionSpecs = (instructionIds ?: emptyList()).map(InstructionSlot::Link)
         )
         val role = agentRoleService.createRole(context.userId, request)
             .mapLeft { error -> error.toHandlerError() }
@@ -144,6 +151,25 @@ private fun CreateAgentRoleError.toHandlerError(): ServerBuiltInToolHandlerError
         )
     is CreateAgentRoleError.InstructionValidationFailed ->
         ServerBuiltInToolHandlerError.OperationFailed("instruction_validation_failed", reason)
+    is CreateAgentRoleError.InstructionNotFound ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "instruction_not_found",
+            "Instruction $instructionId not found or not owned by the current user."
+        )
+    is CreateAgentRoleError.DuplicateInstructionLink ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "duplicate_instruction_link",
+            "Instruction $instructionId would be linked to this agent role more than once."
+        )
     is CreateAgentRoleError.OwnerInsertFailed ->
         ServerBuiltInToolHandlerError.OperationFailed("owner_insert_failed", reason)
+    is CreateAgentRoleError.LinkedRoleInstructionListInvalid ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "linked_role_instruction_list_invalid",
+            "Instruction $instructionId cannot change: agent role(s) ${linkedRoleIds.joinToString()} " +
+                "would be left with an invalid instruction list ($reason)."
+        )
+    is CreateAgentRoleError.InstructionOwnerInsertFailed ->
+        // Unreachable from this tool (it only sends link specs), kept for exhaustiveness.
+        ServerBuiltInToolHandlerError.OperationFailed("instruction_owner_insert_failed", reason)
 }

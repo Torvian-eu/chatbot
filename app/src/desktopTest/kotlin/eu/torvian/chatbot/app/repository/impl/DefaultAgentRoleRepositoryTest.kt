@@ -5,6 +5,8 @@ import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.ProjectRepository
 import eu.torvian.chatbot.app.service.api.AgentRoleApi
+import eu.torvian.chatbot.app.service.api.ApiResourceError
+import eu.torvian.chatbot.app.service.api.InstructionApi
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
@@ -27,6 +29,7 @@ class DefaultAgentRoleRepositoryTest {
 
     private lateinit var api: AgentRoleApi
     private lateinit var projectRepository: ProjectRepository
+    private lateinit var instructionApi: InstructionApi
     private lateinit var repository: DefaultAgentRoleRepository
 
     private fun role(id: Long, name: String) = AgentRoleDto(
@@ -40,12 +43,26 @@ class DefaultAgentRoleRepositoryTest {
         instructions = emptyList()
     )
 
+    /**
+     * Builds one instruction entry as a role payload reports it.
+     *
+     * @param id The instruction row id.
+     * @return The reported entry.
+     */
+    private fun writerInstruction(id: Long) = eu.torvian.chatbot.common.models.agent.AgentInstructionDto(
+        id = id,
+        type = eu.torvian.chatbot.common.models.agent.AgentInstructionTypes.CUSTOM,
+        name = "Tone",
+        message = "Be concise"
+    )
+
     @BeforeTest
     fun setup() {
         api = mockk()
         projectRepository = mockk()
+        instructionApi = mockk()
         coEvery { projectRepository.loadProjects() } returns Either.Right(Unit)
-        repository = DefaultAgentRoleRepository(api, projectRepository)
+        repository = DefaultAgentRoleRepository(api, projectRepository, instructionApi)
     }
 
     @Test
@@ -213,6 +230,63 @@ class DefaultAgentRoleRepositoryTest {
         repository.createRole(CreateAgentRoleRequest(name = "x"))
 
         coVerify(exactly = 0) { projectRepository.loadProjects() }
+    }
+
+    @Test
+    fun `assignInstruction - replaces the cached role with the response echo`() = runTest {
+        coEvery { api.getAllRoles() } returns Either.Right(listOf(role(1, "writer")))
+        repository.loadRoles()
+        val updated = role(1, "writer").copy(instructions = listOf(writerInstruction(7L)))
+        coEvery { instructionApi.assignInstruction(1L, 7L) } returns Either.Right(updated)
+
+        val result = repository.assignInstruction(roleId = 1L, instructionId = 7L)
+
+        assertEquals(updated, result.getOrNull())
+        // The echo is the role's state after the append, so the role stream needs no second read.
+        assertEquals(listOf(7L), repository.roles.value.dataOrNull?.single()?.instructions?.map { it.id })
+        coVerify(exactly = 1) { instructionApi.assignInstruction(1L, 7L) }
+        // Linking an instruction changes no project membership.
+        coVerify(exactly = 0) { projectRepository.loadProjects() }
+    }
+
+    @Test
+    fun `assignInstruction - failure is wrapped in the operation context and leaves the cache alone`() = runTest {
+        coEvery { api.getAllRoles() } returns Either.Right(listOf(role(1, "writer")))
+        repository.loadRoles()
+        coEvery { instructionApi.assignInstruction(1L, 7L) } returns
+            Either.Left(ApiResourceError.UnknownError("boom", null))
+
+        val result = repository.assignInstruction(roleId = 1L, instructionId = 7L)
+
+        assertTrue(result.isLeft())
+        assertTrue(repository.roles.value.dataOrNull?.single()?.instructions.orEmpty().isEmpty())
+    }
+
+    @Test
+    fun `unassignInstruction - replaces the cached role with the response echo`() = runTest {
+        coEvery { api.getAllRoles() } returns Either.Right(listOf(role(1, "writer").copy(instructions = listOf(writerInstruction(7L)))))
+        repository.loadRoles()
+        val updated = role(1, "writer")
+        coEvery { instructionApi.unassignInstruction(1L, 7L) } returns Either.Right(updated)
+
+        val result = repository.unassignInstruction(roleId = 1L, instructionId = 7L)
+
+        assertEquals(updated, result.getOrNull())
+        // The link is gone from the role while the instruction row itself is untouched here.
+        assertTrue(repository.roles.value.dataOrNull?.single()?.instructions.orEmpty().isEmpty())
+        coVerify(exactly = 1) { instructionApi.unassignInstruction(1L, 7L) }
+    }
+
+    @Test
+    fun `assignInstruction - upserts the echo when the role is not cached yet`() = runTest {
+        // The echo is authoritative, so a role missing from the cache (e.g. an unloaded stream) is
+        // added instead of being dropped.
+        val updated = role(5, "reviewer")
+        coEvery { instructionApi.assignInstruction(5L, 7L) } returns Either.Right(updated)
+
+        repository.assignInstruction(roleId = 5L, instructionId = 7L)
+
+        assertEquals(listOf(5L), repository.roles.value.dataOrNull?.map { it.id })
     }
 
     @Test

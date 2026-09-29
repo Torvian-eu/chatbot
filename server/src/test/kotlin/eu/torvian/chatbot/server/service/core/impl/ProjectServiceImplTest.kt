@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleDisabledDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleInstructionDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleOwnershipDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleSpawnableRoleDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleToolDao
@@ -19,6 +20,10 @@ import eu.torvian.chatbot.server.data.dao.SessionProjectPair
 import eu.torvian.chatbot.server.data.dao.SessionRolePair
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.project.ProjectError as ProjectDaoError
+import eu.torvian.chatbot.server.data.dao.AgentRoleInstructionDao.InstructionRef
+import eu.torvian.chatbot.server.service.core.AgentRoleService
+import eu.torvian.chatbot.server.service.core.agent.DeleteAgentRoleResult
+import eu.torvian.chatbot.server.service.core.error.agent.DeleteAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.project.CloneProjectError
 import eu.torvian.chatbot.server.service.core.error.project.CreateProjectError
 import eu.torvian.chatbot.server.service.core.error.project.DeleteProjectError
@@ -44,9 +49,10 @@ import kotlin.test.assertTrue
  * Unit tests for [ProjectServiceImpl].
  *
  * This suite verifies the owner-scoped CRUD behavior, the per-owner name-uniqueness rule
- * (including self-exclusion on rename), the batch-loaded member role ids on DTOs, and the uniform
- * Legality-restoring project deletion: affected sessions are captured before the delete and their
- * roles are cleared after it, in the same transaction, without touching the roles themselves.
+ * (including self-exclusion on rename), the batch-loaded member role ids on DTOs, and the cascade
+ * project deletion: member role ids and affected sessions are captured before the project row
+ * delete, each member role is deleted through [AgentRoleService.deleteRole], and the affected
+ * sessions' roles are cleared uniformly in the same transaction.
  */
 class ProjectServiceImplTest {
 
@@ -58,7 +64,9 @@ class ProjectServiceImplTest {
     private lateinit var agentRoleSpawnableRoleDao: AgentRoleSpawnableRoleDao
     private lateinit var agentRoleOwnershipDao: AgentRoleOwnershipDao
     private lateinit var agentRoleDisabledDao: AgentRoleDisabledDao
+    private lateinit var agentRoleInstructionDao: AgentRoleInstructionDao
     private lateinit var sessionDao: SessionDao
+    private lateinit var agentRoleService: AgentRoleService
     private lateinit var transactionScope: TransactionScope
 
     private lateinit var service: ProjectServiceImpl
@@ -76,7 +84,9 @@ class ProjectServiceImplTest {
         agentRoleSpawnableRoleDao = mockk()
         agentRoleOwnershipDao = mockk()
         agentRoleDisabledDao = mockk()
+        agentRoleInstructionDao = mockk()
         sessionDao = mockk()
+        agentRoleService = mockk()
         transactionScope = mockk()
 
         service = ProjectServiceImpl(
@@ -88,7 +98,9 @@ class ProjectServiceImplTest {
             agentRoleSpawnableRoleDao = agentRoleSpawnableRoleDao,
             agentRoleOwnershipDao = agentRoleOwnershipDao,
             agentRoleDisabledDao = agentRoleDisabledDao,
+            agentRoleInstructionDao = agentRoleInstructionDao,
             sessionDao = sessionDao,
+            agentRoleService = agentRoleService,
             transactionScope = transactionScope
         )
 
@@ -102,6 +114,10 @@ class ProjectServiceImplTest {
         // "no session uses any role" so focused tests only stub it when they verify the sweep.
         coEvery { sessionDao.getSessionProjectPairsForRoles(any()) } returns emptyList()
         coEvery { sessionDao.clearAgentRoleForSessions(any()) } returns Unit
+        // The project cascade deletes each member role through the role service; default it to a
+        // no-op sweep so focused tests only stub the roles they verify.
+        coEvery { agentRoleService.deleteRole(any(), any()) } returns
+            DeleteAgentRoleResult(emptyList(), emptyList()).right()
         // The membership replacement is invoked unconditionally by create/update (a full replacement
         // of the member set); default it so focused tests only override when they verify arguments.
         coEvery { projectAgentRoleDao.replaceRolesForProject(any(), any()) } returns Unit
@@ -114,6 +130,10 @@ class ProjectServiceImplTest {
         coEvery { agentRoleDisabledDao.getDisabledRoleIds(any(), any()) } returns emptySet()
         coEvery { agentRoleToolDao.replaceToolsForRole(any(), any()) } returns Unit
         coEvery { agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(any(), any()) } returns Unit
+        // Clones link the source's instruction rows without copying content: an empty link map and a
+        // no-op rewrite are the defaults, and clone tests asserting links override both.
+        coEvery { agentRoleInstructionDao.getLinksForRoles(any()) } returns emptyMap()
+        coEvery { agentRoleInstructionDao.replaceInstructionsForRole(any(), any()) } returns Unit
         coEvery { agentRoleOwnershipDao.setOwner(any(), any()) } returns Unit.right()
         coEvery { agentRoleDisabledDao.setRoleDisabled(any(), any(), any()) } returns Unit
 
@@ -134,7 +154,9 @@ class ProjectServiceImplTest {
             agentRoleSpawnableRoleDao,
             agentRoleOwnershipDao,
             agentRoleDisabledDao,
+            agentRoleInstructionDao,
             sessionDao,
+            agentRoleService,
             transactionScope
         )
     }
@@ -808,11 +830,19 @@ class ProjectServiceImplTest {
         coEvery { agentRoleToolDao.getToolsForRoles(listOf(10L, 11L)) } returns mapOf(10L to setOf(100L, 101L))
         coEvery { agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(listOf(10L, 11L)) } returns
             mapOf(10L to setOf(11L, 99L))
+        // Instruction links: role 10 lists two shared rows in order, role 11 shares the second one.
+        coEvery { agentRoleInstructionDao.getLinksForRoles(listOf(10L, 11L)) } returns mapOf(
+            10L to listOf(
+                InstructionRef(instructionId = 50L, sequence = 0),
+                InstructionRef(instructionId = 51L, sequence = 1)
+            ),
+            11L to listOf(InstructionRef(instructionId = 51L, sequence = 0))
+        )
         coEvery { projectDao.insertProject("Copy of Acme Web App", source.description) } returns
             TestDefaults.project2.copy(id = 20L, name = "Copy of Acme Web App")
         coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
         // New ids 30/31 are assigned in source iteration order (insertRole call order).
-        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any()) } returnsMany listOf(
             TestDefaults.agentRole1.copy(id = 30L),
             TestDefaults.agentRole2.copy(id = 31L)
         )
@@ -832,7 +862,6 @@ class ProjectServiceImplTest {
                 displayName = "Senior Architect",
                 description = "role description",
                 modelPresetId = 7L,
-                instructionsJson = sourceRoleA.instructionsJson,
                 projectId = 20L
             )
         }
@@ -842,12 +871,15 @@ class ProjectServiceImplTest {
                 "Code Reviewer",
                 sourceRoleB.description,
                 8L,
-                sourceRoleB.instructionsJson,
                 20L
             )
         }
         // The tool set is copied as-is.
         coVerify(exactly = 1) { agentRoleToolDao.replaceToolsForRole(30L, setOf(100L, 101L)) }
+        // The clone links the SAME instruction rows in the same order; a row shared between both source
+        // roles gains both clone links.
+        coVerify(exactly = 1) { agentRoleInstructionDao.replaceInstructionsForRole(30L, listOf(50L, 51L)) }
+        coVerify(exactly = 1) { agentRoleInstructionDao.replaceInstructionsForRole(31L, listOf(51L)) }
         // The spawn allow-list is remapped where the target is cloned (11 -> 31), while the target
         // outside the cloned set (99) is preserved verbatim.
         coVerify(exactly = 1) { agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(30L, setOf(31L, 99L)) }
@@ -876,7 +908,7 @@ class ProjectServiceImplTest {
         coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(10L, 11L)) } returns listOf(sourceRoleA, sourceRoleB)
         coEvery { projectDao.insertProject("Copy", source.description) } returns TestDefaults.project2.copy(id = 20L, name = "Copy")
         coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
-        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any()) } returnsMany listOf(
             TestDefaults.agentRole1.copy(id = 30L),
             TestDefaults.agentRole2.copy(id = 31L)
         )
@@ -905,7 +937,7 @@ class ProjectServiceImplTest {
         coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(10L, 11L)) } returns listOf(sourceRoleA, sourceRoleB)
         coEvery { projectDao.insertProject("Copy", source.description) } returns TestDefaults.project2.copy(id = 20L, name = "Copy")
         coEvery { projectOwnershipDao.setOwner(20L, userId) } returns Unit.right()
-        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any()) } returnsMany listOf(
             TestDefaults.agentRole1.copy(id = 30L),
             TestDefaults.agentRole2.copy(id = 31L)
         )
@@ -935,7 +967,7 @@ class ProjectServiceImplTest {
         // A forced failure while copying a role, after the new project row was inserted: the exception
         // escapes the service so the real TransactionScope can roll the whole clone back (no new
         // project, no orphaned role rows).
-        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) } throws
+        coEvery { agentRoleDao.insertRole(any(), any(), any(), any(), any()) } throws
             RuntimeException("injected role insertion failure")
 
         assertFailsWith<RuntimeException> {
@@ -943,7 +975,7 @@ class ProjectServiceImplTest {
         }
     }
 
-    // --- deleteProject (legality cleanup) ---
+    // --- deleteProject (cascade cleanup) ---
 
     @Test
     fun `deleteProject captures affected sessions, deletes and clears their roles uniformly`() = runTest {
@@ -957,6 +989,12 @@ class ProjectServiceImplTest {
         val result = service.deleteProject(userId, project.id)
 
         assertTrue(result.isRight())
+        // A project with no member roles draws no role deletion and reports an empty impact.
+        coVerify(exactly = 0) { agentRoleService.deleteRole(any(), any()) }
+        val summary = assertNotNull(result.getOrNull())
+        assertEquals(emptyList<Long>(), summary.deletedAgentRoleIds)
+        assertEquals(emptyList<Long>(), summary.deletedInstructionIds)
+        assertEquals(emptyList<Long>(), summary.retainedInstructionIds)
         // Order matters: the affected set is captured before the delete (after it, the sessions would
         // no longer be addressable by project), then the roles are cleared uniformly after the delete
         // inside the same transaction.
@@ -965,6 +1003,75 @@ class ProjectServiceImplTest {
             projectDao.deleteProject(project.id)
             sessionDao.clearAgentRoleForSessions(listOf(101L, 102L))
         }
+    }
+
+    @Test
+    fun `deleteProject captures member role ids and affected sessions before the project row delete`() = runTest {
+        val project = TestDefaults.project1
+        coEvery { projectDao.getProjectById(project.id) } returns project.right()
+        coEvery { projectOwnershipDao.getOwner(project.id) } returns userId.right()
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(project.id) } returns setOf(10L)
+        coEvery { sessionDao.getSessionIdsByProject(project.id) } returns listOf(101L, 102L)
+        coEvery { projectDao.deleteProject(project.id) } returns Unit.right()
+        coEvery { agentRoleService.deleteRole(userId, 10L) } returns
+            DeleteAgentRoleResult(emptyList(), emptyList()).right()
+
+        val result = service.deleteProject(userId, project.id)
+
+        assertTrue(result.isRight())
+        // Both captures happen before any write (the FK nulls the membership information), then each
+        // role is deleted, then the project row, then the session clear.
+        coVerifyOrder {
+            projectAgentRoleDao.getRoleIdsForProject(project.id)
+            sessionDao.getSessionIdsByProject(project.id)
+            agentRoleService.deleteRole(userId, 10L)
+            projectDao.deleteProject(project.id)
+            sessionDao.clearAgentRoleForSessions(listOf(101L, 102L))
+        }
+    }
+
+    @Test
+    fun `deleteProject deletes every member role once and aggregates the sweep results`() = runTest {
+        val project = TestDefaults.project1
+        coEvery { projectDao.getProjectById(project.id) } returns project.right()
+        coEvery { projectOwnershipDao.getOwner(project.id) } returns userId.right()
+        // Unordered set: the service deletes the member roles in sorted id order.
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(project.id) } returns setOf(11L, 10L)
+        coEvery { projectDao.deleteProject(project.id) } returns Unit.right()
+        // Instruction 2 is linked by both member roles: the first role retains it, the second removes
+        // it. The aggregate must report it deleted only, never retained.
+        coEvery { agentRoleService.deleteRole(userId, 10L) } returns
+            DeleteAgentRoleResult(deletedInstructionIds = listOf(1L), retainedInstructionIds = listOf(2L)).right()
+        coEvery { agentRoleService.deleteRole(userId, 11L) } returns
+            DeleteAgentRoleResult(deletedInstructionIds = listOf(2L, 3L), retainedInstructionIds = listOf(4L)).right()
+
+        val result = service.deleteProject(userId, project.id)
+
+        val summary = assertNotNull(result.getOrNull())
+        assertEquals(listOf(10L, 11L), summary.deletedAgentRoleIds)
+        assertEquals(listOf(1L, 2L, 3L), summary.deletedInstructionIds)
+        assertEquals(listOf(4L), summary.retainedInstructionIds)
+        // Each member role is deleted exactly once through the delivered role-deletion path.
+        coVerify(exactly = 1) { agentRoleService.deleteRole(userId, 10L) }
+        coVerify(exactly = 1) { agentRoleService.deleteRole(userId, 11L) }
+    }
+
+    @Test
+    fun `deleteProject with no member roles deletes the project without calling deleteRole`() = runTest {
+        val project = TestDefaults.project1
+        coEvery { projectDao.getProjectById(project.id) } returns project.right()
+        coEvery { projectOwnershipDao.getOwner(project.id) } returns userId.right()
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(project.id) } returns emptySet()
+        coEvery { projectDao.deleteProject(project.id) } returns Unit.right()
+
+        val result = service.deleteProject(userId, project.id)
+
+        assertTrue(result.isRight())
+        coVerify(exactly = 0) { agentRoleService.deleteRole(any(), any()) }
+        val summary = assertNotNull(result.getOrNull())
+        assertEquals(emptyList<Long>(), summary.deletedAgentRoleIds)
+        assertEquals(emptyList<Long>(), summary.deletedInstructionIds)
+        assertEquals(emptyList<Long>(), summary.retainedInstructionIds)
     }
 
     @Test
@@ -981,21 +1088,23 @@ class ProjectServiceImplTest {
 
         assertTrue(result.isRight())
         coVerify(exactly = 1) { sessionDao.clearAgentRoleForSessions(emptyList()) }
+        assertNotNull(result.getOrNull())
     }
 
     @Test
-    fun `deleteProject never deletes roles`() = runTest {
+    fun `deleteProject fails fast when a member role cannot be deleted`() = runTest {
         val project = TestDefaults.project1
         coEvery { projectDao.getProjectById(project.id) } returns project.right()
         coEvery { projectOwnershipDao.getOwner(project.id) } returns userId.right()
-        coEvery { projectDao.deleteProject(project.id) } returns Unit.right()
+        coEvery { projectAgentRoleDao.getRoleIdsForProject(project.id) } returns setOf(10L)
+        // Impossible for a captured member role (it is owned by the project owner); the service must
+        // abort rather than silently skip, leaving the project row untouched.
+        coEvery { agentRoleService.deleteRole(userId, 10L) } returns DeleteAgentRoleError.NotFound(10L).left()
 
-        val result = service.deleteProject(userId, project.id)
+        assertFailsWith<IllegalStateException> { service.deleteProject(userId, project.id) }
 
-        assertTrue(result.isRight())
-        // The service surface has no role-deletion capability; only the project row and the session
-        // role clears may be invoked (role rows survive via cascade semantics in the DB).
-        coVerify(exactly = 0) { projectAgentRoleDao.replaceRolesForProject(any(), any()) }
+        coVerify(exactly = 0) { projectDao.deleteProject(any()) }
+        coVerify(exactly = 0) { sessionDao.clearAgentRoleForSessions(any()) }
     }
 
     @Test
@@ -1005,6 +1114,8 @@ class ProjectServiceImplTest {
         val result = service.deleteProject(userId, 9L)
 
         assertIs<DeleteProjectError.NotFound>(result.leftOrNull())
+        coVerify(exactly = 0) { agentRoleService.deleteRole(any(), any()) }
+        coVerify(exactly = 0) { projectDao.deleteProject(any()) }
         coVerify(exactly = 0) { sessionDao.clearAgentRoleForSessions(any()) }
     }
 }

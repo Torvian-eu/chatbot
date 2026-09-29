@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.viewmodel.settings
 import androidx.lifecycle.viewModelScope
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.AgentRoleDialogState
+import eu.torvian.chatbot.app.domain.contracts.AgentRoleInstructionDraft
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.app.repository.*
@@ -12,7 +13,10 @@ import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.instruction.CreateInstructionRequest
+import eu.torvian.chatbot.common.models.api.instruction.UpdateInstructionRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.llm.ModelPresetDto
 import eu.torvian.chatbot.common.models.worker.WorkerDto
@@ -30,6 +34,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 import kotlin.time.Instant
@@ -43,6 +48,7 @@ class AgentRolesViewModelTest {
 
     private lateinit var dispatcher: TestDispatcher
     private lateinit var repository: AgentRoleRepository
+    private lateinit var instructionRepository: InstructionRepository
     private lateinit var presetRepository: ModelPresetRepository
     private lateinit var modelRepository: ModelRepository
     private lateinit var settingsRepository: ModelSettingsRepository
@@ -57,6 +63,7 @@ class AgentRolesViewModelTest {
     // flow afterwards would have no effect on its lookups.
     private lateinit var workersFlow: MutableStateFlow<DataState<RepositoryError, List<WorkerDto>>>
     private lateinit var serversFlow: MutableStateFlow<DataState<RepositoryError, List<LocalMCPServerDto>>>
+    private lateinit var instructionsFlow: MutableStateFlow<DataState<RepositoryError, List<AgentInstructionDto>>>
 
     private fun role(id: Long, name: String, modelPresetId: Long? = 3L) = AgentRoleDto(
         id = id,
@@ -68,7 +75,12 @@ class AgentRolesViewModelTest {
         modelPresetId = modelPresetId,
         tools = emptySet(),
         instructions = listOf(
-            AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a writer")
+            AgentInstructionDto(
+                id = 1L,
+                type = AgentInstructionTypes.ROLE,
+                name = "Role",
+                message = "You are a writer"
+            )
         )
     )
 
@@ -96,6 +108,7 @@ class AgentRolesViewModelTest {
     fun setup() {
         dispatcher = UnconfinedTestDispatcher()
         repository = mockk(relaxed = true)
+        instructionRepository = mockk()
         presetRepository = mockk(relaxed = true)
         modelRepository = mockk(relaxed = true)
         settingsRepository = mockk(relaxed = true)
@@ -107,6 +120,8 @@ class AgentRolesViewModelTest {
 
         workersFlow = MutableStateFlow(DataState.Success(emptyList()))
         serversFlow = MutableStateFlow(DataState.Success(emptyList()))
+        // The library stream feeds the role form's existing-instruction picker.
+        instructionsFlow = MutableStateFlow(DataState.Success(emptyList()))
 
         every { repository.roles } returns MutableStateFlow(DataState.Success(emptyList()))
         every { presetRepository.presets } returns
@@ -117,6 +132,7 @@ class AgentRolesViewModelTest {
         every { projectRepository.projects } returns MutableStateFlow(DataState.Success(emptyList()))
         every { workerRepository.workers } returns workersFlow
         every { mcpServerRepository.servers } returns serversFlow
+        every { instructionRepository.instructions } returns instructionsFlow
         // Stub every catalog load: the ViewModel maps each result's Left branch to a notification, and
         // a relaxed mock would answer with a placeholder Either whose value cannot be mapped.
         coEvery { repository.loadRoles() } returns Either.Right(Unit)
@@ -128,9 +144,11 @@ class AgentRolesViewModelTest {
         coEvery { workerRepository.loadWorkers() } returns Either.Right(Unit)
         // The MCP-server load reports its outcome through its result as well as the `servers` stream.
         coEvery { mcpServerRepository.loadServers() } returns Either.Right(Unit)
+        coEvery { instructionRepository.loadInstructions() } returns Either.Right(Unit)
 
         viewModel = AgentRolesViewModel(
             agentRoleRepository = repository,
+            instructionRepository = instructionRepository,
             modelPresetRepository = presetRepository,
             modelRepository = modelRepository,
             modelSettingsRepository = settingsRepository,
@@ -151,7 +169,7 @@ class AgentRolesViewModelTest {
 
     @Test
     fun `loadRolesAndCatalogs - also loads the preset catalog`() = runTest(dispatcher) {
-        // parZip runs the eight loaders on Dispatchers.Default, outside this test's scheduler: await the
+        // parZip runs the nine loaders on Dispatchers.Default, outside this test's scheduler: await the
         // launched load so the verifications below observe completed calls instead of racing the pool.
         viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
 
@@ -163,6 +181,37 @@ class AgentRolesViewModelTest {
         coVerify(exactly = 1) { projectRepository.loadProjects() }
         coVerify(exactly = 1) { workerRepository.loadWorkers() }
         coVerify(exactly = 1) { mcpServerRepository.loadServers() }
+        coVerify(exactly = 1) { instructionRepository.loadInstructions() }
+    }
+
+    @Test
+    fun `loadRolesAndCatalogs - instruction failure is reported without aborting the load`() =
+        runTest(dispatcher) {
+            val error = RepositoryError.OtherError("instruction load failed")
+            coEvery { instructionRepository.loadInstructions() } returns Either.Left(error)
+
+            viewModel.viewModelScope.awaitLaunchedBy { viewModel.loadRolesAndCatalogs() }
+
+            coVerify { notificationService.repositoryError(error, "Failed to load instructions") }
+            // The role catalog still ran: a failed library load only costs the picker its rows.
+            coVerify(exactly = 1) { repository.loadRoles() }
+        }
+
+    @Test
+    fun `instructionsState exposes the repository library stream`() = runTest(dispatcher) {
+        val library = listOf(
+            AgentInstructionDto(
+                id = 1L,
+                type = AgentInstructionTypes.CUSTOM,
+                name = "Tone",
+                message = "Be concise",
+                linkedRoleIds = setOf(2L, 3L)
+            )
+        )
+
+        instructionsFlow.value = DataState.Success(library)
+
+        assertEquals(library, viewModel.instructionsState.value.dataOrNull)
     }
 
     @Test
@@ -229,8 +278,12 @@ class AgentRolesViewModelTest {
         collectorScope.cancel()
     }
 
+    /**
+     * Verifies that the drafts ride along as inline create specs in one request and the role form
+     * writes no instruction rows of its own.
+     */
     @Test
-    fun `saveRole - add - maps draft to CreateAgentRoleRequest`() = runTest(dispatcher) {
+    fun `saveRole - add - sends one atomic request with inline create specs`() = runTest(dispatcher) {
         coEvery { repository.createRole(any()) } returns Either.Right(role(10, "writer"))
         viewModel.startAddingNewRole()
 
@@ -242,8 +295,16 @@ class AgentRolesViewModelTest {
                 modelPresetId = 3L,
                 toolIds = setOf(10L, 20L),
                 instructions = listOf(
-                    AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a writer"),
-                    AgentInstructionDto(AgentInstructionTypes.CUSTOM, "Tone", "Be concise")
+                    AgentRoleInstructionDraft(
+                        type = AgentInstructionTypes.ROLE,
+                        name = "Role",
+                        message = "You are a writer"
+                    ),
+                    AgentRoleInstructionDraft(
+                        type = AgentInstructionTypes.CUSTOM,
+                        name = "Tone",
+                        message = "Be concise"
+                    )
                 )
             )
         }
@@ -257,11 +318,27 @@ class AgentRolesViewModelTest {
                             request.displayName == "Writer" &&
                             request.modelPresetId == 3L &&
                             request.toolIds == setOf(10L, 20L) &&
-                            request.instructions.size == 2 &&
-                            request.instructions[1].type == AgentInstructionTypes.CUSTOM
+                            request.instructionSpecs == listOf(
+                                InstructionSlot.Create(
+                                    CreateInstructionRequest(
+                                        type = AgentInstructionTypes.ROLE,
+                                        name = "Role",
+                                        message = "You are a writer"
+                                    )
+                                ),
+                                InstructionSlot.Create(
+                                    CreateInstructionRequest(
+                                        type = AgentInstructionTypes.CUSTOM,
+                                        name = "Tone",
+                                        message = "Be concise"
+                                    )
+                                )
+                            )
                 }
             )
         }
+        coVerify(exactly = 0) { instructionRepository.createInstruction(any()) }
+        coVerify(exactly = 0) { instructionRepository.updateInstruction(any()) }
     }
 
     @Test
@@ -282,6 +359,151 @@ class AgentRolesViewModelTest {
             )
         }
         assertEquals(AgentRoleDialogState.None, viewModel.dialogState.value)
+    }
+
+    /**
+     * Verifies that an untouched stored draft becomes a link spec: no content write, no new row.
+     */
+    @Test
+    fun `saveRole - edit - an untouched reported instruction becomes a link spec`() = runTest(dispatcher) {
+        coEvery { repository.updateRole(7L, any()) } returns Either.Right(role(7, "writer-v2"))
+        viewModel.startEditingRole(role(7, "writer"))
+
+        viewModel.updateRoleForm { form -> form.copy(name = "writer-v2", modelPresetId = 4L) }
+
+        viewModel.saveRole()
+
+        // The draft's row is referenced unchanged: no content write, no new row.
+        coVerify(exactly = 0) { instructionRepository.updateInstruction(any()) }
+        coVerify(exactly = 0) { instructionRepository.createInstruction(any()) }
+        coVerify(exactly = 1) {
+            repository.updateRole(
+                eq(7L),
+                match<UpdateAgentRoleRequest> { request ->
+                    request.name == "writer-v2" &&
+                        request.modelPresetId == 4L &&
+                        request.instructionSpecs == listOf(InstructionSlot.Link(1L))
+                }
+            )
+        }
+    }
+
+    /**
+     * Verifies that an edited stored draft becomes an update spec inside the one role request, so the
+     * shared row is rewritten by the save itself and reaches every role linking it.
+     */
+    @Test
+    fun `saveRole - edit - an edited instruction becomes an update spec`() = runTest(dispatcher) {
+        coEvery { repository.updateRole(7L, any()) } returns Either.Right(role(7, "writer"))
+        viewModel.startEditingRole(role(7, "writer"))
+
+        viewModel.updateRoleForm { form ->
+            form.copy(instructions = form.instructions.map { it.copy(message = "You are a poet") })
+        }
+
+        viewModel.saveRole()
+
+        // The role form issues no instruction write of its own; the row is rewritten inline.
+        coVerify(exactly = 0) { instructionRepository.updateInstruction(any()) }
+        coVerify(exactly = 0) { instructionRepository.createInstruction(any()) }
+        coVerify(exactly = 1) {
+            repository.updateRole(
+                eq(7L),
+                match<UpdateAgentRoleRequest> { request ->
+                    request.instructionSpecs == listOf(
+                        InstructionSlot.Update(
+                            UpdateInstructionRequest(
+                                id = 1L,
+                                type = AgentInstructionTypes.ROLE,
+                                name = "Role",
+                                message = "You are a poet"
+                            )
+                        )
+                    )
+                }
+            )
+        }
+    }
+
+    /**
+     * Verifies that a failed save touches no instruction rows and a retry re-sends identical specs —
+     * there are no partial ids to remember or de-duplicate.
+     */
+    @Test
+    fun `a failed save persists nothing and a retry re-sends the same specs`() = runTest(dispatcher) {
+        coEvery { repository.createRole(any()) } returns
+            Either.Left(RepositoryError.OtherError("role save failed")) andThen
+            Either.Right(role(10, "writer"))
+        viewModel.startAddingNewRole()
+        viewModel.updateRoleForm { form -> form.copy(name = "writer", modelPresetId = 3L) }
+
+        viewModel.saveRole()
+
+        coVerify(exactly = 0) { instructionRepository.createInstruction(any()) }
+        coVerify(exactly = 0) { instructionRepository.updateInstruction(any()) }
+        coVerify(exactly = 0) { instructionRepository.deleteInstruction(any()) }
+        // Nothing was written anywhere, so the drafts stay as the user left them — unwritten and
+        // id-less, which is now the correct steady state rather than lost bookkeeping.
+        val failedDrafts = (viewModel.dialogState.value as AgentRoleDialogState.AddRole).formState.instructions
+        assertTrue(failedDrafts.all { it.id == null })
+
+        viewModel.saveRole()
+
+        val captured = mutableListOf<CreateAgentRoleRequest>()
+        coVerify(exactly = 2) { repository.createRole(capture(captured)) }
+        // The retry re-sends the same slots verbatim instead of duplicating rows of a partial attempt.
+        assertEquals(captured[0].instructionSpecs, captured[1].instructionSpecs)
+        assertTrue(captured[0].instructionSpecs.isNotEmpty())
+    }
+
+    /**
+     * Verifies that after a failed save there are no instruction writes or compensating deletes to
+     * run: closing the dialog abandons a save that left nothing behind.
+     */
+    @Test
+    fun `closing the dialog after a failed save leaves nothing to clean up`() = runTest(dispatcher) {
+        coEvery { repository.createRole(any()) } returns Either.Left(RepositoryError.OtherError("role save failed"))
+        viewModel.startAddingNewRole()
+        viewModel.updateRoleForm { form -> form.copy(name = "writer", modelPresetId = 3L) }
+
+        viewModel.saveRole()
+        viewModel.cancelDialog()
+
+        coVerify(exactly = 0) { instructionRepository.createInstruction(any()) }
+        coVerify(exactly = 0) { instructionRepository.updateInstruction(any()) }
+        coVerify(exactly = 0) { instructionRepository.deleteInstruction(any()) }
+        coVerify(exactly = 0) { instructionRepository.loadInstructions() }
+    }
+
+    /**
+     * Verifies that a second save while one is in flight is refused, and that the guard releases once
+     * the save settles so a later save can start.
+     */
+    @Test
+    fun `a second save while one is in flight is refused`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        coEvery { repository.createRole(any()) } coAnswers {
+            gate.await()
+            Either.Right(role(10, "writer"))
+        }
+        viewModel.startAddingNewRole()
+        viewModel.updateRoleForm { form -> form.copy(name = "writer", modelPresetId = 3L) }
+
+        viewModel.saveRole()
+        viewModel.saveRole()
+
+        coVerify(exactly = 1) { repository.createRole(any()) }
+        assertTrue(viewModel.saving.value)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(false, viewModel.saving.value)
+
+        // The guard released with the settled save, so a fresh save runs again.
+        viewModel.startAddingNewRole()
+        viewModel.updateRoleForm { form -> form.copy(name = "writer", modelPresetId = 3L) }
+        viewModel.saveRole()
+        coVerify(exactly = 2) { repository.createRole(any()) }
     }
 
     @Test
@@ -435,5 +657,77 @@ class AgentRolesViewModelTest {
         viewModel.startEditingRole(role(9, "coder"))
         val editForm = (viewModel.dialogState.value as AgentRoleDialogState.EditRole).formState
         assertEquals(FormMode.EDIT, editForm.mode)
+    }
+
+    @Test
+    fun `saveRole - add - refreshes the instruction library once after the role write`() = runTest(dispatcher) {
+        coEvery { repository.createRole(any()) } returns Either.Right(role(10, "writer"))
+        viewModel.startAddingNewRole()
+        viewModel.updateRoleForm { form -> form.copy(name = "writer", modelPresetId = 3L) }
+
+        viewModel.saveRole()
+
+        // The role write changed which roles link each instruction row, so the cached library's
+        // `linkedRoleIds` (the usage the settings screens render) is refreshed exactly once.
+        coVerify(exactly = 1) { instructionRepository.loadInstructions() }
+    }
+
+    @Test
+    fun `saveRole - edit - refreshes the instruction library once after the role write`() = runTest(dispatcher) {
+        coEvery { repository.updateRole(7L, any()) } returns Either.Right(role(7, "writer-v2"))
+        viewModel.startEditingRole(role(7, "writer"))
+        viewModel.updateRoleForm { form -> form.copy(name = "writer-v2", modelPresetId = 4L) }
+
+        viewModel.saveRole()
+
+        coVerify(exactly = 1) { instructionRepository.loadInstructions() }
+    }
+
+    @Test
+    fun `deleteRole refreshes the instruction library once after success`() = runTest(dispatcher) {
+        coEvery { repository.deleteRole(7L) } returns Either.Right(Unit)
+
+        viewModel.deleteRole(7L)
+
+        // The role's links cascade away with it, so the library's usage is stale until the refresh.
+        coVerify(exactly = 1) { instructionRepository.loadInstructions() }
+    }
+
+    @Test
+    fun `a failed role write does not refresh the instruction library`() = runTest(dispatcher) {
+        coEvery { repository.createRole(any()) } returns Either.Left(RepositoryError.OtherError("write failed"))
+        viewModel.startAddingNewRole()
+        viewModel.updateRoleForm { form -> form.copy(name = "writer", modelPresetId = 3L) }
+
+        viewModel.saveRole()
+
+        // Nothing changed server-side, so an extra request would only cost a round trip.
+        coVerify(exactly = 0) { instructionRepository.loadInstructions() }
+    }
+
+    /** Verifies a failed deletion leaves the cached library untouched, so no refresh is issued. */
+    @Test
+    fun `a failed deleteRole does not refresh the instruction library`() = runTest(dispatcher) {
+        coEvery { repository.deleteRole(7L) } returns Either.Left(RepositoryError.OtherError("deletion failed"))
+
+        viewModel.deleteRole(7L)
+
+        // Nothing changed server-side, so an extra request would only cost a round trip.
+        coVerify(exactly = 0) { instructionRepository.loadInstructions() }
+    }
+
+    @Test
+    fun `a failed library refresh is reported but does not fail the role write`() = runTest(dispatcher) {
+        val refreshError = RepositoryError.OtherError("refresh failed")
+        coEvery { repository.createRole(any()) } returns Either.Right(role(10, "writer"))
+        coEvery { instructionRepository.loadInstructions() } returns Either.Left(refreshError)
+        viewModel.startAddingNewRole()
+        viewModel.updateRoleForm { form -> form.copy(name = "writer", modelPresetId = 3L) }
+
+        viewModel.saveRole()
+
+        // The role is saved; only the usage information stays stale, which is announced.
+        coVerify { notificationService.repositoryError(refreshError, "Failed to refresh instructions") }
+        assertEquals(AgentRoleDialogState.None, viewModel.dialogState.value)
     }
 }

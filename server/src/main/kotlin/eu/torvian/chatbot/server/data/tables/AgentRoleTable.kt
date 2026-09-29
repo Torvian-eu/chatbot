@@ -6,8 +6,9 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 /**
  * Exposed table definition for user-defined agent roles.
  *
- * The attached tool set lives in the normalized `agent_role_tools` join table ([AgentRoleToolsTable]);
- * only the flat `instructions_json` document is stored as a JSON string in this table.
+ * The attached tool set lives in the normalized `agent_role_tools` join table ([AgentRoleToolsTable])
+ * and the role's ordered instructions in the `agent_role_instructions` join table
+ * ([AgentRoleInstructionTable]); this table holds only the role's own flat attributes.
  *
  * The role's LLM configuration is NOT stored here: the role references a user-owned model preset
  * through the single `model_preset_id` column, and the preset is the sole source of truth for the
@@ -29,8 +30,6 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  *            delete). Null means the role is **unassociated** (offered only for project-less
  *            sessions). Membership was reduced from a set to a single column so project-sensitive
  *            rules (name-uniqueness scope, Session Legality Invariant) are exact comparisons.
- * @property instructionsJson JSON array of the flat [eu.torvian.chatbot.common.models.agent.AgentInstructionDto]
- *            list (the same encoding used on the wire).
  * @property createdAt Timestamp when the role was created.
  * @property updatedAt Timestamp when the role was last updated.
  */
@@ -40,7 +39,6 @@ object AgentRoleTable : LongIdTable("agent_roles") {
     val description = text("description").default("")
     val modelPresetId = reference("model_preset_id", ModelPresetTable, onDelete = ReferenceOption.SET_NULL).nullable()
     val projectId = reference("project_id", ProjectTable, onDelete = ReferenceOption.SET_NULL).nullable()
-    val instructionsJson = text("instructions_json").default("[]")
     val createdAt = long("created_at")
     val updatedAt = long("updated_at")
 

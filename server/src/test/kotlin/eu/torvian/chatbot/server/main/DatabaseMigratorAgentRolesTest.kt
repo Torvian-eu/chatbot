@@ -55,12 +55,12 @@ class DatabaseMigratorAgentRolesTest {
                     )
                     // Two users, same machine-readable name — must both be accepted.
                     statement.executeUpdate(
-                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at) " +
-                            "VALUES (1, 'architect', '', '[]', 0, 0)"
+                        "INSERT INTO agent_roles (id, name, description, created_at, updated_at) " +
+                            "VALUES (1, 'architect', '', 0, 0)"
                     )
                     statement.executeUpdate(
-                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at) " +
-                            "VALUES (2, 'architect', '', '[]', 0, 0)"
+                        "INSERT INTO agent_roles (id, name, description, created_at, updated_at) " +
+                            "VALUES (2, 'architect', '', 0, 0)"
                     )
                     statement.executeUpdate("INSERT INTO agent_role_owners (role_id, user_id) VALUES (1, 1)")
                     statement.executeUpdate("INSERT INTO agent_role_owners (role_id, user_id) VALUES (2, 2)")
@@ -101,8 +101,8 @@ class DatabaseMigratorAgentRolesTest {
                             "VALUES (1, 'u1', 'h', NULL, 'ENABLED', 0, 0)"
                     )
                     statement.executeUpdate(
-                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at) " +
-                            "VALUES (1, 'architect', '', '[]', 0, 0)"
+                        "INSERT INTO agent_roles (id, name, description, created_at, updated_at) " +
+                            "VALUES (1, 'architect', '', 0, 0)"
                     )
                     statement.executeUpdate(
                         "INSERT INTO tool_definitions (id, name, description, type, config_json, input_schema_json, is_enabled, created_at, updated_at) " +
@@ -151,8 +151,8 @@ class DatabaseMigratorAgentRolesTest {
                 // Deleting the role cascades its tool rows too.
                 connection.createStatement().use { statement ->
                     statement.executeUpdate(
-                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at) " +
-                            "VALUES (2, 'architect2', '', '[]', 0, 0)"
+                        "INSERT INTO agent_roles (id, name, description, created_at, updated_at) " +
+                            "VALUES (2, 'architect2', '', 0, 0)"
                     )
                     statement.executeUpdate(
                         "INSERT INTO tool_definitions (id, name, description, type, config_json, input_schema_json, is_enabled, created_at, updated_at) " +
@@ -337,8 +337,8 @@ class DatabaseMigratorAgentRolesTest {
                             "VALUES (2, 'u2', 'h', NULL, 'ENABLED', 0, 0)"
                     )
                     statement.executeUpdate(
-                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at) " +
-                            "VALUES (1, 'architect', '', '[]', 0, 0)"
+                        "INSERT INTO agent_roles (id, name, description, created_at, updated_at) " +
+                            "VALUES (1, 'architect', '', 0, 0)"
                     )
                     statement.executeUpdate(
                         "INSERT INTO agent_role_disabled (role_id, user_id) VALUES (1, 1)"
@@ -377,8 +377,8 @@ class DatabaseMigratorAgentRolesTest {
                 // A second role plus a disabled row for it: deleting the role cascades every user's rows.
                 connection.createStatement().use { statement ->
                     statement.executeUpdate(
-                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at) " +
-                            "VALUES (2, 'reviewer', '', '[]', 0, 0)"
+                        "INSERT INTO agent_roles (id, name, description, created_at, updated_at) " +
+                            "VALUES (2, 'reviewer', '', 0, 0)"
                     )
                     statement.executeUpdate(
                         "INSERT INTO agent_role_disabled (role_id, user_id) VALUES (2, 1)"
@@ -434,8 +434,8 @@ class DatabaseMigratorAgentRolesTest {
                             "VALUES (1, 'u1', 'h', NULL, 'ENABLED', 0, 0)"
                     )
                     statement.executeUpdate(
-                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at) " +
-                            "VALUES (1, 'architect', '', '[]', 0, 0)"
+                        "INSERT INTO agent_roles (id, name, description, created_at, updated_at) " +
+                            "VALUES (1, 'architect', '', 0, 0)"
                     )
                     statement.executeUpdate(
                         "INSERT INTO agent_role_owners (role_id, user_id) VALUES (1, 1)"

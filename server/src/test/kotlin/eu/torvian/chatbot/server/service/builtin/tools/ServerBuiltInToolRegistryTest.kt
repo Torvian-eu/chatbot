@@ -17,9 +17,9 @@ import kotlin.test.assertNotNull
  * Tests the Koin-registered server built-in tool registry.
  *
  * Verifies that the `Map<String, ServerBuiltInTool>` binding (the executor's dispatch table) is
- * keyed by every canonical catalog name — including the three targeted instruction tools,
- * `get_current_session_info`, the five project-management tools, `delete_agent_role`, and the five
- * model-preset tools — and
+ * keyed by every canonical catalog name — including the agent-role mutating tools,
+ * `get_current_session_info`, the six project-management tools, `delete_agent_role`, the five
+ * model-preset tools, and the five instruction-library tools — and
  * that those keys resolve to the correct handler implementations.
  */
 class ServerBuiltInToolRegistryTest {
@@ -47,17 +47,10 @@ class ServerBuiltInToolRegistryTest {
             assertNotNull(tools[spec.name]) { "Registry is missing a handler for '${spec.name}'" }
         }
 
-        // The three targeted instruction tools resolve to their dedicated handlers (never to a
+        // The agent-role mutating tools resolve to their dedicated handlers (never to a
         // generic fallback), so the executor can dispatch the canonical names.
-        assertIs<InsertAgentRoleInstructionTool>(
-            tools[ServerBuiltInToolCatalog.INSERT_AGENT_ROLE_INSTRUCTION_NAME]
-        )
-        assertIs<EditAgentRoleInstructionsTool>(
-            tools[ServerBuiltInToolCatalog.EDIT_AGENT_ROLE_INSTRUCTIONS_NAME]
-        )
-        assertIs<RemoveAgentRoleInstructionTool>(
-            tools[ServerBuiltInToolCatalog.REMOVE_AGENT_ROLE_INSTRUCTION_NAME]
-        )
+        assertIs<CreateAgentRoleTool>(tools[ServerBuiltInToolCatalog.CREATE_AGENT_ROLE_NAME])
+        assertIs<UpdateAgentRoleTool>(tools[ServerBuiltInToolCatalog.UPDATE_AGENT_ROLE_NAME])
         assertIs<GetCurrentSessionInfoTool>(
             tools[ServerBuiltInToolCatalog.GET_CURRENT_SESSION_INFO_NAME]
         )
@@ -80,5 +73,14 @@ class ServerBuiltInToolRegistryTest {
         assertIs<CreateModelPresetTool>(tools[ServerBuiltInToolCatalog.CREATE_MODEL_PRESET_NAME])
         assertIs<UpdateModelPresetTool>(tools[ServerBuiltInToolCatalog.UPDATE_MODEL_PRESET_NAME])
         assertIs<DeleteModelPresetTool>(tools[ServerBuiltInToolCatalog.DELETE_MODEL_PRESET_NAME])
+
+        // The five instruction-library tools resolve to their dedicated handlers. No tool links or
+        // unlinks an instruction: update_agent_role's instruction_ids covers that, so a registry
+        // entry for attach/detach would also fail the size assertion above.
+        assertIs<ListInstructionsTool>(tools[ServerBuiltInToolCatalog.LIST_INSTRUCTIONS_NAME])
+        assertIs<ReadInstructionTool>(tools[ServerBuiltInToolCatalog.READ_INSTRUCTION_NAME])
+        assertIs<CreateInstructionTool>(tools[ServerBuiltInToolCatalog.CREATE_INSTRUCTION_NAME])
+        assertIs<EditInstructionTool>(tools[ServerBuiltInToolCatalog.EDIT_INSTRUCTION_NAME])
+        assertIs<DeleteInstructionTool>(tools[ServerBuiltInToolCatalog.DELETE_INSTRUCTION_NAME])
     }
 }

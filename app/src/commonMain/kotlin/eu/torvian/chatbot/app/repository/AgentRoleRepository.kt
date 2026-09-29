@@ -89,6 +89,34 @@ interface AgentRoleRepository {
     suspend fun setRoleDisabled(roleId: Long, disabled: Boolean): Either<RepositoryError, AgentRoleDto>
 
     /**
+     * Links an instruction to a role, appending it as the last element of that role's list.
+     *
+     * The link is a role mutation: the returned role (the server's echo of the new list) replaces the
+     * previous entry in [roles], so any screen reading the role sees the appended instruction. The
+     * instruction library's own `linkedRoleIds` changes too, and is refreshed by the caller that shows
+     * usage rather than here, so this repository keeps a single refresh direction.
+     *
+     * @param roleId The unique identifier of the role to link to.
+     * @param instructionId The unique identifier of the instruction to link.
+     * @return [Either.Right] with the updated [AgentRoleDto] on success, or [Either.Left] with
+     *         [RepositoryError] on failure.
+     */
+    suspend fun assignInstruction(roleId: Long, instructionId: Long): Either<RepositoryError, AgentRoleDto>
+
+    /**
+     * Removes an instruction's link from a role.
+     *
+     * Only the link is removed: the instruction row survives as a library entry. The returned role
+     * replaces the previous entry in [roles], mirroring [assignInstruction].
+     *
+     * @param roleId The unique identifier of the role to unlink from.
+     * @param instructionId The unique identifier of the instruction to unlink.
+     * @return [Either.Right] with the updated [AgentRoleDto] on success, or [Either.Left] with
+     *         [RepositoryError] on failure.
+     */
+    suspend fun unassignInstruction(roleId: Long, instructionId: Long): Either<RepositoryError, AgentRoleDto>
+
+    /**
      * Deletes an agent role and removes it from [roles].
      *
      * Sessions referencing the role are unassigned server-side via `SET NULL`; the next session

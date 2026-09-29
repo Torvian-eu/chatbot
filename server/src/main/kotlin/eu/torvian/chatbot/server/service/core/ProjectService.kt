@@ -10,6 +10,7 @@ import eu.torvian.chatbot.server.service.core.error.project.CreateProjectError
 import eu.torvian.chatbot.server.service.core.error.project.DeleteProjectError
 import eu.torvian.chatbot.server.service.core.error.project.ProjectError
 import eu.torvian.chatbot.server.service.core.error.project.UpdateProjectError
+import eu.torvian.chatbot.server.service.core.project.DeleteProjectResult
 
 /**
  * Service interface for managing user-owned projects.
@@ -102,15 +103,21 @@ interface ProjectService {
     /**
      * Deletes a project owned by the user.
      *
-     * The project's `project_owners` row cascades away and its member roles' `project_id` is nulled
-     * (roles survive), and
-     * `chat_sessions.project_id` becomes null via `ON DELETE SET NULL`. In the same transaction the
-     * service clears the agent role of every session that selected the deleted project (uniform
-     * legality restoration), so no session is left with an illegal pair. Does **not** delete roles.
+     * Deletion is destructive for the project's member agent roles: each is deleted through
+     * [AgentRoleService.deleteRole], so its dependent rows cascade away and every instruction row it
+     * linked that loses its last link is removed too. Instruction rows still linked by a surviving
+     * role — another project's role or an unassociated role — are kept. The project row and its
+     * `project_owners` row are then removed, and `chat_sessions.project_id` becomes null via
+     * `ON DELETE SET NULL`. In the same transaction the service clears the agent role of every
+     * session that selected the deleted project (uniform legality restoration), so no session is left
+     * with an illegal pair. The whole cascade is atomic: a failure rolls everything back.
+     *
+     * A foreign or nonexistent project collapses to [DeleteProjectError.NotFound] before any write.
      *
      * @param userId The ID of the requesting user.
      * @param projectId The ID of the project to delete.
-     * @return Either a [DeleteProjectError] or Unit on success.
+     * @return Either a [DeleteProjectError] or the [DeleteProjectResult] naming the deleted roles and
+     *         the removed/retained instruction rows.
      */
-    suspend fun deleteProject(userId: Long, projectId: Long): Either<DeleteProjectError, Unit>
+    suspend fun deleteProject(userId: Long, projectId: Long): Either<DeleteProjectError, DeleteProjectResult>
 }

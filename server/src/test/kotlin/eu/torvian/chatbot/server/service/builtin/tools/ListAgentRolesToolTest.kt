@@ -84,11 +84,13 @@ class ListAgentRolesToolTest {
         projectId: Long? = null,
         instructions: List<AgentInstructionDto> = listOf(
             AgentInstructionDto(
+                id = 10L,
                 type = AgentInstructionTypes.ROLE,
                 name = "Role instruction name",
                 message = "SENSITIVE role instruction message"
             ),
             AgentInstructionDto(
+                id = 11L,
                 type = AgentInstructionTypes.CUSTOM,
                 name = "Custom instruction name",
                 message = "SENSITIVE custom instruction message",

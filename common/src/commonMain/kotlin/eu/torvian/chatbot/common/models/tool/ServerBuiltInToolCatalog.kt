@@ -101,35 +101,11 @@ object ServerBuiltInToolCatalog {
      * role; absent or null means an unassociated role). */
     const val PROJECT_ID_PROPERTY = "project_id"
 
-    /** JSON property holding the flat instruction list of a role (advanced; see AgentInstructionDto). */
-    const val INSTRUCTIONS_PROPERTY = "instructions"
-
-    /** Canonical, unprefixed catalog name of the `insert_agent_role_instruction` tool. */
-    const val INSERT_AGENT_ROLE_INSTRUCTION_NAME = "insert_agent_role_instruction"
-
-    /** Canonical, unprefixed catalog name of the `edit_agent_role_instructions` tool. */
-    const val EDIT_AGENT_ROLE_INSTRUCTIONS_NAME = "edit_agent_role_instructions"
-
-    /** Canonical, unprefixed catalog name of the `remove_agent_role_instruction` tool. */
-    const val REMOVE_AGENT_ROLE_INSTRUCTION_NAME = "remove_agent_role_instruction"
+    /** JSON property holding the ordered instruction row ids a role links. */
+    const val INSTRUCTION_IDS_PROPERTY = "instruction_ids"
 
     /** Canonical, unprefixed catalog name of the `get_current_session_info` tool. */
     const val GET_CURRENT_SESSION_INFO_NAME = "get_current_session_info"
-
-    /** JSON property holding the zero-based index into the instruction list (insert/remove tools). */
-    const val POSITION_PROPERTY = "position"
-
-    /** JSON property holding the single instruction object for `insert_agent_role_instruction`. */
-    const val INSTRUCTION_PROPERTY = "instruction"
-
-    /** JSON property holding the text-edit batch for `edit_agent_role_instructions`. */
-    const val EDITS_PROPERTY = "edits"
-
-    /** JSON property inside each [EDITS_PROPERTY] item: the exact text to be replaced. */
-    const val OLD_TEXT_PROPERTY = "oldText"
-
-    /** JSON property inside each [EDITS_PROPERTY] item: the replacement text. */
-    const val NEW_TEXT_PROPERTY = "newText"
 
     /** Canonical, unprefixed catalog name of the `list_projects` tool. */
     const val LIST_PROJECTS_NAME = "list_projects"
@@ -167,6 +143,42 @@ object ServerBuiltInToolCatalog {
     /** JSON property holding the user-owned agent-role ids attached to a project. */
     const val AGENT_ROLE_IDS_PROPERTY = "agent_role_ids"
 
+    /** Canonical, unprefixed catalog name of the `list_instructions` tool. */
+    const val LIST_INSTRUCTIONS_NAME = "list_instructions"
+
+    /** Canonical, unprefixed catalog name of the `read_instruction` tool. */
+    const val READ_INSTRUCTION_NAME = "read_instruction"
+
+    /** Canonical, unprefixed catalog name of the `create_instruction` tool. */
+    const val CREATE_INSTRUCTION_NAME = "create_instruction"
+
+    /** Canonical, unprefixed catalog name of the `edit_instruction` tool. */
+    const val EDIT_INSTRUCTION_NAME = "edit_instruction"
+
+    /** Canonical, unprefixed catalog name of the `delete_instruction` tool. */
+    const val DELETE_INSTRUCTION_NAME = "delete_instruction"
+
+    /** JSON property holding the instruction-row id addressed by the instruction tools. */
+    const val INSTRUCTION_ID_PROPERTY = "instruction_id"
+
+    /** JSON property holding the instruction kind key of an authored instruction. */
+    const val TYPE_PROPERTY = "type"
+
+    /** JSON property holding the instruction text of an authored instruction. */
+    const val MESSAGE_PROPERTY = "message"
+
+    /** JSON property holding the kind-specific extra fields of an authored instruction. */
+    const val CUSTOM_PROPERTY = "custom"
+
+    /** JSON property holding the text-edit batch of `edit_instruction`. */
+    const val EDITS_PROPERTY = "edits"
+
+    /** JSON property inside each [EDITS_PROPERTY] item: the exact text to be replaced. */
+    const val OLD_TEXT_PROPERTY = "oldText"
+
+    /** JSON property inside each [EDITS_PROPERTY] item: the replacement text. */
+    const val NEW_TEXT_PROPERTY = "newText"
+
     /**
      * Immutable specification of a single server built-in tool.
      *
@@ -199,11 +211,86 @@ object ServerBuiltInToolCatalog {
      * Builds a JSON Schema for an integer property.
      *
      * @param description Human-readable description of the property.
+     * @param minimum Optional inclusive lower bound, used for row ids so a placeholder `0` is
+     *            rejected by the schema instead of reaching the lookup.
      * @return The JSON Schema object for the integer property.
      */
-    private fun integerProperty(description: String): JsonObject = buildJsonObject {
+    private fun integerProperty(description: String, minimum: Int? = null): JsonObject = buildJsonObject {
         put("type", "integer")
+        if (minimum != null) put("minimum", minimum)
         put("description", description)
+    }
+
+    /**
+     * Builds a JSON Schema for the instruction-kind property of an authored instruction.
+     *
+     * The `enum` is derived from [AgentInstructionTypes.allKnown] so the accepted kinds cannot
+     * drift from the server's validation of the same value.
+     *
+     * @return The JSON Schema object for the `type` property.
+     */
+    private fun instructionTypeProperty(): JsonObject = buildJsonObject {
+        put("type", "string")
+        put("description", "Kind of the instruction; one of the known instruction kinds.")
+        putJsonArray("enum") {
+            AgentInstructionTypes.allKnown.forEach { add(it) }
+        }
+    }
+
+    /**
+     * Builds a JSON Schema for a free-form JSON-object property.
+     *
+     * The object is deliberately open: its keys depend on the instruction kind, and the server
+     * validates the kind-specific requirements, so a schema change cannot weaken them.
+     *
+     * @param description Human-readable description of the property.
+     * @return The JSON Schema object for the object-valued property.
+     */
+    private fun objectProperty(description: String): JsonObject = buildJsonObject {
+        put("type", "object")
+        put("description", description)
+    }
+
+    /**
+     * Builds a JSON Schema for the text-edit batch of `edit_instruction`.
+     *
+     * Mirrors the worker `edit_file` tool's `edits` parameter shape: an array of `oldText`/`newText`
+     * pairs matched exactly against the original instruction message (array order is not sequential,
+     * and all non-overlapping occurrences of each `oldText` are replaced).
+     *
+     * @return The JSON Schema object for the `edits` array.
+     */
+    private fun editsProperty(): JsonObject = buildJsonObject {
+        put("type", "array")
+        put("minItems", 1)
+        put(
+            "description",
+            "Replacement batch matched against the original instruction message; array order is " +
+                "not sequential. Each edit replaces all non-overlapping occurrences of its oldText, " +
+                "and the operation fails if an oldText matches nothing."
+        )
+        putJsonObject("items") {
+            put("type", "object")
+            put("additionalProperties", false)
+            putJsonObject("properties") {
+                putJsonObject(OLD_TEXT_PROPERTY) {
+                    put("type", "string")
+                    put(
+                        "description",
+                        "Exact text to replace. All non-overlapping occurrences are replaced; add " +
+                            "surrounding context to target one occurrence."
+                    )
+                }
+                putJsonObject(NEW_TEXT_PROPERTY) {
+                    put("type", "string")
+                    put("description", "Replacement text.")
+                }
+            }
+            putJsonArray("required") {
+                add(OLD_TEXT_PROPERTY)
+                add(NEW_TEXT_PROPERTY)
+            }
+        }
     }
 
     /**
@@ -232,155 +319,35 @@ object ServerBuiltInToolCatalog {
     }
 
     /**
-     * Builds a JSON Schema for a single instruction object (one AgentInstructionDto).
+     * Builds a JSON Schema for the ordered instruction-id list property.
      *
-     * Shared by the `items` of the `instructions` array (`create_agent_role`/`update_agent_role`)
-     * and the `instruction` parameter of `insert_agent_role_instruction`. The schema documents the
-     * shape but cannot enforce the per-type business rules (e.g. `model_specific` requires
-     * `custom.modelId`, other kinds require no custom data); those are validated server-side by
-     * the role service, which is more reliable than `if`/`then` for LLM function-calling providers
-     * that only support a JSON Schema subset.
-     *
-     * `type`, `name`, and `message` are required; a `spawnable_agents` instruction takes an empty
-     * message (the server generates the text from the role's spawn allow-list). `custom` is an
-     * optional key that must be omitted (never null) when the instruction kind carries no
-     * type-specific data.
-     *
-     * @return The JSON Schema object describing one instruction.
-     */
-    private fun instructionObjectSchema(): JsonObject = buildJsonObject {
-        put("type", "object")
-        put("additionalProperties", false)
-
-        putJsonObject("properties") {
-            putJsonObject("type") {
-                put("type", "string")
-                put("description", "The instruction kind.")
-
-                putJsonArray("enum") {
-                    AgentInstructionTypes.allKnown.forEach { add(it) }
-                }
-            }
-
-            putJsonObject("name") {
-                put("type", "string")
-                put("description", "Human-readable label for the instruction.")
-            }
-
-            putJsonObject("message") {
-                put("type", "string")
-                put(
-                    "description",
-                    """
-                    Instruction text. For spawnable_agents pass an empty string; the server
-                    generates the message from the role's spawn allow-list.
-                    """.trimIndent()
-                )
-            }
-
-            putJsonObject("custom") {
-                put("type", "object")
-                put(
-                    "description",
-                    """
-                    Type-specific data. For model_specific this must contain modelId; for the
-                    other currently supported instruction types omit it.
-                    """.trimIndent()
-                )
-
-                putJsonObject("properties") {
-                    putJsonObject("modelId") {
-                        put("type", "integer")
-                        put("minimum", 1)
-                        put(
-                            "description",
-                            "ID of the model targeted by a model_specific instruction."
-                        )
-                    }
-                }
-
-                put("additionalProperties", false)
-            }
-        }
-
-        putJsonArray("required") {
-            add("type")
-            add("name")
-            add("message")
-        }
-    }
-
-    /**
-     * Builds a JSON Schema for the optional instruction list (advanced usage), with a different
-     * description for the `create_agent_role` tool.
+     * A role references instructions by id: the values select existing instruction rows, and their
+     * order is the order of the role's instruction list. Instruction content is authored through the
+     * instruction surfaces, so the schema carries no nested instruction objects.
      *
      * @param create True when building the schema for `create_agent_role`, false for `update_agent_role`.
-     * @return The JSON Schema object for the `instructions` array.
+     * @return The JSON Schema object for the `instruction_ids` array.
      */
-    private fun instructionsProperty(create: Boolean): JsonObject = buildJsonObject {
+    private fun instructionIdsProperty(create: Boolean): JsonObject = buildJsonObject {
         put("type", "array")
         put(
             "description",
-            buildString {
-                appendLine("Ordered list of instructions used to compose the agent role's system prompt.")
-                appendLine()
-                appendLine("Supported instruction types:")
-                appendLine("- role: static description of the agent's role")
-                appendLine("- main: project or AGENTS.md context")
-                appendLine("- custom: user-editable free-text instruction")
-                appendLine("- spawnable_agents: server-generated guidance; pass an empty string (the supplied message is ignored)")
-                appendLine("- model_specific: instruction applied only to custom.modelId")
-                appendLine()
-                if (create) {
-                    append("To modify the list after creation, use `insert_agent_role_instruction`, `edit_agent_role_instructions`, or `remove_agent_role_instruction`.")
-                } else {
-                    append("Pass the entire `instructions` array to replace the whole list in one call — include every instruction you want to keep. For targeted changes, use the dedicated tools `insert_agent_role_instruction` (add), `edit_agent_role_instructions` (batch `oldText`/`newText` replacements), or `remove_agent_role_instruction` (remove).")
-                }
-            }.trimIndent()
-        )
-        put("items", instructionObjectSchema())
-    }
-
-    /**
-     * Builds a JSON Schema for the text-edit batch of `edit_agent_role_instructions`.
-     *
-     * Mirrors the worker `edit_file` tool's `edits` parameter shape: an array of `oldText`/`newText`
-     * pairs matched exactly against the original instruction texts (array order is not sequential,
-     * and all non-overlapping occurrences of each `oldText` are replaced).
-     *
-     * @return The JSON Schema object for the `edits` array.
-     */
-    private fun editsProperty(): JsonObject = buildJsonObject {
-        put("type", "array")
-        put("minItems", 1)
-        put(
-            "description",
-            "Replacement batch matched against the original instruction texts; array order is not " +
-                "sequential. Each edit replaces all non-overlapping occurrences of its oldText " +
-                "across every instruction message; the operation fails if an oldText matches nothing."
-        )
-        putJsonObject("items") {
-            put("type", "object")
-            put("additionalProperties", false)
-            putJsonObject("properties") {
-                putJsonObject(OLD_TEXT_PROPERTY) {
-                    put("type", "string")
-                    put(
-                        "description",
-                        "Exact text to replace. All non-overlapping occurrences across all " +
-                            "instruction messages are replaced; add context to target one instance."
-                    )
-                }
-                putJsonObject(NEW_TEXT_PROPERTY) {
-                    put("type", "string")
-                    put("description", "Replacement text.")
-                }
+            if (create) {
+                "Optional ordered ids of existing instructions that make up the role's system " +
+                    "prompt. Every id must reference an instruction owned by the current user, and the " +
+                    "same instruction can be linked at most once. Omit to create a role without " +
+                    "instructions."
+            } else {
+                "New ordered ids of the instructions that make up the role's system prompt (full " +
+                    "replacement of the role's instruction list). Every id must reference an " +
+                    "instruction owned by the current user, and the same instruction can be linked at " +
+                    "most once. Omit to keep the role's current instructions."
             }
-            putJsonArray("required") {
-                add(OLD_TEXT_PROPERTY)
-                add(NEW_TEXT_PROPERTY)
-            }
-        }
+        )
+        put("items", buildJsonObject {
+            put("type", "integer")
+            put("minimum", 1)
+        })
     }
 
     /**
@@ -480,8 +447,10 @@ object ServerBuiltInToolCatalog {
         ServerBuiltInToolSpec(
             name = DELETE_PROJECT_NAME,
             description = "Deletes one project owned by the current user by its id. The project's " +
-                "member agent roles are not deleted: their project membership is removed, so they " +
-                "become unassociated. Returns a concise one-line summary of the operation.",
+                "member agent roles are deleted with it, and every instruction row that loses its " +
+                "last link through those role deletions is removed as well; instructions still linked " +
+                "by a role outside the project survive. Returns a concise one-line summary of the " +
+                "operation.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -560,7 +529,9 @@ object ServerBuiltInToolCatalog {
             name = CREATE_AGENT_ROLE_NAME,
             description = "Creates a new agent role owned by the current user. The role may be " +
                 "created without a model preset and completed later via update_agent_role; " +
-                "a role without a preset is non-sendable until set. Returns a concise " +
+                "a role without a preset is non-sendable until set. Instructions are referenced " +
+                "by the ids of existing instruction rows, never by content: author instruction " +
+                "content through the instruction surfaces first. Returns a concise " +
                 "one-line summary of the operation.",
             inputSchema = buildJsonObject {
                 put("type", "object")
@@ -598,7 +569,7 @@ object ServerBuiltInToolCatalog {
                                 "must be owned by the current user."
                         )
                     )
-                    put(INSTRUCTIONS_PROPERTY, instructionsProperty(create = true))
+                    put(INSTRUCTION_IDS_PROPERTY, instructionIdsProperty(create = true))
                 })
                 put("required", buildJsonArray {
                     add(NAME_PROPERTY)
@@ -609,7 +580,9 @@ object ServerBuiltInToolCatalog {
             name = UPDATE_AGENT_ROLE_NAME,
             description = "Updates one agent role owned by the current user (patch semantics): " +
                 "provide only the fields to change; every omitted field is preserved, including the " +
-                "attached tools, spawnable roles and instructions. Passing null is treated as omitted " +
+                "attached tools, spawnable roles and instructions. Instructions are referenced by " +
+                "the ids of existing instruction rows, never by content: author instruction content " +
+                "through the instruction surfaces first. Passing null is treated as omitted " +
                 "— fields cannot be cleared with null; pass an empty string or an empty array to " +
                 "clear a field (project_id is the exception: pass 0 to clear it, which moves the " +
                 "role to unassociated; model_preset_id also accepts 0 to detach its preset). " +
@@ -662,7 +635,7 @@ object ServerBuiltInToolCatalog {
                                 "valid project id)."
                         )
                     )
-                    put(INSTRUCTIONS_PROPERTY, instructionsProperty(create = false))
+                    put(INSTRUCTION_IDS_PROPERTY, instructionIdsProperty(create = false))
                 })
                 put("required", buildJsonArray {
                     add(ROLE_ID_PROPERTY)
@@ -674,7 +647,11 @@ object ServerBuiltInToolCatalog {
             description = "Deletes one agent role owned by the current user by its id. Deleting is " +
                 "non-destructive for sessions: chat sessions and messages that referenced the role " +
                 "keep their history and become inert until another role is selected (no 'role in " +
-                "use' rejection applies). Returns a concise one-line summary of the operation.",
+                "use' rejection applies). Instruction rows that lose their last link through this " +
+                "deletion are removed as well; instructions still linked to other roles or assigned " +
+                "to no role survive. Returns a concise one-line summary of the operation naming any " +
+                "instruction rows removed with the role and any kept because other roles still link " +
+                "them.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -689,81 +666,146 @@ object ServerBuiltInToolCatalog {
             }
         ),
         ServerBuiltInToolSpec(
-            name = INSERT_AGENT_ROLE_INSTRUCTION_NAME,
-            description = "Inserts one instruction into an agent role owned by the current user at " +
-                "the given position, without rewriting the other instructions. The instruction " +
-                "object uses the same shape as an entry of update_agent_role's instructions " +
-                "parameter. Returns a concise one-line summary of the operation. Prefer this " +
-                "tool over update_agent_role when only adding one instruction, to save tokens.",
+            name = LIST_INSTRUCTIONS_NAME,
+            description = "Lists the instruction library of the current user: every stored " +
+                    "instruction with its id, type, name, and the ids of the agent roles that link " +
+                    "it. Each row carries no message text, so use read_instruction with an id to " +
+                    "fetch the text of one instruction. Pass role_id to report only the instructions " +
+                    "assigned to one agent role owned by the current user; an unknown or non-owned " +
+                    "role id fails instead of returning an empty list, so an empty result always " +
+                    "means that role has no instructions.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
                     put(
                         ROLE_ID_PROPERTY,
-                        integerProperty("Id of the agent role to modify. The role must be owned by the current user.")
-                    )
-                    put(
-                        POSITION_PROPERTY,
                         integerProperty(
-                            "Zero-based position in the instruction list where the new instruction " +
-                                "is inserted: 0 inserts at the beginning, and the current list size " +
-                                "appends at the end."
+                            "Optional id of an agent role owned by the current user; when " +
+                                    "given, only the instructions assigned to that role are listed.",
+                            minimum = 1
                         )
                     )
-                    put(INSTRUCTION_PROPERTY, instructionObjectSchema())
-                })
-                put("required", buildJsonArray {
-                    add(ROLE_ID_PROPERTY)
-                    add(POSITION_PROPERTY)
-                    add(INSTRUCTION_PROPERTY)
                 })
             }
         ),
         ServerBuiltInToolSpec(
-            name = EDIT_AGENT_ROLE_INSTRUCTIONS_NAME,
-            description = "Applies text replacements to the instruction messages of an agent role " +
-                "owned by the current user. Each edit replaces all non-overlapping occurrences of " +
-                "its oldText across every instruction message; edits match the original instruction " +
-                "texts (array order is not sequential), and the operation fails when an oldText " +
-                "matches nothing. Returns an edit summary and a unified diff of the changed " +
-                "instruction texts. Prefer this tool over update_agent_role for targeted text " +
-                "changes to save tokens.",
+            name = READ_INSTRUCTION_NAME,
+            description = "Reads one instruction owned by the current user by its id, " +
+                    "returning its full JSON: id, type, name, message, custom data, and the ids of " +
+                    "the agent roles that link it. The message is the stored text; for a " +
+                    "spawnable_agents instruction it is empty, because that text is generated for " +
+                    "each linked role at read time.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
                     put(
-                        ROLE_ID_PROPERTY,
-                        integerProperty("Id of the agent role to modify. The role must be owned by the current user.")
+                        INSTRUCTION_ID_PROPERTY,
+                        integerProperty(
+                            "Id of the instruction to read. The instruction must be owned by the current user.",
+                            minimum = 1
+                        )
+                    )
+                })
+                put("required", buildJsonArray {
+                    add(INSTRUCTION_ID_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
+            name = CREATE_INSTRUCTION_NAME,
+            description = "Creates a new instruction owned by the current user. Instructions are " +
+                    "standalone library objects that agent roles reference by id; a new row is " +
+                    "linked to no role, so assign it in the same turn by passing its id to " +
+                    "update_agent_role's instruction_ids. type must name a known instruction kind, " +
+                    "name must be a non-blank label of at most 255 characters, message is the " +
+                    "instruction text, and custom carries kind-specific data (a model_specific " +
+                    "instruction needs custom.modelId). Omit message for a spawnable_agents " +
+                    "instruction: its text is generated per linked role, so a supplied message is " +
+                    "rejected and the created row reports an empty message. Returns the created " +
+                    "instruction's full JSON including its " +
+                    "server-generated id.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(TYPE_PROPERTY, instructionTypeProperty())
+                    put(
+                        NAME_PROPERTY,
+                        stringProperty("Human-readable label of the instruction, non-blank and at most 255 characters.")
+                    )
+                    put(
+                        MESSAGE_PROPERTY,
+                        stringProperty(
+                            "Instruction text. Omit for a spawnable_agents instruction, whose text " +
+                                    "is generated for each linked role at read time."
+                        )
+                    )
+                    put(
+                        CUSTOM_PROPERTY,
+                        objectProperty(
+                            "Optional kind-specific data; a model_specific instruction requires " +
+                                    "{\"modelId\": <id>} naming the model it applies to."
+                        )
+                    )
+                })
+                put("required", buildJsonArray {
+                    add(TYPE_PROPERTY)
+                    add(NAME_PROPERTY)
+                })
+            }
+        ),
+        ServerBuiltInToolSpec(
+            name = EDIT_INSTRUCTION_NAME,
+            description = "Replaces text inside the message of one instruction owned by the " +
+                    "current user. Each edit supplies the exact oldText to replace and its newText; " +
+                    "every non-overlapping occurrence of an oldText is replaced, all edits are " +
+                    "matched against the original message so array order is not sequential, and the " +
+                    "call fails if an oldText matches nothing. Only the message changes: the " +
+                    "instruction's type, name and custom data stay as they are, and a " +
+                    "spawnable_agents instruction cannot be edited because its text is generated " +
+                    "per linked role. The change reaches every agent role that links the " +
+                    "instruction, and the result is a plain-text report naming those roles plus a " +
+                    "unified diff of the message.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put(
+                        INSTRUCTION_ID_PROPERTY,
+                        integerProperty(
+                            "Id of the instruction whose message to edit. The instruction must be " +
+                                    "owned by the current user.",
+                            minimum = 1
+                        )
                     )
                     put(EDITS_PROPERTY, editsProperty())
                 })
                 put("required", buildJsonArray {
-                    add(ROLE_ID_PROPERTY)
+                    add(INSTRUCTION_ID_PROPERTY)
                     add(EDITS_PROPERTY)
                 })
             }
         ),
         ServerBuiltInToolSpec(
-            name = REMOVE_AGENT_ROLE_INSTRUCTION_NAME,
-            description = "Removes the instruction at the given position from an agent role owned by " +
-                "the current user, without rewriting the other instructions. Returns a concise " +
-                "one-line summary of the operation. Prefer this tool over update_agent_role when " +
-                "only removing one instruction, to save tokens.",
+            name = DELETE_INSTRUCTION_NAME,
+            description = "Deletes one instruction owned by the current user by its id. The call " +
+                    "fails with instruction_in_use while any agent role still links the " +
+                    "instruction, naming the roles that must unlink it first: remove the link from " +
+                    "every role through update_agent_role (deleting the last linking agent role " +
+                    "removes the instruction too). Deleting destroys the stored text permanently, " +
+                    "whereas unassigning the instruction from every role keeps it in the library " +
+                    "instead. Returns a one-line summary naming the deleted instruction.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
                     put(
-                        ROLE_ID_PROPERTY,
-                        integerProperty("Id of the agent role to modify. The role must be owned by the current user.")
-                    )
-                    put(
-                        POSITION_PROPERTY,
-                        integerProperty("Zero-based position of the instruction to remove.")
+                        INSTRUCTION_ID_PROPERTY,
+                        integerProperty(
+                            "Id of the instruction to delete. The instruction must be owned by the current user.",
+                            minimum = 1
+                        )
                     )
                 })
                 put("required", buildJsonArray {
-                    add(ROLE_ID_PROPERTY)
-                    add(POSITION_PROPERTY)
+                    add(INSTRUCTION_ID_PROPERTY)
                 })
             }
         ),
@@ -814,15 +856,6 @@ object ServerBuiltInToolCatalog {
                     add(TOOL_ID_PROPERTY)
                 })
             }
-        ),
-        ServerBuiltInToolSpec(
-            name = GET_CURRENT_SESSION_INFO_NAME,
-            description = "Returns the current chat session's id and name together with the id, " +
-                "name, and (when set) display name of the agent role selected for that session, " +
-                "and the session's project id (present only when the session has a project " +
-                "selected). The session is the one the current conversation belongs to and is " +
-                "always owned by the current user, so no other user's data is ever exposed.",
-            inputSchema = emptyObjectSchema()
         ),
         ServerBuiltInToolSpec(
             name = LIST_MODEL_PRESETS_NAME,
@@ -973,6 +1006,15 @@ object ServerBuiltInToolCatalog {
                     add(MODEL_PRESET_ID_PROPERTY)
                 })
             }
+        ),
+        ServerBuiltInToolSpec(
+            name = GET_CURRENT_SESSION_INFO_NAME,
+            description = "Returns the current chat session's id and name together with the id, " +
+                    "name, and (when set) display name of the agent role selected for that session, " +
+                    "and the session's project id (present only when the session has a project " +
+                    "selected). The session is the one the current conversation belongs to and is " +
+                    "always owned by the current user, so no other user's data is ever exposed.",
+            inputSchema = emptyObjectSchema()
         )
     )
 }

@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.service.api
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
+import eu.torvian.chatbot.common.models.api.project.DeleteProjectResponse
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
 
@@ -78,13 +79,16 @@ interface ProjectApi {
     suspend fun cloneProject(projectId: Long, request: CloneProjectRequest): Either<ApiResourceError, ProjectDto>
 
     /**
-     * Deletes a project and its ownership/role links. Member roles themselves are not deleted;
-     * sessions using the project are unassigned server-side via `SET NULL`.
+     * Deletes a project together with its member agent roles and the instruction rows that lose
+     * their last link through those deletions; instructions still linked by a surviving role are
+     * kept. Sessions using the project are unassigned server-side via `SET NULL`.
      *
-     * Corresponds to `DELETE /api/v1/projects/{projectId}`.
+     * Corresponds to `DELETE /api/v1/projects/{projectId}`, which returns `200` with the deletion
+     * impact so the caller can refresh its caches and report the outcome.
      *
      * @param projectId The unique identifier of the project to delete.
-     * @return [Either.Right] with [Unit] on success, or [Either.Left] containing an [ApiResourceError] on failure.
+     * @return [Either.Right] with the [DeleteProjectResponse] impact on success, or [Either.Left]
+     *         containing an [ApiResourceError] on failure.
      */
-    suspend fun deleteProject(projectId: Long): Either<ApiResourceError, Unit>
+    suspend fun deleteProject(projectId: Long): Either<ApiResourceError, DeleteProjectResponse>
 }

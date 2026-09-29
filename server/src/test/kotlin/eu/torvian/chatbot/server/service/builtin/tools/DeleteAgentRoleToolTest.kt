@@ -6,6 +6,7 @@ import arrow.core.right
 import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.AgentRoleService
+import eu.torvian.chatbot.server.service.core.agent.DeleteAgentRoleResult
 import eu.torvian.chatbot.server.service.core.error.agent.DeleteAgentRoleError
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -14,6 +15,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -72,13 +74,50 @@ class DeleteAgentRoleToolTest {
     @Test
     fun `returns a confirmation mentioning the role id on success`() = runTest {
         val agentRoleService = mockk<AgentRoleService>()
-        coEvery { agentRoleService.deleteRole(userId, 7L) } returns Unit.right()
+        coEvery { agentRoleService.deleteRole(userId, 7L) } returns DeleteAgentRoleResult(emptyList(), emptyList()).right()
         val tool = DeleteAgentRoleTool(agentRoleService)
 
         val output = assertSuccess(tool.execute(buildJsonObject { put("role_id", 7L) }, context()))
 
         assertTrue(output.contains("Deleted agent role (id: 7)"))
         coVerify(exactly = 1) { agentRoleService.deleteRole(userId, 7L) }
+    }
+
+    /**
+     * Pins the tool path to the service semantics: the whole deletion — including the instruction
+     * cleanup that rides it — is delegated to [AgentRoleService.deleteRole] in exactly one call, and
+     * the summary stays the plain confirmation when no instruction rows were affected.
+     */
+    @Test
+    fun `delegates the whole deletion to one deleteRole call with the unchanged summary`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        coEvery { agentRoleService.deleteRole(userId, 7L) } returns DeleteAgentRoleResult(emptyList(), emptyList()).right()
+        val tool = DeleteAgentRoleTool(agentRoleService)
+
+        val output = assertSuccess(tool.execute(buildJsonObject { put("role_id", 7L) }, context()))
+
+        assertEquals("Deleted agent role (id: 7).", output)
+        coVerify(exactly = 1) { agentRoleService.deleteRole(any(), any()) }
+    }
+
+    /**
+     * Verifies the summary reports the sweep outcome the service returned: the instruction rows
+     * removed with the role and the rows kept because other roles still link them.
+     */
+    @Test
+    fun `reports removed and still-linked instructions in the summary`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        coEvery { agentRoleService.deleteRole(userId, 7L) } returns
+            DeleteAgentRoleResult(deletedInstructionIds = listOf(3L, 5L), retainedInstructionIds = listOf(9L)).right()
+        val tool = DeleteAgentRoleTool(agentRoleService)
+
+        val output = assertSuccess(tool.execute(buildJsonObject { put("role_id", 7L) }, context()))
+
+        assertEquals(
+            "Deleted agent role (id: 7); removed 2 instruction(s) that lost their last link " +
+                "(ids: 3, 5); kept 1 instruction(s) still linked by other role(s) (ids: 9).",
+            output
+        )
     }
 
     /**

@@ -5,6 +5,7 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.resources.ProjectResource
 import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
+import eu.torvian.chatbot.common.models.api.project.DeleteProjectResponse
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
@@ -33,7 +34,7 @@ import io.ktor.server.routing.*
  * - POST /api/v1/projects - Create a new project (the caller becomes the owner)
  * - GET /api/v1/projects/{projectId} - Get a specific project
  * - PUT /api/v1/projects/{projectId} - Update a specific project
- * - DELETE /api/v1/projects/{projectId} - Delete a specific project
+ * - DELETE /api/v1/projects/{projectId} - Delete a specific project (roles and orphaned instructions are deleted)
  * - POST /api/v1/projects/{projectId}/clone - Clone a specific project (deep-copies its member roles)
  *
  * @param projectService Service backing the project CRUD operations.
@@ -103,8 +104,9 @@ fun Route.configureProjectRoutes(
             call.respondEither(result, HttpStatusCode.Created)
         }
 
-        // DELETE /api/v1/projects/{projectId} - Delete project (ownership checked; roles survive, the
-        // affected sessions' roles are cleared by the service in the same transaction)
+        // DELETE /api/v1/projects/{projectId} - Delete project (ownership checked; the project's member
+        // roles are deleted, instructions that lose their last link go with them, and the affected
+        // sessions' roles are cleared by the service in the same transaction)
         delete<ProjectResource.ById> { resource ->
             val userId = call.getUserId()
 
@@ -112,8 +114,15 @@ fun Route.configureProjectRoutes(
                 withError({ e: DeleteProjectError -> e.toApiError() }) {
                     projectService.deleteProject(userId, resource.projectId).bind()
                 }
+            }.map { deleted ->
+                DeleteProjectResponse(
+                    projectId = resource.projectId,
+                    deletedAgentRoleIds = deleted.deletedAgentRoleIds,
+                    deletedInstructionIds = deleted.deletedInstructionIds,
+                    retainedInstructionIds = deleted.retainedInstructionIds
+                )
             }
-            call.respondEither(result, HttpStatusCode.NoContent)
+            call.respondEither(result)
         }
     }
 }

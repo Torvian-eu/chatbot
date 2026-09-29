@@ -18,25 +18,27 @@ import eu.torvian.chatbot.server.service.builtin.ServerBuiltInTool
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolExecutor
 import eu.torvian.chatbot.server.service.builtin.tools.CloneProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.CreateAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.CreateInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.CreateModelPresetTool
 import eu.torvian.chatbot.server.service.builtin.tools.CreateProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.DeleteAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.DeleteInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.DeleteModelPresetTool
 import eu.torvian.chatbot.server.service.builtin.tools.DeleteProjectTool
-import eu.torvian.chatbot.server.service.builtin.tools.EditAgentRoleInstructionsTool
+import eu.torvian.chatbot.server.service.builtin.tools.EditInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.GetCurrentSessionInfoTool
-import eu.torvian.chatbot.server.service.builtin.tools.InsertAgentRoleInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListAgentRolesTool
+import eu.torvian.chatbot.server.service.builtin.tools.ListInstructionsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListModelPresetsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListModelSettingsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListModelsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListProjectsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ListToolsTool
 import eu.torvian.chatbot.server.service.builtin.tools.ReadAgentRoleTool
+import eu.torvian.chatbot.server.service.builtin.tools.ReadInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.ReadModelPresetTool
 import eu.torvian.chatbot.server.service.builtin.tools.ReadProjectTool
 import eu.torvian.chatbot.server.service.builtin.tools.ReadToolTool
-import eu.torvian.chatbot.server.service.builtin.tools.RemoveAgentRoleInstructionTool
 import eu.torvian.chatbot.server.service.builtin.tools.UpdateAgentRoleTool
 import eu.torvian.chatbot.server.service.builtin.tools.UpdateModelPresetTool
 import eu.torvian.chatbot.server.service.builtin.tools.UpdateProjectTool
@@ -239,9 +241,6 @@ fun serviceModule() = module {
             ReadAgentRoleTool(agentRoleService = get(), json = get()),
             CreateAgentRoleTool(agentRoleService = get()),
             UpdateAgentRoleTool(agentRoleService = get()),
-            InsertAgentRoleInstructionTool(agentRoleService = get()),
-            EditAgentRoleInstructionsTool(agentRoleService = get()),
-            RemoveAgentRoleInstructionTool(agentRoleService = get()),
             ListModelsTool(llmModelService = get(), json = get()),
             ListModelSettingsTool(llmModelService = get(), modelSettingsService = get(), json = get()),
             ListToolsTool(toolService = get(), json = get()),
@@ -259,6 +258,11 @@ fun serviceModule() = module {
             CreateModelPresetTool(modelPresetService = get(), json = get()),
             UpdateModelPresetTool(modelPresetService = get()),
             DeleteModelPresetTool(modelPresetService = get()),
+            ListInstructionsTool(instructionService = get(), agentRoleService = get(), json = get()),
+            ReadInstructionTool(instructionService = get(), json = get()),
+            CreateInstructionTool(instructionService = get(), json = get()),
+            EditInstructionTool(instructionService = get()),
+            DeleteInstructionTool(instructionService = get()),
         ).associateBy { it.name }
     }
     single<ServerBuiltInToolExecutor> {
@@ -303,6 +307,9 @@ fun serviceModule() = module {
             agentRoleSpawnableRoleDao = get(),
             agentRoleOwnershipDao = get(),
             agentRoleDisabledDao = get(),
+            instructionDao = get(),
+            instructionOwnershipDao = get(),
+            agentRoleInstructionDao = get(),
             modelPresetDao = get(),
             settingsDao = get(),
             toolDefinitionDao = get(),
@@ -310,6 +317,15 @@ fun serviceModule() = module {
             transactionScope = get(),
             projectDao = get(),
             sessionDao = get()
+        )
+    }
+    single<InstructionService> {
+        InstructionServiceImpl(
+            instructionDao = get(),
+            instructionOwnershipDao = get(),
+            agentRoleInstructionDao = get(),
+            transactionScope = get(),
+            json = get()
         )
     }
     single<ModelPresetService> {
@@ -331,7 +347,9 @@ fun serviceModule() = module {
             agentRoleSpawnableRoleDao = get(),
             agentRoleOwnershipDao = get(),
             agentRoleDisabledDao = get(),
+            agentRoleInstructionDao = get(),
             sessionDao = get(),
+            agentRoleService = get(),
             transactionScope = get()
         )
     }

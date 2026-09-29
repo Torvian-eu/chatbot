@@ -1,8 +1,7 @@
 package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.right
-import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
-import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
@@ -146,9 +145,7 @@ class AgentRoleServiceImplToolTest : AgentRoleServiceImplTestBase() {
             description = "Designs systems",
             modelPresetId = validPreset.id,
             toolIds = setOf(1L, 2L),
-            instructions = listOf(
-                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect.")
-            )
+            instructionSpecs = listOf(InstructionSlot.Link(1L))
         )
         val result = service.updateRole(userId, 1L, request)
 

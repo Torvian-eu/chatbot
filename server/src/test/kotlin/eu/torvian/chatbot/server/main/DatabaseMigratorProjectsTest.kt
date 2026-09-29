@@ -83,8 +83,8 @@ class DatabaseMigratorProjectsTest {
                             "VALUES (1, 'u1', 'h', NULL, 'ENABLED', 0, 0)"
                     )
                     statement.executeUpdate(
-                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at) " +
-                            "VALUES (1, 'architect', '', '[]', 0, 0)"
+                        "INSERT INTO agent_roles (id, name, description, created_at, updated_at) " +
+                            "VALUES (1, 'architect', '', 0, 0)"
                     )
                     statement.executeUpdate(
                         "INSERT INTO agent_role_owners (role_id, user_id) VALUES (1, 1)"
@@ -150,8 +150,8 @@ class DatabaseMigratorProjectsTest {
                             "VALUES (1, 'Acme', '', 0, 0)"
                     )
                     statement.executeUpdate(
-                        "INSERT INTO agent_roles (id, name, description, instructions_json, created_at, updated_at, project_id) " +
-                            "VALUES (1, 'architect', '', '[]', 0, 0, 1)"
+                        "INSERT INTO agent_roles (id, name, description, created_at, updated_at, project_id) " +
+                            "VALUES (1, 'architect', '', 0, 0, 1)"
                     )
                     statement.executeUpdate(
                         "INSERT INTO project_owners (project_id, user_id) VALUES (1, 1)"

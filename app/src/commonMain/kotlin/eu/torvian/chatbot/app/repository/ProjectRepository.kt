@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.api.project.CreateProjectRequest
+import eu.torvian.chatbot.common.models.api.project.DeleteProjectResponse
 import eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import kotlinx.coroutines.flow.StateFlow
@@ -91,11 +92,14 @@ interface ProjectRepository {
     /**
      * Deletes a project and removes it from [projects].
      *
-     * Sessions referencing the project are unassigned server-side via `SET NULL`; roles on affected
-     * sessions are cleared by the server in the same transaction.
+     * The server also deletes the project's member agent roles and the instruction rows that lose
+     * their last link through them; sessions referencing the project are unassigned server-side via
+     * `SET NULL`. The returned [DeleteProjectResponse] reports that impact so callers can refresh the
+     * role and instruction caches and surface the outcome.
      *
      * @param projectId The unique identifier of the project to delete.
-     * @return [Either.Right] with [Unit] on success, or [Either.Left] with [RepositoryError] on failure.
+     * @return [Either.Right] with the [DeleteProjectResponse] impact on success, or [Either.Left]
+     *         with [RepositoryError] on failure.
      */
-    suspend fun deleteProject(projectId: Long): Either<RepositoryError, Unit>
+    suspend fun deleteProject(projectId: Long): Either<RepositoryError, DeleteProjectResponse>
 }

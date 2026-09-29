@@ -8,9 +8,8 @@ import kotlin.time.Instant
 /**
  * Maps an Exposed [ResultRow] from `agent_roles` to an [AgentRoleEntity].
  *
- * The raw JSON `instructions_json` column is copied verbatim; parsing it into typed values happens in
- * the service layer so this mapper stays a pure table projection. The role's tool ids are NOT part of
- * this row — they live in the `agent_role_tools` join table and are loaded separately. The single
+ * The role's tool ids are NOT part of this row — they live in the `agent_role_tools` join table and
+ * the ordered instructions in `agent_role_instructions`; both are loaded separately. The single
  * `project_id` membership column IS part of the row (a role belongs to at most one project).
  *
  * The role's model id and settings id are NOT part of this row either: they are derived at the service
@@ -26,7 +25,6 @@ fun ResultRow.toAgentRoleEntity(): AgentRoleEntity = AgentRoleEntity(
     displayName = this[AgentRoleTable.displayName],
     description = this[AgentRoleTable.description],
     modelPresetId = this[AgentRoleTable.modelPresetId]?.value,
-    instructionsJson = this[AgentRoleTable.instructionsJson],
     createdAt = Instant.fromEpochMilliseconds(this[AgentRoleTable.createdAt]),
     updatedAt = Instant.fromEpochMilliseconds(this[AgentRoleTable.updatedAt]),
     projectId = this[AgentRoleTable.projectId]?.value

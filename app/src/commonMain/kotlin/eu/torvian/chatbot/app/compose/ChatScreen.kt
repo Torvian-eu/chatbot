@@ -120,12 +120,14 @@ fun ChatScreen(
 
     // --- Agent-role quick management (add/edit dialogs hosted on the chat screen) ---
     val agentRoleDialogState by agentRoleManagementViewModel.dialogState.collectAsState()
+    val agentRoleSaving by agentRoleManagementViewModel.saving.collectAsState()
     val agentRoleModelsState by agentRoleManagementViewModel.modelsState.collectAsState()
     val agentRolePresetsState by agentRoleManagementViewModel.presetsState.collectAsState()
     val agentRoleSettingsById by agentRoleManagementViewModel.settingsById.collectAsState()
     val agentRoleToolsState by agentRoleManagementViewModel.toolsState.collectAsState()
     val agentRoleCatalogState by agentRoleManagementViewModel.rolesState.collectAsState()
     val agentRoleProjectsState by agentRoleManagementViewModel.projectsState.collectAsState()
+    val agentRoleInstructionsState by agentRoleManagementViewModel.instructionsState.collectAsState()
     val agentRoleWorkerDisplayNamesById by agentRoleManagementViewModel.workerDisplayNamesById.collectAsState()
     val agentRoleMcpServerNamesById by agentRoleManagementViewModel.mcpServerNamesById.collectAsState()
 
@@ -433,9 +435,11 @@ fun ChatScreen(
         presets = agentRolePresetsState.dataOrNull.orEmpty(),
         settingsById = agentRoleSettingsById,
         tools = agentRoleToolsState.dataOrNull.orEmpty(),
+        instructions = agentRoleInstructionsState.dataOrNull.orEmpty(),
         roles = agentRoleCatalogState.dataOrNull.orEmpty(),
         projects = agentRoleProjectsState.dataOrNull.orEmpty(),
         workerDisplayNamesById = agentRoleWorkerDisplayNamesById,
-        mcpServerNamesById = agentRoleMcpServerNamesById
+        mcpServerNamesById = agentRoleMcpServerNamesById,
+        saving = agentRoleSaving
     )
 }

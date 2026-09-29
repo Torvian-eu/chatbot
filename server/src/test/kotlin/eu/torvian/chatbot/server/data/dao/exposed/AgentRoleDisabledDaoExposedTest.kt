@@ -33,8 +33,7 @@ class AgentRoleDisabledDaoExposedTest {
     // agent_role_disabled table itself only references users and agent_roles).
     private val role = TestDefaults.agentRole1.copy(
         id = 1L,
-        modelPresetId = null,
-        instructionsJson = "[]"
+        modelPresetId = null
     )
 
     private val userA = TestDefaults.user1

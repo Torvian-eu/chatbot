@@ -10,6 +10,7 @@ import eu.torvian.chatbot.app.domain.contracts.ProjectFormState
 import eu.torvian.chatbot.app.domain.contracts.createEmptyProjectForm
 import eu.torvian.chatbot.app.domain.contracts.toEditFormState
 import eu.torvian.chatbot.app.repository.AgentRoleRepository
+import eu.torvian.chatbot.app.repository.InstructionRepository
 import eu.torvian.chatbot.app.repository.ProjectRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
@@ -36,12 +37,15 @@ import kotlinx.coroutines.launch
  * @property projectRepository Repository for project CRUD and the reactive project list.
  * @property agentRoleRepository Repository of agent roles (member-role lookups + the form's role
  *            multi-select, plus the reverse-cache refresh after project CRUD).
+ * @property instructionRepository Repository of instruction rows, refreshed after a project deletion
+ *            because the cascade removes rows and changes survivors' `linkedRoleIds`.
  * @property notificationService Service for error/success notifications.
  * @property uiDispatcher Dispatcher used for UI coroutines. Defaults to Main.
  */
 class ProjectsViewModel(
     private val projectRepository: ProjectRepository,
     private val agentRoleRepository: AgentRoleRepository,
+    private val instructionRepository: InstructionRepository,
     private val notificationService: NotificationService,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
@@ -180,9 +184,12 @@ class ProjectsViewModel(
     }
 
     /**
-     * Deletes a project and closes the confirmation dialog.
+     * Deletes a project, reports the cascade's impact and closes the confirmation dialog.
      */
     fun deleteProject(projectId: Long) {
+        // The open confirmation dialog carries the name for the toast; a programmatic delete (no
+        // dialog) falls back to naming the id.
+        val projectName = (_dialogState.value as? ProjectDialogState.DeleteProject)?.project?.name
         viewModelScope.launch(uiDispatcher) {
             projectRepository.deleteProject(projectId)
                 .fold(
@@ -192,11 +199,16 @@ class ProjectsViewModel(
                             shortMessage = "Failed to delete project"
                         )
                     },
-                    ifRight = {
-                        // The deleted project's role links cascade server-side; refresh the role
-                        // stream so ProjectDto.agentRoleIds/AgentRoleDto.projectId stay consistent
-                        // (this direction is triggered here, keeping the dependency cycle-free).
+                    ifRight = { response ->
+                        notificationService.genericSuccess(
+                            formatProjectDeletionSummary(projectName, response)
+                        )
+                        // The cascade deleted the project's roles, so refresh the role stream; it also
+                        // removed instruction rows and changed survivors' linkedRoleIds, so refresh
+                        // the instruction library too (this direction is triggered here, keeping the
+                        // dependency cycle-free).
                         agentRoleRepository.loadRoles()
+                        instructionRepository.loadInstructions()
                         // If the deleted project was open in the detail page, fall back to the list.
                         if (userSelectedProjectId.value == projectId) {
                             userSelectedProjectId.value = null

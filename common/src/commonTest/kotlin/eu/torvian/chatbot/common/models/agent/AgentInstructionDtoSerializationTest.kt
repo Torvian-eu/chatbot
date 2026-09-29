@@ -5,6 +5,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -21,12 +23,17 @@ class AgentInstructionDtoSerializationTest {
     @Test
     fun `all built-in subtypes round-trip through the codec`() {
         val instructions: List<AgentInstructionDto> = listOf(
-            AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are an architect."),
-            AgentInstructionDto(AgentInstructionTypes.MAIN, "Main instruction", "Project context"),
-            AgentInstructionDto(AgentInstructionTypes.CUSTOM, "Tone", "Be concise"),
-            AgentInstructionDto(AgentInstructionTypes.MODEL_SPECIFIC, "Swift mode", "Write idiomatic Swift",
-                custom = buildJsonObject { put("modelId", 5L) }),
-            AgentInstructionDto(AgentInstructionTypes.SPAWNABLE_AGENTS, "Available agents", "")
+            AgentInstructionDto(1L, AgentInstructionTypes.ROLE, "Role", "You are an architect."),
+            AgentInstructionDto(2L, AgentInstructionTypes.MAIN, "Main instruction", "Project context"),
+            AgentInstructionDto(3L, AgentInstructionTypes.CUSTOM, "Tone", "Be concise"),
+            AgentInstructionDto(
+                4L,
+                AgentInstructionTypes.MODEL_SPECIFIC,
+                "Swift mode",
+                "Write idiomatic Swift",
+                custom = buildJsonObject { put("modelId", 5L) }
+            ),
+            AgentInstructionDto(5L, AgentInstructionTypes.SPAWNABLE_AGENTS, "Available agents", "")
         )
 
         val encoded = json.encodeToString(instructions)
@@ -37,21 +44,24 @@ class AgentInstructionDtoSerializationTest {
 
     @Test
     fun `model_specific serializes with its modelId in custom`() {
-        val instruction = AgentInstructionDto(AgentInstructionTypes.MODEL_SPECIFIC, "Swift", "Write Swift",
-                custom = buildJsonObject { put("modelId", 5L) })
+        val instruction = AgentInstructionDto(
+            5L,
+            AgentInstructionTypes.MODEL_SPECIFIC,
+            "Swift",
+            "Write Swift",
+            custom = buildJsonObject { put("modelId", 5L) }
+        )
         val encoded = json.encodeToString(instruction)
         assertTrue(encoded.contains("\"type\":\"model_specific\""), "expected discriminator, got: $encoded")
         assertTrue(encoded.contains("\"modelId\":5"), "expected modelId field, got: $encoded")
     }
 
     @Test
-    fun `legacy stored shapes decode into the matching subtypes without migration`() {
+    fun `reported entries decode with their identity and link fields`() {
         val payload = """
             [
-                {"type":"role","name":"Role","message":"You are a senior architect."},
-                {"type":"main","name":"Main instruction","message":"AGENTS.md context"},
-                {"type":"custom","name":"Tone","message":"Be concise"},
-                {"type":"spawnable_agents","name":"Available agents","message":""}
+                {"id":5,"type":"custom","name":"Tone","message":"Be concise","linkedRoleIds":[1,2,7]},
+                {"id":6,"type":"spawnable_agents","name":"Available agents","message":"generated"}
             ]
         """.trimIndent()
 
@@ -59,10 +69,19 @@ class AgentInstructionDtoSerializationTest {
 
         assertEquals(
             listOf(
-                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect."),
-                AgentInstructionDto(AgentInstructionTypes.MAIN, "Main instruction", "AGENTS.md context"),
-                AgentInstructionDto(AgentInstructionTypes.CUSTOM, "Tone", "Be concise"),
-                AgentInstructionDto(AgentInstructionTypes.SPAWNABLE_AGENTS, "Available agents", "")
+                AgentInstructionDto(
+                    id = 5L,
+                    type = AgentInstructionTypes.CUSTOM,
+                    name = "Tone",
+                    message = "Be concise",
+                    linkedRoleIds = setOf(1L, 2L, 7L)
+                ),
+                AgentInstructionDto(
+                    id = 6L,
+                    type = AgentInstructionTypes.SPAWNABLE_AGENTS,
+                    name = "Available agents",
+                    message = "generated"
+                )
             ),
             decoded
         )
@@ -73,5 +92,65 @@ class AgentInstructionDtoSerializationTest {
         val payload = """[]"""
         val decoded = json.decodeFromString<List<AgentInstructionDto>>(payload)
         assertTrue(decoded.isEmpty())
+    }
+
+    @Test
+    fun `identity fields round-trip through the codec`() {
+        val instructions = listOf(
+            AgentInstructionDto(
+                id = 5L,
+                type = AgentInstructionTypes.CUSTOM,
+                name = "Tone",
+                message = "Be concise",
+                linkedRoleIds = setOf(1L, 2L, 7L)
+            )
+        )
+
+        val encoded = json.encodeToString(instructions)
+        val decoded = json.decodeFromString<List<AgentInstructionDto>>(encoded)
+
+        assertEquals(instructions, decoded)
+    }
+
+    @Test
+    fun `absent linked roles decode as an empty set`() {
+        val payload = """[{"id":5,"type":"role","name":"Role","message":"Text"}]"""
+
+        val decoded = json.decodeFromString<List<AgentInstructionDto>>(payload)
+
+        val instruction = decoded.single()
+        assertEquals(5L, instruction.id)
+        assertEquals(emptySet(), instruction.linkedRoleIds)
+    }
+
+    @Test
+    fun `an entry without an id does not decode`() {
+        // Every reported instruction is backed by a stored row, so the identity is part of the
+        // contract rather than an optional field.
+        val payload = """[{"type":"role","name":"Role","message":"Text"}]"""
+
+        val decoded = runCatching {
+            json.decodeFromString<List<AgentInstructionDto>>(payload)
+        }.getOrNull()
+
+        assertNull(decoded)
+    }
+
+    @Test
+    fun `shared derives from more than one linked role and is never serialized`() {
+        val shared = AgentInstructionDto(
+            id = 5L,
+            type = AgentInstructionTypes.CUSTOM,
+            name = "Tone",
+            message = "Be concise",
+            linkedRoleIds = setOf(2L, 7L)
+        )
+        val single = shared.copy(linkedRoleIds = setOf(2L))
+        val unlinked = shared.copy(linkedRoleIds = emptySet())
+
+        assertTrue(shared.shared)
+        assertFalse(single.shared)
+        assertFalse(unlinked.shared)
+        assertFalse(json.encodeToString(shared).contains("shared"), "derived flag must not be serialized")
     }
 }

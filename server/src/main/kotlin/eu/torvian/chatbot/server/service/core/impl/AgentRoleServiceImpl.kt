@@ -7,49 +7,57 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.common.models.agent.modelIdOrNull
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
-import eu.torvian.chatbot.server.data.dao.AgentRoleDao
-import eu.torvian.chatbot.server.data.dao.AgentRoleOwnershipDao
-import eu.torvian.chatbot.server.data.dao.AgentRoleToolDao
-import eu.torvian.chatbot.server.data.dao.AgentRoleSpawnableRoleDao
-import eu.torvian.chatbot.server.data.dao.AgentRoleDisabledDao
-import eu.torvian.chatbot.server.data.dao.ModelPresetDao
-import eu.torvian.chatbot.server.data.dao.ProjectDao
-import eu.torvian.chatbot.server.data.dao.SessionDao
-import eu.torvian.chatbot.server.data.dao.SettingsDao
-import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
-import eu.torvian.chatbot.server.data.dao.error.AgentRoleError as AgentRoleDaoError
+import eu.torvian.chatbot.server.data.dao.*
+import eu.torvian.chatbot.server.data.dao.AgentRoleInstructionDao.InstructionRef
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
+import eu.torvian.chatbot.server.data.dao.error.InstructionError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
+import eu.torvian.chatbot.server.data.entities.InstructionEntity
 import eu.torvian.chatbot.server.data.entities.ModelPresetEntity
 import eu.torvian.chatbot.server.service.core.AgentRoleService
 import eu.torvian.chatbot.server.service.core.agent.AgentRole
+import eu.torvian.chatbot.server.service.core.agent.DeleteAgentRoleResult
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
+import eu.torvian.chatbot.server.service.core.error.agent.AssignInstructionError
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.DeleteAgentRoleError
+import eu.torvian.chatbot.server.service.core.error.agent.UnassignInstructionError
 import eu.torvian.chatbot.server.service.core.error.agent.UpdateAgentRoleError
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import eu.torvian.chatbot.server.data.dao.error.AgentRoleError as AgentRoleDaoError
 
 /**
  * Implementation of [AgentRoleService] providing user-scoped agent-role CRUD operations.
  *
  * Uses Arrow's `either { }`/`ensure`/`withError` pattern for typed logical errors and wraps all
- * operations in the shared [TransactionScope]. Instructions are persisted as a raw JSON string
- * (`instructions_json`) so serialization stays at the [AgentRoleMapper] service boundary: the stored
- * shape equals the wire shape (polymorphic instruction DTO list), and the server domain instruction
- * hierarchy is reconstructed per read. The role's tool set is stored in the normalized `agent_role_tools` join
- * table through [agentRoleToolDao] (full replacement on create/update, cascade-deleted with the role
- * or a tool definition). Shared request invariants live in [AgentRoleRequestValidator].
+ * operations in the shared [TransactionScope]. A role write materializes its `instructionSpecs` —
+ * referencing a stored row, creating one inline, or replacing one — plus their ordered links and the
+ * role row in that one transaction, so a failed save persists none of them. Deleting a role sweeps
+ * its instruction rows in that same transaction and reports each linked row's fate: rows left with
+ * no link through the deletion are removed, while rows still linked elsewhere and never-linked rows
+ * survive. Every read maps the
+ * ordered rows through the single [AgentRoleMapper] funnel. The role's tool set is stored in the
+ * normalized `agent_role_tools` join table through [agentRoleToolDao] (full replacement on
+ * create/update, cascade-deleted with the role or a tool definition). Shared request invariants live
+ * in [AgentRoleRequestValidator].
  *
  * @property agentRoleDao DAO for the `agent_roles` table.
  * @property agentRoleToolDao DAO for the `agent_role_tools` join table (the role's tool ids).
  * @property agentRoleSpawnableRoleDao DAO for the role-to-role spawn allow-list.
  * @property agentRoleOwnershipDao DAO for the `agent_role_owners` table (per-user ownership).
  * @property agentRoleDisabledDao DAO for the `agent_role_disabled` side table (per-user disabled state).
+ * @property instructionDao DAO for the instruction rows the role links: ownership checks of the
+ *            referenced ids and content writes for inline create/update specs.
+ * @property instructionOwnershipDao DAO for `instruction_owners` (an inline-created row's creator
+ *            becomes its owner).
+ * @property agentRoleInstructionDao DAO for the ordered role↔instruction links.
  * @property modelPresetDao DAO used to resolve the model presets a role references — the single read
  *            for single-role paths and one batch read for the list path — and to validate an attached
  *            preset.
@@ -59,7 +67,7 @@ import org.apache.logging.log4j.Logger
  * @property projectDao DAO used to validate project references (ownership and existence).
  * @property sessionDao DAO used to restore the Session Legality Invariant when a role update changes
  *            its project membership (role-update legality sweep).
- * @property json Shared JSON codec used to (de)serialize the `instructions_json` column.
+ * @property json Shared JSON codec used to parse instruction `custom` JSON text.
  * @property transactionScope Transaction wrapper that keeps validation + persistence atomic.
  *
  * Project membership is a single nullable `project_id` column on the role row (a role belongs to at
@@ -80,6 +88,9 @@ class AgentRoleServiceImpl(
     private val agentRoleToolDao: AgentRoleToolDao,
     private val agentRoleOwnershipDao: AgentRoleOwnershipDao,
     private val agentRoleDisabledDao: AgentRoleDisabledDao,
+    private val instructionDao: InstructionDao,
+    private val instructionOwnershipDao: InstructionOwnershipDao,
+    private val agentRoleInstructionDao: AgentRoleInstructionDao,
     private val modelPresetDao: ModelPresetDao,
     private val settingsDao: SettingsDao,
     private val toolDefinitionDao: ToolDefinitionDao,
@@ -100,12 +111,14 @@ class AgentRoleServiceImpl(
         modelPresetDao = modelPresetDao,
         settingsDao = settingsDao,
         toolDefinitionDao = toolDefinitionDao,
-        projectDao = projectDao
+        projectDao = projectDao,
+        instructionDao = instructionDao,
+        json = json
     )
 
     /**
-     * Row↔domain and domain↔wire mapping plus the instruction codec, constructed from the DAOs
-     * and JSON codec this service already receives so the constructor stays unchanged.
+     * Row↔domain and domain↔wire mapping plus the spawn advertisement loader, constructed from the
+     * DAOs and JSON codec this service already receives so the constructor stays unchanged.
      */
     private val mapper = AgentRoleMapper(
         agentRoleDao = agentRoleDao,
@@ -125,7 +138,9 @@ class AgentRoleServiceImpl(
         // Batch-load every role's tool ids, spawn allow-list ids, project ids and the user's disabled
         // ids in one query each so the list endpoint avoids an N+1 read (mirrors the spawn allow-list
         // batch pattern). The referenced model presets are batch-loaded the same way: one query for the
-        // whole list, and the derived model/settings ids come from that single map.
+        // whole list, and the derived model/settings ids come from that single map. Instructions add
+        // three batched queries (links per role, content rows, reverse links per row) regardless of
+        // the number of roles.
         val roleIds = entities.map { it.id }
         val toolsByRole = agentRoleToolDao.getToolsForRoles(roleIds)
         val spawnableByRole = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(roleIds)
@@ -133,6 +148,7 @@ class AgentRoleServiceImpl(
         val presetsById = modelPresetDao
             .getPresetsByIdsForUser(userId, entities.mapNotNull { it.modelPresetId }.distinct())
             .associateBy { it.id }
+        val (instructionsByRole, linkedRoleIdsByInstructionId) = loadInstructionsForRoles(roleIds)
         entities.map {
             mapper.toDto(
                 entity = it,
@@ -141,7 +157,9 @@ class AgentRoleServiceImpl(
                 projectId = it.projectId,
                 preset = it.modelPresetId?.let(presetsById::get),
                 ownerId = userId,
-                disabled = it.id in disabledRoleIds
+                disabled = it.id in disabledRoleIds,
+                instructions = instructionsByRole[it.id].orEmpty(),
+                linkedRoleIdsByInstructionId = linkedRoleIdsByInstructionId
             )
         }
     }
@@ -150,17 +168,7 @@ class AgentRoleServiceImpl(
         transactionScope.transaction {
             either {
                 val entity = loadOwnedRole(userId, roleId, AgentRoleError.NotFound(roleId))
-                val disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id)
-                val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
-                mapper.toDto(
-                    entity = entity,
-                    tools = agentRoleToolDao.getToolsForRole(entity.id),
-                    spawnableRoleIds = spawnableRoleIds,
-                    projectId = entity.projectId,
-                    preset = resolvePreset(entity),
-                    ownerId = userId,
-                    disabled = disabled
-                )
+                loadPersistedRoleDto(userId, entity, agentRoleDisabledDao.isRoleDisabled(userId, entity.id))
             }
         }
 
@@ -177,17 +185,7 @@ class AgentRoleServiceImpl(
                 val entity = withError({ _: AgentRoleDaoError.NotFoundByName -> AgentRoleError.NotFoundByName(name) }) {
                     agentRoleDao.getRoleByNameForUser(userId, name, projectId).bind()
                 }
-                val disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id)
-                val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
-                mapper.toDto(
-                    entity = entity,
-                    tools = agentRoleToolDao.getToolsForRole(entity.id),
-                    spawnableRoleIds = spawnableRoleIds,
-                    projectId = entity.projectId,
-                    preset = resolvePreset(entity),
-                    ownerId = userId,
-                    disabled = disabled
-                )
+                loadPersistedRoleDto(userId, entity, agentRoleDisabledDao.isRoleDisabled(userId, entity.id))
             }
         }
 
@@ -203,7 +201,7 @@ class AgentRoleServiceImpl(
                 val ownerId = withError({ ownerError: GetOwnerError ->
                     logger.error(
                         "Agent role $roleId exists but has no ownership row " +
-                            "(database inconsistency): $ownerError"
+                                "(database inconsistency): $ownerError"
                     )
                     AgentRoleError.NotFound(roleId)
                 }) {
@@ -213,7 +211,11 @@ class AgentRoleServiceImpl(
             }
         }
 
-    override suspend fun setRoleDisabled(userId: Long, roleId: Long, disabled: Boolean): Either<AgentRoleError.NotFound, AgentRoleDto> =
+    override suspend fun setRoleDisabled(
+        userId: Long,
+        roleId: Long,
+        disabled: Boolean
+    ): Either<AgentRoleError.NotFound, AgentRoleDto> =
         transactionScope.transaction {
             either {
                 logger.info("Setting disabled=$disabled for agent role $roleId (user $userId)")
@@ -221,18 +223,9 @@ class AgentRoleServiceImpl(
                 // Idempotent insert/delete of the (user, role) row inside the same transaction as the
                 // ownership check; a foreign or nonexistent role is rejected before any write happens.
                 agentRoleDisabledDao.setRoleDisabled(userId, entity.id, disabled)
-                val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
-                mapper.toDto(
-                    entity = entity,
-                    tools = agentRoleToolDao.getToolsForRole(entity.id),
-                    spawnableRoleIds = spawnableRoleIds,
-                    projectId = entity.projectId,
-                    preset = resolvePreset(entity),
-                    ownerId = userId,
-                    // The DTO must echo the requested state even if the row pre-existed: the write is
-                    // idempotent, so the new value equals the requested value by construction.
-                    disabled = disabled
-                )
+                // The DTO must echo the requested state even if the row pre-existed: the write is
+                // idempotent, so the new value equals the requested value by construction.
+                loadPersistedRoleDto(userId, entity, disabled)
             }
         }
 
@@ -243,9 +236,10 @@ class AgentRoleServiceImpl(
         either {
             logger.info("Creating agent role '${request.name}' for user $userId")
 
-            // The attached preset (if any) is resolved and validated here; it is reused below to build
-            // the echoed DTO, so the derived model/settings ids need no second read.
-            val preset = requestValidator.validateCreate(userId, request).bind()
+            // The attached preset (if any) and the instruction specs are resolved and validated here;
+            // the preset is reused below to build the echoed DTO and the loaded instruction rows feed
+            // the materialization, so nothing below needs a second read.
+            val validated = requestValidator.validateCreate(userId, request).bind()
 
             // Names are unique per (user, project scope), not globally or per user alone: the new
             // role's project scope (null = unassociated scope) must not equal any other same-name
@@ -255,14 +249,11 @@ class AgentRoleServiceImpl(
                 CreateAgentRoleError.NameAlreadyExists(request.name)
             }
 
-            val instructionsJson = mapper.encodeInstructions(request.instructions)
-
             val entity = agentRoleDao.insertRole(
                 name = request.name,
                 displayName = request.displayName,
                 description = request.description,
                 modelPresetId = request.modelPresetId,
-                instructionsJson = instructionsJson,
                 projectId = request.projectId
             )
 
@@ -278,16 +269,41 @@ class AgentRoleServiceImpl(
                 agentRoleOwnershipDao.setOwner(entity.id, userId).bind()
             }
 
+            // Inline instruction specs materialize their rows and ownership immediately before the
+            // link rewrite. Every failure below must propagate as a `Left` out of the outermost
+            // transaction block: that is what rolls the whole save back (nested transaction blocks
+            // have no rollback point of their own), so a failed save leaves nothing behind.
+            val orderedInstructionIds = materializeInstructionSpecs(
+                userId = userId,
+                roleId = entity.id,
+                specs = request.instructionSpecs,
+                referencedInstructions = validated.referencedInstructions,
+                instructionNotFound = { instructionId -> CreateAgentRoleError.InstructionNotFound(instructionId) },
+                linkedRoleListInvalid = { instructionId, linkedRoleIds, reason ->
+                    CreateAgentRoleError.LinkedRoleInstructionListInvalid(instructionId, linkedRoleIds, reason)
+                },
+                ownerInsertFailed = { reason -> CreateAgentRoleError.InstructionOwnerInsertFailed(reason) }
+            )
+
+            // Full replacement of the role's instruction links: the materialized ids in the payload's
+            // order, and the validator has already confirmed every referenced row exists and is owned.
+            agentRoleInstructionDao.replaceInstructionsForRole(entity.id, orderedInstructionIds)
+
             logger.info("Created agent role '${request.name}' (id ${entity.id}) for user $userId")
+            // The echo reads the stored links (one batched query) rather than reusing a write result, so
+            // the reported order and the computed linking roles come from persisted state.
+            val (instructionsByRole, linkedRoleIdsByInstructionId) = loadInstructionsForRoles(listOf(entity.id))
             mapper.toDto(
                 entity = entity,
                 tools = request.toolIds,
                 spawnableRoleIds = request.spawnableAgentRoleIds,
                 projectId = request.projectId,
-                preset = preset,
+                preset = validated.preset,
                 ownerId = userId,
                 // No side-table row is ever inserted on create: a fresh role is enabled for its owner.
-                disabled = false
+                disabled = false,
+                instructions = instructionsByRole[entity.id].orEmpty(),
+                linkedRoleIdsByInstructionId = linkedRoleIdsByInstructionId
             )
         }
     }
@@ -305,7 +321,7 @@ class AgentRoleServiceImpl(
             // the scope-sensitive uniqueness check below and to compare against the request's value.
             val currentProjectId = existing.projectId
 
-            val preset = requestValidator.validateUpdate(userId, request).bind()
+            val validated = requestValidator.validateUpdate(userId, request).bind()
 
             // Name uniqueness is scoped per (user, project scope). The check is scope-sensitive: it
             // runs whenever the update changes the name and/or the project. The role being updated is
@@ -327,7 +343,6 @@ class AgentRoleServiceImpl(
                 displayName = request.displayName,
                 description = request.description,
                 modelPresetId = request.modelPresetId,
-                instructionsJson = mapper.encodeInstructions(request.instructions),
                 projectId = request.projectId
             )
 
@@ -335,12 +350,30 @@ class AgentRoleServiceImpl(
                 agentRoleDao.updateRole(updated).bind()
             }
 
-            // Full-replacement semantics preserved: the tool set is rewritten atomically with the role
-            // row (delete + insert) inside the same transaction.
+            // Full-replacement semantics preserved: the tool set and the spawn allow-list are
+            // rewritten atomically with the role row inside the same transaction. The project
+            // membership is written together with the row (a full replacement via the `project_id`
+            // column).
             agentRoleToolDao.replaceToolsForRole(roleId, request.toolIds)
             agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(roleId, request.spawnableAgentRoleIds)
-            // The project membership is written together with the row (a full replacement via the
-            // `project_id` column on the role row).
+
+            // Inline instruction specs materialize exactly as in [createRole]: rows and ownership
+            // first, then the full-replacement link rewrite — all rolled back together on failure.
+            val orderedInstructionIds = materializeInstructionSpecs(
+                userId = userId,
+                roleId = roleId,
+                specs = request.instructionSpecs,
+                referencedInstructions = validated.referencedInstructions,
+                instructionNotFound = { instructionId -> UpdateAgentRoleError.InstructionNotFound(instructionId) },
+                linkedRoleListInvalid = { instructionId, linkedRoleIds, reason ->
+                    UpdateAgentRoleError.LinkedRoleInstructionListInvalid(instructionId, linkedRoleIds, reason)
+                },
+                ownerInsertFailed = { reason -> UpdateAgentRoleError.InstructionOwnerInsertFailed(reason) }
+            )
+
+            // Full-replacement semantics preserved: the role's instruction links are rewritten
+            // atomically with the role row inside the same transaction, in the payload's order.
+            agentRoleInstructionDao.replaceInstructionsForRole(roleId, orderedInstructionIds)
 
             // Legality sweep: clear the role on every session using it whose pair became illegal under the
             // new membership — a session whose project differs from the role's single project (a
@@ -356,19 +389,97 @@ class AgentRoleServiceImpl(
             // The side-table disabled marker is untouched by the full-replacement row update, so the
             // returned DTO must re-read the per-user flag (single-role existence check, mirrors the
             // single role paths) rather than defaulting it.
+            val (instructionsByRole, linkedRoleIdsByInstructionId) = loadInstructionsForRoles(listOf(roleId))
             mapper.toDto(
                 entity = updated,
                 tools = request.toolIds,
                 spawnableRoleIds = request.spawnableAgentRoleIds,
                 projectId = request.projectId,
-                preset = preset,
+                preset = validated.preset,
                 ownerId = userId,
-                disabled = agentRoleDisabledDao.isRoleDisabled(userId, roleId)
+                disabled = agentRoleDisabledDao.isRoleDisabled(userId, roleId),
+                instructions = instructionsByRole[roleId].orEmpty(),
+                linkedRoleIdsByInstructionId = linkedRoleIdsByInstructionId
             )
         }
     }
 
-    override suspend fun deleteRole(userId: Long, roleId: Long): Either<DeleteAgentRoleError, Unit> =
+    override suspend fun assignInstruction(
+        userId: Long,
+        roleId: Long,
+        instructionId: Long
+    ): Either<AssignInstructionError, AgentRoleDto> = transactionScope.transaction {
+        either {
+            logger.info("Assigning instruction $instructionId to agent role $roleId for user $userId")
+
+            val entity = loadOwnedRole(userId, roleId, AssignInstructionError.RoleNotFound(roleId))
+            // The row must exist and be owned by the caller; the owner-scoped batch read doubles as the
+            // ownership check, so a missing and a foreign row collapse into the same error.
+            val row = instructionDao
+                .getInstructionsByIdsForUser(userId, listOf(instructionId))
+                .singleOrNull()
+                ?: raise(AssignInstructionError.InstructionNotFound(instructionId))
+
+            val links = agentRoleInstructionDao.getLinksForRoles(listOf(roleId))[roleId].orEmpty()
+            ensure(links.none { it.instructionId == instructionId }) {
+                AssignInstructionError.AlreadyLinked(instructionId)
+            }
+
+            // The rules judge the *resulting* list: the role's current rows in their stored order plus
+            // the appended one, so a second singleton kind is rejected before any write.
+            AgentRoleInstructionRules.validate(
+                instructions = ruleInputsForLinks(links) + row.toRuleInput(json),
+                raise = this,
+                instructionValidationFailed = { reason ->
+                    AssignInstructionError.InstructionValidationFailed(reason)
+                }
+            )
+
+            // Append-last semantics: the new link goes behind the role's current maximum position.
+            agentRoleInstructionDao.appendInstructionForRole(roleId, instructionId)
+
+            logger.info("Assigned instruction $instructionId to agent role $roleId for user $userId")
+            // The echo re-reads the stored links so the reported order and the computed linking roles
+            // come from persisted state.
+            loadPersistedRoleDto(userId, entity, agentRoleDisabledDao.isRoleDisabled(userId, entity.id))
+        }
+    }
+
+    override suspend fun unassignInstruction(
+        userId: Long,
+        roleId: Long,
+        instructionId: Long
+    ): Either<UnassignInstructionError, AgentRoleDto> = transactionScope.transaction {
+        either {
+            logger.info("Unassigning instruction $instructionId from agent role $roleId for user $userId")
+
+            val entity = loadOwnedRole(userId, roleId, UnassignInstructionError.RoleNotFound(roleId))
+            instructionDao
+                .getInstructionsByIdsForUser(userId, listOf(instructionId))
+                .singleOrNull()
+                ?: raise(UnassignInstructionError.InstructionNotFound(instructionId))
+
+            val links = agentRoleInstructionDao.getLinksForRoles(listOf(roleId))[roleId].orEmpty()
+            ensure(links.any { it.instructionId == instructionId }) {
+                UnassignInstructionError.NotLinked(instructionId)
+            }
+
+            // Removing a link leaves a hole in the middle of the sequence, so the surviving links keep
+            // their relative order but are re-normalized to a contiguous zero-based list. The row itself
+            // is never touched: only its link disappears.
+            val remaining = links.sortedBy { it.sequence }.filterNot { it.instructionId == instructionId }
+            agentRoleInstructionDao.removeInstructionFromRole(roleId, instructionId)
+            val isContiguousAfterRemoval = remaining.withIndex().all { (index, ref) -> ref.sequence == index }
+            if (!isContiguousAfterRemoval) {
+                agentRoleInstructionDao.replaceInstructionsForRole(roleId, remaining.map { it.instructionId })
+            }
+
+            logger.info("Unassigned instruction $instructionId from agent role $roleId for user $userId")
+            loadPersistedRoleDto(userId, entity, agentRoleDisabledDao.isRoleDisabled(userId, entity.id))
+        }
+    }
+
+    override suspend fun deleteRole(userId: Long, roleId: Long): Either<DeleteAgentRoleError, DeleteAgentRoleResult> =
         transactionScope.transaction {
             either {
                 logger.info("Deleting agent role $roleId for user $userId")
@@ -377,13 +488,55 @@ class AgentRoleServiceImpl(
                 // collapse hides the existence of foreign roles).
                 ensureOwnedBy(userId, roleId, DeleteAgentRoleError.NotFound(roleId))
 
+                // Snapshot before the role row goes: its link rows vanish with it by FK cascade, so
+                // afterwards no read can tell which instruction rows this role linked.
+                val candidateIds = agentRoleInstructionDao.getLinksForRoles(listOf(roleId))[roleId]
+                    .orEmpty()
+                    .map { it.instructionId }
+                    .distinct()
+
                 withError({ _: AgentRoleDaoError.NotFound -> DeleteAgentRoleError.NotFound(roleId) }) {
                     agentRoleDao.deleteRole(roleId).bind()
                 }
 
+                val sweep = sweepLinkedInstructions(candidateIds)
+
                 logger.info("Deleted agent role $roleId for user $userId")
+                sweep
             }
         }
+
+    /**
+     * Removes the linked instruction rows the deleted role left without any link and reports every
+     * candidate's fate.
+     *
+     * Candidates are only the rows the deleted role linked: each is removed exactly when nothing
+     * links it after the role's links cascaded away, and kept when another role still links it.
+     * Runs inside the caller's transaction so the sweep commits or rolls back together with the
+     * role delete.
+     *
+     * @param candidateIds Ids the deleted role linked before its link rows were removed.
+     * @return The removed and the kept ids, both in candidate order.
+     */
+    private suspend fun sweepLinkedInstructions(candidateIds: List<Long>): DeleteAgentRoleResult {
+        if (candidateIds.isEmpty()) return DeleteAgentRoleResult(emptyList(), emptyList())
+        // The count runs after the cascade, so a candidate is doomed exactly when nothing links it now.
+        val remainingLinks = agentRoleInstructionDao.getLinkedRoleIdsForInstructions(candidateIds)
+        val (doomed, kept) = candidateIds.partition { remainingLinks[it].isNullOrEmpty() }
+        val deleted = doomed.filter { instructionId ->
+            // The row was linked moments ago and writers serialize, so a failure cannot occur here. A
+            // logged no-op must not fail the role deletion over it, because the role is already gone;
+            // such a row is reported as deleted only when this call actually deleted it.
+            instructionDao.deleteInstruction(instructionId).fold(
+                ifLeft = { error ->
+                    logger.debug("Instruction {} was not deleted during role-delete cleanup ({})", instructionId, error)
+                    false
+                },
+                ifRight = { true }
+            )
+        }
+        return DeleteAgentRoleResult(deletedInstructionIds = deleted, retainedInstructionIds = kept)
+    }
 
     /**
      * Whether two same-name roles' project scopes are identical (the scope-equality conflict rule).
@@ -398,6 +551,101 @@ class AgentRoleServiceImpl(
      * @return `true` if the scopes are identical, `false` otherwise.
      */
     private fun scopesConflict(projectIdA: Long?, projectIdB: Long?): Boolean = projectIdA == projectIdB
+
+    /**
+     * Materializes a validated instruction spec list and returns the ordered ids to link.
+     *
+     * Runs after all validation, inside the caller's transaction: `Create` inserts a row plus its
+     * ownership link, `Update` rewrites its target's content in place, and `Link` only contributes its
+     * id. An `Update` that changes its target's kind or model target is allowed only when every other
+     * role linking that row still ends up with a valid instruction list, because the row's input is
+     * part of those roles' list validity and this save only judges the written role's list. Every
+     * failure must surface as a raised error so the outermost transaction block rolls the whole save
+     * back — a partially materialized spec list must never be committed.
+     *
+     * @receiver The raise scope of the caller's `either { }` block.
+     * @param userId The requesting user, who becomes the owner of every created row.
+     * @param roleId The role being written, whose own list this save already validated.
+     * @param specs The validated spec list in the role's order.
+     * @param referencedInstructions Target rows loaded during validation, keyed by row id.
+     * @param instructionNotFound Factory building the caller's error when an `Update` target vanished
+     *            between validation and the write.
+     * @param linkedRoleListInvalid Factory building the caller's error when an `Update` target's new
+     *            input would leave another linking role with an invalid list.
+     * @param ownerInsertFailed Factory building the caller's error when a created row's ownership link
+     *            cannot be inserted.
+     * @return The instruction ids in the role's order.
+     */
+    private suspend fun <E> Raise<E>.materializeInstructionSpecs(
+        userId: Long,
+        roleId: Long,
+        specs: List<InstructionSlot>,
+        referencedInstructions: Map<Long, InstructionEntity>,
+        instructionNotFound: (instructionId: Long) -> E,
+        linkedRoleListInvalid: (instructionId: Long, linkedRoleIds: List<Long>, reason: String) -> E,
+        ownerInsertFailed: (reason: String) -> E
+    ): List<Long> = specs.map { slot ->
+        when (slot) {
+            // A pure reference never rewrites content, so a concurrent edit of the row survives this
+            // save.
+            is InstructionSlot.Link -> slot.id
+
+            is InstructionSlot.Create -> {
+                val created = instructionDao.insertInstruction(
+                    type = slot.content.type,
+                    name = slot.content.name,
+                    message = InstructionContentRules.storedMessage(slot.content.type, slot.content.message),
+                    custom = slot.content.custom?.toString()
+                )
+                // A row without an owner would be unmodifiable once created, so an ownership failure
+                // must surface instead of slipping through.
+                withError({ error: SetOwnerError -> ownerInsertFailed(error.toString()) }) {
+                    instructionOwnershipDao.setOwner(created.id, userId).bind()
+                }
+                created.id
+            }
+
+            is InstructionSlot.Update -> {
+                // The rewrite keeps the row's id, so the new content reaches every role linking the
+                // row (shared-row semantics). A concurrent delete collapses to not-found.
+                val existing = referencedInstructions.getValue(slot.content.id)
+                // The row's kind and model target are part of every linking role's list validity, but
+                // this save validated only the written role's list, so the other linking roles'
+                // resulting lists are judged here: the change is refused only when one would become
+                // invalid.
+                val newRuleInput = AgentRoleInstructionRules.RuleInput(
+                    type = slot.content.type,
+                    modelId = slot.content.custom?.modelIdOrNull()
+                )
+                if (existing.toRuleInput(json) != newRuleInput) {
+                    val otherRoleIds = agentRoleInstructionDao
+                        .getLinkedRoleIdsForInstructions(listOf(slot.content.id))[slot.content.id]
+                        .orEmpty()
+                        .filter { it != roleId }
+                        .sorted()
+                    validateLinkedRoleInstructionLists(
+                        linkedRoleIds = otherRoleIds,
+                        instructionId = slot.content.id,
+                        newRuleInput = newRuleInput,
+                        agentRoleInstructionDao = agentRoleInstructionDao,
+                        instructionDao = instructionDao,
+                        json = json,
+                        onInvalid = { roleIds, reason -> linkedRoleListInvalid(slot.content.id, roleIds, reason) }
+                    )
+                }
+                val rewritten = existing.copy(
+                    type = slot.content.type,
+                    name = slot.content.name,
+                    message = InstructionContentRules.storedMessage(slot.content.type, slot.content.message),
+                    custom = slot.content.custom?.toString()
+                )
+                withError({ _: InstructionError -> instructionNotFound(slot.content.id) }) {
+                    instructionDao.updateInstruction(rewritten).bind()
+                }
+                rewritten.id
+            }
+        }
+    }
 
     // --- Ownership helpers ---
 
@@ -437,6 +685,32 @@ class AgentRoleServiceImpl(
     // --- Read helpers ---
 
     /**
+     * Batch-loads the instruction content of the given roles: the ordered rows per role and the
+     * linking-role ids per instruction row.
+     *
+     * Three batched queries cover any number of roles (link rows per role, content rows by id, and
+     * one reverse-link lookup for the shared computation), so no read path becomes N+1. A link whose
+     * row is missing (impossible under enforced FKs) is skipped rather than failing the read.
+     *
+     * @param roleIds The roles whose instructions are loaded.
+     * @return Ordered rows per role, plus linking-role ids per instruction row (both keyed by role
+     *         or instruction id).
+     */
+    private suspend fun loadInstructionsForRoles(
+        roleIds: List<Long>
+    ): Pair<Map<Long, List<InstructionEntity>>, Map<Long, Set<Long>>> {
+        val linksByRole = agentRoleInstructionDao.getLinksForRoles(roleIds)
+        val instructionIds = linksByRole.values.flatten().map { it.instructionId }.distinct()
+        if (instructionIds.isEmpty()) return emptyMap<Long, List<InstructionEntity>>() to emptyMap()
+        val rowsById = instructionDao.getInstructionsByIds(instructionIds).associateBy { it.id }
+        val linkedRoleIdsByInstructionId = agentRoleInstructionDao.getLinkedRoleIdsForInstructions(instructionIds)
+        val instructionsByRole = linksByRole.mapValues { (_, refs) ->
+            refs.mapNotNull { rowsById[it.instructionId] }
+        }
+        return instructionsByRole to linkedRoleIdsByInstructionId
+    }
+
+    /**
      * Loads normalized role relations and maps a stored row into its domain representation.
      *
      * @param entity Stored role row.
@@ -449,6 +723,7 @@ class AgentRoleServiceImpl(
      */
     private suspend fun loadDomainRole(entity: AgentRoleEntity, ownerId: Long, userId: Long): AgentRole {
         val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
+        val (instructionsByRole, linkedRoleIdsByInstructionId) = loadInstructionsForRoles(listOf(entity.id))
         return mapper.toDomain(
             entity = entity,
             tools = agentRoleToolDao.getToolsForRole(entity.id),
@@ -456,9 +731,60 @@ class AgentRoleServiceImpl(
             projectId = entity.projectId,
             preset = resolvePreset(entity),
             ownerId = ownerId,
-            disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id)
+            disabled = agentRoleDisabledDao.isRoleDisabled(userId, entity.id),
+            instructions = instructionsByRole[entity.id].orEmpty(),
+            linkedRoleIdsByInstructionId = linkedRoleIdsByInstructionId
         )
     }
+
+    /**
+     * Builds the wire response of a persisted role: its relations, preset-derived configuration, the
+     * ordered instructions and their recomputed linking-role ids.
+     *
+     * Every part is read from storage, so a caller that just changed the role's links (or wants the
+     * requested value of the idempotent disabled toggle) reports the state after its own write.
+     *
+     * @param userId The requesting user, who owns the role and whose disabled flag applies.
+     * @param entity The stored role row to report.
+     * @param disabled The per-user disabled state to report (read back, or the requested value of an
+     *            idempotent toggle).
+     * @return The role's current state as the wire shape.
+     */
+    private suspend fun loadPersistedRoleDto(
+        userId: Long,
+        entity: AgentRoleEntity,
+        disabled: Boolean
+    ): AgentRoleDto {
+        val spawnableRoleIds = agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRole(entity.id)
+        val (instructionsByRole, linkedRoleIdsByInstructionId) = loadInstructionsForRoles(listOf(entity.id))
+        return mapper.toDto(
+            entity = entity,
+            tools = agentRoleToolDao.getToolsForRole(entity.id),
+            spawnableRoleIds = spawnableRoleIds,
+            projectId = entity.projectId,
+            preset = resolvePreset(entity),
+            ownerId = userId,
+            disabled = disabled,
+            instructions = instructionsByRole[entity.id].orEmpty(),
+            linkedRoleIdsByInstructionId = linkedRoleIdsByInstructionId
+        )
+    }
+
+    /**
+     * Projects the rows behind the given links into the per-role rule inputs.
+     *
+     * A link whose row is missing (impossible under enforced foreign keys) is skipped rather than
+     * failing the write; the rules only count kinds, so skipping cannot make an illegal list legal.
+     *
+     * @param links The role's links in stored order.
+     * @return The linked rows as the per-role rules see them.
+     */
+    private suspend fun ruleInputsForLinks(links: List<InstructionRef>): List<AgentRoleInstructionRules.RuleInput> =
+        if (links.isEmpty()) {
+            emptyList()
+        } else {
+            instructionDao.getInstructionsByIds(links.map { it.instructionId }).map { it.toRuleInput(json) }
+        }
 
     /**
      * Resolves the model preset a stored role references, for the single-role read paths (list paths
@@ -478,7 +804,7 @@ class AgentRoleServiceImpl(
             { error ->
                 logger.error(
                     "Agent role ${entity.id} references model preset $presetId, which does not exist " +
-                        "(database inconsistency): $error"
+                            "(database inconsistency): $error"
                 )
                 null
             },

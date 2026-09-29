@@ -10,6 +10,7 @@ import eu.torvian.chatbot.app.domain.contracts.createEmptyAgentRoleForm
 import eu.torvian.chatbot.app.domain.contracts.isChatCapable
 import eu.torvian.chatbot.app.domain.contracts.toEditFormState
 import eu.torvian.chatbot.app.repository.AgentRoleRepository
+import eu.torvian.chatbot.app.repository.InstructionRepository
 import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.ModelPresetRepository
 import eu.torvian.chatbot.app.repository.ModelRepository
@@ -20,6 +21,7 @@ import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.repository.WorkerRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelPresetDto
@@ -44,6 +46,10 @@ import kotlinx.coroutines.launch
  * one-directional); this ViewModel only observes the preset stream.
  *
  * @property agentRoleRepository Repository for agent-role CRUD and the reactive role list.
+ * @property instructionRepository Repository backing the form's existing-instruction picker and the
+ *            post-mutation library refresh: a role save carries its instruction specs inline and is
+ *            written atomically by the server, so the role form issues no instruction writes of its
+ *            own.
  * @property modelPresetRepository Repository of model presets (the role form's preset picker and the
  *            detail page's preset/resolved-configuration rendering).
  * @property modelRepository Repository of LLM models (filtered to chat-capable for the form's
@@ -62,6 +68,7 @@ import kotlinx.coroutines.launch
  */
 class AgentRolesViewModel(
     private val agentRoleRepository: AgentRoleRepository,
+    private val instructionRepository: InstructionRepository,
     private val modelPresetRepository: ModelPresetRepository,
     private val modelRepository: ModelRepository,
     private val modelSettingsRepository: ModelSettingsRepository,
@@ -79,6 +86,10 @@ class AgentRolesViewModel(
 
     private val userSelectedRoleId = MutableStateFlow<Long?>(null)
     private val _dialogState = MutableStateFlow<AgentRoleDialogState>(AgentRoleDialogState.None)
+    private val _saving = MutableStateFlow(false)
+
+    /** Whether a role save is in flight; a second save is refused until it settles. */
+    val saving: StateFlow<Boolean> = _saving.asStateFlow()
 
     /** Reactive stream of all agent roles owned by the current user. */
     val rolesState: StateFlow<DataState<RepositoryError, List<AgentRoleDto>>> = agentRoleRepository.roles
@@ -125,6 +136,16 @@ class AgentRolesViewModel(
 
     /** Reactive stream of the user's projects, fed to the role form's single project selector. */
     val projectsState: StateFlow<DataState<RepositoryError, List<ProjectDto>>> = projectRepository.projects
+
+    /**
+     * Reactive stream of the user's instruction library, fed to the role form's existing-instruction
+     * picker.
+     *
+     * Rows are offered as link targets rather than copied, so the stream is the whole library —
+     * including entries no role links any more.
+     */
+    val instructionsState: StateFlow<DataState<RepositoryError, List<AgentInstructionDto>>> =
+        instructionRepository.instructions
 
     /** Reactive stream of the user's model presets (name-ascending), fed to the role form's picker. */
     val presetsState: StateFlow<DataState<RepositoryError, List<ModelPresetDto>>> = modelPresetRepository.presets
@@ -183,11 +204,12 @@ class AgentRolesViewModel(
     val dialogState: StateFlow<AgentRoleDialogState> = _dialogState.asStateFlow()
 
     /**
-     * Loads the role list and the model/preset/settings/tools/project/worker/MCP-server catalogs in
-     * parallel.
+     * Loads the role list and the model/preset/settings/tools/project/instruction/worker/MCP-server
+     * catalogs in parallel.
      *
      * Every loader is non-fatal: a failure is reported through a notification and leaves the form
-     * usable, with the tool groups falling back to their id-based labels.
+     * usable, with the tool groups falling back to their id-based labels and the instruction picker
+     * offering nothing.
      */
     fun loadRolesAndCatalogs() {
         viewModelScope.launch(uiDispatcher) {
@@ -199,9 +221,10 @@ class AgentRolesViewModel(
                 { toolRepository.loadTools() },
                 { projectRepository.loadProjects() },
                 { workerRepository.loadWorkers() },
-                { mcpServerRepository.loadServers() }
+                { mcpServerRepository.loadServers() },
+                { instructionRepository.loadInstructions() }
             ) { rolesResult, presetsResult, modelsResult, settingsResult, toolsResult, projectsResult,
-                workersResult, serverConfigsResult ->
+                workersResult, serverConfigsResult, instructionsResult ->
                 rolesResult.mapLeft { error ->
                     notificationService.repositoryError(
                         error = error,
@@ -248,6 +271,12 @@ class AgentRolesViewModel(
                     notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load MCP servers"
+                    )
+                }
+                instructionsResult.mapLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load instructions"
                     )
                 }
             }
@@ -303,11 +332,23 @@ class AgentRolesViewModel(
     /**
      * Saves the active form draft: creates a new role for the add dialog, or replaces the
      * configuration for the edit dialog.
+     *
+     * The in-flight guard flips before any suspension point, so a double-click or a second activation
+     * while a save is running is dropped instead of starting a competing request.
      */
     fun saveRole() {
+        if (_saving.value) return
         when (val dialogState = _dialogState.value) {
-            is AgentRoleDialogState.AddRole -> saveNewRole(dialogState.formState)
-            is AgentRoleDialogState.EditRole -> saveEditedRole(dialogState)
+            is AgentRoleDialogState.AddRole -> {
+                _saving.value = true
+                saveNewRole(dialogState.formState)
+            }
+
+            is AgentRoleDialogState.EditRole -> {
+                _saving.value = true
+                saveEditedRole(dialogState)
+            }
+
             else -> return
         }
     }
@@ -331,6 +372,9 @@ class AgentRolesViewModel(
                             userSelectedRoleId.value = null
                         }
                         cancelDialog()
+                        // The refresh covers both vanished rows (sole-linked instructions removed
+                        // with the role) and surviving rows whose linkedRoleIds changed.
+                        refreshInstructionLibrary()
                     }
                 )
         }
@@ -367,52 +411,96 @@ class AgentRolesViewModel(
         _dialogState.value = AgentRoleDialogState.None
     }
 
+    /**
+     * Sends one atomic create request carrying the draft's instruction specs.
+     *
+     * Nothing is persisted until the server commits the whole save, so a failure leaves the drafts
+     * untouched and a retry re-sends the same specs — there are no partial ids to remember.
+     */
     private fun saveNewRole(formState: AgentRoleFormState) {
         val validationError = formState.validate()
         if (validationError != null) {
+            _saving.value = false
             updateRoleForm { it.withError(validationError) }
             return
         }
         viewModelScope.launch(uiDispatcher) {
-            agentRoleRepository.createRole(formState.toCreateRequest())
-                .fold(
-                    ifLeft = { error ->
-                        notificationService.repositoryError(
-                            error = error,
-                            shortMessage = "Failed to create agent role"
-                        )
-                        updateRoleForm { it.withError("Error creating agent role: ${error.message}") }
-                    },
-                    ifRight = { createdRole ->
-                        cancelDialog()
-                        selectRole(createdRole)
-                    }
-                )
+            try {
+                agentRoleRepository.createRole(formState.toCreateRequest())
+                    .fold(
+                        ifLeft = { error ->
+                            notificationService.repositoryError(
+                                error = error,
+                                shortMessage = "Failed to create agent role"
+                            )
+                            updateRoleForm { it.withError("Error creating agent role: ${error.message}") }
+                        },
+                        ifRight = { createdRole ->
+                            cancelDialog()
+                            selectRole(createdRole)
+                            // The role write changed which roles link each instruction row.
+                            refreshInstructionLibrary()
+                        }
+                    )
+            } finally {
+                _saving.value = false
+            }
         }
     }
 
+    /**
+     * Sends one atomic update request carrying the draft's instruction specs.
+     *
+     * Mirrors [saveNewRole]: the whole save is one transaction server-side, so a failure persists
+     * nothing and the drafts stay exactly as the user left them.
+     */
     private fun saveEditedRole(dialogState: AgentRoleDialogState.EditRole) {
         val formState = dialogState.formState
         val validationError = formState.validate()
         if (validationError != null) {
+            _saving.value = false
             updateRoleForm { it.withError(validationError) }
             return
         }
         viewModelScope.launch(uiDispatcher) {
-            agentRoleRepository.updateRole(dialogState.role.id, formState.toUpdateRequest())
-                .fold(
-                    ifLeft = { error ->
-                        notificationService.repositoryError(
-                            error = error,
-                            shortMessage = "Failed to update agent role"
-                        )
-                        updateRoleForm { it.withError("Error updating agent role: ${error.message}") }
-                    },
-                    ifRight = { updatedRole ->
-                        cancelDialog()
-                        selectRole(updatedRole)
-                    }
-                )
+            try {
+                agentRoleRepository.updateRole(dialogState.role.id, formState.toUpdateRequest())
+                    .fold(
+                        ifLeft = { error ->
+                            notificationService.repositoryError(
+                                error = error,
+                                shortMessage = "Failed to update agent role"
+                            )
+                            updateRoleForm { it.withError("Error updating agent role: ${error.message}") }
+                        },
+                        ifRight = { updatedRole ->
+                            cancelDialog()
+                            selectRole(updatedRole)
+                            // The role write replaced the role's links, so the library's usage is stale now.
+                            refreshInstructionLibrary()
+                        }
+                    )
+            } finally {
+                _saving.value = false
+            }
+        }
+    }
+
+    /**
+     * Re-reads the instruction library after a role write.
+     *
+     * A role write changes which roles link each instruction row without touching the rows themselves,
+     * so the cached library would keep reporting the previous `linkedRoleIds` — the roles the settings
+     * screens render as "used by" and the shared marker. The refresh runs once per successful mutation
+     * (not per keystroke), and a failure only costs the refresh, because the role write already
+     * succeeded.
+     */
+    private suspend fun refreshInstructionLibrary() {
+        instructionRepository.loadInstructions().mapLeft { error ->
+            notificationService.repositoryError(
+                error = error,
+                shortMessage = "Failed to refresh instructions"
+            )
         }
     }
 }

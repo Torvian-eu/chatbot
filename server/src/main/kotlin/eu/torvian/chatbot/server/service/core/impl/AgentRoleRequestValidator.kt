@@ -4,31 +4,39 @@ import arrow.core.Either
 import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.ensure
-import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
-import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
-import eu.torvian.chatbot.common.models.agent.modelSpecificId
+import eu.torvian.chatbot.common.models.agent.modelIdOrNull
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
+import eu.torvian.chatbot.server.data.dao.InstructionDao
 import eu.torvian.chatbot.server.data.dao.ModelPresetDao
 import eu.torvian.chatbot.server.data.dao.ProjectDao
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
+import eu.torvian.chatbot.server.data.entities.InstructionEntity
 import eu.torvian.chatbot.server.data.entities.ModelPresetEntity
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.UpdateAgentRoleError
 import eu.torvian.chatbot.server.service.llm.isChatLikeSettings
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Shared request validation for agent-role writes: name shape, the attached model preset, tool
  * ownership, spawn allow-list membership, project membership and instruction-list rules.
  *
- * The validation is transaction-free and never logs; it only reads the five DAOs below. The exact
+ * The validation is transaction-free and never logs; it only reads the DAOs below. The exact
  * error subtype raised is decoupled through [RoleValidationErrors], letting the single private core
  * serve both the create and update flows (which use different error surfaces). The two entry points
  * return `Either` and are consumed with `.bind()` at the call site, mirroring
  * `LocalMCPServerServiceImpl.validateRequest(...).bind()`; the `Raise`-based core stays private per
  * the Arrow typed-error conventions.
+ *
+ * Instruction specs are validated as the role's full ordered link set: inline content is checked
+ * with [InstructionContentRules] (the instruction endpoints' rules), link-level checks (no row twice
+ * in one request, every referenced row exists and is owned by the caller) live here, and the
+ * per-list rules live in [AgentRoleInstructionRules].
  *
  * @property agentRoleDao DAO used to validate spawn allow-list targets (existence and ownership).
  * @property modelPresetDao DAO used to resolve and validate an attached preset (ownership-scoped
@@ -37,13 +45,17 @@ import eu.torvian.chatbot.server.service.llm.isChatLikeSettings
  *            (chat-capability and agreement with the preset's model).
  * @property toolDefinitionDao DAO used to validate tool references against the user's owned tool set.
  * @property projectDao DAO used to validate project references (ownership and existence).
+ * @property instructionDao DAO used to validate linked instruction references (existence and
+ *            ownership).
  */
 internal class AgentRoleRequestValidator(
     private val agentRoleDao: AgentRoleDao,
     private val modelPresetDao: ModelPresetDao,
     private val settingsDao: SettingsDao,
     private val toolDefinitionDao: ToolDefinitionDao,
-    private val projectDao: ProjectDao
+    private val projectDao: ProjectDao,
+    private val instructionDao: InstructionDao,
+    private val json: Json
 ) {
     companion object {
         /** Maximum allowed length of the role name. */
@@ -62,7 +74,11 @@ internal class AgentRoleRequestValidator(
             toolNotFound = { toolId -> CreateAgentRoleError.ToolNotFound(toolId) },
             spawnableRoleNotFound = { roleId -> CreateAgentRoleError.SpawnableRoleNotFound(roleId) },
             projectNotFound = { projectId -> CreateAgentRoleError.ProjectNotFound(projectId) },
-            instructionValidationFailed = { reason -> CreateAgentRoleError.InstructionValidationFailed(reason) }
+            instructionValidationFailed = { reason -> CreateAgentRoleError.InstructionValidationFailed(reason) },
+            duplicateInstructionLink = { instructionId ->
+                CreateAgentRoleError.DuplicateInstructionLink(instructionId)
+            },
+            instructionNotFound = { instructionId -> CreateAgentRoleError.InstructionNotFound(instructionId) }
         )
 
         /** Error factories for the update flow ([UpdateAgentRoleError] surface). */
@@ -78,7 +94,11 @@ internal class AgentRoleRequestValidator(
             toolNotFound = { toolId -> UpdateAgentRoleError.ToolNotFound(toolId) },
             spawnableRoleNotFound = { roleId -> UpdateAgentRoleError.SpawnableRoleNotFound(roleId) },
             projectNotFound = { projectId -> UpdateAgentRoleError.ProjectNotFound(projectId) },
-            instructionValidationFailed = { reason -> UpdateAgentRoleError.InstructionValidationFailed(reason) }
+            instructionValidationFailed = { reason -> UpdateAgentRoleError.InstructionValidationFailed(reason) },
+            duplicateInstructionLink = { instructionId ->
+                UpdateAgentRoleError.DuplicateInstructionLink(instructionId)
+            },
+            instructionNotFound = { instructionId -> UpdateAgentRoleError.InstructionNotFound(instructionId) }
         )
     }
 
@@ -87,10 +107,10 @@ internal class AgentRoleRequestValidator(
      *
      * @param userId User whose role, preset, tool and project ownership is required.
      * @param request The create request to validate.
-     * @return The resolved preset entity (null when no preset is attached), so the caller can build
-     *         the derived model/settings ids without a second read.
+     * @return The validated write set: the resolved preset (null when none is attached) and the
+     *         referenced instruction rows, so the write phase needs no second read.
      */
-    suspend fun validateCreate(userId: Long, request: CreateAgentRoleRequest): Either<CreateAgentRoleError, ModelPresetEntity?> =
+    suspend fun validateCreate(userId: Long, request: CreateAgentRoleRequest): Either<CreateAgentRoleError, ValidatedRoleWrite> =
         either {
             validate(
                 errors = createValidationErrors,
@@ -99,7 +119,7 @@ internal class AgentRoleRequestValidator(
                 toolIds = request.toolIds,
                 spawnableAgentRoleIds = request.spawnableAgentRoleIds,
                 projectId = request.projectId,
-                instructions = request.instructions,
+                instructionSpecs = request.instructionSpecs,
                 userId = userId
             )
         }
@@ -109,13 +129,13 @@ internal class AgentRoleRequestValidator(
      *
      * @param userId User whose role, preset, tool and project ownership is required.
      * @param request The update request to validate.
-     * @return The resolved preset entity (null when no preset is attached), so the caller can build
-     *         the derived model/settings ids without a second read.
+     * @return The validated write set: the resolved preset (null when none is attached) and the
+     *         referenced instruction rows, so the write phase needs no second read.
      */
     suspend fun validateUpdate(
         userId: Long,
         request: UpdateAgentRoleRequest
-    ): Either<UpdateAgentRoleError, ModelPresetEntity?> =
+    ): Either<UpdateAgentRoleError, ValidatedRoleWrite> =
         either {
             validate(
                 errors = updateValidationErrors,
@@ -124,7 +144,7 @@ internal class AgentRoleRequestValidator(
                 toolIds = request.toolIds,
                 spawnableAgentRoleIds = request.spawnableAgentRoleIds,
                 projectId = request.projectId,
-                instructions = request.instructions,
+                instructionSpecs = request.instructionSpecs,
                 userId = userId
             )
         }
@@ -151,11 +171,12 @@ internal class AgentRoleRequestValidator(
      * @param projectId The single project id the role belongs to; a non-null id must reference a
      *            user-owned project. A missing or foreign id raises the same not-found error. It never
      *            constrains the spawn allow-list.
-     * @param instructions The instruction DTOs to validate.
+     * @param instructionSpecs The role's full ordered link set (reference, create, or replace-and-link
+     *            per entry).
      * @param userId User whose role and tool ownership is required.
-     * @return The resolved preset entity (null when no preset is attached), so the caller can build the
-     *         derived model/settings ids without a second read. Failures raise through the caller's
-     *         `either { }` scope via the [Either]-returning entry points.
+     * @return The validated write set: the resolved preset (null when none is attached) and the
+     *         referenced instruction rows, so the write phase needs no second read. Failures raise
+     *         through the caller's `either { }` scope via the [Either]-returning entry points.
      */
     private suspend fun <E> Raise<E>.validate(
         errors: RoleValidationErrors<E>,
@@ -164,9 +185,9 @@ internal class AgentRoleRequestValidator(
         toolIds: Set<Long>,
         spawnableAgentRoleIds: Set<Long>,
         projectId: Long?,
-        instructions: List<AgentInstructionDto>,
+        instructionSpecs: List<InstructionSlot>,
         userId: Long
-    ): ModelPresetEntity? {
+    ): ValidatedRoleWrite {
         ensure(name.isNotBlank()) {
             errors.invalidName(name, "Role name cannot be blank")
         }
@@ -261,43 +282,96 @@ internal class AgentRoleRequestValidator(
             }
         }
 
-        val roleCount = instructions.count { it.type == AgentInstructionTypes.ROLE }
-        val mainCount = instructions.count { it.type == AgentInstructionTypes.MAIN }
-        val spawnableInstructionCount = instructions.count { it.type == AgentInstructionTypes.SPAWNABLE_AGENTS }
-        ensure(roleCount <= 1) {
-            errors.instructionValidationFailed("At most one 'role' instruction is allowed")
+        // Instruction specs are the role's full ordered link set. A row may appear at most once per
+        // role (the composite PK enforces it at the storage level too): `Link` and `Update` each
+        // materialize one link, so their target ids share one duplicate check.
+        val referencedIds = instructionSpecs.mapNotNull { slot ->
+            when (slot) {
+                is InstructionSlot.Link -> slot.id
+                is InstructionSlot.Create -> null
+                is InstructionSlot.Update -> slot.content.id
+            }
         }
-        ensure(mainCount <= 1) {
-            errors.instructionValidationFailed("At most one 'main' instruction is allowed")
+        referencedIds.groupBy { it }.entries.firstOrNull { it.value.size > 1 }?.let { duplicate ->
+            raise(errors.duplicateInstructionLink(duplicate.key))
         }
-        ensure(spawnableInstructionCount <= 1) {
-            errors.instructionValidationFailed("At most one 'spawnable_agents' instruction is allowed")
+        // Missing and foreign ids collapse to the same not-found error (no existence leak); the
+        // owner-scoped batch read doubles as the ownership check and feeds the write phase, so an
+        // `Update` spec needs no second read of its target row.
+        val referencedById = if (referencedIds.isEmpty()) {
+            emptyMap()
+        } else {
+            instructionDao
+                .getInstructionsByIdsForUser(userId, referencedIds.distinct())
+                .associateBy { it.id }
         }
-
-        // A `model_specific` instruction is meaningless without its target model: the composer
-        // keeps only the instance matching the active model, so a missing target would be silently
-        // dropped at read time. Reject it up front instead of accepting data that disappears.
-        ensure(instructions.none {
-            it.type == AgentInstructionTypes.MODEL_SPECIFIC && it.modelSpecificId() == null
-        }) {
-            errors.instructionValidationFailed(
-                "A 'model_specific' instruction must include custom.modelId"
-            )
-        }
-
-        // `model_specific` is multi-instance (one per target model) but each instance must reference a
-        // distinct model: two entries for the same model would be redundant and ambiguous at compose
-        // time, where the composer keeps only the matching instance.
-        val modelSpecificModelIds = instructions
-            .filter { it.type == AgentInstructionTypes.MODEL_SPECIFIC }
-            .mapNotNull { it.modelSpecificId() }
-        ensure(modelSpecificModelIds.distinct().size == modelSpecificModelIds.size) {
-            errors.instructionValidationFailed(
-                "Each 'model_specific' instruction must reference a distinct model"
-            )
+        referencedIds.firstOrNull { it !in referencedById }?.let { missingId ->
+            raise(errors.instructionNotFound(missingId))
         }
 
-        return preset
+        // Inline content is validated exactly like the instruction endpoints (`Create` like the
+        // create endpoint, `Update` like the update endpoint). The per-role rules then judge the
+        // resulting list in request order: the rule input comes from the loaded row for `Link` and
+        // from the authored content for the inline variants.
+        val ruleInputs = instructionSpecs.map { slot ->
+            when (slot) {
+                is InstructionSlot.Link -> referencedById.getValue(slot.id).toRuleInput(json)
+                is InstructionSlot.Create -> validatedContentRuleInput(
+                    errors = errors,
+                    type = slot.content.type,
+                    name = slot.content.name,
+                    message = slot.content.message,
+                    custom = slot.content.custom
+                )
+
+                is InstructionSlot.Update -> validatedContentRuleInput(
+                    errors = errors,
+                    type = slot.content.type,
+                    name = slot.content.name,
+                    message = slot.content.message,
+                    custom = slot.content.custom
+                )
+            }
+        }
+        AgentRoleInstructionRules.validate(
+            instructions = ruleInputs,
+            raise = this,
+            instructionValidationFailed = errors.instructionValidationFailed
+        )
+
+        return ValidatedRoleWrite(preset = preset, referencedInstructions = referencedById)
+    }
+
+    /**
+     * Validates one inline spec's authored content and projects it into the per-role rule input.
+     *
+     * Runs the shared instruction content rules first, so inline content is classified with the
+     * instruction endpoints' wording before the list-level rules see it.
+     *
+     * @receiver The raise scope of the caller.
+     * @param errors Factories that map each validation failure to the caller's error type.
+     * @param type The instruction kind key.
+     * @param name The instruction label.
+     * @param message The instruction text, or null for the generated-message kind.
+     * @param custom Type-specific extra fields.
+     * @return The rule input describing the authored kind and model target.
+     */
+    private fun <E> Raise<E>.validatedContentRuleInput(
+        errors: RoleValidationErrors<E>,
+        type: String,
+        name: String,
+        message: String?,
+        custom: JsonObject?
+    ): AgentRoleInstructionRules.RuleInput {
+        InstructionContentRules.validate(
+            type = type,
+            name = name,
+            message = message,
+            custom = custom,
+            raise = this,
+            validationFailed = errors.instructionValidationFailed
+        )
+        return AgentRoleInstructionRules.RuleInput(type = type, modelId = custom.modelIdOrNull())
     }
 
     /**
@@ -311,6 +385,8 @@ internal class AgentRoleRequestValidator(
      * @property spawnableRoleNotFound Builds an inaccessible-target error.
      * @property projectNotFound Builds a project-not-found error.
      * @property instructionValidationFailed Builds an instruction-validation error.
+     * @property duplicateInstructionLink Builds a duplicate-instruction-link error.
+     * @property instructionNotFound Builds an instruction-not-found error.
      */
     private data class RoleValidationErrors<E>(
         val invalidName: (name: String, reason: String) -> E,
@@ -320,6 +396,20 @@ internal class AgentRoleRequestValidator(
         val toolNotFound: (toolId: Long) -> E,
         val spawnableRoleNotFound: (roleId: Long) -> E,
         val projectNotFound: (projectId: Long) -> E,
-        val instructionValidationFailed: (reason: String) -> E
+        val instructionValidationFailed: (reason: String) -> E,
+        val duplicateInstructionLink: (instructionId: Long) -> E,
+        val instructionNotFound: (instructionId: Long) -> E
     )
 }
+
+/**
+ * Outcome of a validated role write, consumed by the materialization phase.
+ *
+ * @property preset The resolved preset entity, or null when the role is preset-less.
+ * @property referencedInstructions The `Link`/`Update` target rows loaded during validation, keyed by
+ *            row id, so materializing an `Update` spec needs no second read.
+ */
+internal data class ValidatedRoleWrite(
+    val preset: ModelPresetEntity?,
+    val referencedInstructions: Map<Long, InstructionEntity>
+)

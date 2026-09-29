@@ -5,9 +5,12 @@ import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import eu.torvian.chatbot.server.service.core.agent.AgentRole
+import eu.torvian.chatbot.server.service.core.agent.DeleteAgentRoleResult
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
+import eu.torvian.chatbot.server.service.core.error.agent.AssignInstructionError
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.DeleteAgentRoleError
+import eu.torvian.chatbot.server.service.core.error.agent.UnassignInstructionError
 import eu.torvian.chatbot.server.service.core.error.agent.UpdateAgentRoleError
 
 /**
@@ -96,7 +99,9 @@ interface AgentRoleService {
      * Creates a new agent role owned by the user.
      *
      * Validates the name, model/settings references (chat-capable and consistent), tool references,
-     * and instruction-list rules before persisting. The newly created role is returned with resolved
+     * and instruction-list rules before persisting. The payload links exactly the referenced
+     * instruction rows, in the given order; their content is authored through the instruction surfaces
+     * and is never touched by a role write. The newly created role is returned with resolved
      * instructions.
      *
      * @param userId The ID of the user who will own the role.
@@ -111,6 +116,9 @@ interface AgentRoleService {
     /**
      * Updates an existing agent role owned by the user (a full configuration replacement).
      *
+     * The instruction list is a full replacement too: the payload's ordered ids become the role's
+     * links, and dropped entries lose only this role's link (their rows persist as library entries).
+     *
      * @param userId The ID of the requesting user.
      * @param roleId The ID of the role to update.
      * @param request The update payload.
@@ -123,6 +131,49 @@ interface AgentRoleService {
     ): Either<UpdateAgentRoleError, AgentRoleDto>
 
     /**
+     * Links one instruction row to an agent role, appending it as the role's last element.
+     *
+     * The operation mutates the role's ordered instruction list, which is why it lives on this service
+     * rather than on the instruction service; the reported [AgentRoleDto] is the role's state after the
+     * write, so the caller receives the new order and every entry's linking roles. Both the role and the
+     * row must be owned by [userId] (foreign and nonexistent ids collapse into the same not-found error
+     * on each side), the pair must not be linked yet, and the resulting list must satisfy the per-role
+     * instruction rules — a violation is rejected before any write.
+     *
+     * @param userId The ID of the requesting user, whose ownership of both sides is required.
+     * @param roleId The ID of the role to link to.
+     * @param instructionId The ID of the instruction row to link.
+     * @return Either an [AssignInstructionError] or the updated [AgentRoleDto] with resolved
+     *         instructions.
+     */
+    suspend fun assignInstruction(
+        userId: Long,
+        roleId: Long,
+        instructionId: Long
+    ): Either<AssignInstructionError, AgentRoleDto>
+
+    /**
+     * Removes one instruction row's link from an agent role.
+     *
+     * Only the link is removed: the instruction row survives as a library entry, so it stays available
+     * for other roles and reappears under an unassigned listing when no role links it any more. The
+     * affected role keeps its remaining instructions in unchanged relative order and its stored
+     * positions stay contiguous. Both the role and the row must be owned by [userId], and the pair must
+     * currently be linked.
+     *
+     * @param userId The ID of the requesting user, whose ownership of both sides is required.
+     * @param roleId The ID of the role to unlink from.
+     * @param instructionId The ID of the instruction row to unlink.
+     * @return Either an [UnassignInstructionError] or the updated [AgentRoleDto] with resolved
+     *         instructions.
+     */
+    suspend fun unassignInstruction(
+        userId: Long,
+        roleId: Long,
+        instructionId: Long
+    ): Either<UnassignInstructionError, AgentRoleDto>
+
+    /**
      * Deletes an agent role owned by the user.
      *
      * The implementation enforces ownership in the same transaction as the delete and collapses a
@@ -130,13 +181,20 @@ interface AgentRoleService {
      * [DeleteAgentRoleError.NotFound] so the caller cannot distinguish "someone else's role" from
      * "no such role".
      *
+     * Deleting is content-destructive for unreferenced instruction rows: every instruction row that
+     * loses its last link through this deletion is removed together with its `instruction_owners`
+     * row, in the same transaction as the role delete. Rows still linked to at least one other role,
+     * and rows that were never linked, survive as library entries. The result reports both fates:
+     * the ids of the removed rows and of the linked rows kept on other roles.
+     *
      * Deleting a role is non-destructive for sessions: `chat_sessions.agent_role_id` and
      * `assistant_messages.agent_role_id` use `ON DELETE SET NULL`, so affected sessions become inert
      * until a role is re-selected.
      *
      * @param userId The ID of the requesting user.
      * @param roleId The ID of the role to delete.
-     * @return Either a [DeleteAgentRoleError] or Unit on success.
+     * @return Either a [DeleteAgentRoleError], or a [DeleteAgentRoleResult] naming the removed and
+     *         the kept instruction rows.
      */
-    suspend fun deleteRole(userId: Long, roleId: Long): Either<DeleteAgentRoleError, Unit>
+    suspend fun deleteRole(userId: Long, roleId: Long): Either<DeleteAgentRoleError, DeleteAgentRoleResult>
 }

@@ -1,8 +1,7 @@
 package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.right
-import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
-import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao.AgentRoleNameScope
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
@@ -32,7 +31,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
 
         assertTrue(result.isLeft())
         assertIs<CreateAgentRoleError.NameAlreadyExists>(result.leftOrNull())
-        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { agentRoleToolDao.replaceToolsForRole(any(), any()) }
     }
     @Test
@@ -41,7 +40,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
         // Another user owns "Senior Architect"; the requesting user does not, so the name is free.
         coEvery { agentRoleDao.getRoleNameScopesForUser(userId, "Senior Architect") } returns emptyList()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -61,7 +60,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
         val result = service.createRole(userId, validRequest())
 
         assertIs<CreateAgentRoleError.NameAlreadyExists>(result.leftOrNull())
-        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any()) }
     }
     @Test
     fun `createRole rejects a same-name role sharing a project`() = runTest {
@@ -85,7 +84,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(2L)) } returns listOf(TestDefaults.project2)
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -96,7 +95,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
         assertTrue(result.isRight())
         // The single membership column is written together with the row.
         coVerify(exactly = 1) {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), eq(2L))
+            agentRoleDao.insertRole(any(), any(), any(), any(), eq(2L))
         }
     }
     @Test
@@ -108,7 +107,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
         )
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -138,9 +137,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
             description = "Designs systems",
             modelPresetId = validPreset.id,
             toolIds = emptySet(),
-            instructions = listOf(
-                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect.")
-            ),
+            instructionSpecs = listOf(InstructionSlot.Link(1L)),
             projectId = 2L
         )
         val result = service.updateRole(userId, 1L, request)
@@ -168,9 +165,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
             description = "Designs systems",
             modelPresetId = validPreset.id,
             toolIds = emptySet(),
-            instructions = listOf(
-                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect.")
-            )
+            instructionSpecs = listOf(InstructionSlot.Link(1L))
         )
         val result = service.updateRole(userId, 1L, request)
 
@@ -188,7 +183,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
             TestDefaults.agentRole2.copy(id = 6L)
         )
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -211,7 +206,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
             TestDefaults.agentRole1.copy(id = 7L, name = "Helper")
         )
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -236,7 +231,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
         coEvery { agentRoleDao.getRolesByIdsForUser(userId, listOf(5L)) } returns
             listOf(TestDefaults.agentRole1.copy(id = 5L, projectId = 1L))
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -258,7 +253,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
             TestDefaults.agentRole1.copy(id = 5L, name = "Helper", projectId = 1L)
         )
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -284,7 +279,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
         val result = service.createRole(userId, validRequest().copy(spawnableAgentRoleIds = setOf(5L, 99L)))
 
         assertIs<CreateAgentRoleError.SpawnableRoleNotFound>(result.leftOrNull())
-        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(any(), any()) }
     }
     @Test
@@ -309,7 +304,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
             modelPresetId = validPreset.id,
             toolIds = emptySet(),
             spawnableAgentRoleIds = setOf(1L),
-            instructions = emptyList(),
+            instructionSpecs = emptyList(),
             projectId = 2L
         )
         val result = service.updateRole(userId, 1L, request)
@@ -342,7 +337,7 @@ class AgentRoleServiceImplScopeRulesTest : AgentRoleServiceImplTestBase() {
             modelPresetId = validPreset.id,
             toolIds = emptySet(),
             spawnableAgentRoleIds = setOf(5L, 6L),
-            instructions = emptyList(),
+            instructionSpecs = emptyList(),
             projectId = 2L
         )
         val result = service.updateRole(userId, 1L, request)

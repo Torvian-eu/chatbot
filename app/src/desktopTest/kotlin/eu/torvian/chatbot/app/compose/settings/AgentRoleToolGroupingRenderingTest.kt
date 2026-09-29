@@ -141,6 +141,7 @@ class AgentRoleToolGroupingRenderingTest {
                 presets = emptyList(),
                 settingsById = emptyMap(),
                 tools = tools,
+                instructions = emptyList(),
                 workerDisplayNamesById = workerNamesById,
                 mcpServerNamesById = mcpServerNamesById,
                 roles = emptyList(),

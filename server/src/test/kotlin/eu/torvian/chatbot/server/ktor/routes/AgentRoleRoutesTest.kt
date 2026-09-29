@@ -1,13 +1,23 @@
 package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.resources.AgentRoleResource
+import eu.torvian.chatbot.common.api.resources.InstructionResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
+import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleDisabledRequest
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.instruction.CreateInstructionRequest
+import eu.torvian.chatbot.common.models.api.instruction.UpdateInstructionRequest
+import eu.torvian.chatbot.server.data.dao.AgentRoleDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleInstructionDao
+import eu.torvian.chatbot.server.data.dao.InstructionDao
+import eu.torvian.chatbot.server.data.dao.InstructionOwnershipDao
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
@@ -20,6 +30,7 @@ import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
+import io.ktor.http.content.TextContent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -33,7 +44,9 @@ import kotlin.test.assertTrue
  *
  * Covers the per-user disabled-state toggle endpoint (ownership-checked: a `true` body records a
  * `(user, role)` disabled marker and returns the updated DTO, `false` removes it, and a role owned by
- * another user collapses to 404), and the model-preset configuration surface: attaching a preset
+ * another user collapses to 404), the DELETE endpoint (204 on success, 404 collapsing foreign and
+ * nonexistent roles, with sole-linked instruction rows swept and shared rows kept), and the
+ * model-preset configuration surface: attaching a preset
  * persists only the reference while the response reports the preset-derived model/settings ids, a
  * preset-less role stays valid, and an unknown preset is rejected without writing.
  */
@@ -49,14 +62,12 @@ class AgentRoleRoutesTest {
     private val ownedRole = TestDefaults.agentRole1.copy(
         id = 1L,
         name = "My Role",
-        modelPresetId = null,
-        instructionsJson = "[]"
+        modelPresetId = null
     )
     private val foreignRole = TestDefaults.agentRole2.copy(
         id = 2L,
         name = "Foreign Role",
-        modelPresetId = null,
-        instructionsJson = "[]"
+        modelPresetId = null
     )
 
     /**
@@ -79,6 +90,8 @@ class AgentRoleRoutesTest {
             container = container,
             routing = {
                 apiRoutesKtor.configureAgentRoleRoutes(this)
+                // The delete-cleanup end-to-end case reads the library listing.
+                apiRoutesKtor.configureInstructionRoutes(this)
             }
         )
 
@@ -93,6 +106,10 @@ class AgentRoleRoutesTest {
                 Table.USERS,
                 Table.AGENT_ROLES,
                 Table.AGENT_ROLE_OWNERS,
+                // Role reads and writes resolve the role's shareable instructions through these.
+                Table.INSTRUCTIONS,
+                Table.INSTRUCTION_OWNERS,
+                Table.AGENT_ROLE_INSTRUCTIONS,
                 // The role-update path runs the Session Legality sweep, which reads chat_sessions.
                 Table.CHAT_SESSIONS
             )
@@ -266,5 +283,258 @@ class AgentRoleRoutesTest {
         assertEquals(HttpStatusCode.BadRequest, response.status)
         // The reference was rejected before any write, so the role is unchanged (still preset-less).
         assertEquals(null, assertNotNull(testDataManager.getAgentRole(ownedRole.id)).modelPresetId)
+    }
+
+    @Test
+    fun `POST agent role materializes all three instruction spec variants in request order`() =
+        agentRoleTestApplication {
+            val instructionDao: InstructionDao = container.get()
+            val instructionOwnershipDao: InstructionOwnershipDao = container.get()
+            val userId = authHelper.defaultTestUser.id
+            val linkedId = instructionDao
+                .insertInstruction(type = AgentInstructionTypes.CUSTOM, name = "Style", message = "Old", custom = null)
+                .id
+            instructionOwnershipDao.setOwner(linkedId, userId)
+            val updatedId = instructionDao
+                .insertInstruction(type = AgentInstructionTypes.CUSTOM, name = "Tone", message = "Old", custom = null)
+                .id
+            instructionOwnershipDao.setOwner(updatedId, userId)
+            val request = CreateAgentRoleRequest(
+                name = "writer",
+                instructionSpecs = listOf(
+                    InstructionSlot.Create(
+                        CreateInstructionRequest(
+                            type = AgentInstructionTypes.ROLE,
+                            name = "Role",
+                            message = "You are a writer."
+                        )
+                    ),
+                    InstructionSlot.Link(linkedId),
+                    InstructionSlot.Update(
+                        UpdateInstructionRequest(
+                            id = updatedId,
+                            type = AgentInstructionTypes.CUSTOM,
+                            name = "Tone",
+                            message = "New"
+                        )
+                    )
+                )
+            )
+
+            val response = client.post(href(AgentRoleResource())) {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                authenticate(authToken)
+            }
+
+            assertEquals(HttpStatusCode.Created, response.status)
+            val dto = response.body<AgentRoleDto>()
+            // The created row, the linked row and the rewritten row appear in request order.
+            assertEquals(listOf("Role", "Style", "Tone"), dto.instructions.map { it.name })
+            assertEquals(linkedId, dto.instructions[1].id)
+            assertEquals(updatedId, dto.instructions[2].id)
+            // The update spec replaced its target's content in place.
+            assertEquals("New", instructionDao.getInstructionById(updatedId).getOrNull()?.message)
+        }
+
+    @Test
+    fun `PUT agent role with a link spec leaves the linked row's content untouched`() = agentRoleTestApplication {
+        val instructionDao: InstructionDao = container.get()
+        val instructionOwnershipDao: InstructionOwnershipDao = container.get()
+        val userId = authHelper.defaultTestUser.id
+        val linkedId = instructionDao
+            .insertInstruction(type = AgentInstructionTypes.CUSTOM, name = "Style", message = "Untouched", custom = null)
+            .id
+        instructionOwnershipDao.setOwner(linkedId, userId)
+        val request = UpdateAgentRoleRequest(
+            name = ownedRole.name,
+            instructionSpecs = listOf(
+                InstructionSlot.Create(
+                    CreateInstructionRequest(
+                        type = AgentInstructionTypes.ROLE,
+                        name = "Role",
+                        message = "You are a writer."
+                    )
+                ),
+                InstructionSlot.Link(linkedId)
+            )
+        )
+
+        val response = client.put(href(AgentRoleResource.ById(roleId = ownedRole.id))) {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+            authenticate(authToken)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        // Exactly one row was created and the referenced row kept its content.
+        assertEquals(2, instructionDao.getAllInstructionsForUser(userId).size)
+        val linked = instructionDao.getInstructionById(linkedId).getOrNull()
+        assertEquals("Untouched", linked?.message)
+        assertEquals("Style", linked?.name)
+    }
+
+    @Test
+    fun `PUT agent role with an empty spec list clears the role's links`() = agentRoleTestApplication {
+        val instructionDao: InstructionDao = container.get()
+        val instructionOwnershipDao: InstructionOwnershipDao = container.get()
+        val agentRoleInstructionDao: AgentRoleInstructionDao = container.get()
+        val userId = authHelper.defaultTestUser.id
+        val linkedId = instructionDao
+            .insertInstruction(type = AgentInstructionTypes.CUSTOM, name = "Style", message = "x", custom = null)
+            .id
+        instructionOwnershipDao.setOwner(linkedId, userId)
+        agentRoleInstructionDao.replaceInstructionsForRole(ownedRole.id, listOf(linkedId))
+
+        val response = client.put(href(AgentRoleResource.ById(roleId = ownedRole.id))) {
+            contentType(ContentType.Application.Json)
+            // Absent instructionSpecs means "no links": a full replacement clears the previous set.
+            setBody(UpdateAgentRoleRequest(name = ownedRole.name))
+            authenticate(authToken)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertTrue(agentRoleInstructionDao.getLinksForRoles(listOf(ownedRole.id))[ownedRole.id].isNullOrEmpty())
+    }
+
+    @Test
+    fun `POST agent role carrying the removed instructionIds key is rejected and nothing is written`() =
+        agentRoleTestApplication {
+            val agentRoleDao: AgentRoleDao = container.get()
+
+            val response = client.post(href(AgentRoleResource())) {
+                contentType(ContentType.Application.Json)
+                setBody(TextContent("""{"name":"Dup","instructionIds":[]}""", ContentType.Application.Json))
+                authenticate(authToken)
+            }
+
+            // Strict decoding rejects the stale key regardless of its value.
+            assertTrue(response.status.value in 400..499, "expected 4xx but got ${response.status}")
+            assertTrue(agentRoleDao.getAllRolesForUser(authHelper.defaultTestUser.id).none { it.name == "Dup" })
+        }
+
+    @Test
+    fun `POST agent role carrying the legacy instructions key is rejected and nothing is written`() =
+        agentRoleTestApplication {
+            val agentRoleDao: AgentRoleDao = container.get()
+            val agentRoleInstructionDao: AgentRoleInstructionDao = container.get()
+
+            val response = client.post(href(AgentRoleResource())) {
+                contentType(ContentType.Application.Json)
+                setBody(TextContent("""{"name":"Dup","instructions":[]}""", ContentType.Application.Json))
+                authenticate(authToken)
+            }
+
+            assertTrue(response.status.value in 400..499, "expected 4xx but got ${response.status}")
+            assertTrue(agentRoleDao.getAllRolesForUser(authHelper.defaultTestUser.id).none { it.name == "Dup" })
+            assertTrue(agentRoleInstructionDao.getLinksForRoles(listOf(ownedRole.id))[ownedRole.id].isNullOrEmpty())
+        }
+
+    @Test
+    fun `PUT agent role carrying the legacy instructions key is rejected and keeps the existing links`() =
+        agentRoleTestApplication {
+            val instructionDao: InstructionDao = container.get()
+            val instructionOwnershipDao: InstructionOwnershipDao = container.get()
+            val agentRoleInstructionDao: AgentRoleInstructionDao = container.get()
+            val userId = authHelper.defaultTestUser.id
+            val linkedId = instructionDao
+                .insertInstruction(type = AgentInstructionTypes.CUSTOM, name = "Style", message = "x", custom = null)
+                .id
+            instructionOwnershipDao.setOwner(linkedId, userId)
+            agentRoleInstructionDao.replaceInstructionsForRole(ownedRole.id, listOf(linkedId))
+
+            val response = client.put(href(AgentRoleResource.ById(roleId = ownedRole.id))) {
+                contentType(ContentType.Application.Json)
+                setBody(TextContent("""{"name":"My Role","instructions":[]}""", ContentType.Application.Json))
+                authenticate(authToken)
+            }
+
+            // Strict decoding rejects the stale key before the write runs, so the update never reaches
+            // the link replacement and the role keeps its previous link set.
+            assertTrue(response.status.value in 400..499, "expected 4xx but got ${response.status}")
+            assertEquals(
+                listOf(linkedId),
+                agentRoleInstructionDao.getLinksForRoles(listOf(ownedRole.id))[ownedRole.id]?.map { it.instructionId }
+            )
+        }
+
+    /** Verifies the wire contract of a successful delete: 204 with the role row gone. */
+    @Test
+    fun `DELETE agent role returns 204 and removes the role`() = agentRoleTestApplication {
+        val response = client.delete(href(AgentRoleResource.ById(roleId = ownedRole.id))) {
+            authenticate(authToken)
+        }
+
+        assertEquals(HttpStatusCode.NoContent, response.status)
+        assertEquals(null, testDataManager.getAgentRole(ownedRole.id))
+    }
+
+    /** Verifies foreign and nonexistent roles both answer 404 with nothing deleted. */
+    @Test
+    fun `DELETE unknown or foreign agent role returns 404 and removes nothing`() = agentRoleTestApplication {
+        val foreignResponse = client.delete(href(AgentRoleResource.ById(roleId = foreignRole.id))) {
+            authenticate(authToken)
+        }
+        val unknownResponse = client.delete(href(AgentRoleResource.ById(roleId = 999L))) {
+            authenticate(authToken)
+        }
+
+        // Foreign and nonexistent roles collapse to the same answer, and neither is deleted.
+        assertEquals(HttpStatusCode.NotFound, foreignResponse.status)
+        assertEquals(HttpStatusCode.NotFound, unknownResponse.status)
+        assertNotNull(testDataManager.getAgentRole(foreignRole.id))
+    }
+
+    /**
+     * Verifies the sweep end-to-end through the wire: the sole-linked row vanishes from the library
+     * listing while the shared row survives with its updated usage.
+     */
+    @Test
+    fun `DELETE agent role removes now-unreferenced rows from the library listing`() = agentRoleTestApplication {
+        val instructionDao: InstructionDao = container.get()
+        val instructionOwnershipDao: InstructionOwnershipDao = container.get()
+        val agentRoleInstructionDao: AgentRoleInstructionDao = container.get()
+        val userId = authHelper.defaultTestUser.id
+        // The shared row survives the deletion because the owned role keeps linking it.
+        val sharedId = instructionDao
+            .insertInstruction(type = AgentInstructionTypes.CUSTOM, name = "Shared", message = "x", custom = null)
+            .id
+        instructionOwnershipDao.setOwner(sharedId, userId)
+        agentRoleInstructionDao.replaceInstructionsForRole(ownedRole.id, listOf(sharedId))
+        val created = client.post(href(AgentRoleResource())) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateAgentRoleRequest(
+                    name = "writer",
+                    instructionSpecs = listOf(
+                        InstructionSlot.Create(
+                            CreateInstructionRequest(
+                                type = AgentInstructionTypes.ROLE,
+                                name = "Role",
+                                message = "You are a writer."
+                            )
+                        ),
+                        InstructionSlot.Link(sharedId)
+                    )
+                )
+            )
+            authenticate(authToken)
+        }
+        assertEquals(HttpStatusCode.Created, created.status)
+        val doomedRoleId = created.body<AgentRoleDto>().id
+
+        val response = client.delete(href(AgentRoleResource.ById(roleId = doomedRoleId))) {
+            authenticate(authToken)
+        }
+        assertEquals(HttpStatusCode.NoContent, response.status)
+
+        val listing = client.get(href(InstructionResource())) {
+            authenticate(authToken)
+        }
+        assertEquals(HttpStatusCode.OK, listing.status)
+        val rows = listing.body<List<AgentInstructionDto>>()
+        // The sole-linked row is gone from the library; the shared row stays with its updated usage.
+        assertEquals(listOf(sharedId), rows.map { it.id })
+        assertEquals(setOf(ownedRole.id), rows.single().linkedRoleIds)
     }
 }

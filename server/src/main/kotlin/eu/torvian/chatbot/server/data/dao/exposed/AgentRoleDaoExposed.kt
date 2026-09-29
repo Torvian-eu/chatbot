@@ -27,9 +27,10 @@ import org.jetbrains.exposed.v1.jdbc.update
 /**
  * Exposed implementation of the [AgentRoleDao].
  *
- * All operations are single-row reads/writes; the JSON `instructions_json` column is passed through
- * verbatim so serialization stays at the service boundary. The role's tool ids live in the separate
- * `agent_role_tools` join table and are managed through [AgentRoleToolDao]. The single project
+ * All operations are single-row reads/writes and never touch instruction data: a role's instructions
+ * are stored rows linked through `agent_role_instructions`, which
+ * [eu.torvian.chatbot.server.data.dao.AgentRoleInstructionDao] owns. The role's tool ids live in the
+ * separate `agent_role_tools` join table and are managed through [AgentRoleToolDao]. The single project
  * membership lives on the role row (`project_id` column) and is therefore read/written with every
  * row operation, as does the single `model_preset_id` configuration reference (the preset itself is a
  * different table and is resolved by the service layer, never here).
@@ -141,7 +142,6 @@ class AgentRoleDaoExposed(
         displayName: String?,
         description: String,
         modelPresetId: Long?,
-        instructionsJson: String,
         projectId: Long?
     ): AgentRoleEntity =
         transactionScope.transaction {
@@ -152,7 +152,6 @@ class AgentRoleDaoExposed(
                 it[AgentRoleTable.description] = description
                 it[AgentRoleTable.modelPresetId] = modelPresetId
                 it[AgentRoleTable.projectId] = projectId
-                it[AgentRoleTable.instructionsJson] = instructionsJson
                 it[AgentRoleTable.createdAt] = now
                 it[AgentRoleTable.updatedAt] = now
             }
@@ -169,7 +168,6 @@ class AgentRoleDaoExposed(
                     it[AgentRoleTable.description] = role.description
                     it[AgentRoleTable.modelPresetId] = role.modelPresetId
                     it[AgentRoleTable.projectId] = role.projectId
-                    it[AgentRoleTable.instructionsJson] = role.instructionsJson
                     it[AgentRoleTable.updatedAt] = System.currentTimeMillis()
                 }
                 ensure(updatedRowCount != 0) { AgentRoleError.NotFound(role.id) }

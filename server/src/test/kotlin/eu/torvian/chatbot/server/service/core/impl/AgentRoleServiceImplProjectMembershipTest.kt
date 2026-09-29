@@ -1,8 +1,7 @@
 package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.right
-import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
-import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
@@ -27,7 +26,7 @@ class AgentRoleServiceImplProjectMembershipTest : AgentRoleServiceImplTestBase()
         coEvery { projectDao.getProjectsByIdsForUser(userId, listOf(1L)) } returns
             listOf(TestDefaults.project1)
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -40,7 +39,7 @@ class AgentRoleServiceImplProjectMembershipTest : AgentRoleServiceImplTestBase()
         // The single membership column is written together with the row, atomically with the tools
         // and ownership writes.
         coVerify(exactly = 1) {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), eq(1L))
+            agentRoleDao.insertRole(any(), any(), any(), any(), eq(1L))
         }
     }
     @Test
@@ -54,7 +53,7 @@ class AgentRoleServiceImplProjectMembershipTest : AgentRoleServiceImplTestBase()
 
         val error = assertIs<CreateAgentRoleError.ProjectNotFound>(result.leftOrNull())
         assertEquals(99L, error.projectId)
-        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any()) }
     }
     @Test
     fun `updateRole persists the new projectId and returns it on the DTO`() = runTest {
@@ -73,9 +72,7 @@ class AgentRoleServiceImplProjectMembershipTest : AgentRoleServiceImplTestBase()
             description = "Designs systems",
             modelPresetId = validPreset.id,
             toolIds = emptySet(),
-            instructions = listOf(
-                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect.")
-            ),
+            instructionSpecs = listOf(InstructionSlot.Link(1L)),
             projectId = 2L
         )
         val result = service.updateRole(userId, 1L, request)
@@ -97,7 +94,7 @@ class AgentRoleServiceImplProjectMembershipTest : AgentRoleServiceImplTestBase()
             description = "Designs systems",
             modelPresetId = validPreset.id,
             toolIds = emptySet(),
-            instructions = emptyList(),
+            instructionSpecs = emptyList(),
             projectId = 99L
         )
         val result = service.updateRole(userId, 1L, request)
@@ -130,7 +127,7 @@ class AgentRoleServiceImplProjectMembershipTest : AgentRoleServiceImplTestBase()
             description = "Designs systems",
             modelPresetId = validPreset.id,
             toolIds = emptySet(),
-            instructions = emptyList(),
+            instructionSpecs = emptyList(),
             projectId = 2L
         )
         val result = service.updateRole(userId, 1L, request)
@@ -158,7 +155,7 @@ class AgentRoleServiceImplProjectMembershipTest : AgentRoleServiceImplTestBase()
             description = "Designs systems",
             modelPresetId = validPreset.id,
             toolIds = emptySet(),
-            instructions = emptyList(),
+            instructionSpecs = emptyList(),
             projectId = 1L
         )
         val result = service.updateRole(userId, 1L, request)

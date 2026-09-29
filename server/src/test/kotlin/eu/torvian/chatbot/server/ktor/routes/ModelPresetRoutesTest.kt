@@ -67,7 +67,7 @@ class ModelPresetRoutesTest {
      * The agent role bound to a preset, used to prove that deleting the preset detaches (rather than
      * deletes) the role.
      */
-    private val boundRole = TestDefaults.agentRole1.copy(id = 1L, modelPresetId = null, instructionsJson = "[]")
+    private val boundRole = TestDefaults.agentRole1.copy(id = 1L, modelPresetId = null)
 
     @BeforeEach
     fun setUp() = runTest {

@@ -110,9 +110,11 @@ fun AgentRolesTab(
         presets = state.presets,
         settingsById = state.settingsById,
         tools = state.tools,
+        instructions = state.instructions,
         roles = state.rolesUiState.dataOrNull.orEmpty(),
         projects = state.projects,
         workerDisplayNamesById = state.workerDisplayNamesById,
-        mcpServerNamesById = state.mcpServerNamesById
+        mcpServerNamesById = state.mcpServerNamesById,
+        saving = state.saving
     )
 }

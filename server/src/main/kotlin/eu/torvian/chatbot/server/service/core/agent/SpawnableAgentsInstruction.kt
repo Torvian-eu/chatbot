@@ -30,15 +30,19 @@ data class SpawnableAgentsAdvertisement(
  * A role without the `spawn_agent` tool gets an empty message (the composer then drops the blank
  * section) and pays no advertisement read at all.
  *
+ * @property id Identifier of the stored instruction row the value was read from.
  * @property name Human-readable marker label; used as the markdown section heading.
  * @property advertisementLoader Resolver for the current, ownership-filtered advertisement.
  * @property spawnAgentToolAvailableLoader Resolver indicating whether this role currently has the
  *            server operator tool enabled.
+ * @property linkedRoleIds Ids of the agent roles that link that row.
  */
 data class SpawnableAgentsInstruction(
+    override val id: Long,
     override val name: String,
     private val advertisementLoader: suspend () -> SpawnableAgentsAdvertisement,
-    private val spawnAgentToolAvailableLoader: suspend () -> Boolean = { true }
+    private val spawnAgentToolAvailableLoader: suspend () -> Boolean = { true },
+    override val linkedRoleIds: Set<Long> = emptySet()
 ) : AgentInstruction {
     override val type: String = AgentInstructionTypes.SPAWNABLE_AGENTS
 

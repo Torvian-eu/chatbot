@@ -97,11 +97,56 @@ sealed interface CreateAgentRoleError {
     data class InstructionValidationFailed(val reason: String) : CreateAgentRoleError
 
     /**
+     * A referenced instruction row does not exist or is not owned by the requesting user.
+     *
+     * Missing and foreign ids collapse to the same error, so the request cannot tell an ownership
+     * mismatch apart from a plain non-existent id (no existence leak).
+     *
+     * @property instructionId The missing or foreign instruction identifier.
+     */
+    data class InstructionNotFound(val instructionId: Long) : CreateAgentRoleError
+
+    /**
+     * The request links the same instruction row to the role more than once.
+     *
+     * @property instructionId The duplicated instruction identifier.
+     */
+    data class DuplicateInstructionLink(val instructionId: Long) : CreateAgentRoleError
+
+    /**
      * The ownership link for the newly created role could not be inserted.
      *
      * @property reason Human-readable explanation of the failure.
      */
     data class OwnerInsertFailed(val reason: String) : CreateAgentRoleError
+
+    /**
+     * An inline spec would change the kind or model target of a row another agent role also links,
+     * leaving that role's instruction list invalid.
+     *
+     * The row is shared content, so its kind is part of every linking role's list validity; this save
+     * only judges the list of the role being written, so the change is allowed only when every other
+     * linking role's resulting list still satisfies the per-role rules.
+     *
+     * @property instructionId The row whose content was to change.
+     * @property linkedRoleIds The other roles whose resulting lists would be invalid, ascending.
+     * @property reason Human-readable description of the violated rule.
+     */
+    data class LinkedRoleInstructionListInvalid(
+        val instructionId: Long,
+        val linkedRoleIds: List<Long>,
+        val reason: String
+    ) : CreateAgentRoleError
+
+    /**
+     * The ownership link for an instruction row created inline by this write could not be inserted.
+     *
+     * A created row without an owner would be unmodifiable, so the whole save fails instead of
+     * leaving it behind.
+     *
+     * @property reason Human-readable explanation of the failure.
+     */
+    data class InstructionOwnerInsertFailed(val reason: String) : CreateAgentRoleError
 }
 
 /**
@@ -147,6 +192,32 @@ fun CreateAgentRoleError.toApiError(): ApiError = when (this) {
     is CreateAgentRoleError.InstructionValidationFailed ->
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid agent role instructions: $reason")
 
+    is CreateAgentRoleError.InstructionNotFound ->
+        apiError(
+            CommonApiErrorCodes.INVALID_ARGUMENT,
+            "Instruction not found",
+            "instructionId" to instructionId.toString()
+        )
+
+    is CreateAgentRoleError.DuplicateInstructionLink ->
+        apiError(
+            CommonApiErrorCodes.INVALID_ARGUMENT,
+            "The same instruction cannot be linked to one role twice",
+            "instructionId" to instructionId.toString()
+        )
+
     is CreateAgentRoleError.OwnerInsertFailed ->
         apiError(CommonApiErrorCodes.INTERNAL, "Failed to set agent role ownership: $reason")
+
+    is CreateAgentRoleError.LinkedRoleInstructionListInvalid ->
+        apiError(
+            CommonApiErrorCodes.INVALID_ARGUMENT,
+            "Instruction change would leave agent role(s) ${linkedRoleIds.joinToString()} with an " +
+                "invalid instruction list: $reason",
+            "instructionId" to instructionId.toString(),
+            "roleIds" to linkedRoleIds.joinToString()
+        )
+
+    is CreateAgentRoleError.InstructionOwnerInsertFailed ->
+        apiError(CommonApiErrorCodes.INTERNAL, "Failed to set instruction ownership: $reason")
 }

@@ -7,9 +7,8 @@ import eu.torvian.chatbot.server.service.core.error.agent.UpdateAgentRoleError
  * Maps an [UpdateAgentRoleError] to an LLM-readable [ServerBuiltInToolHandlerError].
  *
  * Shared by every server built-in tool that mutates an agent role through the role service
- * (`update_agent_role`, `insert_agent_role_instruction`, `edit_agent_role_instructions`, and
- * `remove_agent_role_instruction`), so all of them surface identical error codes and messages for
- * the same underlying failure.
+ * (`update_agent_role`), so all of them surface identical error codes and messages for the same
+ * underlying failure.
  *
  * @receiver The typed update-role failure.
  * @return The corresponding handler error.
@@ -60,4 +59,23 @@ internal fun UpdateAgentRoleError.toHandlerError(): ServerBuiltInToolHandlerErro
         )
     is UpdateAgentRoleError.InstructionValidationFailed ->
         ServerBuiltInToolHandlerError.OperationFailed("instruction_validation_failed", reason)
+    is UpdateAgentRoleError.InstructionNotFound ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "instruction_not_found",
+            "Instruction $instructionId not found or not owned by the current user."
+        )
+    is UpdateAgentRoleError.DuplicateInstructionLink ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "duplicate_instruction_link",
+            "Instruction $instructionId would be linked to this agent role more than once."
+        )
+    is UpdateAgentRoleError.LinkedRoleInstructionListInvalid ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "linked_role_instruction_list_invalid",
+            "Instruction $instructionId cannot change: agent role(s) ${linkedRoleIds.joinToString()} " +
+                "would be left with an invalid instruction list ($reason)."
+        )
+    is UpdateAgentRoleError.InstructionOwnerInsertFailed ->
+        // Unreachable from the role tools (they only send link specs), kept for exhaustiveness.
+        ServerBuiltInToolHandlerError.OperationFailed("instruction_owner_insert_failed", reason)
 }
