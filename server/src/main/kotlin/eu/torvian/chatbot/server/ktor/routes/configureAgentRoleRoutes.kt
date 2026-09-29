@@ -34,6 +34,8 @@ import io.ktor.server.routing.*
  * - PUT /api/v1/agent-roles/{roleId} - Update a specific role
  * - DELETE /api/v1/agent-roles/{roleId} - Delete a specific role
  * - PUT /api/v1/agent-roles/{roleId}/disabled - Set the per-user disabled state of a specific role
+ * - POST /api/v1/agent-roles/{roleId}/instructions/{instructionId} - Append an instruction to the role's list
+ * - DELETE /api/v1/agent-roles/{roleId}/instructions/{instructionId} - Remove an instruction's link from the role
  *
  * @param agentRoleService Service backing the agent-role CRUD operations.
  * @param authorizationService Authorization service retained for parity with the other resource routes;
@@ -95,6 +97,8 @@ fun Route.configureAgentRoleRoutes(
                 withError({ e: DeleteAgentRoleError -> e.toApiError() }) {
                     agentRoleService.deleteRole(userId, resource.roleId).bind()
                 }
+                // The wire contract is 204 without a body; the sweep outcome is tool-facing only.
+                Unit
             }
             call.respondEither(result, HttpStatusCode.NoContent)
         }
@@ -107,6 +111,40 @@ fun Route.configureAgentRoleRoutes(
             val result = either {
                 withError({ e: AgentRoleError -> e.toApiError() }) {
                     agentRoleService.setRoleDisabled(userId, resource.parent.roleId, request.disabled).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // POST /api/v1/agent-roles/{roleId}/instructions/{instructionId} - Link a row to the role as
+        // its last instruction (ownership checked on both sides; per-role rules apply to the result)
+        post<AgentRoleResource.ById.Instructions.ByInstructionId> { resource ->
+            val userId = call.getUserId()
+
+            val result = either {
+                withError({ e: AssignInstructionError -> e.toApiError() }) {
+                    agentRoleService.assignInstruction(
+                        userId = userId,
+                        roleId = resource.parent.parent.roleId,
+                        instructionId = resource.instructionId
+                    ).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // DELETE /api/v1/agent-roles/{roleId}/instructions/{instructionId} - Remove only the link; the
+        // instruction row itself survives as a library entry
+        delete<AgentRoleResource.ById.Instructions.ByInstructionId> { resource ->
+            val userId = call.getUserId()
+
+            val result = either {
+                withError({ e: UnassignInstructionError -> e.toApiError() }) {
+                    agentRoleService.unassignInstruction(
+                        userId = userId,
+                        roleId = resource.parent.parent.roleId,
+                        instructionId = resource.instructionId
+                    ).bind()
                 }
             }
             call.respondEither(result)

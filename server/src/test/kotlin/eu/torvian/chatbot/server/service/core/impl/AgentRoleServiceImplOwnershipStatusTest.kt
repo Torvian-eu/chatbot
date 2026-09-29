@@ -2,7 +2,6 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.service.core.error.agent.DeleteAgentRoleError
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
@@ -24,7 +23,7 @@ class AgentRoleServiceImplOwnershipStatusTest : AgentRoleServiceImplTestBase() {
         coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         // The returned DTO loads the role's tools from the join table.
@@ -37,9 +36,6 @@ class AgentRoleServiceImplOwnershipStatusTest : AgentRoleServiceImplTestBase() {
         val dto = result.getOrNull()
         assertNotNull(dto)
         assertEquals("Senior Architect", dto.name)
-        // instructions are resolved to DTOs on return
-        assertEquals(1, dto.instructions.size)
-        assertEquals(AgentInstructionTypes.ROLE, dto.instructions[0].type)
         coVerify(exactly = 1) { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) }
         // The tool set is persisted into the join table (full replacement of the new role's empty set).
         coVerify(exactly = 1) { agentRoleToolDao.replaceToolsForRole(TestDefaults.agentRole1.id, emptySet()) }
@@ -188,7 +184,7 @@ class AgentRoleServiceImplOwnershipStatusTest : AgentRoleServiceImplTestBase() {
         coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery { settingsDao.getSettingsById(1L) } returns chatSettings.right()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()

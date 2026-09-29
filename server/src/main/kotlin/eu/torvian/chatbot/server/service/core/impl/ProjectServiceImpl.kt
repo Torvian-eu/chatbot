@@ -13,6 +13,7 @@ import eu.torvian.chatbot.common.models.project.MAX_PROJECT_NAME_LENGTH
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleDisabledDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleInstructionDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleOwnershipDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleSpawnableRoleDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleToolDao
@@ -54,6 +55,8 @@ import org.apache.logging.log4j.Logger
  * @property agentRoleOwnershipDao DAO used to give every cloned role its own ownership row.
  * @property agentRoleDisabledDao DAO used to copy each source role's per-user disabled marker onto
  *            its clone (a source role disabled for the user stays disabled in the clone).
+ * @property agentRoleInstructionDao DAO used to link each cloned role to the same ordered
+ *            instruction rows as its source role (clones share rows; ownership is untouched).
  * @property sessionDao DAO used to restore the Session Legality Invariant when a project is deleted or
  *            its role membership is edited.
  * @property transactionScope Transaction wrapper that keeps validation + persistence atomic.
@@ -67,6 +70,7 @@ class ProjectServiceImpl(
     private val agentRoleSpawnableRoleDao: AgentRoleSpawnableRoleDao,
     private val agentRoleOwnershipDao: AgentRoleOwnershipDao,
     private val agentRoleDisabledDao: AgentRoleDisabledDao,
+    private val agentRoleInstructionDao: AgentRoleInstructionDao,
     private val sessionDao: SessionDao,
     private val transactionScope: TransactionScope
 ) : ProjectService {
@@ -275,6 +279,10 @@ class ProjectServiceImpl(
             val sourceToolIdsByRole = agentRoleToolDao.getToolsForRoles(sourceRoleIds.toList())
             val sourceSpawnableIdsByRole =
                 agentRoleSpawnableRoleDao.getSpawnableRoleIdsForRoles(sourceRoleIds.toList())
+            // Instruction links are copied as references to the SAME instruction rows (no content
+            // copy): one batched link read covers every source role, and its refs are already ordered
+            // by their stored sequence.
+            val sourceInstructionRefsByRole = agentRoleInstructionDao.getLinksForRoles(sourceRoleIds.toList())
             // A (user, role) row means "disabled for that user"; the batch read mirrors the tool and
             // spawnable batch loads so the disabled-state copy stays N+1-free too.
             val disabledSourceRoleIds = agentRoleDisabledDao.getDisabledRoleIds(userId, sourceRoleIds.toList())
@@ -293,7 +301,6 @@ class ProjectServiceImpl(
                     // project-scoped), so the clone shares the same preset row and re-pointing that
                     // preset switches the source and every clone at once.
                     modelPresetId = sourceRole.modelPresetId,
-                    instructionsJson = sourceRole.instructionsJson,
                     // Membership is established by the row write itself: the clone's member set is
                     // exactly the roles inserted with the clone's project id.
                     projectId = clonedProject.id
@@ -309,6 +316,12 @@ class ProjectServiceImpl(
             for (sourceRole in sourceRoles) {
                 val newRoleId = requireNotNull(oldToNewRoleIds[sourceRole.id])
                 agentRoleToolDao.replaceToolsForRole(newRoleId, sourceToolIdsByRole[sourceRole.id].orEmpty())
+                // The clone links the source role's instruction rows in the same order; a source row
+                // shared between two source roles stays shared and gains the clone links.
+                agentRoleInstructionDao.replaceInstructionsForRole(
+                    newRoleId,
+                    sourceInstructionRefsByRole[sourceRole.id].orEmpty().map { it.instructionId }
+                )
                 agentRoleSpawnableRoleDao.replaceSpawnableRolesForRole(
                     newRoleId,
                     sourceSpawnableIdsByRole[sourceRole.id].orEmpty()

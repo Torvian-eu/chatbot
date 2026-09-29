@@ -27,6 +27,11 @@ import kotlinx.serialization.json.JsonObject
  * become inert until another role is re-selected. Returns a concise one-line summary of the
  * completed operation (see [formatDeletedAgentRole]) instead of the full role JSON.
  *
+ * The deletion is content-destructive for unreferenced instruction rows: rows losing their last
+ * link through it are removed as well. This tool inherits that sweep unchanged because it delegates
+ * the entire deletion to [AgentRoleService.deleteRole] in a single call, and the summary reports the
+ * outcome — the removed rows and the rows kept because other roles still link them.
+ *
  * @property agentRoleService User-scoped role service used to delete the role.
  */
 class DeleteAgentRoleTool(
@@ -60,10 +65,14 @@ class DeleteAgentRoleTool(
         }
         // roleId is non-null here: a null result always coincides with a recorded validation error,
         // and we bail out above when any error was recorded.
-        agentRoleService.deleteRole(context.userId, roleId!!)
+        val sweep = agentRoleService.deleteRole(context.userId, roleId!!)
             .mapLeft { error -> error.toHandlerError() }
             .bind()
-        formatDeletedAgentRole(roleId)
+        formatDeletedAgentRole(
+            roleId = roleId,
+            deletedInstructionIds = sweep.deletedInstructionIds,
+            retainedInstructionIds = sweep.retainedInstructionIds
+        )
     }
 }
 

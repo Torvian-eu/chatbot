@@ -52,6 +52,7 @@ class SpawnableAgentsInstructionTest {
         toolAvailable: Boolean = true
     ): String {
         val instruction = SpawnableAgentsInstruction(
+            id = 1L,
             name = "Available agents",
             advertisementLoader = { advertisement },
             spawnAgentToolAvailableLoader = { toolAvailable }
@@ -225,6 +226,7 @@ class SpawnableAgentsInstructionTest {
         )
 
         val unnamed = SpawnableAgentsInstruction(
+            id = 1L,
             name = "   ",
             advertisementLoader = { advertisement },
             spawnAgentToolAvailableLoader = { true }
@@ -233,6 +235,7 @@ class SpawnableAgentsInstructionTest {
         assertEquals("## Available agents", unnamed.message.lines().first())
 
         val named = SpawnableAgentsInstruction(
+            id = 2L,
             name = "My spawn team",
             advertisementLoader = { advertisement },
             spawnAgentToolAvailableLoader = { true }
@@ -353,6 +356,7 @@ class SpawnableAgentsInstructionTest {
     fun `does not load the advertisement when spawn_agent is not enabled`() = runTest {
         var advertisementLoads = 0
         val instruction = SpawnableAgentsInstruction(
+            id = 1L,
             name = "Available agents",
             advertisementLoader = {
                 advertisementLoads += 1

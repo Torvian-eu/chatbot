@@ -5,10 +5,9 @@ import kotlin.time.Instant
 /**
  * Represents a row from the `agent_roles` database table.
  *
- * The complex `instructions` value is kept as its raw JSON string so serialization stays at the
- * mapper/service boundary: the entity is a plain projection of the table row, and
- * [instructionsJson] is parsed into typed domain values by the service layer. The role's tool ids are
- * NOT stored in this table — they live in the `agent_role_tools` join table and are loaded separately.
+ * The entity is a plain projection of the role's own table row: the tool ids live in the
+ * `agent_role_tools` join table and the ordered instructions in `agent_role_instructions`, both
+ * loaded separately, so neither relation is part of this entity.
  *
  * The role's LLM configuration is stored **only** as [modelPresetId]: the model preset is the sole
  * source of truth, and the values the wire DTO exposes as `modelId`/`modelSettingsId` are derived
@@ -25,7 +24,6 @@ import kotlin.time.Instant
  * @property projectId Optional identifier of the single project the role belongs to; null means
  *            **unassociated**. Set via the membership column on create/update (a role belongs to at
  *            most one project) and nulled by `ON DELETE SET NULL` when the project is deleted.
- * @property instructionsJson Raw JSON array of the flat `AgentInstructionDto` list.
  * @property createdAt Timestamp when the role was created.
  * @property updatedAt Timestamp when the role was last updated.
  */
@@ -35,7 +33,6 @@ data class AgentRoleEntity(
     val displayName: String?,
     val description: String,
     val modelPresetId: Long?,
-    val instructionsJson: String,
     val createdAt: Instant,
     val updatedAt: Instant,
     val projectId: Long? = null

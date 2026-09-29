@@ -70,6 +70,10 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             // place the presets first.
             Table.MODEL_PRESETS to ModelPresetTable,
             Table.MODEL_PRESET_OWNERS to ModelPresetOwnersTable,
+            // Instructions are standalone content rows owned via instruction_owners; both are created
+            // before agent_role_instructions links them to roles.
+            Table.INSTRUCTIONS to InstructionTable,
+            Table.INSTRUCTION_OWNERS to InstructionOwnersTable,
             Table.AGENT_ROLES to AgentRoleTable,
             // Project tables: projects and its two link tables reference users/agent_roles, and
             // chat_sessions references projects (project_id), so they must be created AFTER
@@ -108,6 +112,8 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             // agent_role_spawnable_roles self-references agent_roles (source and target), so it must
             // be created after agent_roles.
             Table.AGENT_ROLE_SPAWNABLE_ROLES to AgentRoleSpawnableRolesTable,
+            // Ordered role ↔ instruction links reference both agent_roles and instructions.
+            Table.AGENT_ROLE_INSTRUCTIONS to AgentRoleInstructionTable,
             // agent_role_disabled references both agent_roles and users, so it must be created after
             // both.
             Table.AGENT_ROLE_DISABLED to AgentRoleDisabledTable,
@@ -463,7 +469,6 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 it[displayName] = agentRole.displayName
                 it[description] = agentRole.description
                 it[modelPresetId] = agentRole.modelPresetId
-                it[instructionsJson] = agentRole.instructionsJson
                 it[createdAt] = agentRole.createdAt.toEpochMilliseconds()
                 it[updatedAt] = agentRole.updatedAt.toEpochMilliseconds()
                 it[projectId] = agentRole.projectId

@@ -386,8 +386,7 @@ class SessionDaoExposedTest {
     // Preset-less role fixture so the session tests below need no llm/preset seeding.
     private val sessionTestRole = TestDefaults.agentRole1.copy(
         id = 50L,
-        modelPresetId = null,
-        instructionsJson = "[]"
+        modelPresetId = null
     )
 
     @Test

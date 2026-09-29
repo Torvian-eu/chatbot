@@ -2,13 +2,14 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
-import eu.torvian.chatbot.common.models.agent.modelSpecificId
+import eu.torvian.chatbot.common.models.agent.modelIdOrNull
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.ProjectDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
+import eu.torvian.chatbot.server.data.entities.InstructionEntity
 import eu.torvian.chatbot.server.data.entities.ModelPresetEntity
 import eu.torvian.chatbot.server.service.core.agent.AgentInstruction
 import eu.torvian.chatbot.server.service.core.agent.AgentRole
@@ -20,21 +21,21 @@ import eu.torvian.chatbot.server.service.core.agent.RoleInstruction
 import eu.torvian.chatbot.server.service.core.agent.SpawnableAgentsAdvertisement
 import eu.torvian.chatbot.server.service.core.agent.SpawnableAgentsInstruction
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
 /**
- * Representation mapping for agent roles: stored row ↔ server domain ↔ wire DTO, plus the
- * instruction codec for the `instructions_json` column.
+ * Representation mapping for agent roles: stored row ↔ server domain ↔ wire DTO.
  *
- * Instructions are persisted as a raw JSON string (`instructions_json`) so serialization stays at
- * this service boundary: the stored shape equals the wire shape (polymorphic [AgentInstructionDto]
- * list), and the server domain [AgentInstruction] hierarchy is reconstructed per read. Callers
- * always supply the already-resolved relations (`tools`, `spawnableRoleIds`, `preset`, `disabled`);
- * the mapper never performs its own preset lookup, so the list path keeps its single batch read and
- * the write paths keep their validated-preset reuse without a second read.
+ * Instructions are normalized rows linked to the role through `agent_role_instructions`; callers
+ * always supply the already-loaded ordered instruction rows plus the per-row linking-role ids (one
+ * batched reverse-link lookup per read), so the mapper never performs its own instruction queries
+ * and the single-role and list paths share one funnel. The same holds for the other resolved
+ * relations (`tools`, `spawnableRoleIds`, `preset`, `disabled`): the mapper performs no lookups of
+ * its own.
  *
  * @property agentRoleDao DAO used by the spawn allow-list advertisement loader (owner-scoped role
  *            reads).
@@ -42,7 +43,7 @@ import org.apache.logging.log4j.Logger
  *            to the role's tool ids).
  * @property projectDao DAO used to resolve the project labels of the advertisement (one batched read
  *            covering the targets' projects and the owning role's own project).
- * @property json Shared JSON codec used to (de)serialize the `instructions_json` column.
+ * @property json Shared JSON codec used to parse the raw `custom` JSON text of stored instructions.
  */
 internal class AgentRoleMapper(
     private val agentRoleDao: AgentRoleDao,
@@ -72,6 +73,9 @@ internal class AgentRoleMapper(
      *            `modelId`/`modelSettingsId`.
      * @param ownerId Owner used to scope dynamic target-summary queries.
      * @param disabled Whether the role is disabled for the requesting user (side-table derived).
+     * @param instructions The role's instruction rows in their `sequence` order.
+     * @param linkedRoleIdsByInstructionId Linking-role ids per instruction row, as resolved by one
+     *            batched reverse-link lookup.
      * @return Domain role with lazy instruction sources.
      */
     fun toDomain(
@@ -81,7 +85,9 @@ internal class AgentRoleMapper(
         projectId: Long?,
         preset: ModelPresetEntity?,
         ownerId: Long,
-        disabled: Boolean
+        disabled: Boolean,
+        instructions: List<InstructionEntity>,
+        linkedRoleIdsByInstructionId: Map<Long, Set<Long>>
     ): AgentRole = AgentRole(
         id = entity.id,
         name = entity.name,
@@ -95,9 +101,10 @@ internal class AgentRoleMapper(
         tools = tools,
         spawnableAgentRoleIds = spawnableRoleIds,
         projectId = projectId,
-        instructions = decodeInstructions(entity.instructionsJson).mapNotNull {
+        instructions = instructions.mapNotNull {
             toDomainInstruction(
-                dto = it,
+                row = it,
+                linkedRoleIds = linkedRoleIdsByInstructionId[it.id].orEmpty(),
                 ownerId = ownerId,
                 spawnableRoleIds = spawnableRoleIds,
                 roleToolIds = tools,
@@ -119,6 +126,8 @@ internal class AgentRoleMapper(
      *            reference is dangling).
      * @param ownerId Owner used to scope dynamic target-summary queries.
      * @param disabled Whether the role is disabled for the requesting user (side-table derived).
+     * @param instructions The role's instruction rows in their `sequence` order.
+     * @param linkedRoleIdsByInstructionId Linking-role ids per instruction row.
      * @return The corresponding [AgentRoleDto] with resolved instruction messages.
      */
     suspend fun toDto(
@@ -128,7 +137,9 @@ internal class AgentRoleMapper(
         projectId: Long?,
         preset: ModelPresetEntity?,
         ownerId: Long,
-        disabled: Boolean
+        disabled: Boolean,
+        instructions: List<InstructionEntity>,
+        linkedRoleIdsByInstructionId: Map<Long, Set<Long>>
     ): AgentRoleDto = toDto(
         toDomain(
             entity = entity,
@@ -137,17 +148,11 @@ internal class AgentRoleMapper(
             projectId = projectId,
             preset = preset,
             ownerId = ownerId,
-            disabled = disabled
+            disabled = disabled,
+            instructions = instructions,
+            linkedRoleIdsByInstructionId = linkedRoleIdsByInstructionId
         )
     )
-
-    /**
-     * Serializes an instruction DTO list into its JSON column representation (the wire shape).
-     *
-     * @param instructions The instruction DTOs.
-     * @return The JSON array string.
-     */
-    fun encodeInstructions(instructions: List<AgentInstructionDto>): String = json.encodeToString(instructions)
 
     /**
      * Loads the advertisement of a role's spawn allow-list: the resolvable targets (with their project
@@ -218,58 +223,83 @@ internal class AgentRoleMapper(
     )
 
     /**
-     * Maps an [AgentInstructionDto] to its server domain subtype.
+     * Maps a stored instruction row to its server domain subtype.
      *
-     * Dispatches on the DTO's [AgentInstructionDto.type] string (a flat, non-polymorphic DTO).
-     * The `else` branch logs a warning and returns null for unknown or unrecognized kinds,
-     * so forward-compatible payloads don't silently apply unrecognized semantics.
+     * Dispatches on the row's `type` string. The `else` branch logs a warning and returns null for
+     * unknown or unrecognized kinds, so forward-compatible rows don't silently apply unrecognized
+     * semantics. The row id and linking-role ids are carried onto every subtype so the wire mapping
+     * can report them.
      *
-     * @param dto The DTO to map.
+     * @param row The stored instruction row to convert.
+     * @param linkedRoleIds Ids of the roles linking the row.
      * @param ownerId Owner scope for dynamic advertisement resolution.
      * @param spawnableRoleIds Unordered target ids used by the dynamic marker.
      * @param roleToolIds Tool ids used to determine whether `spawn_agent` is enabled.
      * @param currentProjectId Project of the role being mapped, used by the advertisement's intro.
      * @return The corresponding [AgentInstruction], or null when the kind is unrecognized or a
-     *         `model_specific` instruction is missing its `modelId` in `custom` (both logged as
-     *         warnings — they indicate a database inconsistency).
+     *         `model_specific` row is missing its `modelId` in `custom` (both logged as warnings —
+     *         they indicate a database inconsistency).
      */
     private fun toDomainInstruction(
-        dto: AgentInstructionDto,
+        row: InstructionEntity,
+        linkedRoleIds: Set<Long>,
         ownerId: Long,
         spawnableRoleIds: Set<Long>,
         roleToolIds: Set<Long>,
         currentProjectId: Long?
-    ): AgentInstruction? = when (dto.type) {
+    ): AgentInstruction? = when (row.type) {
         AgentInstructionTypes.SPAWNABLE_AGENTS -> SpawnableAgentsInstruction(
-            name = dto.name,
+            name = row.name,
             advertisementLoader = {
                 loadSpawnableAgentsAdvertisement(ownerId, spawnableRoleIds, currentProjectId)
             },
             spawnAgentToolAvailableLoader = {
                 toolDefinitionDao.getToolDefinitionsByIds(roleToolIds)
                     .any { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
-            }
+            },
+            id = row.id,
+            linkedRoleIds = linkedRoleIds
         )
 
-        AgentInstructionTypes.ROLE -> RoleInstruction(dto.name, dto.message)
-        AgentInstructionTypes.MAIN -> MainInstruction(dto.name, dto.message)
-        AgentInstructionTypes.CUSTOM -> CustomInstruction(dto.name, dto.message)
+        AgentInstructionTypes.ROLE -> RoleInstruction(
+            id = row.id,
+            name = row.name,
+            message = row.message.orEmpty(),
+            linkedRoleIds = linkedRoleIds
+        )
+
+        AgentInstructionTypes.MAIN -> MainInstruction(
+            id = row.id,
+            name = row.name,
+            message = row.message.orEmpty(),
+            linkedRoleIds = linkedRoleIds
+        )
+
+        AgentInstructionTypes.CUSTOM -> CustomInstruction(
+            id = row.id,
+            name = row.name,
+            message = row.message.orEmpty(),
+            linkedRoleIds = linkedRoleIds
+        )
+
         AgentInstructionTypes.MODEL_SPECIFIC -> {
-            val targetModelId = dto.modelSpecificId()
+            val targetModelId = parseCustom(row.custom).modelIdOrNull()
             if (targetModelId == null) {
                 // A model_specific instruction without a modelId is a data integrity issue: the
-                // stored JSON was malformed or partially migrated. Log it and drop the instruction
-                // rather than crashing role retrieval.
+                // stored custom JSON was malformed or partially migrated. Log it and drop the
+                // instruction rather than crashing role retrieval.
                 logger.warn(
                     "Dropping model_specific instruction '{}' for role retrieval: missing 'modelId' in custom",
-                    dto.name
+                    row.name
                 )
                 null
             } else {
                 ModelSpecificInstruction(
-                    name = dto.name,
-                    message = dto.message,
-                    modelId = targetModelId
+                    name = row.name,
+                    message = row.message.orEmpty(),
+                    modelId = targetModelId,
+                    id = row.id,
+                    linkedRoleIds = linkedRoleIds
                 )
             }
         }
@@ -278,9 +308,9 @@ internal class AgentRoleMapper(
         else -> {
             logger.warn(
                 "Dropping unrecognized instruction '{}' (type '{}') for role retrieval:"
-                + " unrecognized kind",
-                dto.name,
-                dto.type
+                    + " unrecognized kind",
+                row.name,
+                row.type
             )
             null
         }
@@ -294,25 +324,56 @@ internal class AgentRoleMapper(
      * was added without updating this mapping).
      *
      * @param instruction The domain instruction to convert.
-     * @return The corresponding [AgentInstructionDto] with a resolved [AgentInstructionDto.message].
+     * @return The corresponding [AgentInstructionDto] with a resolved [AgentInstructionDto.message]
+     *         and the shared-row identity fields.
      */
     private suspend fun toDtoInstruction(instruction: AgentInstruction): AgentInstructionDto {
         instruction.loadMessage()
         return when (instruction) {
             is SpawnableAgentsInstruction ->
-                AgentInstructionDto(AgentInstructionTypes.SPAWNABLE_AGENTS, instruction.name, instruction.message)
+                AgentInstructionDto(
+                    type = AgentInstructionTypes.SPAWNABLE_AGENTS,
+                    name = instruction.name,
+                    message = instruction.message,
+                    id = instruction.id,
+                    linkedRoleIds = instruction.linkedRoleIds
+                )
+
             is RoleInstruction ->
-                AgentInstructionDto(AgentInstructionTypes.ROLE, instruction.name, instruction.message)
+                AgentInstructionDto(
+                    type = AgentInstructionTypes.ROLE,
+                    name = instruction.name,
+                    message = instruction.message,
+                    id = instruction.id,
+                    linkedRoleIds = instruction.linkedRoleIds
+                )
+
             is MainInstruction ->
-                AgentInstructionDto(AgentInstructionTypes.MAIN, instruction.name, instruction.message)
+                AgentInstructionDto(
+                    type = AgentInstructionTypes.MAIN,
+                    name = instruction.name,
+                    message = instruction.message,
+                    id = instruction.id,
+                    linkedRoleIds = instruction.linkedRoleIds
+                )
+
             is CustomInstruction ->
-                AgentInstructionDto(AgentInstructionTypes.CUSTOM, instruction.name, instruction.message)
+                AgentInstructionDto(
+                    type = AgentInstructionTypes.CUSTOM,
+                    name = instruction.name,
+                    message = instruction.message,
+                    id = instruction.id,
+                    linkedRoleIds = instruction.linkedRoleIds
+                )
+
             is ModelSpecificInstruction ->
                 AgentInstructionDto(
                     type = AgentInstructionTypes.MODEL_SPECIFIC,
                     name = instruction.name,
                     message = instruction.message,
-                    custom = buildJsonObject { put("modelId", instruction.modelId) }
+                    custom = buildJsonObject { put("modelId", instruction.modelId) },
+                    id = instruction.id,
+                    linkedRoleIds = instruction.linkedRoleIds
                 )
 
             else -> error("Unknown AgentInstruction subtype: ${instruction::class.simpleName}")
@@ -320,11 +381,24 @@ internal class AgentRoleMapper(
     }
 
     /**
-     * Deserializes the `instructions_json` column into the instruction DTO list (the wire shape).
+     * Parses the raw `custom` JSON text of a stored instruction into an object.
      *
-     * @param instructionsJson The JSON array string.
-     * @return The instruction DTOs; an empty list when the stored value is unparseable.
+     * @param custom The stored JSON text, or null.
+     * @return The parsed object, or null when absent or unparseable (dropped-row diagnostics then
+     *         handle the inconsistency).
      */
-    private fun decodeInstructions(instructionsJson: String): List<AgentInstructionDto> =
-        runCatching { json.decodeFromString<List<AgentInstructionDto>>(instructionsJson) }.getOrDefault(emptyList())
+    private fun parseCustom(custom: String?): JsonObject? = parseStoredCustom(json, custom)
 }
+
+/**
+ * Parses the stored `custom` JSON text of an instruction row, tolerating malformed values.
+ *
+ * Shared by the read mapper and the request validator so a corrupt `custom` value degrades the same
+ * way on both paths instead of raising a parse failure.
+ *
+ * @param json The codec used to parse the text.
+ * @param custom The stored JSON text, or null.
+ * @return The parsed object, or null when absent or unparseable.
+ */
+internal fun parseStoredCustom(json: Json, custom: String?): JsonObject? =
+    runCatching { json.parseToJsonElement(custom.orEmpty()) }.getOrNull() as? JsonObject

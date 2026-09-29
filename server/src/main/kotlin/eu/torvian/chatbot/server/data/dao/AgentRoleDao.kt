@@ -7,10 +7,10 @@ import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
 /**
  * Data Access Object for agent-role entities.
  *
- * The complex `instructions` value lives in a JSON column, so every operation is a single-row
- * read/write: the DAO receives the raw JSON string (or returns it verbatim) and the service layer
- * owns (de)serialization via the shared JSON codec. The role's tool ids are stored separately in the
- * `agent_role_tools` join table and are managed through [AgentRoleToolDao].
+ * The role's instructions live in the `agent_role_instructions` link table and their content in
+ * `instructions`, so every operation here touches only the role's own flat row: the DAO never sees
+ * instruction data and the service layer owns instruction persistence separately. The role's tool
+ * ids are stored in the `agent_role_tools` join table and are managed through [AgentRoleToolDao].
  *
  * The role's LLM configuration is a single nullable `model_preset_id` column referencing a user-owned
  * model preset; the preset is the sole source of truth for the model and settings profile, so the DAO
@@ -127,7 +127,6 @@ interface AgentRoleDao {
      * @param description Free-form description.
      * @param modelPresetId Optional identifier of the model preset holding the role's model and
      *            settings profile; null creates a preset-less (non-sendable) role.
-     * @param instructionsJson Raw JSON array of the flat `AgentInstructionDto` list.
      * @param projectId The single project id the role belongs to, or null for an unassociated role.
      * @return The newly created [AgentRoleEntity].
      */
@@ -136,14 +135,13 @@ interface AgentRoleDao {
         displayName: String?,
         description: String,
         modelPresetId: Long?,
-        instructionsJson: String,
         projectId: Long?
     ): AgentRoleEntity
 
     /**
-     * Updates an existing agent role row (a full replacement, including the `instructions_json`
-     * column and the single `project_id` membership column). The role's tool set is a full
-     * replacement too, but it is handled by [AgentRoleToolDao.replaceToolsForRole] separately.
+     * Updates an existing agent role row (a full replacement of the role's own columns, including
+     * the single `project_id` membership column). The role's tool set is a full replacement too, but
+     * it is handled by [AgentRoleToolDao.replaceToolsForRole] separately.
      *
      * @param role The [AgentRoleEntity] with updated values. The ID must match an existing role.
      * @return Either [AgentRoleError.NotFound] if the role does not exist, or Unit on success.

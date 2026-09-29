@@ -3,9 +3,9 @@ package eu.torvian.chatbot.server.service.builtin.tools
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.core.AgentRoleService
@@ -26,8 +26,9 @@ import kotlin.test.assertTrue
  *
  * Covers input validation (required `name`, optional fields, unknown parameters, accumulated
  * errors), the mapping of the parsed input into a [CreateAgentRoleRequest] (including the
- * preset-less create path), the rejection of the removed legacy `model_id`/`model_settings_id`
- * parameters, and the mapping of [CreateAgentRoleError]s to LLM-readable handler errors.
+ * preset-less create path and the ordered instruction-id list), the rejection of the removed legacy
+ * `model_id`/`model_settings_id` parameters, and the mapping of [CreateAgentRoleError]s to
+ * LLM-readable handler errors.
  */
 class CreateAgentRoleToolTest {
 
@@ -94,14 +95,14 @@ class CreateAgentRoleToolTest {
                             request.modelPresetId == null &&
                             request.toolIds.isEmpty() &&
                             request.spawnableAgentRoleIds.isEmpty() &&
-                            request.instructions.isEmpty()
+                            request.instructionSpecs.isEmpty()
                 }
             )
         }
     }
 
     @Test
-    fun `parses every optional field including instructions`() = runTest {
+    fun `parses every optional field including the ordered instruction ids`() = runTest {
         val agentRoleService = mockk<AgentRoleService>()
         coEvery { agentRoleService.createRole(userId, any()) } returns createdRole().right()
         val tool = CreateAgentRoleTool(agentRoleService)
@@ -113,16 +114,7 @@ class CreateAgentRoleToolTest {
             put("model_preset_id", 3L)
             putJsonArray("tool_ids") { add(JsonPrimitive(5L)); add(JsonPrimitive(6L)) }
             putJsonArray("spawnable_agent_role_ids") { add(JsonPrimitive(2L)) }
-            putJsonArray("instructions") {
-                add(
-                    buildJsonObject {
-                        put("type", AgentInstructionTypes.ROLE)
-                        put("name", "Role")
-                        put("message", "You are a writer.")
-                        put("custom", JsonNull)
-                    }
-                )
-            }
+            putJsonArray("instruction_ids") { add(JsonPrimitive(10L)); add(JsonPrimitive(11L)) }
         }
         tool.execute(input, context())
 
@@ -136,11 +128,37 @@ class CreateAgentRoleToolTest {
                             request.modelPresetId == 3L &&
                             request.toolIds == setOf(5L, 6L) &&
                             request.spawnableAgentRoleIds == setOf(2L) &&
-                            request.instructions.size == 1 &&
-                            request.instructions.first().type == AgentInstructionTypes.ROLE
+                            request.instructionSpecs == listOf(InstructionSlot.Link(10L), InstructionSlot.Link(11L))
                 }
             )
         }
+    }
+
+    @Test
+    fun `keeps duplicate instruction ids for the role service to reject`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        coEvery { agentRoleService.createRole(userId, any()) } returns
+            CreateAgentRoleError.DuplicateInstructionLink(10L).left()
+        val tool = CreateAgentRoleTool(agentRoleService)
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("name", "writer")
+                putJsonArray("instruction_ids") { add(JsonPrimitive(10L)); add(JsonPrimitive(10L)) }
+            },
+            context()
+        )
+
+        // The parsing layer preserves the duplicate so the role validator reports it with its own
+        // wording ("duplicate_instruction_link") instead of the argument silently collapsing.
+        coVerify(exactly = 1) {
+            agentRoleService.createRole(
+                userId,
+                match<CreateAgentRoleRequest> { request -> request.instructionSpecs == listOf(InstructionSlot.Link(10L), InstructionSlot.Link(10L)) }
+            )
+        }
+        val error = assertIs<ServerBuiltInToolHandlerError.OperationFailed>(result.leftOrNull())
+        assertEquals("duplicate_instruction_link", error.code)
     }
 
     @Test
@@ -172,6 +190,22 @@ class CreateAgentRoleToolTest {
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Unknown parameter: 'model_id'"), error.message)
         assertTrue(error.message.contains("Unknown parameter: 'model_settings_id'"), error.message)
+    }
+
+    @Test
+    fun `rejects the pre-normalization instructions parameter as unknown`() = runTest {
+        val tool = CreateAgentRoleTool(mockk())
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("name", "x")
+                putJsonArray("instructions") { }
+            },
+            context()
+        )
+
+        val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
+        assertTrue(error.message.contains("Unknown parameter: 'instructions'"), error.message)
     }
 
     @Test
@@ -235,13 +269,32 @@ class CreateAgentRoleToolTest {
     }
 
     @Test
-    fun `rejects a malformed instructions array`() = runTest {
+    fun `rejects a malformed instruction_ids value`() = runTest {
         val tool = CreateAgentRoleTool(mockk())
 
-        val result = tool.execute(buildJsonObject { put("name", "x"); put("instructions", "nope") }, context())
+        val result = tool.execute(
+            buildJsonObject { put("name", "x"); put("instruction_ids", "nope") },
+            context()
+        )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
-        assertTrue(error.message.contains("Argument 'instructions' must be an array of instruction objects"))
+        assertTrue(error.message.contains("Argument 'instruction_ids' must be an array of integers"))
+    }
+
+    @Test
+    fun `rejects a non-integer instruction id inside the instruction_ids array`() = runTest {
+        val tool = CreateAgentRoleTool(mockk())
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("name", "x")
+                putJsonArray("instruction_ids") { add(JsonPrimitive("not-an-id")) }
+            },
+            context()
+        )
+
+        val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
+        assertTrue(error.message.contains("Argument 'instruction_ids[0]' must be an integer"))
     }
 
     @Test

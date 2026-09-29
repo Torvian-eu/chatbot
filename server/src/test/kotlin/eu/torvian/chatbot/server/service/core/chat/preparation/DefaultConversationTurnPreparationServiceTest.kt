@@ -390,7 +390,7 @@ class DefaultConversationTurnPreparationServiceTest {
         val streamingSettings = testSettings.copy(stream = true)
         val roleWithInstructions = testRole.copy(
             modelSettingsId = streamingSettings.id,
-            instructions = listOf(CustomInstruction("Role", "You are a senior architect."))
+            instructions = listOf(CustomInstruction(id = 1L, name = "Role", message = "You are a senior architect."))
         )
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns roleWithInstructions.right()

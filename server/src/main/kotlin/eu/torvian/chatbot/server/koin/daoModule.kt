@@ -65,6 +65,11 @@ fun daoModule() = module {
     single<ModelPresetDao> { ModelPresetDaoExposed(get()) }
     single<ModelPresetOwnershipDao> { ModelPresetOwnershipDaoExposed(get()) }
 
+    // Instruction-related DAOs (shareable agent-role instruction content, links and ownership)
+    single<InstructionDao> { InstructionDaoExposed(get()) }
+    single<AgentRoleInstructionDao> { AgentRoleInstructionDaoExposed(get()) }
+    single<InstructionOwnershipDao> { InstructionOwnershipDaoExposed(get()) }
+
     // Tool-related DAOs
     single<ToolDefinitionDao> { ToolDefinitionDaoExposed(get()) }
     single<ToolCallDao> { ToolCallDaoExposed(get()) }

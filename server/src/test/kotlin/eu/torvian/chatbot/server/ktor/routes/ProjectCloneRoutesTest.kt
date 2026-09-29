@@ -8,8 +8,11 @@ import eu.torvian.chatbot.common.models.api.project.CloneProjectRequest
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.AgentRoleDisabledDao
+import eu.torvian.chatbot.server.data.dao.AgentRoleInstructionDao
 import eu.torvian.chatbot.server.data.dao.AgentRoleSpawnableRoleDao
+import eu.torvian.chatbot.server.data.dao.InstructionDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
+import eu.torvian.chatbot.server.data.entities.InstructionEntity
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
@@ -48,6 +51,9 @@ class ProjectCloneRoutesTest {
     private lateinit var authHelper: TestAuthHelper
     private lateinit var spawnableRoleDao: AgentRoleSpawnableRoleDao
     private lateinit var disabledDao: AgentRoleDisabledDao
+    private lateinit var instructionDao: InstructionDao
+    private lateinit var agentRoleInstructionDao: AgentRoleInstructionDao
+    private lateinit var sharedInstruction: InstructionEntity
     private lateinit var authToken: String
 
     // The authenticated user (id 1) owns project 1 with two member roles: role 10 (disabled for the
@@ -75,7 +81,6 @@ class ProjectCloneRoutesTest {
         description = "The architecture role",
         // The preset reference is carried over verbatim by the clone (asserted as model_preset_id).
         modelPresetId = sourcePreset.id,
-        instructionsJson = """[{"type":"role","name":"Role","message":"You are the architect."}]""",
         projectId = sourceProject.id
     )
     private val sourceRoleB = TestDefaults.agentRole2.copy(
@@ -103,6 +108,8 @@ class ProjectCloneRoutesTest {
         testDataManager = container.get()
         spawnableRoleDao = container.get()
         disabledDao = container.get()
+        instructionDao = container.get()
+        agentRoleInstructionDao = container.get()
 
         testDataManager.createTables(
             setOf(
@@ -116,6 +123,8 @@ class ProjectCloneRoutesTest {
                 Table.AGENT_ROLE_OWNERS,
                 Table.AGENT_ROLE_TOOLS,
                 Table.AGENT_ROLE_SPAWNABLE_ROLES,
+                Table.AGENT_ROLE_INSTRUCTIONS,
+                Table.INSTRUCTIONS,
                 Table.AGENT_ROLE_DISABLED,
                 Table.TOOL_DEFINITIONS
             )
@@ -153,6 +162,23 @@ class ProjectCloneRoutesTest {
         testDataManager.insertAgentRoleTool(sourceRoleA.id, tool.id)
         spawnableRoleDao.replaceSpawnableRolesForRole(sourceRoleA.id, setOf(sourceRoleB.id))
         testDataManager.insertAgentRoleDisabled(sourceRoleA.id, ownerUserId)
+
+        // Seed instruction links the clone must reproduce: role A lists two instruction rows in
+        // order, role B shares the first one, so the clone test covers ordered and shared links.
+        sharedInstruction = instructionDao.insertInstruction(
+            type = "role",
+            name = "Role",
+            message = "You are the architect.",
+            custom = null
+        )
+        val secondInstruction = instructionDao.insertInstruction(
+            type = "custom",
+            name = "Tone",
+            message = "Be concise.",
+            custom = null
+        )
+        agentRoleInstructionDao.replaceInstructionsForRole(sourceRoleA.id, listOf(sharedInstruction.id, secondInstruction.id))
+        agentRoleInstructionDao.replaceInstructionsForRole(sourceRoleB.id, listOf(sharedInstruction.id))
     }
 
     @AfterEach
@@ -216,7 +242,19 @@ class ProjectCloneRoutesTest {
         assertEquals(sourceRoleA.modelPresetId, clonedA.modelPresetId, "the preset reference is copied")
         assertEquals(sourcePreset.id, clonedA.modelPresetId)
         assertNull(clonedB.modelPresetId, "a preset-less source role yields a preset-less clone")
-        assertEquals(sourceRoleA.instructionsJson, clonedA.instructionsJson)
+        // The clone links the SAME instruction rows in the same order (no content copy).
+        val clonedInstructionRefs = agentRoleInstructionDao.getLinksForRoles(cloned.agentRoleIds.toList())
+        assertEquals(
+            agentRoleInstructionDao.getLinksForRoles(listOf(sourceRoleA.id)).getValue(sourceRoleA.id)
+                .map { it.instructionId },
+            clonedInstructionRefs.getValue(clonedA.id).map { it.instructionId },
+            "the cloned role links the source's instruction rows in order"
+        )
+        assertEquals(
+            listOf(sharedInstruction.id),
+            clonedInstructionRefs.getValue(clonedB.id).map { it.instructionId },
+            "a shared instruction row gains the clone's link"
+        )
         assertTrue(clonedRoles.all { it.projectId == cloned.id }, "every cloned role is bound to the clone")
 
         // The spawn allow-list is remapped to the cloned role ids (11 -> clonedB), never to the source.

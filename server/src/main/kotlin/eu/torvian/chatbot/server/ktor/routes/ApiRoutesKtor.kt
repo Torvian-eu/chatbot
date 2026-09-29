@@ -48,6 +48,7 @@ class ApiRoutesKtor(
     private val agentRoleService: AgentRoleService,
     private val projectService: ProjectService,
     private val modelPresetService: ModelPresetService,
+    private val instructionService: InstructionService,
     private val authorizationService: AuthorizationService,
     private val workerService: WorkerService,
     private val json: Json,
@@ -70,6 +71,7 @@ class ApiRoutesKtor(
         configureAgentRoleRoutes(route)
         configureProjectRoutes(route)
         configureModelPresetRoutes(route)
+        configureInstructionRoutes(route)
         configureSessionRoutes(route)
         configureGroupRoutes(route)
         configureProviderRoutes(route)
@@ -152,6 +154,14 @@ class ApiRoutesKtor(
      */
     fun configureModelPresetRoutes(route: Route) {
         route.configureModelPresetRoutes(modelPresetService, authorizationService)
+    }
+
+    /**
+     * Configures routes related to instruction authoring (/api/v1/instructions), the content agent
+     * roles reference by id.
+     */
+    fun configureInstructionRoutes(route: Route) {
+        route.configureInstructionRoutes(instructionService, authorizationService)
     }
 
     /**

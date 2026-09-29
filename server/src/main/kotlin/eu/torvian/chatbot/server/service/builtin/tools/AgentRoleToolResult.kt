@@ -1,20 +1,15 @@
 package eu.torvian.chatbot.server.service.builtin.tools
 
-import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 
 /**
  * Formats the concise, non-JSON operation summaries returned by the mutating agent-role tools.
  *
- * Mutating tools (`create_agent_role`, `update_agent_role`, `insert_agent_role_instruction`,
- * `edit_agent_role_instructions`, `remove_agent_role_instruction`, `delete_agent_role`)
- * deliberately do **not** return
- * the full [AgentRoleDto] JSON: instruction lists can be large, and echoing the whole role after
- * every mutation wastes tokens. Instead each tool returns a one-line plain-text description of the
- * operation it just completed: the action, the affected role's identity (name and id), and — for
- * the instruction tools — the affected instruction's type/name and its zero-based position.
- * `read_agent_role` remains the tool that returns the full role; `edit_agent_role_instructions`
- * additionally appends its diff report.
+ * Mutating tools (`create_agent_role`, `update_agent_role`, `delete_agent_role`) deliberately do
+ * **not** return the full [AgentRoleDto] JSON: instruction lists can be large, and echoing the whole
+ * role after every mutation wastes tokens. Instead each tool returns a one-line plain-text description
+ * of the operation it just completed: the action and the affected role's identity (name and id).
+ * `read_agent_role` remains the tool that returns the full role.
  */
 
 /**
@@ -36,45 +31,42 @@ internal fun formatUpdatedAgentRole(role: AgentRoleDto): String =
     "Updated agent role '${role.name}' (id: ${role.id})."
 
 /**
- * Formats the summary for a completed `insert_agent_role_instruction` operation.
- *
- * @param role The role state after the insert (as returned by the role service).
- * @param position The zero-based position the new instruction was inserted at.
- * @param instruction The inserted instruction, whose type and name identify it for the LLM.
- * @return Plain text like `Inserted instruction (type=custom, name=Tone) at 0-based position 1
- *         in agent role 'writer' (id: 1).` (never JSON).
- */
-internal fun formatInsertedInstruction(
-    role: AgentRoleDto,
-    position: Int,
-    instruction: AgentInstructionDto
-): String =
-    "Inserted instruction (type=${instruction.type}, name=${instruction.name}) at 0-based " +
-        "position $position in agent role '${role.name}' (id: ${role.id})."
-
-/**
- * Formats the summary for a completed `remove_agent_role_instruction` operation.
- *
- * @param role The role state after the removal (as returned by the role service).
- * @param position The zero-based position the instruction was removed from.
- * @param instruction The removed instruction, whose type and name identify it for the LLM.
- * @return Plain text like `Removed instruction (type=custom, name=Style) at 0-based position 1
- *         from agent role 'writer' (id: 1).` (never JSON).
- */
-internal fun formatRemovedInstruction(
-    role: AgentRoleDto,
-    position: Int,
-    instruction: AgentInstructionDto
-): String =
-    "Removed instruction (type=${instruction.type}, name=${instruction.name}) at 0-based " +
-        "position $position from agent role '${role.name}' (id: ${role.id})."
-
-/**
  * Formats the summary for a completed `delete_agent_role` operation.
  *
- * @param roleId The id of the deleted role (the delete service returns no payload, so the message
- *            carries the id the caller supplied).
- * @return Plain text like `Deleted agent role (id: 1).` (never JSON).
+ * The sweep outcome is part of the summary because it is unobservable afterwards: which linked rows
+ * were removed with the role and which survive on other roles cannot be re-read once the role is
+ * gone. Never-linked library rows are outside the role's link set and never appear.
+ *
+ * @param roleId The id of the deleted role (the delete service returns no role payload, so the
+ *            message carries the id the caller supplied).
+ * @param deletedInstructionIds Linked rows removed because no link remained; empty adds no clause.
+ * @param retainedInstructionIds Linked rows kept because another role still links them; empty adds
+ *            no clause.
+ * @return Plain text like `Deleted agent role (id: 1); removed 1 instruction(s) that lost their last
+ *         link (ids: 3).` or `Deleted agent role (id: 1).` (never JSON).
  */
-internal fun formatDeletedAgentRole(roleId: Long): String =
-    "Deleted agent role (id: $roleId)."
+internal fun formatDeletedAgentRole(
+    roleId: Long,
+    deletedInstructionIds: List<Long> = emptyList(),
+    retainedInstructionIds: List<Long> = emptyList()
+): String {
+    val consequences = buildList {
+        if (deletedInstructionIds.isNotEmpty()) {
+            add(
+                "removed ${deletedInstructionIds.size} instruction(s) that lost their last link " +
+                    "(ids: ${deletedInstructionIds.joinToString(", ")})"
+            )
+        }
+        if (retainedInstructionIds.isNotEmpty()) {
+            add(
+                "kept ${retainedInstructionIds.size} instruction(s) still linked by other role(s) " +
+                    "(ids: ${retainedInstructionIds.joinToString(", ")})"
+            )
+        }
+    }
+    return if (consequences.isEmpty()) {
+        "Deleted agent role (id: $roleId)."
+    } else {
+        "Deleted agent role (id: $roleId); ${consequences.joinToString("; ")}."
+    }
+}

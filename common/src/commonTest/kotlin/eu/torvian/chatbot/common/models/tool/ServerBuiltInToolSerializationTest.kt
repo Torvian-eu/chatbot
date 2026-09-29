@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.common.models.tool
 
+import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -24,42 +25,22 @@ class ServerBuiltInToolSerializationTest {
     private val now = Instant.fromEpochMilliseconds(1_700_000_000_000L)
 
     /**
-     * Verifies the `instructions` input schema defines the nested item shape recursively, matching
-     * [eu.torvian.chatbot.common.models.agent.AgentInstructionDto]: each item is an object with
-     * `type` (enum), `name`, `message`, and the optional nested `custom` object carrying `modelId`.
+     * Verifies the `instruction_ids` input schema declares an ordered array of positive integers.
      */
     @Test
-    fun `instructions schema defines the nested item shape`() {
+    fun `instruction_ids schema declares an ordered array of positive integers`() {
         val createSpec = ServerBuiltInToolCatalog.specFor(ServerBuiltInToolCatalog.CREATE_AGENT_ROLE_NAME)!!
         val properties = createSpec.inputSchema["properties"]!!.jsonObject
-        val instructions = properties[ServerBuiltInToolCatalog.INSTRUCTIONS_PROPERTY]!!.jsonObject
-        assertEquals("array", instructions["type"]?.jsonPrimitive?.content)
+        val instructionIds = properties[ServerBuiltInToolCatalog.INSTRUCTION_IDS_PROPERTY]!!.jsonObject
+        assertEquals("array", instructionIds["type"]?.jsonPrimitive?.content)
 
-        // The array items are themselves fully defined objects (not a bare `type: object`).
-        val items = instructions["items"]!!.jsonObject
-        assertEquals("object", items["type"]?.jsonPrimitive?.content)
-        val itemProperties = items["properties"]!!.jsonObject
+        val items = instructionIds["items"]!!.jsonObject
+        assertEquals("integer", items["type"]?.jsonPrimitive?.content)
+        assertEquals(1L, items["minimum"]?.jsonPrimitive?.content?.toLong())
 
-        val typeProp = itemProperties["type"]!!.jsonObject
-        assertEquals(
-            listOf("role", "main", "custom", "spawnable_agents", "model_specific"),
-            typeProp["enum"]!!.jsonArray.map { it.jsonPrimitive.content }
-        )
-        assertEquals("string", itemProperties["name"]!!.jsonObject["type"]?.jsonPrimitive?.content)
-        assertEquals("string", itemProperties["message"]!!.jsonObject["type"]?.jsonPrimitive?.content)
-
-        // The nested custom object is optional (omitted when not applicable, never null) and
-        // defines modelId for model_specific items.
-        val customProp = itemProperties["custom"]!!.jsonObject
-        assertEquals("object", customProp["type"]?.jsonPrimitive?.content)
-        val modelIdProp = customProp["properties"]!!.jsonObject["modelId"]!!.jsonObject
-        assertEquals("integer", modelIdProp["type"]?.jsonPrimitive?.content)
-        assertEquals(1L, modelIdProp["minimum"]?.jsonPrimitive?.content?.toLong())
-
-        // Strict-schema consumers need the required list on the item: type, name, and message
-        // (spawnable_agents takes an empty message); custom stays optional (omitted, never null).
-        val required = items["required"]!!.jsonArray.map { it.jsonPrimitive.content }
-        assertEquals(setOf("type", "name", "message"), required.toSet())
+        // The list is optional: a role may be created without instructions.
+        val required = createSpec.inputSchema["required"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(listOf(ServerBuiltInToolCatalog.NAME_PROPERTY), required)
     }
 
     /**
@@ -158,10 +139,10 @@ class ServerBuiltInToolSerializationTest {
     }
 
     /**
-     * Verifies the catalog defines every tool in stable order (the six project tools, the three
-     * targeted instruction-edit tools, the get_current_session_info session-identity tool, the
-     * remaining role/model/settings/tool tools, the delete_agent_role delete tool, and the five
-     * model-preset tools) and that
+     * Verifies the catalog defines every tool in stable order (the six project tools, the
+     * get_current_session_info session-identity tool, the remaining role/model/settings/tool tools,
+     * the delete_agent_role delete tool, the five model-preset tools, and the five
+     * instruction-library tools) and that
      * every parameterless schema passes the empty-object shape (so seeding validation never
      * rejects it).
      */
@@ -181,19 +162,21 @@ class ServerBuiltInToolSerializationTest {
                 ServerBuiltInToolCatalog.CREATE_AGENT_ROLE_NAME,
                 ServerBuiltInToolCatalog.UPDATE_AGENT_ROLE_NAME,
                 ServerBuiltInToolCatalog.DELETE_AGENT_ROLE_NAME,
-                ServerBuiltInToolCatalog.INSERT_AGENT_ROLE_INSTRUCTION_NAME,
-                ServerBuiltInToolCatalog.EDIT_AGENT_ROLE_INSTRUCTIONS_NAME,
-                ServerBuiltInToolCatalog.REMOVE_AGENT_ROLE_INSTRUCTION_NAME,
+                ServerBuiltInToolCatalog.LIST_INSTRUCTIONS_NAME,
+                ServerBuiltInToolCatalog.READ_INSTRUCTION_NAME,
+                ServerBuiltInToolCatalog.CREATE_INSTRUCTION_NAME,
+                ServerBuiltInToolCatalog.EDIT_INSTRUCTION_NAME,
+                ServerBuiltInToolCatalog.DELETE_INSTRUCTION_NAME,
                 ServerBuiltInToolCatalog.LIST_MODELS_NAME,
                 ServerBuiltInToolCatalog.LIST_MODEL_SETTINGS_NAME,
                 ServerBuiltInToolCatalog.LIST_TOOLS_NAME,
                 ServerBuiltInToolCatalog.READ_TOOL_NAME,
-                ServerBuiltInToolCatalog.GET_CURRENT_SESSION_INFO_NAME,
                 ServerBuiltInToolCatalog.LIST_MODEL_PRESETS_NAME,
                 ServerBuiltInToolCatalog.READ_MODEL_PRESET_NAME,
                 ServerBuiltInToolCatalog.CREATE_MODEL_PRESET_NAME,
                 ServerBuiltInToolCatalog.UPDATE_MODEL_PRESET_NAME,
-                ServerBuiltInToolCatalog.DELETE_MODEL_PRESET_NAME
+                ServerBuiltInToolCatalog.DELETE_MODEL_PRESET_NAME,
+                ServerBuiltInToolCatalog.GET_CURRENT_SESSION_INFO_NAME,
             ),
             names
         )
@@ -229,7 +212,7 @@ class ServerBuiltInToolSerializationTest {
         val listSpec = requireNotNull(ServerBuiltInToolCatalog.specFor(ServerBuiltInToolCatalog.LIST_MODEL_PRESETS_NAME))
         assertEquals("object", listSpec.inputSchema["type"]!!.jsonPrimitive.content)
         assertTrue(propertiesOf(ServerBuiltInToolCatalog.LIST_MODEL_PRESETS_NAME).isEmpty())
-        assertTrue(listSpec.inputSchema["required"] == null)
+        assertEquals(null, listSpec.inputSchema["required"])
 
         // The preset id is the only required parameter of read/update/delete.
         listOf(
@@ -275,5 +258,114 @@ class ServerBuiltInToolSerializationTest {
         ).description
         assertTrue(updateDescription.contains("patch semantics"))
         assertTrue(updateDescription.contains("pass 0"))
+    }
+
+    /**
+     * Verifies the five instruction-library specs declare their parameters: only `list_instructions`
+     * has no required property, every tool addressing a row requires the instruction id, the
+     * authoring schema constrains the kind with the known-instruction `enum` and keeps only
+     * `type`/`name` required, and the edit batch declares its `oldText`/`newText` items.
+     */
+    @Test
+    fun `instruction specs declare their parameters and the edit batch shape`() {
+        fun propertiesOf(name: String) = requireNotNull(ServerBuiltInToolCatalog.specFor(name))
+            .inputSchema["properties"]!!.jsonObject
+
+        fun requiredOf(name: String): List<String> =
+            requireNotNull(ServerBuiltInToolCatalog.specFor(name))
+                .inputSchema["required"]!!.jsonArray.map { it.jsonPrimitive.content }
+
+        // list_instructions may be called with no arguments; its only parameter is the role filter.
+        assertEquals(
+            setOf(ServerBuiltInToolCatalog.ROLE_ID_PROPERTY),
+            propertiesOf(ServerBuiltInToolCatalog.LIST_INSTRUCTIONS_NAME).keys
+        )
+        assertEquals(
+            null, requireNotNull(ServerBuiltInToolCatalog.specFor(ServerBuiltInToolCatalog.LIST_INSTRUCTIONS_NAME))
+                .inputSchema["required"]
+        )
+
+        // read/delete address one row by id, and so does edit_instruction next to its edit batch.
+        listOf(
+            ServerBuiltInToolCatalog.READ_INSTRUCTION_NAME,
+            ServerBuiltInToolCatalog.DELETE_INSTRUCTION_NAME
+        ).forEach { name ->
+            assertEquals(
+                "integer",
+                propertiesOf(name)[ServerBuiltInToolCatalog.INSTRUCTION_ID_PROPERTY]!!
+                    .jsonObject["type"]!!.jsonPrimitive.content
+            )
+            assertEquals(listOf(ServerBuiltInToolCatalog.INSTRUCTION_ID_PROPERTY), requiredOf(name))
+        }
+        assertEquals(
+            listOf(
+                ServerBuiltInToolCatalog.INSTRUCTION_ID_PROPERTY,
+                ServerBuiltInToolCatalog.EDITS_PROPERTY
+            ),
+            requiredOf(ServerBuiltInToolCatalog.EDIT_INSTRUCTION_NAME)
+        )
+
+        // create_instruction requires the kind and the label only; the text and the kind-specific
+        // data are optional, and the kind is constrained to the known instruction kinds.
+        val createProperties = propertiesOf(ServerBuiltInToolCatalog.CREATE_INSTRUCTION_NAME)
+        assertEquals(
+            setOf(
+                ServerBuiltInToolCatalog.TYPE_PROPERTY,
+                ServerBuiltInToolCatalog.NAME_PROPERTY,
+                ServerBuiltInToolCatalog.MESSAGE_PROPERTY,
+                ServerBuiltInToolCatalog.CUSTOM_PROPERTY
+            ),
+            createProperties.keys
+        )
+        assertEquals(
+            listOf(ServerBuiltInToolCatalog.TYPE_PROPERTY, ServerBuiltInToolCatalog.NAME_PROPERTY),
+            requiredOf(ServerBuiltInToolCatalog.CREATE_INSTRUCTION_NAME)
+        )
+        assertEquals(
+            AgentInstructionTypes.allKnown,
+            createProperties[ServerBuiltInToolCatalog.TYPE_PROPERTY]!!.jsonObject["enum"]!!
+                .jsonArray.map { it.jsonPrimitive.content }
+        )
+        assertEquals(
+            "object",
+            createProperties[ServerBuiltInToolCatalog.CUSTOM_PROPERTY]!!.jsonObject["type"]!!
+                .jsonPrimitive.content
+        )
+
+        // The edit batch mirrors the worker edit_file shape: a non-empty array of two-string items.
+        val edits = propertiesOf(ServerBuiltInToolCatalog.EDIT_INSTRUCTION_NAME)[ServerBuiltInToolCatalog.EDITS_PROPERTY]!!
+            .jsonObject
+        assertEquals("array", edits["type"]!!.jsonPrimitive.content)
+        assertEquals(1L, edits["minItems"]!!.jsonPrimitive.content.toLong())
+        val editsItem = edits["items"]!!.jsonObject
+        assertEquals("object", editsItem["type"]!!.jsonPrimitive.content)
+        assertEquals(
+            listOf(
+                ServerBuiltInToolCatalog.OLD_TEXT_PROPERTY,
+                ServerBuiltInToolCatalog.NEW_TEXT_PROPERTY
+            ),
+            editsItem["required"]!!.jsonArray.map { it.jsonPrimitive.content }
+        )
+        assertEquals(
+            setOf(
+                ServerBuiltInToolCatalog.OLD_TEXT_PROPERTY,
+                ServerBuiltInToolCatalog.NEW_TEXT_PROPERTY
+            ),
+            editsItem["properties"]!!.jsonObject.keys
+        )
+    }
+
+    /**
+     * Verifies the `delete_instruction` description warns that a linked row cannot be deleted and
+     * names the way to unlink it, so the model does not promise a deletion the server refuses.
+     */
+    @Test
+    fun `delete instruction description states the linked-row refusal`() {
+        val description = requireNotNull(
+            ServerBuiltInToolCatalog.specFor(ServerBuiltInToolCatalog.DELETE_INSTRUCTION_NAME)
+        ).description
+
+        assertTrue(description.contains("instruction_in_use"))
+        assertTrue(description.contains(ServerBuiltInToolCatalog.UPDATE_AGENT_ROLE_NAME))
     }
 }

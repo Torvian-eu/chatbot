@@ -12,6 +12,8 @@ import io.ktor.resources.*
  * - PUT /api/v1/agent-roles/{roleId} - Update a specific role
  * - DELETE /api/v1/agent-roles/{roleId} - Delete a specific role
  * - PUT /api/v1/agent-roles/{roleId}/disabled - Set the disabled state of a role for the current user
+ * - POST /api/v1/agent-roles/{roleId}/instructions/{instructionId} - Link an instruction to the role
+ * - DELETE /api/v1/agent-roles/{roleId}/instructions/{instructionId} - Unlink an instruction from the role
  */
 @Resource("agent-roles")
 class AgentRoleResource(val parent: Api = Api()) {
@@ -33,5 +35,26 @@ class AgentRoleResource(val parent: Api = Api()) {
          */
         @Resource("disabled")
         class Disabled(val parent: ById)
+
+        /**
+         * Resource for the ordered instruction links of one role
+         * (`/api/v1/agent-roles/{roleId}/instructions/{instructionId}`).
+         *
+         * Both link operations address the pair that way; appending and removing are distinguished by
+         * the HTTP method rather than by a separate URL.
+         *
+         * @property parent The parent [ById] resource carrying the role id.
+         */
+        @Resource("instructions")
+        class Instructions(val parent: ById) {
+            /**
+             * Resource for one role↔instruction link.
+             *
+             * @property parent The parent [Instructions] resource carrying the role id.
+             * @property instructionId The unique identifier of the instruction to link or unlink.
+             */
+            @Resource("{instructionId}")
+            class ByInstructionId(val parent: Instructions, val instructionId: Long)
+        }
     }
 }

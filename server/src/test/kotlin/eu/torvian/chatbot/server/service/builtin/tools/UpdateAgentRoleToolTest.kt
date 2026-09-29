@@ -6,6 +6,7 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
@@ -16,6 +17,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -70,7 +72,7 @@ class UpdateAgentRoleToolTest {
         spawnableAgentRoleIds = setOf(2L),
         projectId = projectId,
         instructions = listOf(
-            AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a writer.")
+            AgentInstructionDto(id = 10L, type = AgentInstructionTypes.ROLE, name = "Role", message = "You are a writer.")
         )
     )
 
@@ -122,7 +124,7 @@ class UpdateAgentRoleToolTest {
                         request.modelPresetId == 3L &&
                         request.toolIds == persisted.tools &&
                         request.spawnableAgentRoleIds == persisted.spawnableAgentRoleIds &&
-                        request.instructions == persisted.instructions
+                        request.instructionSpecs == persisted.instructions.map { InstructionSlot.Link(it.id) }
                 }
             )
         }
@@ -383,5 +385,125 @@ class UpdateAgentRoleToolTest {
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
         assertTrue(error.message.contains("Argument 'role_id' must be an integer"))
+    }
+
+    @Test
+    fun `instruction_ids replaces the role's instruction links in the given order`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        val persisted = sampleRole()
+        coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
+        coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns persisted.right()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        assertSuccess(
+            tool.execute(
+                buildJsonObject {
+                    put("role_id", 1L)
+                    putJsonArray("instruction_ids") {
+                        add(JsonPrimitive(11L))
+                        add(JsonPrimitive(10L))
+                    }
+                },
+                context()
+            )
+        )
+
+        // The supplied order is the role's order: the full replacement preserves it verbatim.
+        coVerify(exactly = 1) {
+            agentRoleService.updateRole(
+                userId,
+                1L,
+                match<UpdateAgentRoleRequest> { request -> request.instructionSpecs == listOf(InstructionSlot.Link(11L), InstructionSlot.Link(10L)) }
+            )
+        }
+    }
+
+    @Test
+    fun `omitted instruction_ids preserves the persisted instruction links`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        val persisted = sampleRole()
+        coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
+        coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns persisted.right()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        assertSuccess(tool.execute(buildJsonObject { put("role_id", 1L); put("name", "renamed") }, context()))
+
+        coVerify(exactly = 1) {
+            agentRoleService.updateRole(
+                userId,
+                1L,
+                match<UpdateAgentRoleRequest> { request ->
+                    request.instructionSpecs == persisted.instructions.map { InstructionSlot.Link(it.id) }
+                }
+            )
+        }
+    }
+
+    @Test
+    fun `an empty instruction_ids array clears the role's instruction links`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        val persisted = sampleRole()
+        coEvery { agentRoleService.getRoleById(userId, 1L) } returns persisted.right()
+        coEvery { agentRoleService.updateRole(userId, 1L, any()) } returns
+            persisted.copy(instructions = emptyList()).right()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        // An explicitly empty array is a supplied value, so it replaces the links instead of being
+        // treated as an omitted field.
+        assertSuccess(
+            tool.execute(
+                buildJsonObject {
+                    put("role_id", 1L)
+                    putJsonArray("instruction_ids") { }
+                },
+                context()
+            )
+        )
+
+        coVerify(exactly = 1) {
+            agentRoleService.updateRole(
+                userId,
+                1L,
+                match<UpdateAgentRoleRequest> { request -> request.instructionSpecs.isEmpty() }
+            )
+        }
+    }
+
+    @Test
+    fun `rejects a non-integer element inside instruction_ids`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("role_id", 1L)
+                putJsonArray("instruction_ids") { add(JsonPrimitive("not-an-id")) }
+            },
+            context()
+        )
+
+        val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
+        assertTrue(error.message.contains("Argument 'instruction_ids[0]' must be an integer"))
+        coVerify(exactly = 0) { agentRoleService.getRoleById(any(), any()) }
+        coVerify(exactly = 0) { agentRoleService.updateRole(any(), any(), any()) }
+    }
+
+    @Test
+    fun `rejects the pre-normalization instructions parameter as unknown`() = runTest {
+        val agentRoleService = mockk<AgentRoleService>()
+        val tool = UpdateAgentRoleTool(agentRoleService)
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("role_id", 1L)
+                putJsonArray("instructions") { }
+            },
+            context()
+        )
+
+        val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
+        assertTrue(error.message.contains("Unknown parameter: 'instructions'"), error.message)
+        coVerify(exactly = 0) { agentRoleService.getRoleById(any(), any()) }
+        coVerify(exactly = 0) { agentRoleService.updateRole(any(), any(), any()) }
     }
 }

@@ -157,7 +157,6 @@ object TestDefaults {
         // Preset-free on purpose: most suites exercise role behaviour that is unrelated to the model
         // configuration, and a preset-less role is a legal (non-sendable) state.
         modelPresetId = null,
-        instructionsJson = """[{"type":"role","name":"Role","message":"You are a senior software architect."}]""",
         createdAt = DEFAULT_INSTANT,
         updatedAt = DEFAULT_INSTANT
     )
@@ -168,7 +167,28 @@ object TestDefaults {
         displayName = "Code Reviewer",
         description = "A code review specialist role",
         modelPresetId = null,
-        instructionsJson = """[{"type":"role","name":"Role","message":"You are a meticulous code reviewer."}]""",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT
+    )
+
+    /** Default shareable instruction row with static role text. */
+    val instruction1 = InstructionEntity(
+        id = 1L,
+        type = "role",
+        name = "Role",
+        message = "You are a senior software architect.",
+        custom = null,
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT
+    )
+
+    /** Second shareable instruction row, distinct content from [instruction1]. */
+    val instruction2 = InstructionEntity(
+        id = 2L,
+        type = "role",
+        name = "Role",
+        message = "You are a meticulous code reviewer.",
+        custom = null,
         createdAt = DEFAULT_INSTANT,
         updatedAt = DEFAULT_INSTANT
     )

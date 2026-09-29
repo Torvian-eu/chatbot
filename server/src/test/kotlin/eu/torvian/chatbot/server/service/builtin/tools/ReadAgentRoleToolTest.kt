@@ -63,7 +63,7 @@ class ReadAgentRoleToolTest {
         tools = setOf(5L, 6L),
         spawnableAgentRoleIds = setOf(2L),
         instructions = listOf(
-            AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a writer.")
+            AgentInstructionDto(id = 1L, type = AgentInstructionTypes.ROLE, name = "Role", message = "You are a writer.")
         )
     )
 

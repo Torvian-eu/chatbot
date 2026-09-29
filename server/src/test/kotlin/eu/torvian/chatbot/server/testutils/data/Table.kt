@@ -40,6 +40,21 @@ enum class Table {
     AGENT_ROLES,
 
     /**
+     * Table for storing shareable agent-role instruction content.
+     */
+    INSTRUCTIONS,
+
+    /**
+     * Table for linking instructions to their single owner user.
+     */
+    INSTRUCTION_OWNERS,
+
+    /**
+     * Table for the ordered agent-role ↔ instruction links.
+     */
+    AGENT_ROLE_INSTRUCTIONS,
+
+    /**
      * Table for storing model settings.
      */
     AGENT_ROLE_OWNERS,

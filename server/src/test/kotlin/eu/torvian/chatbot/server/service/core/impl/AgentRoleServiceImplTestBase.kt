@@ -2,11 +2,12 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.api.agent.CreateAgentRoleRequest
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.llm.CompletionModelSettings
 import eu.torvian.chatbot.server.data.dao.*
+import eu.torvian.chatbot.server.data.entities.InstructionEntity
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import io.mockk.clearMocks
 import io.mockk.coEvery
@@ -35,6 +36,12 @@ abstract class AgentRoleServiceImplTestBase {
     protected lateinit var agentRoleSpawnableRoleDao: AgentRoleSpawnableRoleDao
     /** Mocked side-table DAO backing the per-user disabled state. */
     protected lateinit var agentRoleDisabledDao: AgentRoleDisabledDao
+    /** Mocked DAO backing shareable instruction row content reads and writes. */
+    protected lateinit var instructionDao: InstructionDao
+    /** Mocked DAO backing inline-created instruction rows' ownership links. */
+    protected lateinit var instructionOwnershipDao: InstructionOwnershipDao
+    /** Mocked join-table DAO backing the ordered role ↔ instruction links. */
+    protected lateinit var agentRoleInstructionDao: AgentRoleInstructionDao
     /** Mocked project DAO backing project membership validation. */
     protected lateinit var projectDao: ProjectDao
     /** Mocked session DAO backing the role-update legality sweep. */
@@ -50,7 +57,7 @@ abstract class AgentRoleServiceImplTestBase {
     /** Service under test, recreated before each test with the mocked DAOs. */
     protected lateinit var service: AgentRoleServiceImpl
 
-    /** Shared JSON codec used for the `instructions_json` column. */
+    /** Shared JSON codec used to parse instruction `custom` JSON text. */
     protected val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -59,6 +66,9 @@ abstract class AgentRoleServiceImplTestBase {
 
     /** Requesting user id used by every test. */
     protected val userId = 7L
+
+    /** Monotonic id source for mocked instruction inserts so consecutive creates stay distinct. */
+    private var nextInstructionId: Long = 100L
 
     /** Chat-capable settings profile referenced by the valid preset. */
     protected val chatSettings = TestDefaults.modelSettings1.copy(id = 1L, modelId = 1L)
@@ -94,6 +104,9 @@ abstract class AgentRoleServiceImplTestBase {
         agentRoleOwnershipDao = mockk()
         agentRoleSpawnableRoleDao = mockk()
         agentRoleDisabledDao = mockk()
+        instructionDao = mockk()
+        instructionOwnershipDao = mockk()
+        agentRoleInstructionDao = mockk()
         projectDao = mockk()
         sessionDao = mockk()
         modelPresetDao = mockk()
@@ -107,6 +120,9 @@ abstract class AgentRoleServiceImplTestBase {
             agentRoleSpawnableRoleDao = agentRoleSpawnableRoleDao,
             agentRoleOwnershipDao = agentRoleOwnershipDao,
             agentRoleDisabledDao = agentRoleDisabledDao,
+            instructionDao = instructionDao,
+            instructionOwnershipDao = instructionOwnershipDao,
+            agentRoleInstructionDao = agentRoleInstructionDao,
             modelPresetDao = modelPresetDao,
             settingsDao = settingsDao,
             toolDefinitionDao = toolDefinitionDao,
@@ -146,6 +162,39 @@ abstract class AgentRoleServiceImplTestBase {
         coEvery { sessionDao.getSessionProjectPairsForRole(any()) } returns emptyList()
         coEvery { sessionDao.clearAgentRoleForSessions(any()) } returns Unit
 
+        // Instruction reads: reads are defaulted to "no linked instructions" so role reads map empty
+        // instruction lists. The owner-scoped batch read doubles as the write-side validation lookup, so
+        // it answers one custom-kind row per requested id — the permissive kind, which keeps any set of
+        // distinct ids valid; tests asserting a specific kind or rule violation override the stub.
+        coEvery { instructionDao.getInstructionsByIds(any()) } returns emptyList()
+        coEvery { instructionDao.getInstructionsByIdsForUser(any(), any()) } answers {
+            secondArg<List<Long>>().map { instructionId ->
+                TestDefaults.instruction1.copy(
+                    id = instructionId,
+                    type = AgentInstructionTypes.CUSTOM,
+                    name = "Instruction $instructionId",
+                    message = "Text",
+                    custom = null
+                )
+            }
+        }
+        coEvery { instructionDao.insertInstruction(any(), any(), any(), any()) } answers {
+            TestDefaults.instruction1.copy(
+                id = nextInstructionId++,
+                type = firstArg(),
+                name = arg(1),
+                message = arg(2),
+                custom = arg(3)
+            )
+        }
+        coEvery { instructionDao.updateInstruction(any()) } answers {
+            firstArg<InstructionEntity>().right()
+        }
+        coEvery { instructionOwnershipDao.setOwner(any(), any()) } returns Unit.right()
+        coEvery { agentRoleInstructionDao.getLinksForRoles(any()) } returns emptyMap()
+        coEvery { agentRoleInstructionDao.getLinkedRoleIdsForInstructions(any()) } returns emptyMap()
+        coEvery { agentRoleInstructionDao.replaceInstructionsForRole(any(), any()) } returns Unit
+
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
             block()
@@ -161,6 +210,9 @@ abstract class AgentRoleServiceImplTestBase {
             agentRoleOwnershipDao,
             agentRoleSpawnableRoleDao,
             agentRoleDisabledDao,
+            instructionDao,
+            instructionOwnershipDao,
+            agentRoleInstructionDao,
             projectDao,
             sessionDao,
             modelPresetDao,
@@ -170,7 +222,7 @@ abstract class AgentRoleServiceImplTestBase {
         )
     }
 
-    /** Builds a valid create request attaching the valid preset and a single role instruction.
+    /** Builds a valid create request attaching the valid preset and a single stored instruction.
      *
      * @return A valid create-role request for the happy path.
      */
@@ -180,8 +232,6 @@ abstract class AgentRoleServiceImplTestBase {
         description = "Designs systems",
         modelPresetId = validPreset.id,
         toolIds = emptySet(),
-        instructions = listOf(
-            AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect.")
-        )
+        instructionSpecs = listOf(InstructionSlot.Link(1L))
     )
 }

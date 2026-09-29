@@ -8,14 +8,18 @@ import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
  * Its [message] is static, user-authored text — never blanked during composition. Filtering happens
  * in the [SystemPromptComposer] via [isActiveFor], which compares [modelId] against the role's model.
  *
+ * @property id Identifier of the stored instruction row the value was read from.
  * @property name Human-readable label of the instruction.
  * @property message The static instruction text (already populated).
  * @property modelId Identifier of the model this instruction applies to.
+ * @property linkedRoleIds Ids of the agent roles that link that row.
  */
 data class ModelSpecificInstruction(
+    override val id: Long,
     override val name: String,
     override val message: String,
-    val modelId: Long
+    val modelId: Long,
+    override val linkedRoleIds: Set<Long> = emptySet()
 ) : AgentInstruction {
     override val type: String = AgentInstructionTypes.MODEL_SPECIFIC
 

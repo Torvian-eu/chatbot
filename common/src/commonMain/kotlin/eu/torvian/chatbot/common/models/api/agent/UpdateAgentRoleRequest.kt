@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.common.models.api.agent
 
-import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import kotlinx.serialization.Serializable
 
 /**
@@ -30,10 +29,14 @@ import kotlinx.serialization.Serializable
  *            impossible at the wire level (a set); self-referencing identifiers are allowed. Targets
  *            may belong to any project scope of the user ([projectId] does not constrain them), and
  *            duplicate names are harmless because `spawn_agent` addresses a target by id.
- * @property instructions Flat instruction list (see [AgentInstructionDto]). `model_specific`
- *            entries are multi-instance and each must reference a distinct model. Server-generated
- *            markers such as `spawnable_agents` are carried through as-is; their messages are
- *            re-resolved on every read.
+ * @property instructionSpecs Ordered link set of the role, first to last — a full replacement of the
+ *            previous links. Each entry either references an existing owned row
+ *            ([InstructionSlot.Link]), creates and links a new one ([InstructionSlot.Create]), or
+ *            replaces and links an existing one ([InstructionSlot.Update]); the whole list is
+ *            materialized with the role in one transaction. Absent or empty clears the role's links.
+ *            Duplicate targets are rejected (a row can be linked at most once), and the per-role rules
+ *            (at most one `role`/`main`/`spawnable_agents`, distinct `model_specific` targets) are
+ *            evaluated over the resulting rows in list order.
  * @property projectId Identifier of the single user-owned project the role belongs to, or `null` for
  *            an **unassociated** role. A role belongs to at most one project (see
  *            [CreateAgentRoleRequest.projectId]); the value is replaced wholesale on update: setting
@@ -50,6 +53,6 @@ data class UpdateAgentRoleRequest(
     val modelPresetId: Long? = null,
     val toolIds: Set<Long> = emptySet(),
     val spawnableAgentRoleIds: Set<Long> = emptySet(),
-    val instructions: List<AgentInstructionDto> = emptyList(),
+    val instructionSpecs: List<InstructionSlot> = emptyList(),
     val projectId: Long? = null
 )

@@ -2,8 +2,7 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
-import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
+import eu.torvian.chatbot.common.models.api.agent.InstructionSlot
 import eu.torvian.chatbot.common.models.api.agent.UpdateAgentRoleRequest
 import eu.torvian.chatbot.server.service.core.error.agent.CreateAgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.UpdateAgentRoleError
@@ -33,7 +32,7 @@ class AgentRoleServiceImplPresetTest : AgentRoleServiceImplTestBase() {
 
         assertTrue(result.isLeft())
         assertIs<CreateAgentRoleError.ModelPresetNotChatLike>(result.leftOrNull())
-        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any()) }
     }
     @Test
     fun `createRole should reject an attached preset whose ids disagree`() = runTest {
@@ -54,7 +53,7 @@ class AgentRoleServiceImplPresetTest : AgentRoleServiceImplTestBase() {
         // settings lookup may run when no preset is attached.
         coEvery { agentRoleDao.getRoleNameScopesForUser(any(), any()) } returns emptyList()
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1.copy(modelPresetId = null)
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -80,7 +79,7 @@ class AgentRoleServiceImplPresetTest : AgentRoleServiceImplTestBase() {
         val settingsOnlyPreset = validPreset.copy(modelId = null)
         coEvery { modelPresetDao.getPresetsByIdsForUser(userId, listOf(1L)) } returns listOf(settingsOnlyPreset)
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1.copy(modelPresetId = 1L)
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -101,7 +100,7 @@ class AgentRoleServiceImplPresetTest : AgentRoleServiceImplTestBase() {
         val emptyPreset = validPreset.copy(modelId = null, modelSettingsId = null)
         coEvery { modelPresetDao.getPresetsByIdsForUser(userId, listOf(1L)) } returns listOf(emptyPreset)
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1.copy(modelPresetId = 1L)
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -122,7 +121,7 @@ class AgentRoleServiceImplPresetTest : AgentRoleServiceImplTestBase() {
 
         val error = assertIs<CreateAgentRoleError.ModelPresetNotFound>(result.leftOrNull())
         assertEquals(1L, error.presetId)
-        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { agentRoleDao.insertRole(any(), any(), any(), any(), any()) }
     }
     @Test
     fun `createRole should fail technically when an attached preset's settings row vanished`() = runTest {
@@ -151,9 +150,7 @@ class AgentRoleServiceImplPresetTest : AgentRoleServiceImplTestBase() {
             description = "Designs systems",
             modelPresetId = null,
             toolIds = emptySet(),
-            instructions = listOf(
-                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect.")
-            )
+            instructionSpecs = listOf(InstructionSlot.Link(1L))
         )
         val result = service.updateRole(userId, 1L, request)
 
@@ -179,9 +176,7 @@ class AgentRoleServiceImplPresetTest : AgentRoleServiceImplTestBase() {
             description = "Designs systems",
             modelPresetId = validPreset.id,
             toolIds = emptySet(),
-            instructions = listOf(
-                AgentInstructionDto(AgentInstructionTypes.ROLE, "Role", "You are a senior architect.")
-            )
+            instructionSpecs = listOf(InstructionSlot.Link(1L))
         )
         val result = service.updateRole(userId, 1L, request)
 
@@ -195,7 +190,7 @@ class AgentRoleServiceImplPresetTest : AgentRoleServiceImplTestBase() {
         // The stored row carries only the preset reference; the DTO's model/settings ids are derived
         // from the preset resolved during validation (no second read).
         coEvery {
-            agentRoleDao.insertRole(any(), any(), any(), any(), any(), any())
+            agentRoleDao.insertRole(any(), any(), any(), any(), any())
         } returns TestDefaults.agentRole1.copy(modelPresetId = validPreset.id)
         coEvery { agentRoleOwnershipDao.setOwner(TestDefaults.agentRole1.id, userId) } returns Unit.right()
         coEvery { agentRoleToolDao.getToolsForRole(TestDefaults.agentRole1.id) } returns emptySet()
@@ -211,7 +206,7 @@ class AgentRoleServiceImplPresetTest : AgentRoleServiceImplTestBase() {
         // The row write carries the preset reference and NOTHING else from the configuration (the
         // modelPresetId argument is the 4th one: name, displayName, description, modelPresetId, ...).
         coVerify(exactly = 1) {
-            agentRoleDao.insertRole(any(), any(), any(), match { it == validPreset.id }, any(), isNull())
+            agentRoleDao.insertRole(any(), any(), any(), match { it == validPreset.id }, isNull())
         }
         // The preset is resolved once for validation and reused for the echoed DTO.
         coVerify(exactly = 1) { modelPresetDao.getPresetsByIdsForUser(userId, listOf(validPreset.id)) }

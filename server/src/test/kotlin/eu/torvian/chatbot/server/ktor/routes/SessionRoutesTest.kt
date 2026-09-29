@@ -97,20 +97,17 @@ class SessionRoutesTest {
     private val testAgentRole = TestDefaults.agentRole1.copy(
         id = 1L,
         name = "Test Agent Role",
-        modelPresetId = testPreset.id,
-        instructionsJson = "[]"
+        modelPresetId = testPreset.id
     )
     private val testAgentRole2 = TestDefaults.agentRole2.copy(
         id = 2L,
         name = "Test Agent Role 2",
-        modelPresetId = testPreset2.id,
-        instructionsJson = "[]"
+        modelPresetId = testPreset2.id
     )
     private val testNonStreamingAgentRole = TestDefaults.agentRole1.copy(
         id = 3L,
         name = "Non-Streaming Agent Role",
-        modelPresetId = testNonStreamingPreset.id,
-        instructionsJson = "[]"
+        modelPresetId = testNonStreamingPreset.id
     )
     private val testSession = TestDefaults.chatSession1.copy(
         id = 1L,
@@ -174,6 +171,10 @@ class SessionRoutesTest {
                 Table.ASSISTANT_MESSAGES,
                 Table.SESSION_CURRENT_LEAF,
                 Table.TOOL_CALLS,
+                // Role reads resolve the role's shareable instructions through these.
+                Table.INSTRUCTIONS,
+                Table.INSTRUCTION_OWNERS,
+                Table.AGENT_ROLE_INSTRUCTIONS,
                 Table.USERS,
                 Table.USER_DEVICES,
                 Table.USER_PREFERENCES,

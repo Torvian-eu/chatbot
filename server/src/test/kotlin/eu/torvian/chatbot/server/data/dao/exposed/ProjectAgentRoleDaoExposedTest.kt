@@ -37,13 +37,11 @@ class ProjectAgentRoleDaoExposedTest {
     // Preset-less roles so no llm_models/model_settings/model_presets seeding is needed.
     private val role1 = TestDefaults.agentRole1.copy(
         id = 1L,
-        modelPresetId = null,
-        instructionsJson = "[]"
+        modelPresetId = null
     )
     private val role2 = TestDefaults.agentRole2.copy(
         id = 2L,
-        modelPresetId = null,
-        instructionsJson = "[]"
+        modelPresetId = null
     )
 
     @BeforeEach
