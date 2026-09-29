@@ -625,6 +625,14 @@ fun appModule(config: AppConfiguration): Module = module {
         )
     }
     viewModel {
+        InstructionsViewModel(
+            instructionRepository = get(),
+            agentRoleRepository = get(),
+            projectRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
         AgentRolesViewModel(
             agentRoleRepository = get(),
             instructionRepository = get(),

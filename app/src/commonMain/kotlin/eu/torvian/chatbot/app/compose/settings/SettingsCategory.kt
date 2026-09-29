@@ -9,6 +9,7 @@ enum class SettingsCategory {
     ModelSettings,
     ModelPresets,
     AgentRoles,
+    Instructions,
     Projects,
     McpServers,
     Workers,
@@ -31,6 +32,7 @@ val SettingsCategory.displayLabel: String
         SettingsCategory.ModelSettings -> "Model Settings"
         SettingsCategory.ModelPresets -> "Model Presets"
         SettingsCategory.AgentRoles -> "Agent Roles"
+        SettingsCategory.Instructions -> "Instructions"
         SettingsCategory.Projects -> "Projects"
         SettingsCategory.McpServers -> "MCP Servers"
         SettingsCategory.Workers -> "Workers"

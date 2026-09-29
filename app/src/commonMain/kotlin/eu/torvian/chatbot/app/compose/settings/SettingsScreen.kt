@@ -128,6 +128,13 @@ fun SettingsScreen(
                         breadcrumbSegments = breadcrumbs
                     }
 
+                    SettingsCategory.Instructions -> InstructionsTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+
                     SettingsCategory.Projects -> ProjectsTabRoute(
                         authState = authState,
                         categoryResetSignal = categoryResetSignal
