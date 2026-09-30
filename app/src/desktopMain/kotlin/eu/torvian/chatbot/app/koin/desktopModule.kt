@@ -9,6 +9,10 @@ import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.clipboard.ClipboardServiceDesktop
 import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.app.service.security.FileSystemCertificateStorage
+import eu.torvian.chatbot.app.service.turnnotification.TurnAlertSoundPlayer
+import eu.torvian.chatbot.app.service.turnnotification.TurnAlertSoundPlayerDesktop
+import eu.torvian.chatbot.app.service.turnnotification.TurnOsNotificationService
+import eu.torvian.chatbot.app.service.turnnotification.TurnOsNotificationServiceDesktop
 import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
 import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionService
@@ -71,5 +75,13 @@ fun desktopModule(config: AppConfiguration) = module {
 
     single<ClipboardService> {
         ClipboardServiceDesktop()
+    }
+
+    single<TurnAlertSoundPlayer> {
+        TurnAlertSoundPlayerDesktop()
+    }
+
+    single<TurnOsNotificationService> {
+        TurnOsNotificationServiceDesktop()
     }
 }

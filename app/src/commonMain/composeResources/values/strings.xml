@@ -70,4 +70,10 @@
     <string name="assistant_message_stopped_by_user">Stopped by the user</string>
     <string name="assistant_message_failed_label">Response failed</string>
 
+    <!-- Turn Status Notifications -->
+    <string name="turn_notification_title_unknown_session">Chat session</string>
+    <string name="turn_notification_body_turn_completed_success">The assistant finished its turn.</string>
+    <string name="turn_notification_body_turn_completed_failure">The assistant's turn ended with an error.</string>
+    <string name="turn_notification_body_awaiting_approval">Waiting for your approval of a tool call.</string>
+
 </resources>

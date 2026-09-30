@@ -21,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import eu.torvian.chatbot.app.compose.admin.AdminScreen
 import eu.torvian.chatbot.app.compose.auth.AuthDialogs
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
+import eu.torvian.chatbot.app.compose.notifications.TurnNotificationHost
 import eu.torvian.chatbot.app.compose.permissions.RequiresAnyPermission
 import eu.torvian.chatbot.app.compose.settings.SettingsScreen
 import eu.torvian.chatbot.app.compose.snackbar.SharedSnackbar
@@ -80,6 +81,16 @@ fun MainApplicationFlow(
 
         // AuthDialogs resolves its own ViewModels and collects its own dialog states
         AuthDialogs(currentAuthState = authState)
+
+        // Out-of-app turn alerts live exactly as long as the authenticated shell, so a notification
+        // click can select the triggering session and reach the chat screen through the existing
+        // navigation graph.
+        TurnNotificationHost(
+            onOpenSession = { sessionId ->
+                sessionListViewModel.selectSession(sessionId)
+                navController.navigateToTop(Chat)
+            }
+        )
     }
 }
 
