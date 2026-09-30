@@ -132,7 +132,10 @@ class MessageServiceImplTest {
         val messageId = 1L
         val newContent = "Updated content"
         val updatedMessage = testMessage1.copy(content = newContent)
-        coEvery { messageDao.updateMessageContent(messageId, newContent) } returns updatedMessage.right()
+        // The edit path also asks for the stored reasoning to be cleared, because the new content no longer
+        // matches the answer the reasoning was produced for.
+        coEvery { messageDao.updateMessageContent(messageId, newContent, null, clearReasoning = true) } returns
+                updatedMessage.right()
 
         // Act
         val result = messageService.updateMessageContent(messageId, newContent)
@@ -141,7 +144,7 @@ class MessageServiceImplTest {
         assertTrue(result.isRight(), "Should return Right for successful update")
         assertEquals(updatedMessage, result.getOrNull(), "Should return the updated message")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { messageDao.updateMessageContent(messageId, newContent) }
+        coVerify(exactly = 1) { messageDao.updateMessageContent(messageId, newContent, null, clearReasoning = true) }
     }
 
     @Test
@@ -150,7 +153,8 @@ class MessageServiceImplTest {
         val messageId = 999L
         val newContent = "Updated content"
         val daoError = MessageError.MessageNotFound(messageId)
-        coEvery { messageDao.updateMessageContent(messageId, newContent) } returns daoError.left()
+        coEvery { messageDao.updateMessageContent(messageId, newContent, null, clearReasoning = true) } returns
+                daoError.left()
 
         // Act
         val result = messageService.updateMessageContent(messageId, newContent)
@@ -162,6 +166,6 @@ class MessageServiceImplTest {
         assertIs<UpdateMessageContentError.MessageNotFound>(error, "Should be MessageNotFound error")
         assertEquals(messageId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { messageDao.updateMessageContent(messageId, newContent) }
+        coVerify(exactly = 1) { messageDao.updateMessageContent(messageId, newContent, null, clearReasoning = true) }
     }
 }

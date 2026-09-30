@@ -59,7 +59,9 @@ class MessageServiceImpl(
                 withError({ daoError: MessageError.MessageNotFound ->
                     UpdateMessageContentError.MessageNotFound(daoError.id)
                 }) {
-                    messageDao.updateMessageContent(id, content, fileReferences).bind()
+                    // A manual edit replaces the answer the reasoning was produced for, so storing the old
+                    // reasoning would leave the message claiming chain-of-thought that no longer matches its text.
+                    messageDao.updateMessageContent(id, content, fileReferences, clearReasoning = true).bind()
                 }
             }
         }
