@@ -61,6 +61,28 @@ sealed interface ChatStreamEvent {
     }
 
     /**
+     * Sent for each new reasoning/thinking text delta received from the LLM during streaming.
+     * Clients should append `deltaContent` to the reasoning section of the message identified by
+     * `messageId`.
+     *
+     * Only derived plaintext (the model's chain-of-thought) is carried here; opaque encrypted reasoning
+     * payloads are never sent as deltas. The completed reasoning of a message is delivered with
+     * [AssistantMessageEnd] through `assistantMessage.reasoningItems`, so a client can render the final
+     * reasoning without depending on any delta it received.
+     *
+     * @property messageId The database ID of the assistant message being updated.
+     * @property deltaContent The new reasoning text chunk to append.
+     */
+    @Serializable
+    @SerialName("assistant_message_reasoning_delta")
+    data class AssistantMessageReasoningDelta(
+        val messageId: Long,
+        val deltaContent: String
+    ) : ChatStreamEvent {
+        override val eventType: String = "assistant_message_reasoning_delta"
+    }
+
+    /**
      * Sent for each new tool call chunk received from the LLM during streaming.
      * The LLM streams tool call arguments as they are generated.
      *

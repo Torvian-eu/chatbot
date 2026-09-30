@@ -26,6 +26,7 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @param onResetEditingBasePath Resets editing base path to the common path.
  * @param onBranchAndContinue Branches from a message and continues the conversation.
  * @param onToggleMessageCollapsed Toggles collapsed/expanded state of a message body.
+ * @param onToggleReasoningSection Toggles collapsed/expanded state of a message reasoning section.
  * @param onShowToolCallDetails Opens details for a tool call badge.
  * @param onShowFileReferenceDetails Opens details for a file reference badge.
  */
@@ -49,6 +50,7 @@ data class MessageActions(
     val onResetEditingBasePath: () -> Unit,
     val onBranchAndContinue: (ChatMessage) -> Unit,
     val onToggleMessageCollapsed: (Long) -> Unit,
+    val onToggleReasoningSection: (Long) -> Unit,
     val onShowToolCallDetails: (ToolCall) -> Unit,
     val onShowFileReferenceDetails: (FileReference) -> Unit
 )

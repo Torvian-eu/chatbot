@@ -27,6 +27,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.chat.reasoning.deriveReasoningDisplay
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -49,6 +50,9 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @param toolCallsForMessage List of tool calls associated with this message.
  * @param isCollapsed Whether this message is currently collapsed.
  * @param isCollapsible Whether this message can be collapsed (content length > threshold).
+ * @param isReasoningExpanded Whether the reasoning section of this message is currently expanded. Collapsed by
+ *        default, including while the message is still streaming.
+ * @param onToggleReasoningSection Invoked when the user toggles the reasoning section of a message.
  * @param turnExecutionState Lifecycle state of the active assistant turn; disables actions that
  * start a new LLM turn (Regenerate, Branch & Continue) while a turn is active.
  * @param searchContext optional in-session search context for highlights and selected-result
@@ -70,6 +74,8 @@ fun MessageItem(
     toolCallsForMessage: List<ToolCall> = emptyList(),
     isCollapsed: Boolean = false,
     isCollapsible: Boolean = false,
+    isReasoningExpanded: Boolean = false,
+    onToggleReasoningSection: (Long) -> Unit = {},
     turnExecutionState: TurnExecutionState = TurnExecutionState.IDLE,
     searchContext: MessageSearchContext? = null
 ) {
@@ -158,6 +164,24 @@ fun MessageItem(
             }
         }
         Spacer(Modifier.height(4.dp))
+
+        // Reasoning section: the message's own items decide whether there is one at all, so a generation that
+        // produced no reasoning renders unchanged, in-flight or completed. Keyed on the message so the item walk and
+        // the joined plaintext run once per snapshot: every streamed delta recomposes every visible message, and an
+        // unchanged one must not re-derive its reasoning for that.
+        val reasoningDisplay = remember(message) {
+            (message as? ChatMessage.AssistantMessage)?.deriveReasoningDisplay()
+        }
+        if (reasoningDisplay != null) {
+            AssistantMessageReasoningSection(
+                display = reasoningDisplay,
+                isExpanded = isReasoningExpanded,
+                contentColor = contentColor,
+                onToggle = { onToggleReasoningSection(message.id) }
+            )
+            // Separates the reasoning from the answer it belongs to, which would otherwise read as one block.
+            Spacer(Modifier.height(8.dp))
+        }
 
         // Message Content - conditionally show editing UI or display content
         Box(

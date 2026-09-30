@@ -240,7 +240,8 @@ class ResponsesStrategy(
             val reasoningEffort = response["reasoning"]?.jsonObject?.get("effort")?.jsonPrimitive?.contentOrNull
 
             // Reasoning items are emitted verbatim so higher layers can persist (sanitized) and replay them
-            // across turns. They are opaque (may include OpenAI-encrypted content) and never rendered.
+            // across turns. The raw item and any OpenAI-encrypted content are opaque and never rendered; only
+            // their derived plaintext is displayable.
             val reasoningItems = outputItems
                 .filter { it["type"]?.jsonPrimitive?.contentOrNull == "reasoning" }
 
@@ -552,8 +553,9 @@ class ResponsesStrategy(
 
                     "response.reasoning_text.delta" -> {
                         // Incremental plaintext chain-of-thought suitable for live UI rendering. Grouped by
-                        // (output_index, content_index); the consumer concatenates deltas. Never persisted or
-                        // replayed (only the opaque ReasoningDone item is), so skip empty deltas.
+                        // (output_index, content_index); the consumer concatenates deltas and persists the
+                        // accumulated text. Only the opaque ReasoningDone item is replayed, so skip empty
+                        // deltas.
                         val reasoningDelta = event["delta"]?.jsonPrimitive?.contentOrNull
                         if (!reasoningDelta.isNullOrEmpty()) {
                             emit(
@@ -569,8 +571,8 @@ class ResponsesStrategy(
                     "response.output_item.done" -> {
                         // The full output item is delivered on this event. For reasoning items, capture the
                         // raw item object (preserving e.g. `summary[].type`) so higher layers can persist and
-                        // replay it. The payload is opaque and never rendered; it is sanitized to the
-                        // replay-safe `input` shape at persistence/replay time.
+                        // replay it. The raw payload and its encrypted content are never rendered; it is
+                        // sanitized to the replay-safe `input` shape at persistence/replay time.
                         when (item?.get("type")?.jsonPrimitive?.contentOrNull) {
                             "reasoning" -> emit(
                                 LLMStreamChunk.ReasoningDone(

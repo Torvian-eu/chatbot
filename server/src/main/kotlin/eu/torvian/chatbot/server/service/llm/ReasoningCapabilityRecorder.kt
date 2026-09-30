@@ -18,17 +18,18 @@ import org.apache.logging.log4j.Logger
  * (non-null) detection is skipped entirely and the recorded value is trusted as correct. This keeps
  * detection cheap (one-time per model) and prevents flapping if a provider changes behavior.
  *
- * The recorder is invoked from the turn orchestrator after each assistant response; a no-op when the
- * model produced no reasoning items, when the items are inconclusive, or when the capability is
- * already recorded.
+ * The recorder is invoked from the turn orchestrator after each assistant response, with the completed reasoning
+ * items the provider emitted; the derived streamed-text item a step persists for display is deliberately left out,
+ * because it would look like evidence of plaintext reasoning. Detection is a no-op when the model produced no
+ * reasoning items, when the items are inconclusive, or when the capability is already recorded.
  */
 interface ReasoningCapabilityRecorder {
     /**
      * Detects and persists the producing model's reasoning mode from its observed reasoning items.
      *
      * @param model The model that produced [reasoningItems].
-     * @param reasoningItems The raw reasoning output items from the model's response, or
-     *            `null`/empty when there are none.
+     * @param reasoningItems The reasoning items the model itself emitted, or `null`/empty when there are none.
+     *            Derived display payloads must not be passed here.
      */
     suspend fun record(model: LLMModel, reasoningItems: List<JsonObject>?)
 }

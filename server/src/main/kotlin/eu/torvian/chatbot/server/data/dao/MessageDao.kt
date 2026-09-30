@@ -64,8 +64,8 @@ interface MessageDao {
      * @param modelId Optional model ID (for assistant messages).
      * @param settingsId Optional settings ID (for assistant messages).
      * @param agentRoleId Optional agent role ID (for assistant messages, provenance).
-     * @param reasoningItems Optional replay-safe reasoning items emitted with an assistant message. Opaque;
-     *                       never rendered.
+     * @param reasoningItems Optional replay-safe reasoning items emitted with an assistant message. Only their
+     *                       derived plaintext may be rendered; the raw items are opaque.
      * @param fileReferences Optional list of file references.
      * @param createdAt Optional creation timestamp. If null, uses current time.
      * @param updatedAt Optional update timestamp. If null, uses current time.
@@ -106,13 +106,18 @@ interface MessageDao {
      * @param fileReferences The new list of file references (optional, if null keeps existing).
      * @param completion Completion state to persist with the new content. Defaults to
      *                   [AssistantMessageCompletionState.Completed], i.e. the message counts as complete.
+     * @param clearReasoning Whether to clear the stored reasoning items of an assistant message. Set by the
+     *                   public edit path, whose new content no longer matches the reasoning that produced the
+     *                   old one; turn finalization keeps the default so reasoning written moments earlier in the
+     *                   same step survives. Ignored for user messages, which carry no reasoning column.
      * @return Either a [MessageError.MessageNotFound] or the updated [ChatMessage] object.
      */
     suspend fun updateMessageContent(
         id: Long,
         content: String,
         fileReferences: List<FileReference>? = null,
-        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed
+        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed,
+        clearReasoning: Boolean = false
     ): Either<MessageError.MessageNotFound, ChatMessage>
 
     /**
@@ -137,8 +142,8 @@ interface MessageDao {
      * Updates the reasoning items attached to an assistant message.
      *
      * @param messageId The ID of the assistant message whose reasoning items to update.
-     * @param reasoningItems The new replay-safe reasoning items, or `null` to clear them. Opaque; never
-     *                       rendered.
+     * @param reasoningItems The new replay-safe reasoning items, or `null` to clear them. Only their derived
+     *                       plaintext may be rendered; the raw items are opaque.
      * @return Either a [MessageError.MessageNotFound] if the message is not an assistant message or not found,
      *         or the updated [ChatMessage.AssistantMessage] on success.
      */

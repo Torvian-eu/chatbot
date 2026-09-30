@@ -6,10 +6,12 @@ import eu.torvian.chatbot.server.service.core.chat.persistence.ConversationTurnP
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import eu.torvian.chatbot.server.service.llm.ReasoningCapabilityRecorder
 import eu.torvian.chatbot.server.service.llm.outputLimitExceededCompletionState
+import eu.torvian.chatbot.server.service.llm.reasoningOutputLimitExceededCompletionState
 import eu.torvian.chatbot.server.service.llm.sanitizeReasoningItems
 import eu.torvian.chatbot.server.service.llm.streamInterruptedCompletionState
 import eu.torvian.chatbot.server.service.llm.toAssistantMessageCompletionState
 import eu.torvian.chatbot.server.service.llm.unexpectedFailureCompletionState
+import eu.torvian.chatbot.server.service.llm.withStreamedReasoningText
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -20,11 +22,11 @@ import org.apache.logging.log4j.Logger
  * Runs one streaming assistant iteration for the shared turn loop: placeholder creation, streamed content and
  * reasoning accumulation, and the exactly-once terminal state of the assistant message.
  *
- * The step owns the limit policy of one iteration: assistant text cut at its cap is a failure that also suppresses
- * the execution of the response's tool calls, a step over the per-step call cap is not acted upon at all, a call
- * over the argument cap is dropped while the other calls of the step are still executed, and the turn's iteration
- * bound flags the final step's message while still executing its calls — the turn then ends after them, which is
- * why the outcome can ask the loop to stop.
+ * The step owns the limit policy of one iteration: assistant or reasoning text cut at its cap is a failure that also
+ * suppresses the execution of the response's tool calls, a step over the per-step call cap is not acted upon at all,
+ * a call over the argument cap is dropped while the other calls of the step are still executed, and the turn's
+ * iteration bound flags the final step's message while still executing its calls — the turn then ends after them,
+ * which is why the outcome can ask the loop to stop.
  *
  * @property llmStreamCollector Collector that owns the provider chunk stream for the iteration.
  * @property conversationTurnPersistence Collaborator that owns the placeholder, the content/reasoning updates
@@ -85,9 +87,13 @@ internal class StreamingAssistantStepRunner(
         )
         val assistantMessage = saveResult.assistantMessage
 
-        // The accumulator lives here (instead of inside handleLlmStreaming) so every abnormal ending below can
+        // The accumulators live here (instead of inside handleLlmStreaming) so every abnormal ending below can
         // persist the exact partial text the stream had received when it stopped.
         val accumulatedContent = StringBuilder()
+
+        // Plaintext reasoning is accumulated for live rendering and durability: the displayed deltas are
+        // persisted as a derived reasoning item, so a reload can show the same text.
+        val accumulatedReasoningText = StringBuilder()
 
         // Reasoning items complete asynchronously during streaming; accumulate them so they can be
         // persisted together with the finalized message on completion.
@@ -111,6 +117,7 @@ internal class StreamingAssistantStepRunner(
             systemMessage = request.llmConfig.systemMessage.takeIf { it.isNotBlank() },
             controlSignal = request.turnControlSignal,
             accumulatedContent = accumulatedContent,
+            accumulatedReasoningText = accumulatedReasoningText,
             onContentDelta = { delta ->
                 emit(ConversationTurnEvent.AssistantMessageDelta(assistantMessage.id, delta))
             },
@@ -126,36 +133,52 @@ internal class StreamingAssistantStepRunner(
                 )
             },
             onReasoningChunk = { reasoningDone ->
-                // Only the opaque completed item is persisted for replay; plaintext reasoning deltas
-                // (ReasoningTextChunk) are render-only and are not accumulated here.
+                // Only the opaque completed item is persisted for replay; it is also what capability detection reads.
                 accumulatedReasoningItems.add(reasoningDone.reasoningItem)
             },
-            onStreamComplete = { toolCallRequests, finishReason, contentTruncated, droppedToolCallCount, clippedToolCallArgumentCount ->
+            onReasoningTextDelta = { delta ->
+                // The text is already in the step's accumulator when this runs, so the live delta and the value
+                // persisted on either ending can never disagree.
+                emit(ConversationTurnEvent.AssistantMessageReasoningDelta(assistantMessage.id, delta))
+            },
+            onStreamComplete = { toolCallRequests, finishReason, contentTruncated, reasoningTruncated, droppedToolCallCount, clippedToolCallArgumentCount ->
                 // Sanitize once before the accumulated items enter persistence or the follow-up context.
                 val sanitizedReasoningItems = sanitizeReasoningItems(accumulatedReasoningItems)
-                // Persist accumulated reasoning (if any) alongside the finalized message content.
-                if (sanitizedReasoningItems.isNotEmpty()) {
+                // Persist accumulated reasoning (if any) alongside the finalized message content: the completed
+                // items plus, when no completed item carries plaintext, the text that was streamed live.
+                val reasoningItemsToPersist = withStreamedReasoningText(
+                    sanitizedReasoningItems,
+                    accumulatedReasoningText.toString()
+                )
+                if (reasoningItemsToPersist.isNotEmpty()) {
                     conversationTurnPersistence.updateAssistantMessageReasoning(
                         assistantMessage.id,
-                        sanitizedReasoningItems
+                        reasoningItemsToPersist
                     )
                 }
-                // Record the model's reasoning mode from the accumulated reasoning items (if any) so later
-                // replays can adapt what is sent to this model. Detection is a cheap, one-time write.
+                // Record the model's reasoning mode from the completed items only: the streamed-text item is a
+                // derived display payload and must not decide whether the model encrypts its reasoning.
                 reasoningCapabilityRecorder.record(
                     request.llmConfig.model,
                     accumulatedReasoningItems.takeIf { it.isNotEmpty() }
                 )
                 // The step ends with tool calls that only a follow-up iteration could consume.
                 val requestsToolCalls = finishReason == "tool_calls" && toolCallRequests.isNotEmpty()
-                // Assistant text cut at the cap is a failure rather than a normal completion, and it is the only
-                // limit that also suppresses tool execution: a response cut off mid-generation is untrustworthy
-                // input for side-effecting tools.
+                // Assistant text cut at the cap is a failure rather than a normal completion, and it suppresses
+                // tool execution: a response cut off mid-generation is untrustworthy input for side-effecting
+                // tools. A cut at the reasoning cap says the same about the response.
                 val contentFailure = if (contentTruncated) {
                     outputLimitExceededCompletionState(ConversationTurnLimits.MAX_ASSISTANT_MESSAGE_CHARS)
                 } else {
                     null
                 }
+                val reasoningFailure = if (reasoningTruncated) {
+                    reasoningOutputLimitExceededCompletionState(ConversationTurnLimits.MAX_REASONING_TEXT_CHARS)
+                } else {
+                    null
+                }
+                // Precedence: the content cap wins, because it flags the answer itself rather than its reasoning.
+                val limitFailure = contentFailure ?: reasoningFailure
                 // The tool-call limits have their own execution policies: the stream collector already dropped the
                 // calls of a step over the per-step cap and the calls whose argument was cut, while the iteration
                 // bound keeps the calls of the final step. Only a limit that still leaves calls to run flags the
@@ -169,7 +192,7 @@ internal class StreamingAssistantStepRunner(
                 val updatedAssistantMessage = conversationTurnPersistence.updateAssistantMessageContent(
                     messageId = assistantMessage.id,
                     content = accumulatedContent.toString(),
-                    completion = contentFailure ?: toolCallFailure ?: AssistantMessageCompletionState.Completed
+                    completion = limitFailure ?: toolCallFailure ?: AssistantMessageCompletionState.Completed
                 )
                 guard.isFinalized = true
                 runCatching { emit(ConversationTurnEvent.AssistantMessageFinished(updatedAssistantMessage)) }
@@ -179,7 +202,7 @@ internal class StreamingAssistantStepRunner(
                         )
                     }
 
-                if (contentFailure == null && toolCallFailure != null) {
+                if (limitFailure == null && toolCallFailure != null) {
                     logToolCallLimitFailure(
                         request = request,
                         assistantMessageId = assistantMessage.id,
@@ -190,15 +213,15 @@ internal class StreamingAssistantStepRunner(
                     )
                 }
 
-                if (contentFailure != null) {
-                    // Tool calls parsed from a truncated response are untrustworthy input for side-effecting tools,
-                    // so the turn ends here instead of handing them to processTurn. The requests are discarded
-                    // (only their count is logged): no tool-call row is written and nothing is executed, so no
-                    // approval prompt or tool badge can appear below a failed message.
+                if (limitFailure != null) {
+                    // Tool calls parsed from a response whose text was cut are untrustworthy input for side-effecting
+                    // tools, so the turn ends here instead of handing them to processTurn. The requests are
+                    // discarded (only their count is logged): no tool-call row is written and nothing is executed,
+                    // so no approval prompt or tool badge can appear below a failed message.
                     if (toolCallRequests.isNotEmpty()) {
                         logger.warn(
                             "Discarding ${toolCallRequests.size} tool call request(s) for session " +
-                                "${request.session.id}: ${contentFailure.errorMessage} (${contentFailure.errorCode})"
+                                "${request.session.id}: ${limitFailure.errorMessage} (${limitFailure.errorCode})"
                         )
                     }
                     emit(ConversationTurnEvent.TurnCompleted)
@@ -246,10 +269,15 @@ internal class StreamingAssistantStepRunner(
                     is UnfinalizedAssistantStream.UnexpectedFailure ->
                         unexpectedFailureCompletionState()
                 }
+                val reasoningItemsToPersist = withStreamedReasoningText(
+                    sanitizeReasoningItems(accumulatedReasoningItems),
+                    accumulatedReasoningText.toString()
+                ).takeIf { it.isNotEmpty() }
                 finalizeUnfinalized(
                     guard = guard,
                     assistantMessage = assistantMessage,
                     accumulatedContent = accumulatedContent,
+                    reasoningItems = reasoningItemsToPersist,
                     completion = completion,
                     emit = emit
                 )
@@ -324,7 +352,8 @@ internal class StreamingAssistantStepRunner(
      *
      * Only the write is made durable across a cancellation, through `NonCancellable`: it must survive the
      * teardown that ends a stopped turn, and a failed write must never be reported as a recorded state (the
-     * guard is therefore set after it, not before). The delivery deliberately runs *outside* that block and in
+     * guard is therefore set after it, not before). Reasoning is written before the content, so the terminal
+     * content write can never clear it. The delivery deliberately runs *outside* that block and in
      * the collector's context, because the turn is a `flow` builder, which rejects an emission from a context
      * whose `Job` chain leaves the collect job — wrapping the emission was what kept the unexpected-failure
      * state from ever reaching a live client. Delivery stays best-effort: on a torn-down socket the client
@@ -334,6 +363,8 @@ internal class StreamingAssistantStepRunner(
      * @param assistantMessage Placeholder row of the step, used as the write target and for diagnostics.
      * @param accumulatedContent Accumulator of the step, persisted as received. It may be empty: a stop before
      *        any content still has to record the terminal state.
+     * @param reasoningItems Reasoning items to persist with the ending, or `null` when the step produced no
+     *        reasoning at all. They carry any partial reasoning the stream had already delivered.
      * @param completion Terminal state that explains why the generation stopped.
      * @param emit Sink used to publish the terminal event, after the write.
      */
@@ -341,6 +372,7 @@ internal class StreamingAssistantStepRunner(
         guard: FinalizationGuard,
         assistantMessage: ChatMessage.AssistantMessage,
         accumulatedContent: StringBuilder,
+        reasoningItems: List<JsonObject>?,
         completion: AssistantMessageCompletionState,
         emit: suspend (ConversationTurnEvent) -> Unit
     ) {
@@ -356,6 +388,11 @@ internal class StreamingAssistantStepRunner(
         // suspension point would abort before touching the row, leaving it without a terminal state forever.
         // Nothing else runs inside this block.
         val updatedAssistantMessage = withContext(NonCancellable) {
+            if (reasoningItems != null) {
+                // Written first and unconditionally: the content/completion statement below never clears the
+                // reasoning column, so a partial reasoning survives the same ending that keeps the partial text.
+                conversationTurnPersistence.updateAssistantMessageReasoning(assistantMessage.id, reasoningItems)
+            }
             conversationTurnPersistence.updateAssistantMessageContent(
                 messageId = assistantMessage.id,
                 // May be empty: a stop before any content still has to record the terminal state.

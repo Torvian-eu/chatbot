@@ -300,6 +300,27 @@ fun outputLimitExceededCompletionState(limitChars: Int): AssistantMessageComplet
     )
 
 /**
+ * Builds the failure state for an assistant step whose accumulated reasoning text was cut at the reasoning character
+ * limit.
+ *
+ * The reasoning is cut at the cap and the message is flagged, so the limit is reported as a failure reason of the
+ * message instead of as a notice inside its content. Like the assistant-content cap, this limit also suppresses the
+ * tool calls of the step: reasoning cut off mid-generation means the response is no longer trustworthy input for
+ * side-effecting tools.
+ *
+ * @param limitChars The character limit that was exceeded, echoed in the reason for operator clarity.
+ * @return A `FAILED` completion state with code `REASONING_OUTPUT_LIMIT_EXCEEDED` and a bounded reason.
+ */
+fun reasoningOutputLimitExceededCompletionState(limitChars: Int): AssistantMessageCompletionState =
+    AssistantMessageCompletionState.failed(
+        code = AssistantMessageErrorCode.REASONING_OUTPUT_LIMIT_EXCEEDED,
+        // Locale.ROOT keeps the digit grouping deterministic (`100,000`) regardless of the server locale.
+        message = "The response was stopped because the model's reasoning exceeded the ${
+            String.format(Locale.ROOT, "%,d", limitChars)
+        }-character limit."
+    )
+
+/**
  * Builds the failure state for a tool-calling iteration that could not be followed up because the turn reached
  * the assistant/tool iteration limit.
  *

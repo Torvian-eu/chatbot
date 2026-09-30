@@ -412,7 +412,8 @@ class MessageDaoExposed(
         id: Long,
         content: String,
         fileReferences: List<FileReference>?,
-        completion: AssistantMessageCompletionState
+        completion: AssistantMessageCompletionState,
+        clearReasoning: Boolean
     ): Either<MessageError.MessageNotFound, ChatMessage> =
         transactionScope.transaction {
             either {
@@ -432,6 +433,9 @@ class MessageDaoExposed(
                     it[AssistantMessageTable.incompleteCause] = completion.incompleteCause?.name
                     it[AssistantMessageTable.errorCode] = completion.errorCode?.name
                     it[AssistantMessageTable.errorMessage] = completion.errorMessage
+                    if (clearReasoning) {
+                        it[AssistantMessageTable.reasoningItemsJson] = null
+                    }
                 }
 
                 // Retrieve the updated message

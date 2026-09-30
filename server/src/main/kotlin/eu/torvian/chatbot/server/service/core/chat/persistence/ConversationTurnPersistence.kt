@@ -42,7 +42,7 @@ interface ConversationTurnPersistence {
      *                    when the message was not produced through an agent role.
      * @param reasoningItems Optional replay-safe reasoning items emitted with the assistant message. Must be
      *                       `null` for non-reasoning models; callers must sanitize them before persistence.
-     *                       Opaque, never logged or rendered.
+     *                       The raw items stay opaque, while their derived plaintext may be displayed.
      * @param completion Completion state written together with the row. The streaming placeholder is inserted
      *                   with [AssistantMessageCompletionState.InFlight] (not completed, no cause yet), a
      *                   non-streaming answer with an explicit terminal state, and the default
@@ -84,7 +84,7 @@ interface ConversationTurnPersistence {
      *
      * @param messageId Assistant message to update.
      * @param reasoningItems Replay-safe reasoning items to persist. `null` clears any stored reasoning.
-     *                       Opaque payload; never logged or rendered.
+     *                       Raw items are never logged or rendered; their derived plaintext may be displayed.
      * @return Updated assistant message.
      */
     suspend fun updateAssistantMessageReasoning(

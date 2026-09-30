@@ -18,12 +18,12 @@ import java.util.concurrent.CancellationException
  * Collects one streaming LLM response and folds its chunk sequence into the caller's turn state.
  *
  * The collector owns the provider-stream half of a streaming assistant step: it applies the assistant-text,
- * per-step tool-call and tool-argument character caps while appending, reports every reached cap back through the
- * [handleLlmStreaming] callbacks (nothing is cut silently), reconstructs tool calls from their streamed deltas,
- * reports streaming errors, and classifies the ending of the stream as an [UnfinalizedAssistantStream] so the
- * caller can persist the matching terminal state exactly once. No content is stored here — the caller owns the
- * [StringBuilder] it passes in and receives the accepted deltas through the [handleLlmStreaming] callbacks, which
- * is what keeps the recorded text and the recorded ending consistent.
+ * reasoning-text, per-step tool-call and tool-argument character caps while appending, reports every reached cap
+ * back through the [handleLlmStreaming] callbacks (nothing is cut silently), reconstructs tool calls from their
+ * streamed deltas, reports streaming errors, and classifies the ending of the stream as an
+ * [UnfinalizedAssistantStream] so the caller can persist the matching terminal state exactly once. No content is
+ * stored here — the caller owns the [StringBuilder] values it passes in and receives the accepted deltas through
+ * the [handleLlmStreaming] callbacks, which is what keeps the recorded text and the recorded ending consistent.
  *
  * Because every dialect converges here, this is the only place that decides how a stream ended: the *first*
  * terminal signal — a completion, an error chunk or a dialect parse failure — fixes the ending for good, which is
@@ -60,12 +60,16 @@ internal class LlmStreamCollector(
      * @param accumulatedContent Accumulator owned by the caller and filled with the accepted streamed text
      *        (bounded by [ConversationTurnLimits.MAX_ASSISTANT_MESSAGE_CHARS]); the caller persists it
      *        on every ending.
+     * @param accumulatedReasoningText Accumulator owned by the caller and filled with the accepted reasoning text
+     *        (bounded by [ConversationTurnLimits.MAX_REASONING_TEXT_CHARS]); the caller renders and persists it.
      * @param onContentDelta Callback for assistant text deltas.
      * @param onToolCallChunk Callback for streamed tool-call chunks.
      * @param onReasoningChunk Callback for the completed, opaque reasoning item emitted by the provider.
+     * @param onReasoningTextDelta Callback for the accepted reasoning-text deltas; they were already appended to
+     *        [accumulatedReasoningText] when it runs, so the recorded text never lags the forwarded delta.
      * @param onStreamComplete Callback invoked after the provider signals stream completion, receiving the
-     *        parsed tool-call requests, the finish reason, whether the character cap was reached, and how many
-     *        tool calls the per-step and per-argument caps cut.
+     *        parsed tool-call requests, the finish reason, whether the assistant-text or reasoning-text cap was
+     *        reached, and how many tool calls the per-step and per-argument caps cut.
      * @param onError Callback for streaming errors.
      * @param onUnfinalized Callback reporting an ending without a terminal chunk, carrying the text received so
      *        far and the reason the stream stopped.
@@ -80,13 +84,16 @@ internal class LlmStreamCollector(
         systemMessage: String?,
         controlSignal: TurnControlSignal,
         accumulatedContent: StringBuilder,
+        accumulatedReasoningText: StringBuilder,
         onContentDelta: suspend (deltaContent: String) -> Unit,
         onToolCallChunk: suspend (toolCallChunk: LLMStreamChunk.ToolCallChunk) -> Unit,
         onReasoningChunk: suspend (reasoningDone: LLMStreamChunk.ReasoningDone) -> Unit,
+        onReasoningTextDelta: suspend (deltaContent: String) -> Unit,
         onStreamComplete: suspend (
             toolCallRequests: List<LLMCompletionResult.CompletionChoice.ToolCallRequest>,
             finishReason: String?,
             contentTruncated: Boolean,
+            reasoningTruncated: Boolean,
             droppedToolCallCount: Int,
             clippedToolCallArgumentCount: Int
         ) -> Unit,
@@ -119,9 +126,11 @@ internal class LlmStreamCollector(
                                 chunk = chunk,
                                 state = state,
                                 accumulatedContent = accumulatedContent,
+                                accumulatedReasoningText = accumulatedReasoningText,
                                 onContentDelta = onContentDelta,
                                 onToolCallChunk = onToolCallChunk,
                                 onReasoningChunk = onReasoningChunk,
+                                onReasoningTextDelta = onReasoningTextDelta,
                                 onStreamComplete = onStreamComplete,
                                 onError = onError
                             )
@@ -199,25 +208,30 @@ internal class LlmStreamCollector(
      * @param chunk Chunk emitted by the provider stream.
      * @param state Collection state of the current invocation, updated in place.
      * @param accumulatedContent Accumulator owned by the caller, bounded here and appended in place.
+     * @param accumulatedReasoningText Accumulator owned by the caller, bounded here and appended in place.
      * @param onContentDelta Callback for the accepted assistant text deltas.
      * @param onToolCallChunk Callback for the tool-call deltas that survive the argument cap.
      * @param onReasoningChunk Callback for the completed, opaque reasoning item emitted by the provider.
+     * @param onReasoningTextDelta Callback for the accepted reasoning-text deltas.
      * @param onStreamComplete Callback invoked after the provider signals stream completion, receiving the
-     *        parsed tool-call requests, the finish reason, whether the character cap was reached, and how many
-     *        tool calls the per-step and per-argument caps cut.
+     *        parsed tool-call requests, the finish reason, whether the assistant-text or reasoning-text cap was
+     *        reached, and how many tool calls the per-step and per-argument caps cut.
      * @param onError Callback for streaming errors that arrive as a chunk.
      */
     private suspend fun handleStreamChunk(
         chunk: LLMStreamChunk,
         state: StreamCollectionState,
         accumulatedContent: StringBuilder,
+        accumulatedReasoningText: StringBuilder,
         onContentDelta: suspend (deltaContent: String) -> Unit,
         onToolCallChunk: suspend (toolCallChunk: LLMStreamChunk.ToolCallChunk) -> Unit,
         onReasoningChunk: suspend (reasoningDone: LLMStreamChunk.ReasoningDone) -> Unit,
+        onReasoningTextDelta: suspend (deltaContent: String) -> Unit,
         onStreamComplete: suspend (
             toolCallRequests: List<LLMCompletionResult.CompletionChoice.ToolCallRequest>,
             finishReason: String?,
             contentTruncated: Boolean,
+            reasoningTruncated: Boolean,
             droppedToolCallCount: Int,
             clippedToolCallArgumentCount: Int
         ) -> Unit,
@@ -336,19 +350,28 @@ internal class LlmStreamCollector(
             }
 
             is LLMStreamChunk.ReasoningDone -> {
-                // Reasoning items are opaque and forwarded as-is so the caller can accumulate and persist
-                // them for replay; they are never rendered.
+                // Completed reasoning items are opaque and forwarded as-is so the caller can accumulate and
+                // persist them for replay; only their derived plaintext is ever rendered.
                 onReasoningChunk(chunk)
             }
 
             is LLMStreamChunk.ReasoningTextChunk -> {
-                // Plaintext reasoning deltas are intended for live UI rendering and are not part of the
-                // persisted transcript. When no live-rendering consumer is wired, they carry no side effect
-                // here. Never persist or replay them.
-                logger.trace(
-                    "Reasoning text delta discarded (no UI consumer): index=${chunk.outputIndex}, " +
-                            "contentIndex=${chunk.contentIndex}, delta=${chunk.delta.take(200)}"
-                )
+                val remainingChars =
+                    ConversationTurnLimits.MAX_REASONING_TEXT_CHARS - accumulatedReasoningText.length
+                if (remainingChars <= 0) {
+                    // The cap is already exhausted: the whole delta is dropped, including an empty one.
+                    state.reasoningTruncated = true
+                    return
+                }
+                val allowedDelta = chunk.delta.take(remainingChars)
+                // Record the cut before the accepted prefix is appended, so the flag never lags the text.
+                if (allowedDelta.length < chunk.delta.length) {
+                    state.reasoningTruncated = true
+                }
+                accumulatedReasoningText.append(allowedDelta)
+                if (allowedDelta.isNotEmpty()) {
+                    onReasoningTextDelta(allowedDelta)
+                }
             }
 
             LLMStreamChunk.Done -> {
@@ -380,6 +403,7 @@ internal class LlmStreamCollector(
                     toolCallRequests,
                     state.finishReason,
                     state.contentTruncated,
+                    state.reasoningTruncated,
                     state.droppedToolCallIndices.size,
                     state.toolCallsByIndex.values.count { it.argumentsClipped }
                 )
@@ -421,6 +445,8 @@ private sealed interface StreamEnding {
  *
  * @property contentTruncated Whether the assistant-text cap was reached, i.e. whether streamed text had to be
  *            dropped.
+ * @property reasoningTruncated Whether the reasoning-text cap was reached, i.e. whether streamed reasoning text had
+ *            to be dropped.
  * @property finishReason Last finish reason reported by the provider, or the derived `tool_calls` value once
  *            the step turned out to carry tool calls.
  * @property ending How this stream ended, or `null` while none of the ending signals has been observed. An ending
@@ -434,6 +460,7 @@ private sealed interface StreamEnding {
  */
 private class StreamCollectionState {
     var contentTruncated: Boolean = false
+    var reasoningTruncated: Boolean = false
     var finishReason: String? = null
     var ending: StreamEnding? = null
     val toolCallsByIndex: MutableMap<Int, MutableToolCallAccumulator> = mutableMapOf()

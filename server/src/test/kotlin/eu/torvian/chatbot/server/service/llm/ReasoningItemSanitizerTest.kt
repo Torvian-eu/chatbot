@@ -470,4 +470,92 @@ class ReasoningItemSanitizerTest {
 
         assertNull(detectReasoningEncryption(items))
     }
+
+    @Test
+    fun `withStreamedReasoningText appends one reasoning_text item for streamed text`() {
+        val completed = buildJsonObject {
+            put("type", "reasoning")
+            put("id", "rs_1")
+            put("encrypted_content", "opaque")
+        }
+
+        val result = withStreamedReasoningText(listOf(completed), "streamed thought")
+
+        assertEquals(2, result.size)
+        assertEquals(completed, result[0])
+        val appended = result[1]
+        assertEquals("reasoning", appended["type"]?.jsonPrimitive?.content)
+        val part = appended["content"]?.jsonArray?.single()?.jsonObject
+        assertEquals("reasoning_text", part?.get("type")?.jsonPrimitive?.content)
+        assertEquals("streamed thought", part?.get("text")?.jsonPrimitive?.content)
+        // No opaque payload is invented for the derived item.
+        assertNull(appended["encrypted_content"])
+    }
+
+    @Test
+    fun `withStreamedReasoningText appends to an empty item list`() {
+        val result = withStreamedReasoningText(emptyList(), "only streamed")
+
+        assertEquals(1, result.size)
+        assertEquals(
+            "only streamed",
+            result[0]["content"]?.jsonArray?.single()?.jsonObject?.get("text")?.jsonPrimitive?.content
+        )
+    }
+
+    @Test
+    fun `withStreamedReasoningText keeps the items unchanged for blank text`() {
+        val items = listOf(buildJsonObject { put("type", "reasoning") })
+
+        assertEquals(items, withStreamedReasoningText(items, ""))
+        assertEquals(items, withStreamedReasoningText(items, "   "))
+    }
+
+    @Test
+    fun `withStreamedReasoningText keeps the items unchanged when one already carries plaintext content`() {
+        val withContent = buildJsonObject {
+            put("type", "reasoning")
+            put("content", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", "reasoning_text")
+                    put("text", "Completed chain of thought.")
+                })
+            })
+        }
+
+        assertEquals(listOf(withContent), withStreamedReasoningText(listOf(withContent), "streamed thought"))
+    }
+
+    @Test
+    fun `the item appended for streamed text looks like plaintext reasoning to mode detection`() {
+        // Why the derived item must stay out of capability detection: on its own it looks like evidence that the
+        // model delivers plaintext reasoning, while only the completed items describe the model's own payload.
+        val appended = withStreamedReasoningText(emptyList(), "streamed thought")
+
+        assertEquals(false, detectReasoningEncryption(appended))
+    }
+
+    @Test
+    fun `withStreamedReasoningText tolerates a content value it cannot read as an array`() {
+        // The sanitizer preserves whatever the provider sent for `content`, including a value that is not an array.
+        // A throwing read here would fail the streaming finalization and turn a successfully generated answer into
+        // an unexpected failure, so the helper must stay tolerant instead.
+        val stringContent = buildJsonObject {
+            put("type", "reasoning")
+            put("content", "not an array")
+        }
+        val nullContent = buildJsonObject {
+            put("type", "reasoning")
+            put("content", null)
+        }
+
+        val fromStringContent = withStreamedReasoningText(listOf(stringContent), "streamed thought")
+        assertEquals(2, fromStringContent.size)
+        assertEquals(stringContent, fromStringContent[0])
+        assertEquals("reasoning", fromStringContent[1]["type"]?.jsonPrimitive?.content)
+
+        val fromNullContent = withStreamedReasoningText(listOf(nullContent), "streamed thought")
+        assertEquals(2, fromNullContent.size)
+        assertEquals(nullContent, fromNullContent[0])
+    }
 }

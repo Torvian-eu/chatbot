@@ -163,6 +163,7 @@ class ChatServiceImpl(
             ConversationTurnEvent.TurnCompleted -> MessageEvent.StreamCompleted.right()
             is ConversationTurnEvent.AssistantMessageStarted,
             is ConversationTurnEvent.AssistantMessageDelta,
+            is ConversationTurnEvent.AssistantMessageReasoningDelta,
             is ConversationTurnEvent.ToolCallDelta,
             is ConversationTurnEvent.AssistantMessageFinished -> {
                 throw IllegalStateException("Streaming-only turn event emitted for non-streaming mapping: $this")
@@ -184,6 +185,10 @@ class ChatServiceImpl(
 
             is ConversationTurnEvent.AssistantMessageDelta -> {
                 MessageStreamEvent.AssistantMessageDelta(messageId, deltaContent).right()
+            }
+
+            is ConversationTurnEvent.AssistantMessageReasoningDelta -> {
+                MessageStreamEvent.AssistantMessageReasoningDelta(messageId, deltaContent).right()
             }
 
             is ConversationTurnEvent.ToolCallDelta -> {

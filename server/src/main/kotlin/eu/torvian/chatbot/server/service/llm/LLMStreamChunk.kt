@@ -35,13 +35,13 @@ sealed class LLMStreamChunk {
      * Represents a reasoning-text delta emitted during streaming for a reasoning-capable model.
      *
      * This chunk carries the **plaintext** chain-of-thought text produced by the model, in incremental
-     * deltas, and is intended for live UI rendering (e.g. a collapsible "Thinking…" panel). Consumers that
+     * deltas, and is intended for live UI rendering (e.g. a collapsible reasoning panel). Consumers that
      * group chunks by ([outputIndex], [contentIndex]) and concatenate their [delta] values reconstruct the
      * full text of a reasoning content part.
      *
      * Unlike [ReasoningDone] (which carries the opaque reasoning output item for persistence and replay),
-     * this chunk carries only renderable text and must never be persisted or fed back into a future
-     * request's `input`.
+     * this chunk carries only renderable text. It is displayed live and the accumulated text is persisted as a
+     * derived plaintext reasoning item, but the raw chunk is never fed back into a future request's `input`.
      *
      * @property outputIndex The output index of the reasoning output item this delta belongs to, or `null`
      *            when the provider does not include it.
@@ -58,10 +58,11 @@ sealed class LLMStreamChunk {
      * Represents a completed, opaque reasoning output item for a reasoning-capable model during streaming.
      *
      * Reasoning items carry the chain-of-thought produced by the model; the raw items (including any
-     * `encrypted_content`) are opaque and must be persisted so they can be replayed into a future
-     * request's `input`. The item is emitted as the provider completes each reasoning output item and is
-     * never rendered to the user. When persisted or replayed, the item is sanitized to the Responses
-     * `input` schema (output-only fields such as `status` are stripped).
+     * `encrypted_content`) are opaque and are persisted so they can be replayed into a future request's
+     * `input`. The item is emitted as the provider completes each reasoning output item. Its derived plaintext
+     * (`summary[].text`, `content[].text`) may be rendered; the raw item and any `encrypted_content` are never
+     * rendered. When persisted or replayed, the item is sanitized to the Responses `input` schema (output-only
+     * fields such as `status` are stripped).
      *
      * @property reasoningItem Raw reasoning output item (e.g. `{"type":"reasoning",...}`) completed.
      */

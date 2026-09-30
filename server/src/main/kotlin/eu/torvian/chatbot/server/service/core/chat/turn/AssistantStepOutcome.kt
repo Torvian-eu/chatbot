@@ -11,7 +11,8 @@ import kotlinx.serialization.json.JsonObject
  *            loop replays back into the next LLM context.
  * @property toolCallRequests Tool calls requested by the assistant.
  * @property reasoningItems Replay-safe reasoning items emitted with the assistant step, forwarded so the
- *            next follow-up LLM request can replay chain-of-thought. Opaque payload; never logged or rendered.
+ *            next follow-up LLM request can replay chain-of-thought. Raw items are never logged or rendered;
+ *            their derived plaintext may be displayed.
  * @property endTurnAfterToolCalls Whether the loop must end the turn once the [toolCallRequests] of this step have
  *            been persisted and executed. Set when the step recorded a tool-call-limit failure on its message while
  *            still handing calls over (the iteration bound keeps every call, the argument cap keeps every call whose
