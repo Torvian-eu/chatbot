@@ -13,8 +13,9 @@ import kotlinx.serialization.json.JsonObject
  * @property reasoningItems For Responses-capable models, the raw reasoning output items (e.g. `{"type":"reasoning",...}`)
  *            emitted alongside the assistant content, captured verbatim so higher layers can persist and replay them
  *            across turns (the items are sanitized to the replay-safe `input` shape when persisted or replayed).
- *            `null` or empty when the model did not emit reasoning. This is an opaque payload and must
- *            not be logged or rendered.
+ *            `null` or empty when the model did not emit reasoning. The raw item and any `encrypted_content` are
+ *            opaque and must not be logged or rendered; only the derived plaintext
+ *            (`summary[].text`, `content[].text`) may be displayed.
  * @property metadata Optional metadata from the provider. Could be used for debugging or logging.
  *                    This map should contain data that doesn't fit into the structured fields but is useful
  *                    to pass up from the specific API response.

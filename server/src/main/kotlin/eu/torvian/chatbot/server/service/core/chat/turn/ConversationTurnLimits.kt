@@ -39,6 +39,17 @@ internal object ConversationTurnLimits {
     const val MAX_ASSISTANT_MESSAGE_CHARS: Int = 64_000
 
     /**
+     * Maximum character length of the reasoning text accumulated during one streaming assistant step.
+     *
+     * The bound covers the plaintext reasoning of a single step, both the text streamed for live rendering and the
+     * portion persisted for later display. Exceeding it is a failure, not a completion with a notice: the message
+     * is recorded as incomplete with the `REASONING_OUTPUT_LIMIT_EXCEEDED` error code and the turn ends before any
+     * tool call is persisted or executed, because a step whose reasoning had to be cut is no longer trustworthy
+     * input for side-effecting tools.
+     */
+    const val MAX_REASONING_TEXT_CHARS: Int = 100_000
+
+    /**
      * Maximum character length of one tool call's argument payload, counted over the accumulated argument text of
      * that call (streamed deltas of the same call share the budget, and the payload of a non-streaming/Responses
      * response is bounded the same way).

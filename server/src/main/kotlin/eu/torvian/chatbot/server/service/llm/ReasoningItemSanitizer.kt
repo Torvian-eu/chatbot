@@ -50,6 +50,41 @@ internal fun sanitizeReasoningItem(reasoningItem: JsonObject): JsonObject = buil
 }
 
 /**
+ * Appends reasoning text that was streamed during a step to the items that are about to be persisted.
+ *
+ * The streamed text becomes one additional item in the Responses `input` shape (a reasoning item with a single
+ * `reasoning_text` content part), which is what lets the live reasoning of a generation survive in the transcript
+ * when the provider never completed a reasoning item for it.
+ *
+ * The item is added only when it carries new information: a blank text adds nothing, and a list whose items already
+ * carry a plaintext `content` array already holds the same text, so appending it would replay the reasoning twice.
+ *
+ * @param sanitizedItems Reasoning items already reduced to the Responses `input` shape by [sanitizeReasoningItems].
+ * @param streamedText Plaintext reasoning accumulated during the streaming step.
+ * @return [sanitizedItems] unchanged when nothing has to be appended, otherwise a copy with the streamed-text item
+ *         appended.
+ */
+internal fun withStreamedReasoningText(sanitizedItems: List<JsonObject>, streamedText: String): List<JsonObject> {
+    if (streamedText.isBlank()) return sanitizedItems
+    // A tolerant read: the throwing `jsonArray` accessor would fail this call for a non-array `content`, and the
+    // sanitizer deliberately preserves whatever the provider sent for that field. Failing here would turn a
+    // successfully generated answer into a failure and lose the reasoning it carried.
+    val alreadyCarriesPlaintext = sanitizedItems.any { item ->
+        (item["content"] as? JsonArray)?.isNotEmpty() == true
+    }
+    if (alreadyCarriesPlaintext) return sanitizedItems
+    return sanitizedItems + buildJsonObject {
+        put("type", "reasoning")
+        put("content", buildJsonArray {
+            add(buildJsonObject {
+                put("type", "reasoning_text")
+                put("text", streamedText)
+            })
+        })
+    }
+}
+
+/**
  * Adapts a previously sanitized reasoning item for the current model's reasoning mode and provenance.
  * The caller must provide an item already reduced to the Responses `input` shape by
  * [sanitizeReasoningItem] or [sanitizeReasoningItems].

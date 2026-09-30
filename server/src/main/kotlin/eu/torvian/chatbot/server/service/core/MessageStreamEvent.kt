@@ -21,6 +21,7 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * 2. Loop until LLM stops calling tools:
  *    - AssistantMessageStarted (new empty assistant message written to DB)
  *    - AssistantMessageDelta (for each content chunk)
+ *    - AssistantMessageReasoningDelta (for each reasoning/thinking text chunk)
  *    - ToolCallDelta (for each tool call argument chunk)
  *    - AssistantMessageFinished (assistant message updated and complete)
  *    - ToolCallsReceived (if LLM wants to call tools)
@@ -64,6 +65,22 @@ sealed class MessageStreamEvent {
      * @property deltaContent The new content chunk to append.
      */
     data class AssistantMessageDelta(val messageId: Long, val deltaContent: String) : MessageStreamEvent()
+
+    /**
+     * Emitted for each new reasoning/thinking text chunk from the LLM during streaming.
+     *
+     * The client should append the delta to the reasoning section of the message identified by
+     * [messageId]. Only derived plaintext is carried here; the completed reasoning of the message
+     * arrives with [AssistantMessageFinished] through
+     * [ChatMessage.AssistantMessage.reasoningItems].
+     *
+     * @property messageId The ID of the assistant message being updated.
+     * @property deltaContent The new reasoning text chunk to append.
+     */
+    data class AssistantMessageReasoningDelta(
+        val messageId: Long,
+        val deltaContent: String
+    ) : MessageStreamEvent()
 
     /**
      * Emitted for each new tool call chunk from the LLM during streaming.

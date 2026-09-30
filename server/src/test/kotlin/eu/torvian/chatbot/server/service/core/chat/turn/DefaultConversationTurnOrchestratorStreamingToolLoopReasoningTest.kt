@@ -16,11 +16,13 @@ import eu.torvian.chatbot.server.service.core.toolcall.ToolCallExecutionEvent
 import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
@@ -222,5 +224,225 @@ class DefaultConversationTurnOrchestratorStreamingToolLoopReasoningTest : Defaul
         val followUpAssistant = capturedContexts[1].filterIsInstance<RawChatMessage.Assistant>()
             .first { !it.toolCalls.isNullOrEmpty() }
         assertEquals(sanitizedReasoningItems, followUpAssistant.reasoningItems)
+    }
+
+    /**
+     * Verifies that the derived streamed-text item a step persists for display stays out of the follow-up request
+     * context: the model must not be handed the same reasoning twice within one turn, and the item is a display
+     * payload rather than something the provider emitted.
+     */
+    @Test
+    fun `processStreamingTurn keeps the streamed-text item out of the follow-up iteration context`() = runTest {
+        val reasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_loop_stream_text")
+                put("encrypted_content", "opaque-stream-text")
+            }
+        )
+        val sanitizedReasoningItems = listOf(
+            buildJsonObject {
+                put("type", "reasoning")
+                put("id", "rs_loop_stream_text")
+                put("encrypted_content", "opaque-stream-text")
+            }
+        )
+        // The item the runner appends for the text that was streamed live.
+        val streamedReasoningItem = buildJsonObject {
+            put("type", "reasoning")
+            put(
+                "content",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("type", "reasoning_text")
+                            put("text", "live thought")
+                        }
+                    )
+                }
+            )
+        }
+        val toolDefinition = LocalMCPToolDefinition(
+            id = 8L,
+            name = "lookup",
+            description = "Looks things up",
+            config = buildJsonObject { },
+            inputSchema = buildJsonObject { },
+            outputSchema = null,
+            isEnabled = true,
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            serverId = 1L,
+            mcpToolName = "lookup"
+        )
+        val reasoningModel = testModel.copy()
+        val reasoningSettings = ResponsesModelSettings(
+            id = 5L,
+            modelId = reasoningModel.id,
+            name = "Default Responses",
+            stream = true,
+            replayReasoning = true
+        )
+        val userMessage = ChatMessage.UserMessage(
+            id = 201L,
+            sessionId = testSession.id,
+            content = "Stream enough",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = emptyList()
+        )
+        val assistantToolStarted = ChatMessage.AssistantMessage(
+            id = 202L,
+            sessionId = testSession.id,
+            content = "",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = userMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = reasoningModel.id,
+            settingsId = reasoningSettings.id
+        )
+        val assistantToolFinished = assistantToolStarted.copy(content = "")
+        val assistantFinal = ChatMessage.AssistantMessage(
+            id = 204L,
+            sessionId = testSession.id,
+            content = "Done.",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = assistantToolStarted.id,
+            childrenMessageIds = emptyList(),
+            modelId = reasoningModel.id,
+            settingsId = reasoningSettings.id
+        )
+        val pendingToolCall = ToolCall(
+            id = 203L,
+            messageId = assistantToolStarted.id,
+            toolDefinitionId = toolDefinition.id,
+            toolName = toolDefinition.name,
+            toolCallId = "call_lookup_stream_text",
+            input = "{\"key\":\"a\"}",
+            output = null,
+            status = ToolCallStatus.PENDING,
+            executedAt = baseInstant
+        )
+
+        coEvery {
+            conversationTurnPersistence.saveUserMessage(testSession.id, "Stream enough", null, any())
+        } returns PersistedUserMessage(userMessage, null)
+        coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
+        coEvery {
+            conversationTurnPersistence.saveAssistantMessage(
+                testSession.id,
+                "",
+                userMessage.id,
+                reasoningModel,
+                reasoningSettings,
+                agentRoleId = testRoleId,
+                reasoningItems = null,
+                completion = AssistantMessageCompletionState.InFlight
+            )
+        } returns PersistedAssistantMessage(assistantToolStarted, userMessage)
+        coEvery {
+            conversationTurnPersistence.saveAssistantMessage(
+                testSession.id,
+                "",
+                assistantToolStarted.id,
+                reasoningModel,
+                reasoningSettings,
+                agentRoleId = testRoleId,
+                reasoningItems = null,
+                completion = AssistantMessageCompletionState.InFlight
+            )
+        } returns PersistedAssistantMessage(assistantFinal, assistantToolStarted)
+        val capturedContexts = mutableListOf<List<RawChatMessage>>()
+        coEvery {
+            llmApiClient.completeChatStreaming(capture(capturedContexts), any(), any(), any(), any(), any())
+        } returnsMany listOf(
+            flowOf(
+                LLMStreamChunk.ReasoningTextChunk(outputIndex = 0, contentIndex = 0, delta = "live thought").right(),
+                LLMStreamChunk.ReasoningDone(reasoningItem = reasoningItems[0]).right(),
+                LLMStreamChunk.ToolCallChunk(
+                    index = 0, id = "call_lookup_stream_text", name = "lookup", argumentsDelta = "{\"key\":\"a\"}"
+                ).right(),
+                LLMStreamChunk.ContentChunk("", finishReason = "tool_calls").right(),
+                LLMStreamChunk.Done.right()
+            ),
+            flowOf(
+                LLMStreamChunk.ContentChunk("Done.", finishReason = "stop").right(),
+                LLMStreamChunk.Done.right()
+            )
+        )
+        coEvery {
+            conversationTurnPersistence.updateAssistantMessageReasoning(
+                assistantToolStarted.id,
+                sanitizedReasoningItems + streamedReasoningItem
+            )
+        } returns assistantToolFinished
+        coEvery {
+            conversationTurnPersistence.updateAssistantMessageContent(assistantToolStarted.id, "")
+        } returns assistantToolFinished
+        coEvery {
+            conversationTurnPersistence.updateAssistantMessageContent(assistantFinal.id, "Done.")
+        } returns assistantFinal
+        coEvery {
+            conversationTurnPersistence.persistPendingToolCalls(
+                assistantToolStarted.id,
+                any(),
+                listOf(toolDefinition)
+            )
+        } returns listOf(pendingToolCall)
+        every {
+            toolCallOrchestrator.executeAndUpdateToolCalls(
+                ToolCallExecutionContext(userId = 1L, sessionId = 1L, sessionName = "Session", agentRoleId = testRoleId),
+                listOf(pendingToolCall),
+                listOf(toolDefinition),
+                any(),
+                any(),
+                any()
+            )
+        } returns flowOf(
+            ToolCallExecutionEvent.ToolCallCompleted(
+                pendingToolCall.copy(
+                    output = "{\"results\":[]}",
+                    status = ToolCallStatus.SUCCESS,
+                    durationMs = 5L
+                )
+            )
+        )
+
+        orchestrator.processStreamingTurn(
+            ConversationTurnRequest(
+                userId = 1L,
+                session = testSession,
+                llmConfig = LLMConfig(
+                    testProvider, reasoningModel, reasoningSettings, "api-key", listOf(toolDefinition)
+                ),
+                content = "Stream enough",
+                parentMessageId = null,
+                fileReferences = emptyList(),
+                toolApprovalFlow = emptyFlow(),
+                operatorToolResultFlow = emptyFlow(),
+                turnControlSignal = TurnControlSignal()
+            )
+        ).toList()
+
+        // The stored row carries the streamed text, while the follow-up request context carries the completed
+        // items only.
+        coVerify(exactly = 1) {
+            conversationTurnPersistence.updateAssistantMessageReasoning(
+                assistantToolStarted.id,
+                sanitizedReasoningItems + streamedReasoningItem
+            )
+        }
+        assertEquals(2, capturedContexts.size)
+        val followUpAssistant = capturedContexts[1].filterIsInstance<RawChatMessage.Assistant>()
+            .first { !it.toolCalls.isNullOrEmpty() }
+        assertEquals(sanitizedReasoningItems, followUpAssistant.reasoningItems)
+        assertEquals(
+            false,
+            followUpAssistant.reasoningItems?.any { item -> item["content"] != null },
+            "The derived streamed-text item must not be replayed within the same turn"
+        )
     }
 }

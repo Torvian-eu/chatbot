@@ -24,6 +24,11 @@ fun MessageStreamEvent.toChatStreamEvent(): ChatStreamEvent {
             deltaContent = deltaContent
         )
 
+        is MessageStreamEvent.AssistantMessageReasoningDelta -> AssistantMessageReasoningDelta(
+            messageId = messageId,
+            deltaContent = deltaContent
+        )
+
         is MessageStreamEvent.AssistantMessageFinished -> AssistantMessageEnd(
             assistantMessage = assistantMessage
         )

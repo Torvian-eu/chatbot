@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
@@ -118,6 +119,22 @@ class DefaultConversationTurnOrchestratorStreamingLifecycleTest : DefaultConvers
                 put("encrypted_content", "opaque-stream")
             }
         )
+        // The plaintext delta is accumulated and stored as its own derived reasoning item, so a reload can
+        // render the reasoning the stream displayed.
+        val streamedReasoningItems = reasoningItems + buildJsonObject {
+            put("type", "reasoning")
+            put(
+                "content",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("type", "reasoning_text")
+                            put("text", "The")
+                        }
+                    )
+                }
+            )
+        }
         val userMessage = ChatMessage.UserMessage(
             id = 71L,
             sessionId = testSession.id,
@@ -171,13 +188,13 @@ class DefaultConversationTurnOrchestratorStreamingLifecycleTest : DefaultConvers
         } returns PersistedAssistantMessage(assistantStarted, userMessage)
         coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ReasoningDone(reasoningItem = reasoningItems[0]).right(),
-            // Plaintext reasoning deltas are render-only and must not be persisted.
+            // Plaintext reasoning deltas are rendered live and their accumulated text is persisted.
             LLMStreamChunk.ReasoningTextChunk(outputIndex = 0, contentIndex = 0, delta = "The").right(),
             LLMStreamChunk.ContentChunk("Answer", finishReason = "stop").right(),
             LLMStreamChunk.Done.right()
         )
         coEvery {
-            conversationTurnPersistence.updateAssistantMessageReasoning(assistantStarted.id, reasoningItems)
+            conversationTurnPersistence.updateAssistantMessageReasoning(assistantStarted.id, streamedReasoningItems)
         } returns assistantFinished
         coEvery {
             conversationTurnPersistence.updateAssistantMessageContent(
@@ -201,10 +218,11 @@ class DefaultConversationTurnOrchestratorStreamingLifecycleTest : DefaultConvers
         ).toList()
 
         coVerify(exactly = 1) {
-            conversationTurnPersistence.updateAssistantMessageReasoning(assistantStarted.id, reasoningItems)
+            conversationTurnPersistence.updateAssistantMessageReasoning(assistantStarted.id, streamedReasoningItems)
         }
-        // The capability recorder must observe the model and its accumulated reasoning items so later
-        // replays can adapt what is sent to this model.
+        // The capability recorder must observe the model and the completed reasoning items only, never the derived
+        // streamed-text item, so later replays can adapt what is sent to this model without being misled about
+        // how the model delivers its reasoning.
         coVerify(exactly = 1) {
             reasoningCapabilityRecorder.record(reasoningModel, reasoningItems)
         }

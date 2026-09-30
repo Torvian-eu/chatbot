@@ -55,6 +55,20 @@ sealed interface ConversationTurnEvent {
     ) : ConversationTurnEvent
 
     /**
+     * Emits a streamed reasoning/thinking text delta.
+     *
+     * Only derived plaintext is carried here; the opaque reasoning items of the step travel through
+     * [AssistantStepOutcome] and persistence instead.
+     *
+     * @property messageId Assistant message receiving the delta.
+     * @property deltaContent Incremental reasoning text.
+     */
+    data class AssistantMessageReasoningDelta(
+        val messageId: Long,
+        val deltaContent: String
+    ) : ConversationTurnEvent
+
+    /**
      * Emits a streamed tool-call argument delta.
      *
      * @property messageId Assistant message that owns the tool call.
