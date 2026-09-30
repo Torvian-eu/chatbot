@@ -109,6 +109,12 @@ interface ChatAreaActions {
     fun onToggleMessageCollapsed(messageId: Long)
 
     /**
+     * Callback for when the user toggles collapse/expand on a message's reasoning section.
+     * @param messageId The ID of the message whose reasoning section to toggle.
+     */
+    fun onToggleReasoningSection(messageId: Long)
+
+    /**
      * Callback for when the user selects (or deselects) an agent role for the session.
      * @param agentRoleId The ID of the role to select, or null to clear the selection.
      */

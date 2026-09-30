@@ -180,6 +180,11 @@ class ChatViewModel(
     val collapsedMessageIds: StateFlow<Set<Long>> = state.collapsedMessageIds
 
     /**
+     * Message IDs whose reasoning section should render expanded.
+     */
+    val expandedReasoningMessageIds: StateFlow<Set<Long>> = state.expandedReasoningMessageIds
+
+    /**
      * The current text content in the message input field.
      */
     val inputContent: StateFlow<String> = state.inputContent
@@ -354,6 +359,15 @@ class ChatViewModel(
      */
     fun toggleMessageCollapsed(messageId: Long) {
         state.toggleMessageCollapsed(messageId)
+    }
+
+    /**
+     * Toggles expanded state of the reasoning section of a message.
+     *
+     * @param messageId The ID of the message whose reasoning section to toggle.
+     */
+    fun toggleReasoningSection(messageId: Long) {
+        state.toggleReasoningSection(messageId)
     }
 
     /**

@@ -81,6 +81,7 @@ fun ChatAreaPreview() {
             override fun onCancelDialog() {}
             override fun onSwitchBranchToMessage(messageId: Long) {}
             override fun onToggleMessageCollapsed(messageId: Long) {}
+            override fun onToggleReasoningSection(messageId: Long) {}
             override fun onSelectAgentRole(agentRoleId: Long?) {}
             override fun onRetryLoadRoles() {}
             override fun onSelectProject(projectId: Long?) {}

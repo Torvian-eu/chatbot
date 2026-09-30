@@ -43,6 +43,7 @@ import kotlinx.coroutines.yield
  * @param chatSession Full chat session, used to derive branch navigation context.
  * @param displayedMessages Messages currently visible in the active branch.
  * @param collapsedMessageIds IDs of messages currently rendered in collapsed mode.
+ * @param expandedReasoningMessageIds IDs of messages whose reasoning section is currently expanded.
  * @param messageActions Action bundle for message item controls.
  * @param inputAreaActions Action bundle for inline expanded input areas.
  * @param editingMessage Message currently being edited, if any.
@@ -72,6 +73,7 @@ fun MessageList(
     chatSession: ChatSession,
     displayedMessages: List<ChatMessage>,
     collapsedMessageIds: Set<Long>,
+    expandedReasoningMessageIds: Set<Long>,
     messageActions: MessageActions,
     inputAreaActions: InputAreaActions,
     editingMessage: ChatMessage?,
@@ -275,6 +277,8 @@ fun MessageList(
                             toolCallsForMessage = toolCallsMap[message.id] ?: emptyList(),
                             isCollapsed = message.id in collapsedMessageIds,
                             isCollapsible = message.content.length > collapseThreshold,
+                            isReasoningExpanded = message.id in expandedReasoningMessageIds,
+                            onToggleReasoningSection = interceptedMessageItemActions.onToggleReasoningSection,
                             turnExecutionState = turnExecutionState,
                             searchContext = itemSearchContext,
                             modifier = Modifier

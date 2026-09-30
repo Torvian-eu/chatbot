@@ -66,6 +66,7 @@ class ChatStateImpl(
     private val _pendingFileReferences = MutableStateFlow<List<FileReference>>(emptyList())
     private val _basePathOverride = MutableStateFlow<String?>(null)
     private val _collapsedMessageIds = MutableStateFlow<Set<Long>>(emptySet())
+    private val _expandedReasoningMessageIds = MutableStateFlow<Set<Long>>(emptySet())
 
     // --- In-Session Search State ---
 
@@ -93,6 +94,7 @@ class ChatStateImpl(
     override val pendingFileReferences: StateFlow<List<FileReference>> = _pendingFileReferences.asStateFlow()
     override val basePathOverride: StateFlow<String?> = _basePathOverride.asStateFlow()
     override val collapsedMessageIds: StateFlow<Set<Long>> = _collapsedMessageIds.asStateFlow()
+    override val expandedReasoningMessageIds: StateFlow<Set<Long>> = _expandedReasoningMessageIds.asStateFlow()
 
     // --- In-Session Search State Flows ---
 
@@ -394,6 +396,12 @@ class ChatStateImpl(
         }
     }
 
+    override fun toggleReasoningSection(messageId: Long) {
+        _expandedReasoningMessageIds.update { current ->
+            if (messageId in current) current - messageId else current + messageId
+        }
+    }
+
     override fun collapseAllDisplayedMessages() {
         _collapsedMessageIds.update { current ->
             displayedMessages.value.filter { it.content.length > COLLAPSE_THRESHOLD }.map { it.id }.toSet() + current
@@ -464,6 +472,7 @@ class ChatStateImpl(
         _pendingFileReferences.value = emptyList()
         _basePathOverride.value = null
         _collapsedMessageIds.value = emptySet()
+        _expandedReasoningMessageIds.value = emptySet()
         lastAutoCollapsedSessionId = null
         // Reset search state
         _isSearchActive.value = false

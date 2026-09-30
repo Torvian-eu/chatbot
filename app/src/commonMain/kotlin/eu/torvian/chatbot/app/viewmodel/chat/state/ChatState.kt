@@ -149,6 +149,14 @@ interface ChatState {
     val collapsedMessageIds: StateFlow<Set<Long>>
 
     /**
+     * Message IDs whose reasoning section is currently expanded.
+     *
+     * Reasoning is collapsed by default and only an in-memory user toggle adds a message here, so the section
+     * always starts collapsed for a session that has just been loaded.
+     */
+    val expandedReasoningMessageIds: StateFlow<Set<Long>>
+
+    /**
      * The current text content in the message input field.
      */
     val inputContent: StateFlow<String>
@@ -247,6 +255,11 @@ interface ChatState {
      * Toggles whether a message should be collapsed in the UI.
      */
     fun toggleMessageCollapsed(messageId: Long)
+
+    /**
+     * Toggles whether the reasoning section of a message is expanded in the UI.
+     */
+    fun toggleReasoningSection(messageId: Long)
 
     /**
      * Collapses all currently displayed messages in the UI.

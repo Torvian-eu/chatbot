@@ -1,19 +1,12 @@
 package eu.torvian.chatbot.app.compose
 
-import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import eu.torvian.chatbot.app.compose.chatarea.MessageActionRow
 import eu.torvian.chatbot.app.compose.chatarea.MessageActions
 import eu.torvian.chatbot.app.testutils.data.assistantMessage
 import eu.torvian.chatbot.app.testutils.data.userMessage
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
-import eu.torvian.chatbot.common.models.core.ChatMessage
 import org.junit.jupiter.api.Test
 
 /**
@@ -66,6 +59,7 @@ class MessageActionRowTest {
         onResetEditingBasePath = {},
         onBranchAndContinue = { onBranchAndContinue() },
         onToggleMessageCollapsed = {},
+        onToggleReasoningSection = {},
         onShowToolCallDetails = {},
         onShowFileReferenceDetails = {}
     )

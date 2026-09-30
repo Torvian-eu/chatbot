@@ -75,6 +75,7 @@ fun ChatArea(
                 chatSession = state.sessionUiState.data,
                 displayedMessages = state.displayedMessages,
                 collapsedMessageIds = state.collapsedMessageIds,
+                expandedReasoningMessageIds = state.expandedReasoningMessageIds,
                 actions = actions,
                 inputContent = state.inputContent,
                 replyTargetMessage = state.replyTargetMessage,
@@ -135,6 +136,8 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  *
  * @param chatSession The current chat session data.
  * @param displayedMessages The list of messages to display.
+ * @param collapsedMessageIds Message IDs that should render in collapsed mode.
+ * @param expandedReasoningMessageIds Message IDs whose reasoning section should render expanded.
  * @param actions The actions contract for the chat area, providing message-related callbacks.
  * @param inputContent The current text content in the message input field.
  * @param replyTargetMessage The message the user is currently explicitly replying to via the Reply action.
@@ -155,6 +158,7 @@ private fun SuccessStateDisplay(
     chatSession: ChatSession,
     displayedMessages: List<ChatMessage>,
     collapsedMessageIds: Set<Long>,
+    expandedReasoningMessageIds: Set<Long>,
     actions: ChatAreaActions,
     inputContent: String,
     replyTargetMessage: ChatMessage?,
@@ -193,6 +197,7 @@ private fun SuccessStateDisplay(
             onBranchAndContinue = actions::onBranchAndContinue,
             onRegenerateMessage = actions::onRegenerateMessage,
             onToggleMessageCollapsed = actions::onToggleMessageCollapsed,
+            onToggleReasoningSection = actions::onToggleReasoningSection,
             onShowToolCallDetails = actions::onShowToolCallDetails,
             onShowFileReferenceDetails = actions::onShowFileReferenceDetails
         )
@@ -309,6 +314,7 @@ private fun SuccessStateDisplay(
                 chatSession = chatSession,
                 displayedMessages = displayedMessages,
                 collapsedMessageIds = collapsedMessageIds,
+                expandedReasoningMessageIds = expandedReasoningMessageIds,
                 messageActions = messageActions,
                 inputAreaActions = inputAreaActions,
                 editingMessage = editingMessage,

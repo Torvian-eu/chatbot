@@ -113,6 +113,7 @@ fun ChatScreen(
     val chatEditingBasePathOverride by chatViewModel.editingBasePathOverride.collectAsState()
     val chatDisplayedMessages by chatViewModel.displayedMessages.collectAsState()
     val chatCollapsedMessageIds by chatViewModel.collapsedMessageIds.collectAsState()
+    val chatExpandedReasoningMessageIds by chatViewModel.expandedReasoningMessageIds.collectAsState()
     val chatTurnExecutionState by chatViewModel.turnExecutionState.collectAsState()
     val chatDialogState by chatViewModel.dialogState.collectAsState()
     val toolCallsForCurrentSession by chatViewModel.toolCallsForCurrentSession.collectAsState()
@@ -259,6 +260,7 @@ fun ChatScreen(
         chatSessionUiState, availableAgentRoles, currentAgentRole, availableProjects, currentProject, canSend, modelsById,
         chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
         chatEditingFileReferences, chatEditingBasePathOverride, chatDisplayedMessages, chatCollapsedMessageIds,
+        chatExpandedReasoningMessageIds,
         chatTurnExecutionState, chatDialogState, toolCallsMap, pendingFileReferences,
         isSearchActive, searchQuery, searchResults, currentSearchIndex,
     ) {
@@ -278,6 +280,7 @@ fun ChatScreen(
             editingBasePathOverride = chatEditingBasePathOverride,
             displayedMessages = chatDisplayedMessages,
             collapsedMessageIds = chatCollapsedMessageIds,
+            expandedReasoningMessageIds = chatExpandedReasoningMessageIds,
             turnExecutionState = chatTurnExecutionState,
             dialogState = chatDialogState,
             toolCallsMap = toolCallsMap,
@@ -317,6 +320,7 @@ fun ChatScreen(
             }
 
             override fun onToggleMessageCollapsed(messageId: Long) = chatViewModel.toggleMessageCollapsed(messageId)
+            override fun onToggleReasoningSection(messageId: Long) = chatViewModel.toggleReasoningSection(messageId)
             override fun onSelectAgentRole(agentRoleId: Long?) = chatViewModel.selectAgentRole(agentRoleId)
             override fun onRetryLoadRoles() = chatViewModel.loadAgentRoles()
             override fun onSelectProject(projectId: Long?) = chatViewModel.selectProject(projectId)

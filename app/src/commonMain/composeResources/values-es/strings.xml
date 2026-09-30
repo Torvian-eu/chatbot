@@ -22,6 +22,12 @@
     <!-- Aviso de finalización del mensaje del asistente -->
     <string name="assistant_message_stopped_by_user">Detenido por el usuario</string>
     <string name="assistant_message_failed_label">La respuesta falló</string>
+    <!-- Sección de razonamiento del mensaje del asistente -->
+    <string name="reasoning_section_label">Razonamiento</string>
+    <string name="reasoning_thinking_indicator">Pensando…</string>
+    <string name="reasoning_summary_label">Resumen</string>
+    <string name="reasoning_encrypted_notice">El razonamiento del modelo está cifrado y no se puede mostrar.</string>
+    <string name="reasoning_display_truncated">Razonamiento truncado para su visualización.</string>
     <!-- Notificaciones de estado del turno -->
     <string name="turn_notification_title_unknown_session">Sesión de chat</string>
     <string name="turn_notification_body_turn_completed_success">El asistente terminó su turno.</string>
