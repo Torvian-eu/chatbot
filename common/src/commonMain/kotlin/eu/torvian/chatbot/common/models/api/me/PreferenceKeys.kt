@@ -28,4 +28,14 @@ object PreferenceKeys {
      * effective value per user; an absent row means automatic compaction is disabled.
      */
     const val CONVERSATION_COMPACTION = "conversation_compaction"
+
+    /**
+     * Global-scope user preference holding the user's turn-status notification toggles.
+     *
+     * The value is a JSON-encoded [TurnNotificationPreference]. The preference is global because the
+     * user configures one desired behaviour for their account rather than per device. An absent row
+     * means the client falls back to [TurnNotificationPreference.DEFAULT]; the server neither reads
+     * nor interprets this key.
+     */
+    const val TURN_NOTIFICATIONS = "turn_notifications"
 }

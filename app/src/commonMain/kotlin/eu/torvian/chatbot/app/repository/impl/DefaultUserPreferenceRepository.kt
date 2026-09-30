@@ -11,6 +11,7 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.common.models.api.me.PreferenceDetailDTO
 import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
+import eu.torvian.chatbot.common.models.api.me.TurnNotificationPreference
 import eu.torvian.chatbot.common.models.api.me.UserPreferenceDTO
 import eu.torvian.chatbot.common.models.user.PreferenceScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +48,10 @@ class DefaultUserPreferenceRepository(
     private val _compactionPreference = MutableStateFlow<ConversationCompactionPreference?>(null)
     override val compactionPreference: StateFlow<ConversationCompactionPreference?> = _compactionPreference.asStateFlow()
 
+    private val _turnNotificationPreference = MutableStateFlow<TurnNotificationPreference?>(null)
+    override val turnNotificationPreference: StateFlow<TurnNotificationPreference?> =
+        _turnNotificationPreference.asStateFlow()
+
     /** Lenient JSON codec matching the server's canonical preference encoding. */
     private val json = Json {
         ignoreUnknownKeys = true
@@ -76,6 +81,21 @@ class DefaultUserPreferenceRepository(
                 }.getOrElse { decodeError ->
                     logger.warn(
                         "Failed to decode conversation_compaction preference (treating as disabled): " +
+                            "${decodeError.message}"
+                    )
+                    null
+                }
+            }
+
+        // Same policy as the compaction key: an undecodable value means "never configured", so the
+        // dispatcher and the settings tab fall back to the enabled defaults.
+        _turnNotificationPreference.value = preferences[PreferenceKeys.TURN_NOTIFICATIONS]
+            ?.let { rawValue ->
+                runCatching {
+                    json.decodeFromString<TurnNotificationPreference>(rawValue)
+                }.getOrElse { decodeError ->
+                    logger.warn(
+                        "Failed to decode turn_notifications preference (using defaults): " +
                             "${decodeError.message}"
                     )
                     null
@@ -185,5 +205,25 @@ class DefaultUserPreferenceRepository(
         syncPreferences().bind()
         syncDetailedPreferences().bind()
         logger.info("Cleared conversation compaction preference")
+    }
+
+    override suspend fun setTurnNotificationPreference(
+        preference: TurnNotificationPreference
+    ): Either<RepositoryError, Unit> = either {
+        val dto = UserPreferenceDTO(
+            key = PreferenceKeys.TURN_NOTIFICATIONS,
+            // The toggles describe the user's account-wide behaviour, so one GLOBAL row keeps every
+            // device consistent; the JSON shape lets later fields be added without a new key.
+            value = json.encodeToString(TurnNotificationPreference.serializer(), preference),
+            scope = PreferenceScope.GLOBAL
+        )
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to update turn notification preference")
+        }) {
+            api.updatePreference(PreferenceKeys.TURN_NOTIFICATIONS, dto).bind()
+        }
+        syncPreferences().bind()
+        syncDetailedPreferences().bind()
+        logger.info("Updated turn notification preference")
     }
 }
