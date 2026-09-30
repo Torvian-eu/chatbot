@@ -768,6 +768,13 @@ fun appModule(config: AppConfiguration): Module = module {
             notificationService = get()
         )
     }
+    viewModel {
+        NotificationsViewModel(
+            userPreferenceRepository = get(),
+            osNotifications = get(),
+            notificationService = get()
+        )
+    }
     viewModel { AppViewModel(get(), get(), get(), get()) }
     viewModel { AboutViewModel() }
     viewModel {
