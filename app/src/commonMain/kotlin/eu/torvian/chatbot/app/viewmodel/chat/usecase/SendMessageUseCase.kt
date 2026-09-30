@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
+import eu.torvian.chatbot.app.domain.TurnOutcome
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_sending_message_short
 import eu.torvian.chatbot.app.generated.resources.warning_no_agent_role_selected
@@ -12,7 +13,6 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionTurnStatusRegistry
-import eu.torvian.chatbot.app.viewmodel.sessionstatus.TurnOutcome
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
@@ -50,7 +50,7 @@ import kotlinx.coroutines.withContext
  * @property state Shared chat UI state observed and updated during message sending.
  * @property notificationService Notification sink for repository, API, and signing errors.
  * @property sessionTurnStatusRegistry Registry that receives the turn lifecycle signals backing the
- *           session list status indicators.
+ *           session list status indicators and the out-of-app turn alerts.
  */
 class SendMessageUseCase(
     private val sessionRepository: SessionRepository,

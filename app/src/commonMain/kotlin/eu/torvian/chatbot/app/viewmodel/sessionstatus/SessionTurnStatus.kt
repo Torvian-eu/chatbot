@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.sessionstatus
 
+import eu.torvian.chatbot.app.domain.TurnOutcome
+
 /**
  * In-memory status of one chat session with a turn owned by this app instance.
  *

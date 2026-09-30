@@ -175,9 +175,10 @@ fun appModule(config: AppConfiguration): Module = module {
         DefaultSessionSelectionController()
     }
 
-    // In-memory registry driving the per-session turn status indicators in the session list
+    // In-memory registry driving the per-session turn status indicators in the session list; it also
+    // publishes the out-of-app turn alert triggers on the shared event bus.
     single<SessionTurnStatusRegistry> {
-        InMemorySessionTurnStatusRegistry(get())
+        InMemorySessionTurnStatusRegistry(get(), get())
     }
 
     // Provide SearchNavigationState for durable navigation intent
