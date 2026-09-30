@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.app.domain.TurnOutcome
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SessionRepository
@@ -10,7 +11,6 @@ import eu.torvian.chatbot.app.service.security.RequestSigningService
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionTurnStatusRegistry
-import eu.torvian.chatbot.app.viewmodel.sessionstatus.TurnOutcome
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.api.core.ChatEvent

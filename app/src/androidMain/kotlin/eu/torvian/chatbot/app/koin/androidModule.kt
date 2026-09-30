@@ -9,6 +9,11 @@ import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.clipboard.ClipboardServiceAndroid
 import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.app.service.security.FileSystemCertificateStorage
+import eu.torvian.chatbot.app.service.turnnotification.AndroidAppFocusFeeder
+import eu.torvian.chatbot.app.service.turnnotification.TurnAlertSoundPlayer
+import eu.torvian.chatbot.app.service.turnnotification.TurnAlertSoundPlayerAndroid
+import eu.torvian.chatbot.app.service.turnnotification.TurnOsNotificationService
+import eu.torvian.chatbot.app.service.turnnotification.TurnOsNotificationServiceAndroid
 import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
 import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionService
@@ -72,5 +77,18 @@ fun androidModule(config: AppConfiguration) = module {
 
     single<ClipboardService> {
         ClipboardServiceAndroid(androidContext())
+    }
+
+    single<TurnAlertSoundPlayer> {
+        TurnAlertSoundPlayerAndroid(androidContext())
+    }
+
+    single<TurnOsNotificationService> {
+        TurnOsNotificationServiceAndroid(androidContext())
+    }
+
+    // Eager so the lifecycle registration happens at app start, before the first activity resumes.
+    single(createdAtStart = true) {
+        AndroidAppFocusFeeder(androidContext(), get())
     }
 }

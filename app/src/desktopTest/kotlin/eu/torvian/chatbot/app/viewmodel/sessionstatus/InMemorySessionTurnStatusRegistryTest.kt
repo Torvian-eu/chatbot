@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.sessionstatus
 
+import eu.torvian.chatbot.app.domain.TurnOutcome
+import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.viewmodel.DefaultSessionSelectionController
 import eu.torvian.chatbot.app.viewmodel.SessionSelectionController
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +31,8 @@ class InMemorySessionTurnStatusRegistryTest {
         sessionSelectionController: SessionSelectionController = DefaultSessionSelectionController()
     ): InMemorySessionTurnStatusRegistry = InMemorySessionTurnStatusRegistry(
         sessionSelectionController,
+        // The alerts the registry publishes are not under test here, so a throwaway bus is enough.
+        EventBus(),
         CoroutineScope(UnconfinedTestDispatcher(testScheduler))
     )
 

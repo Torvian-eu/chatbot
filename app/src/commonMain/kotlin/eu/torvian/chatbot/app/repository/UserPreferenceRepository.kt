@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.repository
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.common.models.api.me.PreferenceDetailDTO
+import eu.torvian.chatbot.common.models.api.me.TurnNotificationPreference
 import eu.torvian.chatbot.common.models.user.PreferenceScope
 import kotlinx.coroutines.flow.StateFlow
 
@@ -44,6 +45,15 @@ interface UserPreferenceRepository {
      * global row exists (automatic compaction is disabled).
      */
     val compactionPreference: StateFlow<ConversationCompactionPreference?>
+
+    /**
+     * Reactive stream of the user's stored turn-status notification toggles, or `null` when no
+     * global row exists.
+     *
+     * A `null` value means the user never configured the feature; consumers apply
+     * [TurnNotificationPreference.DEFAULT] rather than reading the absence as disabled.
+     */
+    val turnNotificationPreference: StateFlow<TurnNotificationPreference?>
 
     /**
      * Fetches the current user's resolved preferences from the server
@@ -135,4 +145,18 @@ interface UserPreferenceRepository {
      * @return [Either.Right] with [Unit] on success, or [Either.Left] with a [RepositoryError] on failure.
      */
     suspend fun clearCompactionPreference(): Either<RepositoryError, Unit>
+
+    /**
+     * Stores the user's turn-status notification toggles as one GLOBAL preference row.
+     *
+     * The whole [TurnNotificationPreference] is written at once so the toggles can never be
+     * persisted in a partially updated state, and the local [turnNotificationPreference] state is
+     * refreshed from the server afterwards so the UI shows the authoritative value.
+     *
+     * @param preference The toggles to store.
+     * @return [Either.Right] with [Unit] on success, or [Either.Left] with a [RepositoryError] on failure.
+     */
+    suspend fun setTurnNotificationPreference(
+        preference: TurnNotificationPreference
+    ): Either<RepositoryError, Unit>
 }

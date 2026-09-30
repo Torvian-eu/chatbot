@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.app.viewmodel.sessionstatus
+package eu.torvian.chatbot.app.domain
 
 /**
  * Terminal outcome of a finished turn that earns a completion badge.

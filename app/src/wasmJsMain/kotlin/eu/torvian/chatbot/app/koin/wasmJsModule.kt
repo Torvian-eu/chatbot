@@ -11,6 +11,10 @@ import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.clipboard.ClipboardServiceWasmJs
 import eu.torvian.chatbot.app.service.security.BrowserCertificateStorage
 import eu.torvian.chatbot.app.service.security.CertificateStorage
+import eu.torvian.chatbot.app.service.turnnotification.TurnAlertSoundPlayer
+import eu.torvian.chatbot.app.service.turnnotification.TurnAlertSoundPlayerWasmJs
+import eu.torvian.chatbot.app.service.turnnotification.TurnOsNotificationService
+import eu.torvian.chatbot.app.service.turnnotification.TurnOsNotificationServiceWasmJs
 import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
 import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.WasmJsAsymmetricCryptoProvider
@@ -59,5 +63,13 @@ fun wasmJsModule(config: AppConfiguration) = module {
 
     single<ClipboardService> {
         ClipboardServiceWasmJs()
+    }
+
+    single<TurnAlertSoundPlayer> {
+        TurnAlertSoundPlayerWasmJs()
+    }
+
+    single<TurnOsNotificationService> {
+        TurnOsNotificationServiceWasmJs()
     }
 }

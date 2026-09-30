@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel
 
 import arrow.core.right
+import eu.torvian.chatbot.app.domain.TurnOutcome
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.GroupRepository
 import eu.torvian.chatbot.app.repository.SessionRepository
@@ -9,7 +10,6 @@ import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionIndicator
 import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionTurnStatus
 import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionTurnStatusRegistry
-import eu.torvian.chatbot.app.viewmodel.sessionstatus.TurnOutcome
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk

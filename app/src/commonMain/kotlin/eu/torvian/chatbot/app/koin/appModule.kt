@@ -17,6 +17,11 @@ import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
 import eu.torvian.chatbot.app.service.security.DefaultRequestSigningService
 import eu.torvian.chatbot.app.service.security.RequestSigningService
+import eu.torvian.chatbot.app.service.turnnotification.AppFocusState
+import eu.torvian.chatbot.app.service.turnnotification.ComposeTurnNotificationTextSource
+import eu.torvian.chatbot.app.service.turnnotification.DefaultAppFocusState
+import eu.torvian.chatbot.app.service.turnnotification.TurnNotificationDispatcher
+import eu.torvian.chatbot.app.service.turnnotification.TurnNotificationTextSource
 import eu.torvian.chatbot.app.startup.AppStartupInitializer
 import eu.torvian.chatbot.app.startup.DefaultAppStartupInitializer
 import eu.torvian.chatbot.app.viewmodel.*
@@ -175,9 +180,33 @@ fun appModule(config: AppConfiguration): Module = module {
         DefaultSessionSelectionController()
     }
 
-    // In-memory registry driving the per-session turn status indicators in the session list
+    // In-memory registry driving the per-session turn status indicators in the session list; it also
+    // publishes the out-of-app turn alert triggers on the shared event bus.
     single<SessionTurnStatusRegistry> {
-        InMemorySessionTurnStatusRegistry(get())
+        InMemorySessionTurnStatusRegistry(get(), get())
+    }
+
+    // Window/tab attention state; platform feeders push updates into this single instance.
+    single<AppFocusState> {
+        DefaultAppFocusState()
+    }
+
+    single<TurnNotificationTextSource> {
+        ComposeTurnNotificationTextSource()
+    }
+
+    // Alert dispatcher fed by the shared application event bus (see the EventBus single above); the
+    // platform channel services are registered per platform.
+    single<TurnNotificationDispatcher> {
+        TurnNotificationDispatcher(
+            eventBus = get(),
+            preferences = get(),
+            focusState = get(),
+            sessionRepository = get(),
+            soundPlayer = get(),
+            osNotifications = get(),
+            textSource = get()
+        )
     }
 
     // Provide SearchNavigationState for durable navigation intent
@@ -736,6 +765,13 @@ fun appModule(config: AppConfiguration): Module = module {
             userPreferenceRepository = get(),
             modelRepository = get(),
             modelSettingsRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
+        NotificationsViewModel(
+            userPreferenceRepository = get(),
+            osNotifications = get(),
             notificationService = get()
         )
     }

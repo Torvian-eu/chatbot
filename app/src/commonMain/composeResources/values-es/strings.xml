@@ -22,4 +22,9 @@
     <!-- Aviso de finalización del mensaje del asistente -->
     <string name="assistant_message_stopped_by_user">Detenido por el usuario</string>
     <string name="assistant_message_failed_label">La respuesta falló</string>
+    <!-- Notificaciones de estado del turno -->
+    <string name="turn_notification_title_unknown_session">Sesión de chat</string>
+    <string name="turn_notification_body_turn_completed_success">El asistente terminó su turno.</string>
+    <string name="turn_notification_body_turn_completed_failure">El turno del asistente terminó con un error.</string>
+    <string name="turn_notification_body_awaiting_approval">Esperando tu aprobación de una llamada a herramienta.</string>
 </resources>
