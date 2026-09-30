@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
 import arrow.core.right
+import eu.torvian.chatbot.app.chat.reasoning.appendReasoningTextDelta
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SessionRepository
@@ -619,6 +620,29 @@ class DefaultSessionRepository(
                             val newContent = message.content + event.deltaContent
                             val now = Clock.System.now()
                             (message as ChatMessage.AssistantMessage).copy(content = newContent, updatedAt = now)
+                        } else {
+                            message
+                        }
+                    }
+                    session.copy(messages = updatedMessages)
+                }
+            }
+
+            is ChatStreamEvent.AssistantMessageReasoningDelta -> {
+                logger.trace("Assistant message reasoning delta: ${event.deltaContent.length} chars")
+                // Live reasoning is appended in the same item shape the server persists, so the reasoning section
+                // renders from one place both while streaming and after the completing event replaces the message.
+                updateSessionDetailsInCache(sessionId) { session ->
+                    val updatedMessages = session.messages.map { message ->
+                        // A missing or non-assistant message is tolerated like the other arms: the delta is about
+                        // a placeholder that is not cached (yet), so there is nothing to update.
+                        val assistantMessage = message as? ChatMessage.AssistantMessage
+                        if (assistantMessage != null && message.id == event.messageId) {
+                            assistantMessage.copy(
+                                reasoningItems = assistantMessage.reasoningItems
+                                    .appendReasoningTextDelta(event.deltaContent),
+                                updatedAt = Clock.System.now()
+                            )
                         } else {
                             message
                         }
