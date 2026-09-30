@@ -56,6 +56,13 @@ enum class AssistantMessageErrorCode {
     OUTPUT_LIMIT_EXCEEDED,
 
     /**
+     * The model's reasoning output exceeded the server's character limit for accumulated reasoning text, so the
+     * reasoning was cut off and the generation was stopped. The message is flagged instead of embedding a
+     * truncation notice in its content.
+     */
+    REASONING_OUTPUT_LIMIT_EXCEEDED,
+
+    /**
      * The provider stopped the generation because the model reached the **provider's own** output limit
      * (for example a Responses `response.incomplete` event whose `incomplete_details.reason` is
      * `max_output_tokens`), so the answer is cut off at the provider's side.

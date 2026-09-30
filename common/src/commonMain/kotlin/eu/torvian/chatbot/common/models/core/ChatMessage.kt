@@ -75,11 +75,12 @@ sealed class ChatMessage {
      * @property settingsId ID of the settings profile used to generate this message.
      * @property agentRoleId ID of the agent role used to generate this message, when the message was
      *            produced through an agent role. Null for assistant messages not tied to a role.
-     * @property reasoningItems For Responses-capable models, the raw reasoning output items
+     * @property reasoningItems For Responses-capable models, the reasoning output items
      *            (e.g. `{"type":"reasoning",...}`) emitted alongside this assistant message, used to replay
      *            reasoning context across turns in a stateless fashion. `null` when the model did not emit
-     *            reasoning. Each item is an opaque object (may include OpenAI-encrypted content) and must not
-     *            be logged or rendered.
+     *            reasoning. Only the derived plaintext of an item (`summary[].text`, `content[].text`) may be
+     *            rendered; the raw item JSON and any `encrypted_content` payload are opaque and must never be
+     *            rendered or logged.
      * @property isComplete Whether the generation of this message finished normally. Four combinations are
      *            observable: `true` with no cause means completed (also the meaning of a legacy payload or a
      *            manually inserted/cloned-completed message); `false` with a `null` [incompleteCause] means the
