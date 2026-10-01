@@ -147,7 +147,8 @@ class DefaultConversationTurnOrchestratorNonStreamingToolLoopTest : DefaultConve
                 reasoningItems = null,
                 // Each iteration records its own usage: the loop does not accumulate them into one message.
                 usageStats = UsageStats(1, 1, 2),
-                completion = any()
+                completion = any(),
+                responseDurationMs = any()
             )
         } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
         coEvery {
@@ -160,7 +161,8 @@ class DefaultConversationTurnOrchestratorNonStreamingToolLoopTest : DefaultConve
                 agentRoleId = testRoleId,
                 reasoningItems = null,
                 usageStats = UsageStats(1, 1, 2),
-                completion = any()
+                completion = any(),
+                responseDurationMs = any()
             )
         } returns PersistedAssistantMessage(assistantFinalMessage, assistantToolMessage)
         coEvery {

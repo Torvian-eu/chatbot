@@ -83,7 +83,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure, usageStats = any())
+                completion = expectedFailure, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(failedAssistantMessage, userMessage)
 
         val events = orchestrator.processNonStreamingTurn(
@@ -176,7 +176,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure, usageStats = any())
+                completion = expectedFailure, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(failedAssistantMessage, userMessage)
         coEvery {
             conversationTurnPersistence.persistPendingToolCalls(
@@ -273,7 +273,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure, usageStats = any())
+                completion = expectedFailure, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(failedAssistantMessage, userMessage)
 
         val events = orchestrator.processNonStreamingTurn(
@@ -339,7 +339,8 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 any(),
                 any(),
                 any(),
-                capture(capturedCompletionStates)
+                capture(capturedCompletionStates),
+                responseDurationMs = any()
             )
         } coAnswers {
             PersistedAssistantMessage(
@@ -376,7 +377,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure, usageStats = any())
+                completion = expectedFailure, usageStats = any(), responseDurationMs = any())
         }
         assertEquals(
             ConversationTurnLimits.MAX_TOOL_CALLING_ITERATIONS.toLong(),
@@ -392,7 +393,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.Completed, usageStats = any())
+                completion = AssistantMessageCompletionState.Completed, usageStats = any(), responseDurationMs = any())
         }
         // The bound does not drop calls: every iteration, including the final one, ran its tool call.
         coVerify(exactly = ConversationTurnLimits.MAX_TOOL_CALLING_ITERATIONS) {
@@ -514,7 +515,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure, usageStats = any())
+                completion = expectedFailure, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(flaggedAssistantMessage, firstUserMessage)
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -525,7 +526,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.Completed, usageStats = any())
+                completion = AssistantMessageCompletionState.Completed, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(secondAssistantMessage, secondUserMessage)
         coEvery {
             conversationTurnPersistence.persistPendingToolCalls(

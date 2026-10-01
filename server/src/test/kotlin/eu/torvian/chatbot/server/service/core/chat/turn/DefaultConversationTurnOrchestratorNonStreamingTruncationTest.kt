@@ -117,7 +117,8 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                 // The provider completed the response and reported its counters; the server cap only explains
                 // why the persisted text is shorter, so the usage is kept.
                 completion = expectedFailure,
-                usageStats = UsageStats(1, 1, 2)
+                usageStats = UsageStats(1, 1, 2),
+                responseDurationMs = any()
             )
         } returns PersistedAssistantMessage(truncatedAssistantMessage, userMessage)
 
@@ -237,7 +238,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                     testSettings,
                     agentRoleId = testRoleId,
                     reasoningItems = null,
-                    completion = expectedFailure, usageStats = any())
+                    completion = expectedFailure, usageStats = any(), responseDurationMs = any())
             } returns PersistedAssistantMessage(partialAssistantMessage, userMessage)
 
             val events = orchestrator.processNonStreamingTurn(
@@ -264,9 +265,9 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                     testSettings,
                     agentRoleId = testRoleId,
                     reasoningItems = null,
-                    completion = expectedFailure, usageStats = any())
+                    completion = expectedFailure, usageStats = any(), responseDurationMs = any())
             }
-            coVerify(exactly = 0) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
+            coVerify(exactly = 0) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any(), responseDurationMs = any()) }
             assertEquals(4, events.size)
             assertIs<ConversationTurnEvent.UserMessageSaved>(events[0])
             val savedPartialStep = assertIs<ConversationTurnEvent.AssistantMessageSaved>(events[1])
@@ -359,7 +360,8 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                 completion = expectedFailure,
                 // The provider declared the generation uncompleted, so its counters are not recorded even
                 // though the server also had to cut the text at the cap.
-                usageStats = null
+                usageStats = null,
+                responseDurationMs = any()
             )
         } returns PersistedAssistantMessage(cappedAssistantMessage, userMessage)
 
@@ -388,7 +390,8 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                 agentRoleId = testRoleId,
                 reasoningItems = null,
                 completion = expectedFailure,
-                usageStats = null
+                usageStats = null,
+                responseDurationMs = any()
             )
         }
         val savedStep = assertIs<ConversationTurnEvent.AssistantMessageSaved>(events[1])

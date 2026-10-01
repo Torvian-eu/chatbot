@@ -103,7 +103,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                 reasoningModel,
                 reasoningSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = reasoningItems, usageStats = any())
+                reasoningItems = reasoningItems, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
         orchestrator.processNonStreamingTurn(
@@ -128,7 +128,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                 reasoningModel,
                 reasoningSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = reasoningItems, usageStats = any())
+                reasoningItems = reasoningItems, usageStats = any(), responseDurationMs = any())
         }
         // The capability recorder must observe the model and its reasoning items so later replays can
         // adapt what is sent to this model.
@@ -268,7 +268,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                 reasoningModel,
                 reasoningSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = reasoningItems, usageStats = any())
+                reasoningItems = reasoningItems, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -278,7 +278,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                 reasoningModel,
                 reasoningSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = null, usageStats = any())
+                reasoningItems = null, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantFinalMessage, assistantToolMessage)
         coEvery {
             conversationTurnPersistence.persistPendingToolCalls(

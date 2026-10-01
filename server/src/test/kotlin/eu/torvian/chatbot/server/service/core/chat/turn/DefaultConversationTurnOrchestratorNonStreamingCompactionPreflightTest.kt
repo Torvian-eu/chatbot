@@ -80,7 +80,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id, assistantMessage.content, userMessage.id, testModel, testSettings,
-                agentRoleId = testRoleId, reasoningItems = null, usageStats = any())
+                agentRoleId = testRoleId, reasoningItems = null, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
         // The default base stub returns a disabled preflight; verify the policy is consulted exactly
@@ -284,7 +284,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                 testModel,
                 testSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = null, usageStats = any())
+                reasoningItems = null, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -294,7 +294,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                 testModel,
                 testSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = null, usageStats = any())
+                reasoningItems = null, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantFinalMessage, assistantToolMessage)
         coEvery {
             conversationTurnPersistence.persistPendingToolCalls(
