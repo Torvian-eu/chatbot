@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.chat.reasoning.ReasoningDisplay
+import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.reasoning_display_truncated
 import eu.torvian.chatbot.app.generated.resources.reasoning_encrypted_notice
@@ -54,37 +55,44 @@ internal fun AssistantMessageReasoningSection(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth().padding(top = 6.dp)) {
-        Row(
-            // Wraps its content instead of filling the row so the chevron stays next to the label rather than
-            // floating at the far edge of the bubble.
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .clickable(onClick = onToggle)
-                .padding(vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(Res.string.reasoning_section_label),
-                style = MaterialTheme.typography.labelSmall,
-                color = contentColor.copy(alpha = 0.8f)
-            )
-            // Additive and static for as long as the generation is still reasoning: no animation, so the section
-            // heading never moves on its own and never claims activity after the answer started.
-            if (display.showsThinkingIndicator) {
-                Spacer(Modifier.width(6.dp))
+        // The header row as a whole is the toggle target, so the tooltip and the click label both describe the whole
+        // row; the chevron inside it stays decoration.
+        val toggleActionText = if (isExpanded) "Hide reasoning" else "Show reasoning"
+        PlainTooltipBox(text = toggleActionText, showDelay = 500L) {
+            Row(
+                // Wraps its content instead of filling the row so the chevron stays next to the label rather than
+                // floating at the far edge of the bubble.
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClickLabel = toggleActionText, onClick = onToggle)
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = stringResource(Res.string.reasoning_thinking_indicator),
+                    text = stringResource(Res.string.reasoning_section_label),
                     style = MaterialTheme.typography.labelSmall,
-                    color = contentColor.copy(alpha = 0.6f)
+                    color = contentColor.copy(alpha = 0.8f)
+                )
+                // Additive and static for as long as the generation is still reasoning: no animation, so the section
+                // heading never moves on its own and never claims activity after the answer started.
+                if (display.showsThinkingIndicator) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(Res.string.reasoning_thinking_indicator),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contentColor.copy(alpha = 0.6f)
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    // Unlabelled on purpose: the surrounding clickable row already announces the action, and a second
+                    // label on the icon would have a screen reader read it twice.
+                    contentDescription = null,
+                    tint = contentColor.copy(alpha = 0.6f),
+                    modifier = Modifier.size(18.dp)
                 )
             }
-            Spacer(Modifier.width(6.dp))
-            Icon(
-                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = null,
-                tint = contentColor.copy(alpha = 0.6f),
-                modifier = Modifier.size(18.dp)
-            )
         }
 
         if (isExpanded) {

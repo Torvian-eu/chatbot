@@ -53,8 +53,10 @@ import org.jetbrains.compose.resources.stringResource
  * @param editingBasePathOverride The base path override for editing file references.
  * @param modelsById Map of model IDs to LLMModel objects for displaying model names with graceful degradation.
  * @param toolCallsForMessage List of tool calls associated with this message.
- * @param isCollapsed Whether this message is currently collapsed.
- * @param isCollapsible Whether this message can be collapsed (content length > threshold).
+ * @param isCollapsed Whether this message is currently collapsed. A collapsed item hides the reasoning section
+ *        along with the answer.
+ * @param isCollapsible Whether this message can be collapsed. Decided by the answer length alone: reasoning length
+ *        does not offer the affordance, so the reasoning of a short answer stays visible in full.
  * @param isReasoningExpanded Whether the reasoning section of this message is currently expanded. Collapsed by
  *        default, including while the message is still streaming.
  * @param onToggleReasoningSection Invoked when the user toggles the reasoning section of a message.
@@ -192,7 +194,10 @@ fun MessageItem(
         val reasoningDisplay = remember(message) {
             (message as? ChatMessage.AssistantMessage)?.deriveReasoningDisplay()
         }
-        if (reasoningDisplay != null) {
+        // Reasoning is part of the collapsible body: a collapsed message must not leave it standing next to a
+        // truncated answer. The expansion state itself is owned by the list, so it is only read here and survives
+        // the collapse, bringing the section back in the state it had before.
+        if (reasoningDisplay != null && !isCollapsed) {
             AssistantMessageReasoningSection(
                 display = reasoningDisplay,
                 isExpanded = isReasoningExpanded,
