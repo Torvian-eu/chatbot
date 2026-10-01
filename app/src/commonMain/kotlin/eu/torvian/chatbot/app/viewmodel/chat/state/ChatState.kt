@@ -195,6 +195,15 @@ interface ChatState {
     val turnExecutionState: StateFlow<TurnExecutionState>
 
     /**
+     * Elapsed-time measurement of the active assistant turn, shown next to the composer action button.
+     *
+     * Held per session in memory only: it starts when a turn enters [TurnExecutionState.RUNNING], counts
+     * through every non-[TurnExecutionState.IDLE] state, freezes when the turn returns to
+     * [TurnExecutionState.IDLE], and returns to [AssistantResponseTimerState.Hidden] in [resetState].
+     */
+    val assistantResponseTimer: StateFlow<AssistantResponseTimerState>
+
+    /**
      * The current dialog state for the chat area (e.g., delete confirmation).
      */
     val dialogState: StateFlow<ChatAreaDialogState>
@@ -303,6 +312,9 @@ interface ChatState {
 
     /**
      * Updates the lifecycle state of the active turn.
+     *
+     * This is the single entry point that also advances [assistantResponseTimer], so the measurement can
+     * never disagree with the turn state machine.
      *
      * @param executionState New state to expose to observers.
      */
