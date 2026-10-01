@@ -232,6 +232,13 @@ interface ChatAreaActions {
     fun onShowFileReferenceDetails(fileReference: FileReference)
 
     /**
+     * Callback for when the user clicks the header of a finalized assistant message to view its details and token
+     * usage.
+     * @param message The assistant message whose details should be shown.
+     */
+    fun onShowMessageUsageDetails(message: ChatMessage.AssistantMessage)
+
+    /**
      * Callback for when the user wants to manage all pending file references.
      * Opens the file references management dialog.
      */

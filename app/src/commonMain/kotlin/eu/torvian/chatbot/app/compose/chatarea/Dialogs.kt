@@ -55,6 +55,15 @@ fun Dialogs(dialogState: ChatAreaDialogState) {
             )
         }
 
+        is ChatAreaDialogState.MessageUsageDetails -> {
+            MessageUsageDialog(
+                message = dialogState.message,
+                modelDisplayName = dialogState.modelDisplayName,
+                settingsDisplayName = dialogState.settingsDisplayName,
+                onDismiss = dialogState.onDismiss
+            )
+        }
+
         is ChatAreaDialogState.FileReferencesManagement -> {
             FileReferencesManagementDialog(
                 fileReferencesFlow = dialogState.fileReferencesFlow,

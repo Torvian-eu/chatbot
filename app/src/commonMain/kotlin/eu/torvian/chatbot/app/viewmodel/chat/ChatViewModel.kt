@@ -831,6 +831,32 @@ class ChatViewModel(
     }
 
     /**
+     * Shows the details and token-usage dialog of a finalized assistant message.
+     *
+     * The model and settings display names are resolved here, at open time, from the lookup maps the view model
+     * already holds. An id the maps cannot resolve (a deleted model or settings profile, which the database stores
+     * as `null`, or a still-loading list) resolves to `null` and the dialog shows its own fallback.
+     *
+     * @param message The assistant message to show details for.
+     */
+    fun showMessageUsageDetails(message: ChatMessage.AssistantMessage) {
+        state.setDialogState(
+            ChatAreaDialogState.MessageUsageDetails(
+                message = message,
+                modelDisplayName = message.modelId
+                    ?.let { modelId -> state.modelsById.value[modelId] }
+                    ?.let { model -> model.displayName ?: model.name },
+                settingsDisplayName = message.settingsId
+                    ?.let { settingsId -> state.settingsById.value[settingsId] }
+                    ?.name,
+                onDismiss = {
+                    state.setDialogState(ChatAreaDialogState.None)
+                }
+            )
+        )
+    }
+
+    /**
      * Shows the file references management dialog.
      * Allows users to manage pending file references before sending.
      */

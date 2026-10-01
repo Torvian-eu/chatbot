@@ -28,6 +28,24 @@
     <string name="reasoning_summary_label">Resumen</string>
     <string name="reasoning_encrypted_notice">El razonamiento del modelo está cifrado y no se puede mostrar.</string>
     <string name="reasoning_display_truncated">Razonamiento truncado para su visualización.</string>
+    <!-- Diálogo de detalles y uso del mensaje -->
+    <string name="usage_dialog_title">Detalles del mensaje</string>
+    <string name="usage_dialog_model_label">Modelo</string>
+    <string name="usage_dialog_settings_label">Perfil de configuración</string>
+    <string name="usage_dialog_unknown_value">Desconocido</string>
+    <string name="usage_dialog_created_label">Creado</string>
+    <string name="usage_dialog_updated_label">Última actualización</string>
+    <string name="usage_dialog_usage_section_title">Uso de tokens</string>
+    <string name="usage_dialog_input_tokens_label">Tokens de entrada</string>
+    <string name="usage_dialog_output_tokens_label">Tokens de salida</string>
+    <string name="usage_dialog_total_tokens_label">Tokens totales</string>
+    <string name="usage_dialog_reasoning_tokens_label">Tokens de razonamiento</string>
+    <string name="usage_dialog_cached_tokens_label">Tokens de entrada en caché</string>
+    <string name="usage_dialog_cache_write_tokens_label">Tokens de escritura en caché</string>
+    <string name="usage_dialog_usage_unavailable">El uso de tokens no está disponible para este mensaje.</string>
+    <string name="usage_dialog_close_button">Cerrar</string>
+    <string name="usage_dialog_header_description">Mostrar detalles del mensaje y uso de tokens</string>
+
     <!-- Notificaciones de estado del turno -->
     <string name="turn_notification_title_unknown_session">Sesión de chat</string>
     <string name="turn_notification_body_turn_completed_success">El asistente terminó su turno.</string>

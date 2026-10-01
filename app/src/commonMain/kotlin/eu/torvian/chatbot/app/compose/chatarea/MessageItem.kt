@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -23,17 +24,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.chat.reasoning.deriveReasoningDisplay
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
+import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.usage_dialog_header_description
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Displays one message item and adapts search occurrence geometry from content coordinates to item coordinates.
@@ -135,14 +140,29 @@ fun MessageItem(
                 } ?: "AI" // No model ID available
             }
         }
+        // Tooltip and click target appear together for the header that offers the details dialog.
+        val usageDetailsMessage = (message as? ChatMessage.AssistantMessage)
+            ?.takeIf { it.offersUsageDetails() }
+        val usageHeaderDescription = stringResource(Res.string.usage_dialog_header_description)
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "$displayName:",
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = contentColor.copy(alpha = 0.8f)
-            )
+            if (usageDetailsMessage != null) {
+                PlainTooltipBox(
+                    text = usageHeaderDescription,
+                    showDelay = 500L
+                ) {
+                    MessageHeaderLabel(
+                        displayName = displayName,
+                        contentColor = contentColor,
+                        modifier = Modifier.clickable(onClickLabel = usageHeaderDescription) {
+                            actions.onShowMessageUsageDetails(usageDetailsMessage)
+                        }
+                    )
+                }
+            } else {
+                MessageHeaderLabel(displayName = displayName, contentColor = contentColor)
+            }
             // Collapse/Expand button - only show for collapsible messages
             if (isCollapsible) {
                 PlainTooltipBox(
@@ -254,3 +274,38 @@ fun MessageItem(
         )
     }
 }
+
+/**
+ * Renders the `"<author name>:"` header label of a message.
+ *
+ * Shared by the plain and the clickable header so both look identical, whether or not the label is wrapped in the
+ * details tooltip.
+ *
+ * @param displayName Author name resolved for the message.
+ * @param contentColor Base color of the surrounding bubble content.
+ * @param modifier Modifier applied to the label, carrying the click action when the header offers one.
+ */
+@Composable
+private fun MessageHeaderLabel(
+    displayName: String,
+    contentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = "$displayName:",
+        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+        color = contentColor.copy(alpha = 0.8f),
+        modifier = modifier
+    )
+}
+
+/**
+ * Whether the header of an assistant message opens the message usage details dialog.
+ *
+ * A still-streaming placeholder is neither completed nor cause-bearing, so its header stays a plain label; a
+ * generation that reached a terminal state is the one that has details and usage to describe.
+ *
+ * @receiver Assistant message whose header is being rendered.
+ * @return Whether clicking the header should open the details dialog.
+ */
+private fun ChatMessage.AssistantMessage.offersUsageDetails(): Boolean = isComplete || incompleteCause != null
