@@ -333,6 +333,230 @@ class DefaultConversationTurnPersistenceTest {
     }
 
     /**
+     * Verifies the measured provider-call duration of an assistant message reaches the DAO insert that creates
+     * the row, so the row and its measured call time are stored by one statement.
+     */
+    @Test
+    fun `saveAssistantMessage forwards the measured response duration to the DAO`() = runTest {
+        val measuredDurationMs = 4200L
+        val savedAssistantMessage = ChatMessage.AssistantMessage(
+            id = 12L,
+            sessionId = 1L,
+            content = "Answer",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = 5L,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id,
+            responseDurationMs = measuredDurationMs
+        )
+        val refreshedParent = ChatMessage.UserMessage(
+            id = 5L,
+            sessionId = 1L,
+            content = "Hello",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = listOf(savedAssistantMessage.id)
+        )
+
+        coEvery {
+            messageDao.insertMessage(
+                sessionId = 1L,
+                targetMessageId = 5L,
+                position = any(),
+                role = ChatMessage.Role.ASSISTANT,
+                content = "Answer",
+                modelId = testModel.id,
+                settingsId = testSettings.id,
+                agentRoleId = any(),
+                fileReferences = any(),
+                reasoningItems = any(),
+                usageStats = any(),
+                completion = any(),
+                responseDurationMs = measuredDurationMs
+            )
+        } returns savedAssistantMessage.right()
+        coEvery { sessionDao.updateSessionLeafMessageId(1L, savedAssistantMessage.id) } returns Unit.right()
+        coEvery { messageDao.getMessageById(5L) } returns refreshedParent.right()
+
+        val result = persistence.saveAssistantMessage(
+            1L,
+            "Answer",
+            5L,
+            testModel,
+            testSettings,
+            responseDurationMs = measuredDurationMs
+        )
+
+        assertEquals(measuredDurationMs, result.assistantMessage.responseDurationMs)
+        coVerify(exactly = 1) {
+            messageDao.insertMessage(
+                sessionId = 1L,
+                targetMessageId = 5L,
+                position = any(),
+                role = ChatMessage.Role.ASSISTANT,
+                content = "Answer",
+                modelId = testModel.id,
+                settingsId = testSettings.id,
+                agentRoleId = any(),
+                fileReferences = any(),
+                reasoningItems = any(),
+                usageStats = any(),
+                completion = any(),
+                responseDurationMs = measuredDurationMs
+            )
+        }
+    }
+
+    /**
+     * Verifies an insert without a measured duration writes none, so a message nothing was measured for never
+     * stores a fake zero.
+     */
+    @Test
+    fun `saveAssistantMessage without a measured duration forwards none to the DAO`() = runTest {
+        val savedAssistantMessage = ChatMessage.AssistantMessage(
+            id = 12L,
+            sessionId = 1L,
+            content = "Answer",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = 5L,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id,
+            responseDurationMs = null
+        )
+        val refreshedParent = ChatMessage.UserMessage(
+            id = 5L,
+            sessionId = 1L,
+            content = "Hello",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = listOf(savedAssistantMessage.id)
+        )
+
+        coEvery {
+            messageDao.insertMessage(
+                sessionId = 1L,
+                targetMessageId = 5L,
+                position = any(),
+                role = ChatMessage.Role.ASSISTANT,
+                content = "Answer",
+                modelId = testModel.id,
+                settingsId = testSettings.id,
+                agentRoleId = any(),
+                fileReferences = any(),
+                reasoningItems = any(),
+                usageStats = any(),
+                completion = any(),
+                responseDurationMs = null
+            )
+        } returns savedAssistantMessage.right()
+        coEvery { sessionDao.updateSessionLeafMessageId(1L, savedAssistantMessage.id) } returns Unit.right()
+        coEvery { messageDao.getMessageById(5L) } returns refreshedParent.right()
+
+        val result = persistence.saveAssistantMessage(1L, "Answer", 5L, testModel, testSettings)
+
+        assertEquals(null, result.assistantMessage.responseDurationMs)
+    }
+
+    /**
+     * Verifies the terminal write of a turn forwards the measured duration it was given, so the finalized message
+     * and its stored call time come from one statement.
+     */
+    @Test
+    fun `updateAssistantMessageContent forwards the measured response duration to the DAO`() = runTest {
+        val measuredDurationMs = 1500L
+        val updatedAssistantMessage = ChatMessage.AssistantMessage(
+            id = 12L,
+            sessionId = 1L,
+            content = "Final content",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = 5L,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id,
+            responseDurationMs = measuredDurationMs
+        )
+
+        coEvery {
+            messageDao.updateMessageContent(
+                id = 12L,
+                content = "Final content",
+                completion = AssistantMessageCompletionState.Completed,
+                usageStats = any(),
+                responseDurationMs = measuredDurationMs
+            )
+        } returns updatedAssistantMessage.right()
+
+        val result = persistence.updateAssistantMessageContent(
+            messageId = 12L,
+            content = "Final content",
+            completion = AssistantMessageCompletionState.Completed,
+            usageStats = null,
+            responseDurationMs = measuredDurationMs
+        )
+
+        assertEquals(measuredDurationMs, result.responseDurationMs)
+        coVerify(exactly = 1) {
+            messageDao.updateMessageContent(
+                id = 12L,
+                content = "Final content",
+                completion = AssistantMessageCompletionState.Completed,
+                usageStats = any(),
+                responseDurationMs = measuredDurationMs
+            )
+        }
+    }
+
+    /**
+     * Verifies a finalization that carries no measurement clears whatever the message had stored, so an update
+     * that does not time the generation cannot leave a stale duration behind.
+     */
+    @Test
+    fun `updateAssistantMessageContent forwards a cleared response duration to the DAO`() = runTest {
+        val updatedAssistantMessage = ChatMessage.AssistantMessage(
+            id = 12L,
+            sessionId = 1L,
+            content = "Edited content",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = 5L,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id,
+            responseDurationMs = null
+        )
+
+        coEvery {
+            messageDao.updateMessageContent(
+                id = 12L,
+                content = "Edited content",
+                completion = AssistantMessageCompletionState.Completed,
+                usageStats = any(),
+                responseDurationMs = null
+            )
+        } returns updatedAssistantMessage.right()
+
+        val result = persistence.updateAssistantMessageContent(12L, "Edited content")
+
+        assertEquals(null, result.responseDurationMs)
+        coVerify(exactly = 1) {
+            messageDao.updateMessageContent(
+                id = 12L,
+                content = "Edited content",
+                completion = AssistantMessageCompletionState.Completed,
+                usageStats = any(),
+                responseDurationMs = null
+            )
+        }
+    }
+
+    /**
      * Verifies pending tool calls keep the known-tool happy path and the unknown-tool error fallback.
      */
     @Test

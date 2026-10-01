@@ -46,6 +46,9 @@ interface ConversationTurnPersistence {
      *                       The raw items stay opaque, while their derived plaintext may be displayed.
      * @param usageStats Provider-reported token usage of the generation, or `null` when there is none to record.
      *                   `null` means "no usage reported" and is never a zero-filled value.
+     * @param responseDurationMs Wall-clock duration in milliseconds of the provider call that produced the
+     *                   message, or `null` when nothing was measured. `null` means "no duration recorded" and is
+     *                   never a zero-filled value.
      * @param completion Completion state written together with the row. The streaming placeholder is inserted
      *                   with [AssistantMessageCompletionState.InFlight] (not completed, no cause yet), a
      *                   non-streaming answer with an explicit terminal state, and the default
@@ -61,7 +64,8 @@ interface ConversationTurnPersistence {
         agentRoleId: Long? = null,
         reasoningItems: List<JsonObject>? = null,
         usageStats: UsageStats? = null,
-        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed
+        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed,
+        responseDurationMs: Long? = null
     ): PersistedAssistantMessage
 
     /**
@@ -78,13 +82,17 @@ interface ConversationTurnPersistence {
      * @param usageStats Provider-reported token usage to persist with [content], or `null` when the generation
      *                   reported none or did not end normally. The value is written together with the content, so a
      *                   finalization that carries no usage also clears any usage stored earlier.
+     * @param responseDurationMs Wall-clock duration in milliseconds of the provider call this finalization
+     *                   terminates, or `null` to clear any stored duration. Written together with the content, so a
+     *                   finalization that carries no measurement clears a duration stored earlier.
      * @return Updated assistant message.
      */
     suspend fun updateAssistantMessageContent(
         messageId: Long,
         content: String,
         completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed,
-        usageStats: UsageStats? = null
+        usageStats: UsageStats? = null,
+        responseDurationMs: Long? = null
     ): ChatMessage.AssistantMessage
 
     /**
