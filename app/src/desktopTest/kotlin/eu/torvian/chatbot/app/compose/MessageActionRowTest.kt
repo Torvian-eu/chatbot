@@ -61,13 +61,14 @@ class MessageActionRowTest {
         onToggleMessageCollapsed = {},
         onToggleReasoningSection = {},
         onShowToolCallDetails = {},
-        onShowFileReferenceDetails = {}
+        onShowFileReferenceDetails = {},
+        onShowMessageUsageDetails = {}
     )
 
     /**
      * Opens the "More actions" overflow menu by clicking its trigger button.
      */
-    private fun androidx.compose.ui.test.ComposeUiTest.openMoreActionsMenu() {
+    private fun ComposeUiTest.openMoreActionsMenu() {
         onNodeWithContentDescription("More actions").performClick()
     }
 

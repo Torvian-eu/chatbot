@@ -239,10 +239,10 @@ class ResponsesStrategyTest {
         assertEquals(1, choice.toolCalls?.size)
         assertEquals("call_1", choice.toolCalls!![0].toolCallId)
         assertEquals("getWeather", choice.toolCalls[0].name)
-        assertEquals(15, completion.usage.promptTokens)
-        assertEquals(25, completion.usage.completionTokens)
-        assertEquals(40, completion.usage.totalTokens)
-        assertEquals(10, completion.usage.reasoningTokens)
+        assertEquals(15, completion.usage?.inputTokens)
+        assertEquals(25, completion.usage?.outputTokens)
+        assertEquals(40, completion.usage?.totalTokens)
+        assertEquals(10, completion.usage?.reasoningTokens)
     }
 
     @Test
@@ -561,7 +561,7 @@ class ResponsesStrategyTest {
         assertTrue(chunks.any { it is LLMStreamChunk.ContentChunk && it.deltaContent == "Hi" })
         assertTrue(chunks.any { it is LLMStreamChunk.ContentChunk && it.deltaContent == " there!" })
         assertTrue(chunks.any {
-            it is LLMStreamChunk.UsageChunk && it.totalTokens == 12 && it.reasoningTokens == 10
+            it is LLMStreamChunk.FinalUsageStats && it.usage.totalTokens == 12 && it.usage.reasoningTokens == 10
         })
 
         // Both tool calls must be grouped by distinct output_index, each carrying its name and call_id,
@@ -672,7 +672,7 @@ class ResponsesStrategyTest {
         assertTrue(chunks.isNotEmpty(), "Expected at least one emitted chunk")
         assertTrue(chunks.any { it is LLMStreamChunk.ContentChunk && it.deltaContent == "Hi" })
         assertTrue(chunks.any { it is LLMStreamChunk.ContentChunk && it.deltaContent == " there!" })
-        assertTrue(chunks.any { it is LLMStreamChunk.UsageChunk && it.totalTokens == 12 })
+        assertTrue(chunks.any { it is LLMStreamChunk.FinalUsageStats && it.usage.totalTokens == 12 })
     }
 
     /**
@@ -798,7 +798,7 @@ class ResponsesStrategyTest {
             chunks.filterIsInstance<LLMStreamChunk.ContentChunk>().map { it.deltaContent }
         )
         assertEquals(2, chunks.count { it is LLMStreamChunk.Done })
-        assertEquals(2, chunks.count { it is LLMStreamChunk.UsageChunk })
+        assertEquals(2, chunks.count { it is LLMStreamChunk.FinalUsageStats })
         val lateError = chunks.filterIsInstance<LLMStreamChunk.Error>().single()
         val lateProviderFailure = assertIs<LLMCompletionError.ProviderFailureError>(lateError.llmError)
         assertEquals("server_error", lateProviderFailure.providerCode)
@@ -834,7 +834,7 @@ class ResponsesStrategyTest {
 
         assertEquals("Done", chunks.filterIsInstance<LLMStreamChunk.ContentChunk>().single().deltaContent)
         assertTrue(chunks.any { it is LLMStreamChunk.Done }, "A null usage must not change the ending")
-        assertTrue(chunks.none { it is LLMStreamChunk.UsageChunk }, "A null usage contributes no token counts")
+        assertTrue(chunks.none { it is LLMStreamChunk.FinalUsageStats }, "A null usage contributes no token counts")
         assertTrue(chunks.none { it is LLMStreamChunk.Error })
     }
 
@@ -1384,5 +1384,122 @@ class ResponsesStrategyTest {
         assertFalse(projection.containsKey("store"))
         assertFalse(projection.containsKey("max_output_tokens"))
         assertFalse(projection.containsKey("reasoning"))
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should read every reported usage counter")
+    fun processSuccessResponse_readsAllReportedUsageCounters() {
+        val responseBody = """
+            {
+              "id": "resp_usage",
+              "status": "completed",
+              "model": "gpt-5.4",
+              "output": [ { "type": "message", "content": [ { "type": "output_text", "text": "Hi" } ] } ],
+              "usage": {
+                "input_tokens": 120,
+                "input_tokens_details": { "cached_tokens": 8, "cache_write_tokens": 4 },
+                "output_tokens": 30,
+                "output_tokens_details": { "reasoning_tokens": 12 },
+                "total_tokens": 150
+              }
+            }
+        """.trimIndent()
+
+        val completion = strategy.processSuccessResponse(responseBody).getOrNull()
+        assertNotNull(completion)
+
+        val usage = assertNotNull(completion.usage)
+        assertEquals(120, usage.inputTokens)
+        assertEquals(30, usage.outputTokens)
+        assertEquals(150, usage.totalTokens)
+        assertEquals(12, usage.reasoningTokens)
+        assertEquals(8, usage.cachedTokens)
+        assertEquals(4, usage.cacheWriteTokens)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should derive the total of a partially reported usage")
+    fun processSuccessResponse_partialUsageDerivesTotal() {
+        val responseBody = """
+            {
+              "id": "resp_partial_usage",
+              "status": "completed",
+              "model": "gpt-5.4",
+              "output": [ { "type": "message", "content": [ { "type": "output_text", "text": "Hi" } ] } ],
+              "usage": { "input_tokens": 40 }
+            }
+        """.trimIndent()
+
+        val completion = strategy.processSuccessResponse(responseBody).getOrNull()
+        assertNotNull(completion)
+
+        val usage = assertNotNull(completion.usage)
+        assertEquals(40, usage.inputTokens)
+        assertEquals(0, usage.outputTokens)
+        assertEquals(40, usage.totalTokens, "A missing total falls back to input + output")
+        assertNull(usage.reasoningTokens, "An omitted optional counter must stay absent, not become zero")
+        assertNull(usage.cachedTokens)
+        assertNull(usage.cacheWriteTokens)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should report no usage when the payload carries no counters")
+    fun processSuccessResponse_usageWithoutCountersReportsNothing() {
+        val responseBody = """
+            {
+              "id": "resp_no_usage",
+              "status": "completed",
+              "model": "gpt-5.4",
+              "output": [ { "type": "message", "content": [ { "type": "output_text", "text": "Hi" } ] } ],
+              "usage": { }
+            }
+        """.trimIndent()
+
+        val completion = strategy.processSuccessResponse(responseBody).getOrNull()
+        assertNotNull(completion)
+
+        assertNull(completion.usage, "An empty usage object must not become a zero-filled value")
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should emit no final usage when the payload carries none")
+    fun processStreamingResponse_completedWithoutUsage_emitsNoFinalUsage() {
+        val events = flowOf(
+            """data: {"type":"response.output_text.delta","delta":"Hi"}""",
+            """data: {"type":"response.completed","response":{"id":"resp_9","status":"completed"}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+
+        assertTrue(chunks.any { it is LLMStreamChunk.Done })
+        assertTrue(
+            chunks.none { it is LLMStreamChunk.FinalUsageStats },
+            "A completion without counters must contribute no usage"
+        )
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should emit the final usage before the terminal chunk")
+    fun processStreamingResponse_emitsFinalUsageBeforeTerminalChunk() {
+        val events = flowOf(
+            """data: {"type":"response.output_text.delta","delta":"Hi"}""",
+            """data: {"type":"response.completed","response":{"id":"resp_9","status":"completed","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":2,"cache_write_tokens":1},"output_tokens":7,"output_tokens_details":{"reasoning_tokens":3},"total_tokens":12}}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+        val usageIndex = chunks.indexOfFirst { it is LLMStreamChunk.FinalUsageStats }
+        val doneIndex = chunks.indexOfFirst { it is LLMStreamChunk.Done }
+
+        assertTrue(usageIndex >= 0, "The completion must report its usage")
+        assertEquals(doneIndex, usageIndex + 1, "The final usage must be emitted immediately before the terminal chunk")
+        val usage = assertIs<LLMStreamChunk.FinalUsageStats>(chunks[usageIndex]).usage
+        assertEquals(5, usage.inputTokens)
+        assertEquals(7, usage.outputTokens)
+        assertEquals(12, usage.totalTokens)
+        assertEquals(3, usage.reasoningTokens)
+        assertEquals(2, usage.cachedTokens)
+        assertEquals(1, usage.cacheWriteTokens)
     }
 }

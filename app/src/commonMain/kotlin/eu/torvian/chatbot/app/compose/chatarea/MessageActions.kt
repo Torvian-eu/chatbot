@@ -29,6 +29,9 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @param onToggleReasoningSection Toggles collapsed/expanded state of a message reasoning section.
  * @param onShowToolCallDetails Opens details for a tool call badge.
  * @param onShowFileReferenceDetails Opens details for a file reference badge.
+ * @param onShowMessageUsageDetails Opens the details and token-usage dialog of an assistant message. The item
+ *        decides whether a click is offered at all: the callback is only invoked from the header of an assistant
+ *        message that reached a terminal state.
  */
 data class MessageActions(
     val onSwitchBranchToMessage: (Long) -> Unit,
@@ -52,6 +55,7 @@ data class MessageActions(
     val onToggleMessageCollapsed: (Long) -> Unit,
     val onToggleReasoningSection: (Long) -> Unit,
     val onShowToolCallDetails: (ToolCall) -> Unit,
-    val onShowFileReferenceDetails: (FileReference) -> Unit
+    val onShowFileReferenceDetails: (FileReference) -> Unit,
+    val onShowMessageUsageDetails: (ChatMessage.AssistantMessage) -> Unit
 )
 

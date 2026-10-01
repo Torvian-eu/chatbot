@@ -89,6 +89,26 @@ sealed class ChatAreaDialogState {
     ) : ChatAreaDialogState()
 
     /**
+     * State for the Message Usage Details dialog.
+     *
+     * The display names of the model and the settings profile are resolved when the dialog is opened, so the
+     * dialog itself needs no lookup maps and stays a plain rendering of one message's provenance and usage.
+     *
+     * @property message The finalized assistant message whose details and usage are displayed.
+     * @property modelDisplayName Name of the model that produced the message, or `null` when the message carries
+     *            no model or its model no longer resolves (the dialog shows a fallback then).
+     * @property settingsDisplayName Name of the settings profile that produced the message, or `null` when the
+     *            message carries no profile or its profile no longer resolves (the dialog shows a fallback then).
+     * @property onDismiss Action to close the dialog.
+     */
+    data class MessageUsageDetails(
+        val message: ChatMessage.AssistantMessage,
+        val modelDisplayName: String?,
+        val settingsDisplayName: String?,
+        val onDismiss: () -> Unit
+    ) : ChatAreaDialogState()
+
+    /**
      * State for the File References Management dialog.
      * Allows users to manage pending file references before sending.
      *

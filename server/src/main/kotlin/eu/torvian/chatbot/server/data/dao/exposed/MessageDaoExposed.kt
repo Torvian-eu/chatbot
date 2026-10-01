@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.server.data.dao.AssistantMessageCompletionState
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
@@ -232,6 +233,7 @@ class MessageDaoExposed(
         agentRoleId: Long?,
         fileReferences: List<FileReference>,
         reasoningItems: List<JsonObject>?,
+        usageStats: UsageStats?,
         createdAt: Instant?,
         updatedAt: Instant?,
         completion: AssistantMessageCompletionState
@@ -302,6 +304,9 @@ class MessageDaoExposed(
                         it[AssistantMessageTable.settingsId] = settingsId
                         it[AssistantMessageTable.agentRoleId] = agentRoleId
                         it[AssistantMessageTable.reasoningItemsJson] = serializeReasoning(reasoningItems)
+                        // Usage is written with the row itself: a non-streaming answer knows its usage when the row
+                        // is created, and the streaming placeholder simply has none yet.
+                        it[AssistantMessageTable.usageStatsJson] = serializeUsage(usageStats)
                         // Completion state is written with the row itself so the streaming placeholder is born
                         // not-completed and no window exists in which the row looks complete.
                         it[AssistantMessageTable.isComplete] = completion.isComplete
@@ -387,6 +392,7 @@ class MessageDaoExposed(
                         settingsId = settingsId,
                         agentRoleId = agentRoleId,
                         reasoningItems = reasoningItems,
+                        usageStats = usageStats,
                         // Mirror the persisted state so callers can emit the message without re-reading it.
                         isComplete = completion.isComplete,
                         incompleteCause = completion.incompleteCause,
@@ -413,7 +419,8 @@ class MessageDaoExposed(
         content: String,
         fileReferences: List<FileReference>?,
         completion: AssistantMessageCompletionState,
-        clearReasoning: Boolean
+        clearReasoning: Boolean,
+        usageStats: UsageStats?
     ): Either<MessageError.MessageNotFound, ChatMessage> =
         transactionScope.transaction {
             either {
@@ -433,6 +440,8 @@ class MessageDaoExposed(
                     it[AssistantMessageTable.incompleteCause] = completion.incompleteCause?.name
                     it[AssistantMessageTable.errorCode] = completion.errorCode?.name
                     it[AssistantMessageTable.errorMessage] = completion.errorMessage
+                    // Written unconditionally so the column always reflects the caller's value; `null` clears it.
+                    it[AssistantMessageTable.usageStatsJson] = serializeUsage(usageStats)
                     if (clearReasoning) {
                         it[AssistantMessageTable.reasoningItemsJson] = null
                     }
@@ -840,4 +849,12 @@ class MessageDaoExposed(
         reasoningItems?.takeIf { it.isNotEmpty() }
             ?.let { Json.encodeToString(ListSerializer(JsonObject.serializer()), it) }
 
+    /**
+     * Serializes the provider-reported usage of an assistant message into its JSON form for the database column.
+     *
+     * @param usageStats Usage to persist, or `null` when the message has none.
+     * @return The JSON-object string, or `null` when there is no usage to store.
+     */
+    private fun serializeUsage(usageStats: UsageStats?): String? =
+        usageStats?.let { Json.encodeToString(UsageStats.serializer(), it) }
 }

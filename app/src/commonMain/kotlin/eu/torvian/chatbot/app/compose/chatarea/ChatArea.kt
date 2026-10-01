@@ -199,7 +199,8 @@ private fun SuccessStateDisplay(
             onToggleMessageCollapsed = actions::onToggleMessageCollapsed,
             onToggleReasoningSection = actions::onToggleReasoningSection,
             onShowToolCallDetails = actions::onShowToolCallDetails,
-            onShowFileReferenceDetails = actions::onShowFileReferenceDetails
+            onShowFileReferenceDetails = actions::onShowFileReferenceDetails,
+            onShowMessageUsageDetails = actions::onShowMessageUsageDetails
         )
     }
 

@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.core.LLMConfig
@@ -77,13 +78,12 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionNotificationTest 
                         role = "assistant", content = assistantMessage.content, finishReason = "stop", index = 0
                     )
                 ),
-                usage = LLMCompletionResult.UsageStats(1, 1, 2)
+                usage = UsageStats(1, 1, 2)
             ).right()
             coEvery {
                 conversationTurnPersistence.saveAssistantMessage(
                     testSession.id, assistantMessage.content, userMessage.id, testModel, testSettings,
-                    agentRoleId = testRoleId, reasoningItems = null
-                )
+                    agentRoleId = testRoleId, reasoningItems = null, usageStats = any())
             } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
             val events = orchestrator.processNonStreamingTurn(
@@ -150,13 +150,12 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionNotificationTest 
                     role = "assistant", content = assistantMessage.content, finishReason = "stop", index = 0
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2)
+            usage = UsageStats(1, 1, 2)
         ).right()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id, assistantMessage.content, userMessage.id, testModel, testSettings,
-                agentRoleId = testRoleId, reasoningItems = null
-            )
+                agentRoleId = testRoleId, reasoningItems = null, usageStats = any())
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
         // The default base stub returns persistedChunkIfAny = null.

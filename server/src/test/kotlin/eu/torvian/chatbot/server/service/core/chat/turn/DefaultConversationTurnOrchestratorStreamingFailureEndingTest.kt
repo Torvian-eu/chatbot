@@ -56,8 +56,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
                 AssistantMessageCompletionState.failed(
                     code = AssistantMessageErrorCode.AUTHENTICATION_FAILED,
                     message = "The provider rejected the API key or credentials."
-                )
-            )
+                ), usageStats = any())
         }
         // Documented failure ordering: the transient error notification, the finalized (failed) message, and
         // then exactly one terminal frame.
@@ -95,8 +94,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
             conversationTurnPersistence.updateAssistantMessageContent(
                 placeholder.id,
                 "Half an answer",
-                streamInterruptedCompletionState()
-            )
+                streamInterruptedCompletionState(), usageStats = any())
         }
         assertEquals(5, events.size)
         val finished = assertIs<ConversationTurnEvent.AssistantMessageFinished>(events[3])
@@ -134,12 +132,11 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
                 AssistantMessageCompletionState.failed(
                     code = AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
                     message = "The provider failed to generate a response."
-                )
-            )
+                ), usageStats = any())
         }
         // Exactly one terminal write: the failure is reported through the error chunk, not through the
         // "stream ended without a terminal chunk" classification.
-        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
         assertEquals(6, events.size)
         assertIs<ConversationTurnEvent.UserMessageSaved>(events[0])
         assertIs<ConversationTurnEvent.AssistantMessageStarted>(events[1])
@@ -186,10 +183,9 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
                 AssistantMessageCompletionState.failed(
                     code = AssistantMessageErrorCode.PROVIDER_REQUEST_REJECTED,
                     message = "The provider stopped the response because of its content policy."
-                )
-            )
+                ), usageStats = any())
         }
-        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
         val finished = events.filterIsInstance<ConversationTurnEvent.AssistantMessageFinished>().single()
         assertFalse(finished.assistantMessage.isComplete)
         assertEquals(1, events.count { it is ConversationTurnEvent.ExternalServiceError })
@@ -221,8 +217,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
             conversationTurnPersistence.updateAssistantMessageContent(
                 placeholder.id,
                 "Partial answer",
-                unexpectedFailureCompletionState()
-            )
+                unexpectedFailureCompletionState(), usageStats = any())
         }
         // The turn is closed by ChatServiceImpl (UnexpectedError + StreamCompleted) after the rethrow, so the
         // orchestrator must not emit a terminal frame here.
@@ -257,11 +252,10 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
             conversationTurnPersistence.updateAssistantMessageContent(
                 placeholder.id,
                 "Complete answer",
-                AssistantMessageCompletionState.Completed
-            )
+                AssistantMessageCompletionState.Completed, usageStats = any())
         }
         // The finalizer is a no-op once the message reached a terminal state, so nothing is re-flagged.
-        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
     }
 
     /**
@@ -290,10 +284,9 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
                 AssistantMessageCompletionState.failed(
                     code = AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
                     message = "The provider is currently unavailable (HTTP 502)."
-                )
-            )
+                ), usageStats = any())
         }
-        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
         // The failure is reported once, and the turn closes once.
         val errorFrame = assertIs<ConversationTurnEvent.ExternalServiceError>(
             events.single { it is ConversationTurnEvent.ExternalServiceError }
@@ -329,10 +322,9 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
             conversationTurnPersistence.updateAssistantMessageContent(
                 placeholder.id,
                 "Complete answer",
-                AssistantMessageCompletionState.Completed
-            )
+                AssistantMessageCompletionState.Completed, usageStats = any())
         }
-        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
         // The late delta never reaches the client and the late error adds no transient frame.
         assertEquals(1, events.count { it is ConversationTurnEvent.AssistantMessageDelta })
         assertTrue(events.none { it is ConversationTurnEvent.ExternalServiceError })
@@ -365,10 +357,9 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
                 AssistantMessageCompletionState.failed(
                     code = AssistantMessageErrorCode.INVALID_PROVIDER_RESPONSE,
                     message = "The provider returned a response that could not be processed."
-                )
-            )
+                ), usageStats = any())
         }
-        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
         assertEquals(1, events.count { it is ConversationTurnEvent.ExternalServiceError })
         assertTrue(events.none { it is ConversationTurnEvent.AssistantMessageDelta })
         assertEquals(1, events.count { it == ConversationTurnEvent.TurnCompleted })
@@ -402,8 +393,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
                 AssistantMessageCompletionState.failed(
                     code = AssistantMessageErrorCode.INVALID_PROVIDER_RESPONSE,
                     message = "The provider returned a response that could not be processed."
-                )
-            )
+                ), usageStats = any())
         }
         val frames = events.filterIsInstance<ConversationTurnEvent.ExternalServiceError>()
         assertEquals(1, frames.size, "A stream has one ending, so it is reported once")
@@ -459,8 +449,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
                 AssistantMessageCompletionState.failed(
                     code = AssistantMessageErrorCode.PROVIDER_OUTPUT_LIMIT_EXCEEDED,
                     message = "The provider stopped the response because the model reached its output limit."
-                )
-            )
+                ), usageStats = any())
         }
         val errorFrame = assertIs<ConversationTurnEvent.ExternalServiceError>(
             events.single { it is ConversationTurnEvent.ExternalServiceError }

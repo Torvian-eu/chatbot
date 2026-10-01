@@ -196,16 +196,18 @@ class SessionServiceImplCloneTest {
                 settingsId = any(),
                 fileReferences = any(),
                 createdAt = any(),
-                updatedAt = any()
+                updatedAt = any(),
+                usageStats = any()
             )
         } answers {
             val role = arg<ChatMessage.Role>(3)
             val content = arg<String>(4)
             val modelId = arg<Long?>(5)
             val settingsId = arg<Long?>(6)
-            // index 10 = createdAt, 11 = updatedAt (after the agentRoleId param at index 7 and reasoningItemsJson at index 9)
-            val createdAt = arg<Instant>(10)
-            val updatedAt = arg<Instant>(11)
+            // index 11 = createdAt, 12 = updatedAt (after the agentRoleId param at index 7, reasoningItemsJson
+            // at index 9 and usageStats at index 10)
+            val createdAt = arg<Instant>(11)
+            val updatedAt = arg<Instant>(12)
             val parentMessageId = arg<Long?>(1)
             val messageId = nextMessageId++
 
@@ -260,6 +262,8 @@ class SessionServiceImplCloneTest {
         coVerify { messageDao.getMessagesBySessionId(testSessionId) }
         coVerify(exactly = 3) {
             messageDao.insertMessage(
+                any(),
+                any(),
                 any(),
                 any(),
                 any(),
@@ -335,6 +339,7 @@ class SessionServiceImplCloneTest {
                 any(),
                 any(),
                 any(),
+                any(),
                 any()
             )
         } answers {
@@ -342,8 +347,8 @@ class SessionServiceImplCloneTest {
                 id = nextMessageId++,
                 sessionId = testClonedSessionId,
                 content = arg<String>(4),
-                createdAt = arg<Instant>(10),
-                updatedAt = arg<Instant>(11),
+                createdAt = arg<Instant>(11),
+                updatedAt = arg<Instant>(12),
                 parentMessageId = arg<Long?>(1),
                 childrenMessageIds = emptyList(),
                 modelId = arg<Long?>(5),
@@ -372,6 +377,7 @@ class SessionServiceImplCloneTest {
                 reasoningItems = null,
                 createdAt = testTimestamp1,
                 updatedAt = testTimestamp1,
+                usageStats = any(),
                 completion = AssistantMessageCompletionState.InterruptedByUser
             )
         }
@@ -389,6 +395,7 @@ class SessionServiceImplCloneTest {
                 reasoningItems = null,
                 createdAt = testTimestamp2,
                 updatedAt = testTimestamp2,
+                usageStats = any(),
                 completion = AssistantMessageCompletionState.failed(
                     code = AssistantMessageErrorCode.OUTPUT_LIMIT_EXCEEDED,
                     message = "The response was stopped because it exceeded the 64,000-character limit."
@@ -413,11 +420,27 @@ class SessionServiceImplCloneTest {
 
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
         } answers {
-            // index 10 = createdAt, 11 = updatedAt (after the agentRoleId param at index 7 and reasoningItemsJson at index 9)
-            val createdAt = arg<Instant>(10)
-            val updatedAt = arg<Instant>(11)
+            // index 11 = createdAt, 12 = updatedAt (after the agentRoleId param at index 7, reasoningItemsJson
+            // at index 9 and usageStats at index 10)
+            val createdAt = arg<Instant>(11)
+            val updatedAt = arg<Instant>(12)
             ChatMessage.UserMessage(
                 id = nextMessageId++,
                 sessionId = testClonedSessionId,
@@ -446,6 +469,7 @@ class SessionServiceImplCloneTest {
                 any(),
                 any(),
                 any(),
+                usageStats = any(),
                 createdAt = testTimestamp1,
                 updatedAt = testTimestamp1
             )
@@ -460,6 +484,7 @@ class SessionServiceImplCloneTest {
                 any(),
                 any(),
                 any(),
+                usageStats = any(),
                 createdAt = testTimestamp2,
                 updatedAt = testTimestamp2
             )
@@ -474,6 +499,7 @@ class SessionServiceImplCloneTest {
                 any(),
                 any(),
                 any(),
+                usageStats = any(),
                 createdAt = testTimestamp3,
                 updatedAt = testTimestamp3
             )
@@ -497,7 +523,21 @@ class SessionServiceImplCloneTest {
         val insertedMessages = mutableListOf<Pair<Long?, String>>() // parentId, content
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
         } answers {
             val parentId = arg<Long?>(1)
             val content = arg<String>(4)
@@ -564,7 +604,21 @@ class SessionServiceImplCloneTest {
 
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
         } answers {
             ChatMessage.UserMessage(
                 id = nextMessageId++,

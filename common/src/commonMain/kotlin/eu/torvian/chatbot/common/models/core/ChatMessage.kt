@@ -97,6 +97,10 @@ sealed class ChatMessage {
      * @property errorMessage Bounded, user-facing reason for a failure. It is server-authored English that
      *            never contains raw provider bodies or exception text, and it is `null` for a user
      *            interruption (the client localizes that label from [incompleteCause] instead).
+     * @property usageStats Token usage the provider reported for the generation that produced this message, or
+     *            `null` when there is none to show: the provider reported no usage, the generation did not end
+     *            normally, the row predates this field, or the message was inserted or edited by hand. `null`
+     *            never means "zero tokens".
      */
     @Serializable
     data class AssistantMessage(
@@ -115,7 +119,8 @@ sealed class ChatMessage {
         val isComplete: Boolean = true,
         val incompleteCause: AssistantMessageIncompleteCause? = null,
         val errorCode: AssistantMessageErrorCode? = null,
-        val errorMessage: String? = null
+        val errorMessage: String? = null,
+        val usageStats: UsageStats? = null
     ) : ChatMessage() {
         override val role: Role = Role.ASSISTANT
 

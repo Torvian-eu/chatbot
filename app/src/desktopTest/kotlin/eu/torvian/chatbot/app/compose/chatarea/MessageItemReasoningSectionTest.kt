@@ -120,7 +120,8 @@ class MessageItemReasoningSectionTest {
         onToggleMessageCollapsed = {},
         onToggleReasoningSection = {},
         onShowToolCallDetails = {},
-        onShowFileReferenceDetails = {}
+        onShowFileReferenceDetails = {},
+        onShowMessageUsageDetails = {}
     )
 
     /**

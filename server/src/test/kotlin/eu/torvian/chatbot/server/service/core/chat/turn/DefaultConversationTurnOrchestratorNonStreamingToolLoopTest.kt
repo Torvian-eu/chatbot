@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -110,7 +111,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolLoopTest : DefaultConve
                     )
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2),
+            usage = UsageStats(1, 1, 2),
             metadata = emptyMap()
         )
         val secondCompletion = LLMCompletionResult(
@@ -123,7 +124,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolLoopTest : DefaultConve
                     index = 0
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2),
+            usage = UsageStats(1, 1, 2),
             metadata = emptyMap()
         )
         val capturedContexts = mutableListOf<List<RawChatMessage>>()
@@ -143,7 +144,10 @@ class DefaultConversationTurnOrchestratorNonStreamingToolLoopTest : DefaultConve
                 testModel,
                 testSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = null
+                reasoningItems = null,
+                // Each iteration records its own usage: the loop does not accumulate them into one message.
+                usageStats = UsageStats(1, 1, 2),
+                completion = any()
             )
         } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
         coEvery {
@@ -154,7 +158,9 @@ class DefaultConversationTurnOrchestratorNonStreamingToolLoopTest : DefaultConve
                 testModel,
                 testSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = null
+                reasoningItems = null,
+                usageStats = UsageStats(1, 1, 2),
+                completion = any()
             )
         } returns PersistedAssistantMessage(assistantFinalMessage, assistantToolMessage)
         coEvery {

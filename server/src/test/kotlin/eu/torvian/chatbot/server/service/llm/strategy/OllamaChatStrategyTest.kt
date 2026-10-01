@@ -163,13 +163,80 @@ class OllamaChatStrategyTest {
         assertEquals(0, choice.index)
 
         // Check usage stats
-        assertEquals(26, completionResult.usage.promptTokens)
-        assertEquals(15, completionResult.usage.completionTokens)
-        assertEquals(41, completionResult.usage.totalTokens)
+        assertEquals(26, completionResult.usage?.inputTokens)
+        assertEquals(15, completionResult.usage?.outputTokens)
+        assertEquals(41, completionResult.usage?.totalTokens)
 
         // Check metadata
         assertEquals("llama3.2", completionResult.metadata["api_model"])
         assertEquals(true, completionResult.metadata["api_done"])
+    }
+
+    @Test
+    fun `processSuccessResponse should report no usage when Ollama reports no counters`() {
+        // Arrange - a response without prompt_eval_count/eval_count (Ollama omits them for some models).
+        val responseBody = """
+            {
+                "model": "llama3.2",
+                "created_at": "2023-12-07T09:32:18.757212583-08:00",
+                "message": { "role": "assistant", "content": "Answer" },
+                "done": true
+            }
+        """.trimIndent()
+
+        // Act
+        val result = strategy.processSuccessResponse(responseBody)
+
+        // Assert - no usage is recorded rather than a zero-filled one.
+        val completionResult = result.getOrElse { throw AssertionError("Expected LLMCompletionResult") }
+        assertNull(completionResult.usage)
+    }
+
+    @Test
+    fun `processSuccessResponse should treat a counter Ollama omits as zero and sum the total`() {
+        // Arrange - only the prompt counter is reported.
+        val responseBody = """
+            {
+                "model": "llama3.2",
+                "created_at": "2023-12-07T09:32:18.757212583-08:00",
+                "message": { "role": "assistant", "content": "Answer" },
+                "done": true,
+                "prompt_eval_count": 26
+            }
+        """.trimIndent()
+
+        // Act
+        val result = strategy.processSuccessResponse(responseBody)
+
+        // Assert
+        val usage = result.getOrElse { throw AssertionError("Expected LLMCompletionResult") }.usage
+        assertNotNull(usage)
+        assertEquals(26, usage.inputTokens)
+        assertEquals(0, usage.outputTokens)
+        assertEquals(26, usage.totalTokens)
+    }
+
+    @Test
+    fun `processStreamingResponse should emit no final usage when the done chunk carries no counters`() = runTest {
+        // Arrange
+        val streamLines = arrayOf(
+            "{\"model\":\"llama3.2\",\"created_at\":\"2023-12-07T09:32:18Z\"," +
+                "\"message\":{\"role\":\"assistant\",\"content\":\"Answer\"},\"done\":false}",
+            "{\"model\":\"llama3.2\",\"created_at\":\"2023-12-07T09:32:18Z\"," +
+                "\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true}"
+        )
+
+        // Act
+        val emitted = strategy.processStreamingResponse(flowOf(*streamLines))
+            .toList()
+            .mapNotNull { it.getOrNull() }
+
+        // Assert
+        assertTrue(emitted.any { it is LLMStreamChunk.Done })
+        assertTrue(
+            emitted.none { it is LLMStreamChunk.FinalUsageStats },
+            "A done chunk without counters must contribute no usage"
+        )
     }
 
     @Test
@@ -295,7 +362,8 @@ class OllamaChatStrategyTest {
         val providerFailure = assertIs<LLMCompletionError.ProviderFailureError>(errorChunk.llmError)
         assertEquals("length", providerFailure.providerCode)
         // The usage of the terminal chunk is still reported, ahead of the failure it qualifies.
-        assertTrue(emitted.any { it is LLMStreamChunk.UsageChunk })
+        val usageIndex = emitted.indexOfFirst { it is LLMStreamChunk.FinalUsageStats }
+        assertTrue(usageIndex in (contentIndex + 1) until errorIndex, "The usage must precede the failure and Done")
     }
 
     /**

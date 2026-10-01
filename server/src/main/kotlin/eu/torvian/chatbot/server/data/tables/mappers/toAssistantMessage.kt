@@ -4,6 +4,7 @@ import eu.torvian.chatbot.common.models.core.AssistantMessageErrorCode
 import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.server.data.tables.AssistantMessageTable
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
 import kotlinx.serialization.builtins.ListSerializer
@@ -27,7 +28,8 @@ private val logger: Logger = LogManager.getLogger("toAssistantMessageMapper")
  *
  * The completion columns (`is_complete`, `incomplete_cause`, `error_code`, `error_message`) are read defensively:
  * the cause and code are stored as enum *names* and an unrecognized value degrades to `null` (rendering nothing)
- * with a warning, instead of throwing and failing the read of an entire session.
+ * with a warning, instead of throwing and failing the read of an entire session. The usage column degrades the
+ * same way: a value this version cannot decode reads as "no usage" instead of failing the session.
  *
  * @receiver A row of a `chat_messages` LEFT JOIN `assistant_messages` query.
  * @return The mapped assistant message, including its persisted completion state.
@@ -56,6 +58,22 @@ fun ResultRow.toAssistantMessage(): ChatMessage.AssistantMessage {
             Json.decodeFromString(ListSerializer(JsonObject.serializer()), it)
         }.getOrNull() }
 
+    // Usage is a nullable JSON column written by the turn pipeline; an absent, blank or undecodable value reads as
+    // "no usage reported", so a foreign or corrupt row cannot break a session load.
+    val usageStats = this.getOrNull(AssistantMessageTable.usageStatsJson)
+        ?.takeIf { it.isNotBlank() }
+        ?.let { storedUsage ->
+            runCatching { Json.decodeFromString(UsageStats.serializer(), storedUsage) }
+                .onFailure {
+                    logger.warn(
+                        "Ignoring undecodable value in assistant_messages.{} for message {}",
+                        AssistantMessageTable.usageStatsJson.name,
+                        id
+                    )
+                }
+                .getOrNull()
+        }
+
     // Completion state: the flag is NOT NULL in the schema, so a missing value is treated as completed (the
     // documented default for rows and payloads that predate the column).
     val isComplete = this.getOrNull(AssistantMessageTable.isComplete) ?: true
@@ -80,7 +98,8 @@ fun ResultRow.toAssistantMessage(): ChatMessage.AssistantMessage {
         isComplete = isComplete,
         incompleteCause = incompleteCause,
         errorCode = errorCode,
-        errorMessage = this.getOrNull(AssistantMessageTable.errorMessage)
+        errorMessage = this.getOrNull(AssistantMessageTable.errorMessage),
+        usageStats = usageStats
     )
 }
 

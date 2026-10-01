@@ -77,6 +77,24 @@
     <string name="reasoning_encrypted_notice">The model's reasoning is encrypted and cannot be displayed.</string>
     <string name="reasoning_display_truncated">Reasoning truncated for display.</string>
 
+    <!-- Message Usage Details Dialog -->
+    <string name="usage_dialog_title">Message details</string>
+    <string name="usage_dialog_model_label">Model</string>
+    <string name="usage_dialog_settings_label">Settings profile</string>
+    <string name="usage_dialog_unknown_value">Unknown</string>
+    <string name="usage_dialog_created_label">Created</string>
+    <string name="usage_dialog_updated_label">Last updated</string>
+    <string name="usage_dialog_usage_section_title">Token usage</string>
+    <string name="usage_dialog_input_tokens_label">Input tokens</string>
+    <string name="usage_dialog_output_tokens_label">Output tokens</string>
+    <string name="usage_dialog_total_tokens_label">Total tokens</string>
+    <string name="usage_dialog_reasoning_tokens_label">Reasoning tokens</string>
+    <string name="usage_dialog_cached_tokens_label">Cached input tokens</string>
+    <string name="usage_dialog_cache_write_tokens_label">Cache write tokens</string>
+    <string name="usage_dialog_usage_unavailable">Token usage is not available for this message.</string>
+    <string name="usage_dialog_close_button">Close</string>
+    <string name="usage_dialog_header_description">Show message details and token usage</string>
+
     <!-- Turn Status Notifications -->
     <string name="turn_notification_title_unknown_session">Chat session</string>
     <string name="turn_notification_body_turn_completed_success">The assistant finished its turn.</string>

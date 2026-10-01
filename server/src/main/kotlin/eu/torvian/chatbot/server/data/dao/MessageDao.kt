@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import kotlinx.serialization.json.JsonObject
@@ -66,6 +67,9 @@ interface MessageDao {
      * @param agentRoleId Optional agent role ID (for assistant messages, provenance).
      * @param reasoningItems Optional replay-safe reasoning items emitted with an assistant message. Only their
      *                       derived plaintext may be rendered; the raw items are opaque.
+     * @param usageStats Optional provider-reported token usage of the assistant message. `null` means there is no
+     *                   usage to record and is what a message without reported usage must carry; it is never a
+     *                   zero-filled value.
      * @param fileReferences Optional list of file references.
      * @param createdAt Optional creation timestamp. If null, uses current time.
      * @param updatedAt Optional update timestamp. If null, uses current time.
@@ -87,6 +91,7 @@ interface MessageDao {
         agentRoleId: Long? = null,
         fileReferences: List<FileReference> = emptyList(),
         reasoningItems: List<JsonObject>? = null,
+        usageStats: UsageStats? = null,
         createdAt: Instant? = null,
         updatedAt: Instant? = null,
         completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed
@@ -110,6 +115,11 @@ interface MessageDao {
      *                   public edit path, whose new content no longer matches the reasoning that produced the
      *                   old one; turn finalization keeps the default so reasoning written moments earlier in the
      *                   same step survives. Ignored for user messages, which carry no reasoning column.
+     * @param usageStats Provider-reported token usage to store with the new content, or `null` to clear any stored
+     *                   usage. The value is written unconditionally, so a caller that means "leave the stored usage
+     *                   alone" cannot express that here: today's callers are the turn-finalization write, which owns
+     *                   the whole terminal state of the message, and the public edit path, whose new content no
+     *                   longer belongs to the generation that reported the usage. Ignored for user messages.
      * @return Either a [MessageError.MessageNotFound] or the updated [ChatMessage] object.
      */
     suspend fun updateMessageContent(
@@ -117,7 +127,8 @@ interface MessageDao {
         content: String,
         fileReferences: List<FileReference>? = null,
         completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed,
-        clearReasoning: Boolean = false
+        clearReasoning: Boolean = false,
+        usageStats: UsageStats? = null
     ): Either<MessageError.MessageNotFound, ChatMessage>
 
     /**

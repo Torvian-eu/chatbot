@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.ResponsesModelSettings
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
@@ -80,7 +81,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                     index = 0
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2),
+            usage = UsageStats(1, 1, 2),
             reasoningItems = reasoningItems
         )
 
@@ -102,8 +103,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                 reasoningModel,
                 reasoningSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = reasoningItems
-            )
+                reasoningItems = reasoningItems, usageStats = any())
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
         orchestrator.processNonStreamingTurn(
@@ -128,8 +128,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                 reasoningModel,
                 reasoningSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = reasoningItems
-            )
+                reasoningItems = reasoningItems, usageStats = any())
         }
         // The capability recorder must observe the model and its reasoning items so later replays can
         // adapt what is sent to this model.
@@ -237,7 +236,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                     )
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2),
+            usage = UsageStats(1, 1, 2),
             reasoningItems = reasoningItems
         )
         val secondCompletion = LLMCompletionResult(
@@ -250,7 +249,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                     index = 0
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2)
+            usage = UsageStats(1, 1, 2)
         )
         val capturedContexts = mutableListOf<List<RawChatMessage>>()
 
@@ -269,8 +268,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                 reasoningModel,
                 reasoningSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = reasoningItems
-            )
+                reasoningItems = reasoningItems, usageStats = any())
         } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -280,8 +278,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                 reasoningModel,
                 reasoningSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = null
-            )
+                reasoningItems = null, usageStats = any())
         } returns PersistedAssistantMessage(assistantFinalMessage, assistantToolMessage)
         coEvery {
             conversationTurnPersistence.persistPendingToolCalls(

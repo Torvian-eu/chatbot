@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.service.llm.*
@@ -176,11 +177,12 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
             }
 
             // 3. Map to generic LLMCompletionResult
-            // Note: Ollama doesn't always provide token usage in non-streaming mode
-            val usage = LLMCompletionResult.UsageStats(
-                promptTokens = successResponse.prompt_eval_count ?: 0,
-                completionTokens = successResponse.eval_count ?: 0,
-                totalTokens = (successResponse.prompt_eval_count ?: 0) + (successResponse.eval_count ?: 0)
+            // Ollama reports its token counters only for some models and versions, and it reports no total of its
+            // own, so the total is the sum of the two counters. When it reports neither, there is no usage to
+            // record rather than a zero-filled one.
+            val usage = ollamaUsageStats(
+                promptEvalCount = successResponse.prompt_eval_count,
+                evalCount = successResponse.eval_count
             )
 
             // Determine finish reason based on done status
@@ -244,15 +246,14 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
                 if (streamChunk.done) {
                     logger.debug("Received done chunk")
 
-                    // Emit usage stats if available
-                    if (streamChunk.prompt_eval_count != null && streamChunk.eval_count != null) {
-                        emit(
-                            LLMStreamChunk.UsageChunk(
-                                promptTokens = streamChunk.prompt_eval_count,
-                                completionTokens = streamChunk.eval_count,
-                                totalTokens = streamChunk.prompt_eval_count + streamChunk.eval_count
-                            ).right()
-                        )
+                    // Emit the authoritative usage before the terminal chunks, so the collector observes it while
+                    // the stream is still open. Ollama reports the counters on the done chunk itself and may
+                    // report only one of them (or none at all, in which case there is no usage to record).
+                    ollamaUsageStats(
+                        promptEvalCount = streamChunk.prompt_eval_count,
+                        evalCount = streamChunk.eval_count
+                    )?.let { usage ->
+                        emit(LLMStreamChunk.FinalUsageStats(usage).right())
                     }
 
                     // The terminal reason declares how the generation ended. A generation the server stopped at
@@ -353,6 +354,28 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
                 errorBody
             )
         }
+    }
+
+    /**
+     * Applies the presence rule to Ollama's token counters.
+     *
+     * Ollama reports no total of its own, so the total is the sum of the two counters. A counter the provider
+     * omitted is `0`, but a done chunk that reports neither counter means that no usage was reported, which stays
+     * `null` instead of becoming a zero-filled value.
+     *
+     * @param promptEvalCount Tokens the provider counted for the prompt, or `null` when it reported none.
+     * @param evalCount Tokens the provider counted for the generation, or `null` when it reported none.
+     * @return The reported usage, or `null` when neither counter was reported.
+     */
+    private fun ollamaUsageStats(promptEvalCount: Int?, evalCount: Int?): UsageStats? {
+        if (promptEvalCount == null && evalCount == null) return null
+        val input = promptEvalCount ?: 0
+        val output = evalCount ?: 0
+        return UsageStats(
+            inputTokens = input,
+            outputTokens = output,
+            totalTokens = input + output
+        )
     }
 
     /**

@@ -367,6 +367,9 @@ fun ChatScreen(
             override fun onShowFileReferenceDetails(fileReference: FileReference) =
                 chatViewModel.showFileReferenceDetails(fileReference)
 
+            override fun onShowMessageUsageDetails(message: ChatMessage.AssistantMessage) =
+                chatViewModel.showMessageUsageDetails(message)
+
             override fun onShowFileReferencesManagement() =
                 chatViewModel.showFileReferencesManagement()
 

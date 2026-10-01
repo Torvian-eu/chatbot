@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.chat.persistence
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -43,6 +44,8 @@ interface ConversationTurnPersistence {
      * @param reasoningItems Optional replay-safe reasoning items emitted with the assistant message. Must be
      *                       `null` for non-reasoning models; callers must sanitize them before persistence.
      *                       The raw items stay opaque, while their derived plaintext may be displayed.
+     * @param usageStats Provider-reported token usage of the generation, or `null` when there is none to record.
+     *                   `null` means "no usage reported" and is never a zero-filled value.
      * @param completion Completion state written together with the row. The streaming placeholder is inserted
      *                   with [AssistantMessageCompletionState.InFlight] (not completed, no cause yet), a
      *                   non-streaming answer with an explicit terminal state, and the default
@@ -57,6 +60,7 @@ interface ConversationTurnPersistence {
         settings: ModelSettings,
         agentRoleId: Long? = null,
         reasoningItems: List<JsonObject>? = null,
+        usageStats: UsageStats? = null,
         completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed
     ): PersistedAssistantMessage
 
@@ -71,12 +75,16 @@ interface ConversationTurnPersistence {
      * @param messageId Assistant message to update.
      * @param content Final or partial accumulated content.
      * @param completion Terminal (or in-flight) completion state to persist with [content].
+     * @param usageStats Provider-reported token usage to persist with [content], or `null` when the generation
+     *                   reported none or did not end normally. The value is written together with the content, so a
+     *                   finalization that carries no usage also clears any usage stored earlier.
      * @return Updated assistant message.
      */
     suspend fun updateAssistantMessageContent(
         messageId: Long,
         content: String,
-        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed
+        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed,
+        usageStats: UsageStats? = null
     ): ChatMessage.AssistantMessage
 
     /**

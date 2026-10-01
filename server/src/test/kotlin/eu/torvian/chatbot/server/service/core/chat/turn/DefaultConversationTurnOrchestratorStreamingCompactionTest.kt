@@ -74,8 +74,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                 conversationTurnPersistence.saveAssistantMessage(
                     testSession.id, "", userMessage.id, testModel, streamingSettings,
                     agentRoleId = testRoleId, reasoningItems = null,
-                    completion = AssistantMessageCompletionState.InFlight
-                )
+                    completion = AssistantMessageCompletionState.InFlight, usageStats = any())
             } returns PersistedAssistantMessage(assistantStarted, userMessage)
             val capturedStreamContexts = mutableListOf<List<RawChatMessage>>()
             coEvery {
@@ -87,7 +86,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                 LLMStreamChunk.Done.right()
             )
             coEvery {
-                conversationTurnPersistence.updateAssistantMessageContent(assistantStarted.id, "Summarized answer")
+                conversationTurnPersistence.updateAssistantMessageContent(assistantStarted.id, "Summarized answer", usageStats = any())
             } returns assistantFinished
 
             val events = orchestrator.processStreamingTurn(
@@ -154,7 +153,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
         assertIs<ConversationTurnEvent.CompactionFailed>(events[1])
         assertEquals(ConversationTurnEvent.TurnCompleted, events[2])
         coVerify(exactly = 0) {
-            conversationTurnPersistence.saveAssistantMessage(any(), any(), any(), any(), any(), any(), any())
+            conversationTurnPersistence.saveAssistantMessage(any(), any(), any(), any(), any(), any(), any(), usageStats = any())
         }
         coVerify(exactly = 0) { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) }
     }
@@ -209,8 +208,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                 conversationTurnPersistence.saveAssistantMessage(
                     testSession.id, "", userMessage.id, testModel, streamingSettings,
                     agentRoleId = testRoleId, reasoningItems = null,
-                    completion = AssistantMessageCompletionState.InFlight
-                )
+                    completion = AssistantMessageCompletionState.InFlight, usageStats = any())
             } returns PersistedAssistantMessage(assistantStarted, userMessage)
             coEvery {
                 llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any())
@@ -219,7 +217,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                 LLMStreamChunk.Done.right()
             )
             coEvery {
-                conversationTurnPersistence.updateAssistantMessageContent(assistantStarted.id, "Streamed from summary")
+                conversationTurnPersistence.updateAssistantMessageContent(assistantStarted.id, "Streamed from summary", usageStats = any())
             } returns assistantFinished
 
             val events = orchestrator.processStreamingTurn(
@@ -288,8 +286,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id, "", userMessage.id, testModel, streamingSettings,
                 agentRoleId = testRoleId, reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight
-            )
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
         } returns PersistedAssistantMessage(assistantStarted, userMessage)
         coEvery {
             llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any())
@@ -298,7 +295,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
             LLMStreamChunk.Done.right()
         )
         coEvery {
-            conversationTurnPersistence.updateAssistantMessageContent(assistantStarted.id, "Direct answer")
+            conversationTurnPersistence.updateAssistantMessageContent(assistantStarted.id, "Direct answer", usageStats = any())
         } returns assistantFinished
 
         val events = orchestrator.processStreamingTurn(

@@ -19,7 +19,9 @@ object OpenAiApiModels {
      * @property created Unix timestamp of when the completion was created
      * @property model The model name used by the API
      * @property choices List of generated responses
-     * @property usage Token usage statistics
+     * @property usage Token usage statistics, or `null`/partial when the provider omitted counters. Every counter
+     *            is optional so a partially reported usage object decodes instead of failing the whole response;
+     *            a usage with no counter at all means "no usage reported".
      */
     @Serializable
     data class ChatCompletionResponse(
@@ -29,7 +31,7 @@ object OpenAiApiModels {
         val created: Long,
         val model: String,
         val choices: List<Choice>,
-        val usage: Usage
+        val usage: Usage? = null
     ) {
         /**
          * Represents a single choice in the chat completion response.
@@ -64,15 +66,17 @@ object OpenAiApiModels {
         /**
          * Represents token usage information for the completion.
          *
-         * @property prompt_tokens Tokens in the input prompt
-         * @property completion_tokens Tokens in the generated completion
-         * @property total_tokens Total tokens used (prompt + completion)
+         * @property prompt_tokens Tokens in the input prompt, or `null` when the provider omitted the counter
+         * @property completion_tokens Tokens in the generated completion, or `null` when the provider omitted the
+         *            counter
+         * @property total_tokens Total tokens used (prompt + completion), or `null` when the provider omitted the
+         *            counter
          */
         @Serializable
         data class Usage(
-            val prompt_tokens: Int,
-            val completion_tokens: Int,
-            val total_tokens: Int
+            val prompt_tokens: Int? = null,
+            val completion_tokens: Int? = null,
+            val total_tokens: Int? = null
         )
     }
 
@@ -213,15 +217,18 @@ object OpenAiApiModels {
          * Represents token usage statistics in a streaming chunk.
          * This can appear in any chunk when stream_options.include_usage is true.
          *
-         * @property completion_tokens Number of tokens in the generated completion
-         * @property prompt_tokens Number of tokens in the prompt/context
-         * @property total_tokens Total tokens used (prompt + completion)
+         * @property completion_tokens Number of tokens in the generated completion, or `null` when the provider
+         *            omitted the counter
+         * @property prompt_tokens Number of tokens in the prompt/context, or `null` when the provider omitted the
+         *            counter
+         * @property total_tokens Total tokens used (prompt + completion), or `null` when the provider omitted the
+         *            counter
          */
         @Serializable
         data class StreamUsage(
-            val completion_tokens: Int,
-            val prompt_tokens: Int,
-            val total_tokens: Int
+            val completion_tokens: Int? = null,
+            val prompt_tokens: Int? = null,
+            val total_tokens: Int? = null
         )
 
         /**

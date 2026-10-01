@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -204,10 +205,10 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                         toolCalls = toolCalls
                     )
                 },
-                usage = LLMCompletionResult.UsageStats(
-                    promptTokens = successResponse.usage.prompt_tokens,
-                    completionTokens = successResponse.usage.completion_tokens,
-                    totalTokens = successResponse.usage.total_tokens
+                usage = toUsageStats(
+                    inputTokens = successResponse.usage?.prompt_tokens,
+                    outputTokens = successResponse.usage?.completion_tokens,
+                    totalTokens = successResponse.usage?.total_tokens
                 ),
                 metadata = mapOf(
                     "api_object" to successResponse.`object`,
@@ -273,6 +274,11 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
     ): Flow<Either<LLMCompletionError.InvalidResponseError, LLMStreamChunk>> = flow {
         logger.debug("Processing streaming response")
 
+        // Usage is reported in one of the chunks (usually the last one before the marker) and only the last
+        // reported object describes the whole generation, so it is kept until the stream is drained and emitted
+        // as the authoritative value right before the terminal chunk.
+        var reportedUsage: OpenAiApiModels.ChatCompletionStreamChunk.StreamUsage? = null
+
         responseStream.collect { rawChunk ->
             try {
                 // OpenAI uses Server-Sent Events (SSE) format
@@ -326,15 +332,10 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                     return@collect
                 }
 
-                // Process usage information if present
+                // Usage is only observed here: it becomes the authoritative final value once the stream is
+                // drained, so no usage chunk is emitted while the generation is still running.
                 streamChunk.usage?.let { usage ->
-                    emit(
-                        LLMStreamChunk.UsageChunk(
-                            promptTokens = usage.prompt_tokens,
-                            completionTokens = usage.completion_tokens,
-                            totalTokens = usage.total_tokens
-                        ).right()
-                    )
+                    reportedUsage = usage
                 }
 
                 // Process each choice in the chunk
@@ -404,8 +405,42 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             }
         }
         // After the stream has been fully collected (usually after the [DONE] signal was received),
-        // emit the final Done chunk to signal completion to the consumer.
+        // emit the authoritative usage and then the final Done chunk to signal completion to the consumer.
+        toUsageStats(
+            inputTokens = reportedUsage?.prompt_tokens,
+            outputTokens = reportedUsage?.completion_tokens,
+            totalTokens = reportedUsage?.total_tokens
+        )?.let { usage ->
+            emit(LLMStreamChunk.FinalUsageStats(usage).right())
+        }
         emit(LLMStreamChunk.Done.right())
+    }
+
+    /**
+     * Applies the presence rule to a provider usage object.
+     *
+     * A counter the provider omitted is `0` and a missing total falls back to the sum, but an object that carries
+     * no counter at all — and a missing object — means that no usage was reported, which must stay `null` rather
+     * than become a zero-filled value.
+     *
+     * @param inputTokens Tokens the provider counted for the input, or `null` when it omitted the counter.
+     * @param outputTokens Tokens the provider counted for the output, or `null` when it omitted the counter.
+     * @param totalTokens Total the provider reported, or `null` when it omitted the counter.
+     * @return The reported usage, or `null` when no counter was reported.
+     */
+    private fun toUsageStats(
+        inputTokens: Int?,
+        outputTokens: Int?,
+        totalTokens: Int?
+    ): UsageStats? {
+        if (inputTokens == null && outputTokens == null && totalTokens == null) return null
+        val input = inputTokens ?: 0
+        val output = outputTokens ?: 0
+        return UsageStats(
+            inputTokens = input,
+            outputTokens = output,
+            totalTokens = totalTokens ?: (input + output)
+        )
     }
 
     /**

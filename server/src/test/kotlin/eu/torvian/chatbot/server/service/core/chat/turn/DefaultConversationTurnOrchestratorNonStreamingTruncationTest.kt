@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.core.AssistantMessageErrorCode
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
@@ -95,7 +96,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                     )
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2),
+            usage = UsageStats(1, 1, 2),
             metadata = emptyMap()
         )
 
@@ -113,7 +114,10 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure
+                // The provider completed the response and reported its counters; the server cap only explains
+                // why the persisted text is shorter, so the usage is kept.
+                completion = expectedFailure,
+                usageStats = UsageStats(1, 1, 2)
             )
         } returns PersistedAssistantMessage(truncatedAssistantMessage, userMessage)
 
@@ -233,8 +237,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                     testSettings,
                     agentRoleId = testRoleId,
                     reasoningItems = null,
-                    completion = expectedFailure
-                )
+                    completion = expectedFailure, usageStats = any())
             } returns PersistedAssistantMessage(partialAssistantMessage, userMessage)
 
             val events = orchestrator.processNonStreamingTurn(
@@ -261,10 +264,9 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                     testSettings,
                     agentRoleId = testRoleId,
                     reasoningItems = null,
-                    completion = expectedFailure
-                )
+                    completion = expectedFailure, usageStats = any())
             }
-            coVerify(exactly = 0) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+            coVerify(exactly = 0) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
             assertEquals(4, events.size)
             assertIs<ConversationTurnEvent.UserMessageSaved>(events[0])
             val savedPartialStep = assertIs<ConversationTurnEvent.AssistantMessageSaved>(events[1])
@@ -337,7 +339,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                     index = 0
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2),
+            usage = UsageStats(1, 1, 2),
             providerFailure = declaredEnding
         )
         coEvery {
@@ -354,7 +356,10 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure
+                completion = expectedFailure,
+                // The provider declared the generation uncompleted, so its counters are not recorded even
+                // though the server also had to cut the text at the cap.
+                usageStats = null
             )
         } returns PersistedAssistantMessage(cappedAssistantMessage, userMessage)
 
@@ -382,7 +387,8 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure
+                completion = expectedFailure,
+                usageStats = null
             )
         }
         val savedStep = assertIs<ConversationTurnEvent.AssistantMessageSaved>(events[1])

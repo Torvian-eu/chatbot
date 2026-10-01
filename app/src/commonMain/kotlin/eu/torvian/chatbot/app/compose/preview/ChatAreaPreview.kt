@@ -90,6 +90,7 @@ fun ChatAreaPreview() {
             override fun onEditRole() {}
             override fun onRetryLoadingSession() {}
             override fun onShowToolCallDetails(toolCall: ToolCall) {}
+            override fun onShowMessageUsageDetails(message: ChatMessage.AssistantMessage) {}
             override fun onCopyMessage(message: ChatMessage) {}
             override fun onCopyThread() {}
             override fun onShowSearch() {}

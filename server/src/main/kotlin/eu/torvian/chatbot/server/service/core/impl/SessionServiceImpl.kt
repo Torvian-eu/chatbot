@@ -309,6 +309,8 @@ class SessionServiceImpl(
                     val settingsId = (message as? ChatMessage.AssistantMessage)?.settingsId
                     val agentRoleId = (message as? ChatMessage.AssistantMessage)?.agentRoleId
                     val reasoningItems = (message as? ChatMessage.AssistantMessage)?.reasoningItems
+                    // The clone reproduces the source message's own usage: it describes the same generation.
+                    val usageStats = (message as? ChatMessage.AssistantMessage)?.usageStats
                     // FR-13: the clone reproduces the source message's own completion state, so a transcript
                     // containing an interrupted or failed response explains the same non-completions after
                     // cloning. Non-assistant messages carry no state and stay completed.
@@ -336,6 +338,7 @@ class SessionServiceImpl(
                             agentRoleId = agentRoleId,
                             fileReferences = message.fileReferences,
                             reasoningItems = reasoningItems,
+                            usageStats = usageStats,
                             createdAt = message.createdAt,
                             updatedAt = message.updatedAt,
                             completion = completion

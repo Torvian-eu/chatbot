@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -74,13 +75,12 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                     role = "assistant", content = assistantMessage.content, finishReason = "stop", index = 0
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2)
+            usage = UsageStats(1, 1, 2)
         ).right()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id, assistantMessage.content, userMessage.id, testModel, testSettings,
-                agentRoleId = testRoleId, reasoningItems = null
-            )
+                agentRoleId = testRoleId, reasoningItems = null, usageStats = any())
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
         // The default base stub returns a disabled preflight; verify the policy is consulted exactly
@@ -252,7 +252,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                     )
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2),
+            usage = UsageStats(1, 1, 2),
             metadata = emptyMap()
         )
         val secondCompletion = LLMCompletionResult(
@@ -265,7 +265,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                     index = 0
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2),
+            usage = UsageStats(1, 1, 2),
             metadata = emptyMap()
         )
 
@@ -284,8 +284,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                 testModel,
                 testSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = null
-            )
+                reasoningItems = null, usageStats = any())
         } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -295,8 +294,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                 testModel,
                 testSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = null
-            )
+                reasoningItems = null, usageStats = any())
         } returns PersistedAssistantMessage(assistantFinalMessage, assistantToolMessage)
         coEvery {
             conversationTurnPersistence.persistPendingToolCalls(
