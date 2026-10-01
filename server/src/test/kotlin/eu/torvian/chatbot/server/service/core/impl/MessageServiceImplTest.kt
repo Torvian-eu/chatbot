@@ -148,6 +148,43 @@ class MessageServiceImplTest {
     }
 
     @Test
+    fun `updateMessageContent should pass no response duration so the edit clears it`() = runTest {
+        // Arrange
+        val messageId = 2L
+        val newContent = "Edited answer"
+        // A user edit is written through the defaulted parameter, exactly as the usage is: the stored content no
+        // longer belongs to the generation that was timed.
+        coEvery {
+            messageDao.updateMessageContent(
+                messageId,
+                newContent,
+                null,
+                completion = any(),
+                clearReasoning = true,
+                usageStats = null,
+                responseDurationMs = null
+            )
+        } returns testMessage2.copy(content = newContent).right()
+
+        // Act
+        val result = messageService.updateMessageContent(messageId, newContent)
+
+        // Assert
+        assertTrue(result.isRight(), "Should return Right for successful update")
+        coVerify(exactly = 1) {
+            messageDao.updateMessageContent(
+                messageId,
+                newContent,
+                null,
+                completion = any(),
+                clearReasoning = true,
+                usageStats = null,
+                responseDurationMs = null
+            )
+        }
+    }
+
+    @Test
     fun `updateMessageContent should return MessageNotFound error when message does not exist`() = runTest {
         // Arrange
         val messageId = 999L
