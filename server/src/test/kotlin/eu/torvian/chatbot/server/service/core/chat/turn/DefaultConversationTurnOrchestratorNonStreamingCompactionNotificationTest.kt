@@ -83,7 +83,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionNotificationTest 
             coEvery {
                 conversationTurnPersistence.saveAssistantMessage(
                     testSession.id, assistantMessage.content, userMessage.id, testModel, testSettings,
-                    agentRoleId = testRoleId, reasoningItems = null, usageStats = any())
+                    agentRoleId = testRoleId, reasoningItems = null, usageStats = any(), responseDurationMs = any())
             } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
             val events = orchestrator.processNonStreamingTurn(
@@ -155,7 +155,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionNotificationTest 
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id, assistantMessage.content, userMessage.id, testModel, testSettings,
-                agentRoleId = testRoleId, reasoningItems = null, usageStats = any())
+                agentRoleId = testRoleId, reasoningItems = null, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
         // The default base stub returns persistedChunkIfAny = null.

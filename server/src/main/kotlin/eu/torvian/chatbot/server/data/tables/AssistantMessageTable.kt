@@ -19,6 +19,10 @@ import org.jetbrains.exposed.v1.core.Table
  *            message, or `NULL` when there is no usage to report. Nullable because a provider may report none, a
  *            generation may not have completed, and rows written before this column existed carry no value; a
  *            counter the provider omitted stays absent instead of being stored as zero.
+ * @property responseDurationMs Wall-clock duration in milliseconds of the provider call that produced the
+ *            message, or `NULL` when nothing was measured (a row predating this column, a row inserted or edited by
+ *            hand, or a generation that never reached a measurement). A duration the server did not measure stays
+ *            absent instead of being stored as zero.
  * @property isComplete Whether the assistant message completed normally. `NOT NULL DEFAULT TRUE` so every row
  *            created before this column existed (and every row inserted without an explicit state) reads as
  *            completed.
@@ -54,6 +58,7 @@ object AssistantMessageTable : Table("assistant_messages") {
     ).nullable()
     val reasoningItemsJson = text("reasoning_items_json").nullable()
     val usageStatsJson = text("usage_stats").nullable()
+    val responseDurationMs = long("response_duration_ms").nullable()
     val isComplete = bool("is_complete").default(true)
     val incompleteCause = varchar("incomplete_cause", 50).nullable()
     val errorCode = varchar("error_code", 50).nullable()

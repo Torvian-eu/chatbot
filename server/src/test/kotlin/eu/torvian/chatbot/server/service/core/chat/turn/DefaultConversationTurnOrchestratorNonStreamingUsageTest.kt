@@ -61,6 +61,7 @@ class DefaultConversationTurnOrchestratorNonStreamingUsageTest : DefaultConversa
                 agentRoleId = testRoleId,
                 reasoningItems = null,
                 usageStats = reportedUsage,
+                responseDurationMs = any(),
                 completion = any()
             )
         }
@@ -103,6 +104,7 @@ class DefaultConversationTurnOrchestratorNonStreamingUsageTest : DefaultConversa
                 agentRoleId = testRoleId,
                 reasoningItems = null,
                 usageStats = null,
+                responseDurationMs = any(),
                 completion = any()
             )
         }
@@ -136,6 +138,7 @@ class DefaultConversationTurnOrchestratorNonStreamingUsageTest : DefaultConversa
                 agentRoleId = testRoleId,
                 reasoningItems = null,
                 usageStats = null,
+                responseDurationMs = any(),
                 completion = any()
             )
         }
@@ -244,7 +247,8 @@ class DefaultConversationTurnOrchestratorNonStreamingUsageTest : DefaultConversa
                 agentRoleId = testRoleId,
                 reasoningItems = null,
                 usageStats = expectedUsage,
-                completion = any()
+                completion = any(),
+                responseDurationMs = any()
             )
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
     }

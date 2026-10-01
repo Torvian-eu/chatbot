@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.response_duration_label
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_cache_write_tokens_label
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_cached_tokens_label
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_close_button
@@ -37,10 +38,11 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * Dialog showing which model and settings profile produced one assistant message, when it was created and last
- * updated, and the token usage the provider reported for it.
+ * updated, how long its provider call took, and the token usage the provider reported for it.
  *
  * The usage block is omitted and replaced by an explicit statement when the message carries none, so "no usage"
- * is never presented as a set of zero counters. Cost information is deliberately not shown.
+ * is never presented as a set of zero counters. The response-duration row is omitted entirely when no duration was
+ * recorded, so a legacy or unmeasured message shows no fake value. Cost information is deliberately not shown.
  *
  * @param message Finalized assistant message whose details are displayed.
  * @param modelDisplayName Name of the producing model, or `null` when it cannot be resolved.
@@ -82,6 +84,13 @@ fun MessageUsageDialog(
                     label = stringResource(Res.string.usage_dialog_updated_label),
                     value = formatInstant(message.updatedAt)
                 )
+                // Absent when nothing was measured: an unmeasured duration is shown as no row, never as zero.
+                message.responseDurationMs?.let { responseDurationMs ->
+                    MessageUsageDetailRow(
+                        label = stringResource(Res.string.response_duration_label),
+                        value = formatToolCallDuration(responseDurationMs)
+                    )
+                }
 
                 HorizontalDivider()
 

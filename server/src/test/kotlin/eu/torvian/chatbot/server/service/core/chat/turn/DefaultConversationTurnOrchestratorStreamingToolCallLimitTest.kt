@@ -64,7 +64,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
                 "",
                 toolCallsPerStepLimitExceededCompletionState(
                     ConversationTurnLimits.MAX_TOOL_CALLS_PER_STEP
-                ), usageStats = any())
+                ), usageStats = any(), responseDurationMs = any())
         }
         val finished = events.filterIsInstance<ConversationTurnEvent.AssistantMessageFinished>().last()
         assertEquals(AssistantMessageErrorCode.TOOL_CALLS_PER_STEP_LIMIT_EXCEEDED, finished.assistantMessage.errorCode)
@@ -159,7 +159,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
                 "",
                 toolCallArgumentLimitExceededCompletionState(
                     ConversationTurnLimits.MAX_TOOL_CALL_ARGUMENT_CHARS
-                ), usageStats = any())
+                ), usageStats = any(), responseDurationMs = any())
         }
         val finished = events.filterIsInstance<ConversationTurnEvent.AssistantMessageFinished>().last()
         assertEquals(
@@ -230,7 +230,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
                 "",
                 toolCallArgumentLimitExceededCompletionState(
                     ConversationTurnLimits.MAX_TOOL_CALL_ARGUMENT_CHARS
-                ), usageStats = any())
+                ), usageStats = any(), responseDurationMs = any())
         }
         // The live delta is the clipped payload the cap allows, so the UI never renders more than the cap.
         val toolCallDelta = assertIs<ConversationTurnEvent.ToolCallDelta>(
@@ -303,7 +303,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
         val finalMessageId = firstMessageId + ConversationTurnLimits.MAX_TOOL_CALLING_ITERATIONS - 1
         // The message of the final allowed iteration carries the failure...
         coVerify(exactly = 1) {
-            conversationTurnPersistence.updateAssistantMessageContent(finalMessageId, "", expectedFailure, usageStats = any())
+            conversationTurnPersistence.updateAssistantMessageContent(finalMessageId, "", expectedFailure, usageStats = any(), responseDurationMs = any())
         }
         assertEquals(
             ConversationTurnLimits.MAX_TOOL_CALLING_ITERATIONS.toLong(),
@@ -314,7 +314,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
             conversationTurnPersistence.updateAssistantMessageContent(
                 any(),
                 "",
-                AssistantMessageCompletionState.Completed, usageStats = any())
+                AssistantMessageCompletionState.Completed, usageStats = any(), responseDurationMs = any())
         }
         // The bound does not suppress execution: every iteration, including the final one, ran its tool call.
         assertEquals(
@@ -360,7 +360,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
                 testSettings.copy(stream = true),
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(secondPlaceholder, firstPlaceholder)
         val oversizedDelta = "x".repeat(ConversationTurnLimits.MAX_TOOL_CALL_ARGUMENT_CHARS + 100)
         val authoritativeArguments = "{\"path\":\"notes.txt\",\"content\":\"hi\"}"
@@ -413,7 +413,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
             conversationTurnPersistence.updateAssistantMessageContent(
                 firstPlaceholder.id,
                 "",
-                AssistantMessageCompletionState.Completed, usageStats = any())
+                AssistantMessageCompletionState.Completed, usageStats = any(), responseDurationMs = any())
         }
         assertEquals(1, capturedRequests.size)
         assertEquals(authoritativeArguments, capturedRequests.single().single().arguments)

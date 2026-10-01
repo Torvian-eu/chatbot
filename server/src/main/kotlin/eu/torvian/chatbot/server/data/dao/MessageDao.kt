@@ -70,6 +70,9 @@ interface MessageDao {
      * @param usageStats Optional provider-reported token usage of the assistant message. `null` means there is no
      *                   usage to record and is what a message without reported usage must carry; it is never a
      *                   zero-filled value.
+     * @param responseDurationMs Wall-clock duration in milliseconds of the provider call that produced the
+     *                   assistant message, or `null` when nothing was measured. `null` means "no duration
+     *                   recorded" and is never a zero-filled value.
      * @param fileReferences Optional list of file references.
      * @param createdAt Optional creation timestamp. If null, uses current time.
      * @param updatedAt Optional update timestamp. If null, uses current time.
@@ -94,7 +97,8 @@ interface MessageDao {
         usageStats: UsageStats? = null,
         createdAt: Instant? = null,
         updatedAt: Instant? = null,
-        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed
+        completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed,
+        responseDurationMs: Long? = null
     ): Either<InsertMessageError, ChatMessage>
 
     /**
@@ -120,6 +124,12 @@ interface MessageDao {
      *                   alone" cannot express that here: today's callers are the turn-finalization write, which owns
      *                   the whole terminal state of the message, and the public edit path, whose new content no
      *                   longer belongs to the generation that reported the usage. Ignored for user messages.
+     * @param responseDurationMs Wall-clock duration in milliseconds of the provider call that produced the
+     *                   content, or `null` to clear any stored duration. The value is written unconditionally, so a
+     *                   caller that means "leave the stored duration alone" cannot express that here: today's
+     *                   callers are the turn-finalization write, which owns the whole terminal state of the
+     *                   message, and the public edit path, whose new content describes a different generation than
+     *                   the one that was timed. Ignored for user messages.
      * @return Either a [MessageError.MessageNotFound] or the updated [ChatMessage] object.
      */
     suspend fun updateMessageContent(
@@ -128,7 +138,8 @@ interface MessageDao {
         fileReferences: List<FileReference>? = null,
         completion: AssistantMessageCompletionState = AssistantMessageCompletionState.Completed,
         clearReasoning: Boolean = false,
-        usageStats: UsageStats? = null
+        usageStats: UsageStats? = null,
+        responseDurationMs: Long? = null
     ): Either<MessageError.MessageNotFound, ChatMessage>
 
     /**

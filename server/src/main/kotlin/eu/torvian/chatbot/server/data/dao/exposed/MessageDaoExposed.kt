@@ -236,7 +236,8 @@ class MessageDaoExposed(
         usageStats: UsageStats?,
         createdAt: Instant?,
         updatedAt: Instant?,
-        completion: AssistantMessageCompletionState
+        completion: AssistantMessageCompletionState,
+        responseDurationMs: Long?
     ): Either<InsertMessageError, ChatMessage> =
         transactionScope.transaction {
             either {
@@ -307,6 +308,9 @@ class MessageDaoExposed(
                         // Usage is written with the row itself: a non-streaming answer knows its usage when the row
                         // is created, and the streaming placeholder simply has none yet.
                         it[AssistantMessageTable.usageStatsJson] = serializeUsage(usageStats)
+                        // The non-streaming answer knows its measured duration when the row is created; the
+                        // streaming placeholder has none yet and is born with no duration.
+                        it[AssistantMessageTable.responseDurationMs] = responseDurationMs
                         // Completion state is written with the row itself so the streaming placeholder is born
                         // not-completed and no window exists in which the row looks complete.
                         it[AssistantMessageTable.isComplete] = completion.isComplete
@@ -393,6 +397,7 @@ class MessageDaoExposed(
                         agentRoleId = agentRoleId,
                         reasoningItems = reasoningItems,
                         usageStats = usageStats,
+                        responseDurationMs = responseDurationMs,
                         // Mirror the persisted state so callers can emit the message without re-reading it.
                         isComplete = completion.isComplete,
                         incompleteCause = completion.incompleteCause,
@@ -420,7 +425,8 @@ class MessageDaoExposed(
         fileReferences: List<FileReference>?,
         completion: AssistantMessageCompletionState,
         clearReasoning: Boolean,
-        usageStats: UsageStats?
+        usageStats: UsageStats?,
+        responseDurationMs: Long?
     ): Either<MessageError.MessageNotFound, ChatMessage> =
         transactionScope.transaction {
             either {
@@ -442,6 +448,9 @@ class MessageDaoExposed(
                     it[AssistantMessageTable.errorMessage] = completion.errorMessage
                     // Written unconditionally so the column always reflects the caller's value; `null` clears it.
                     it[AssistantMessageTable.usageStatsJson] = serializeUsage(usageStats)
+                    // Like usage, the duration is written unconditionally: an edit that describes a different
+                    // generation clears it, while the terminal write stores the step's measurement.
+                    it[AssistantMessageTable.responseDurationMs] = responseDurationMs
                     if (clearReasoning) {
                         it[AssistantMessageTable.reasoningItemsJson] = null
                     }

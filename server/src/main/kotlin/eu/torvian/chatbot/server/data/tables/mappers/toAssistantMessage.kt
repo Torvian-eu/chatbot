@@ -31,6 +31,9 @@ private val logger: Logger = LogManager.getLogger("toAssistantMessageMapper")
  * with a warning, instead of throwing and failing the read of an entire session. The usage column degrades the
  * same way: a value this version cannot decode reads as "no usage" instead of failing the session.
  *
+ * Numeric columns need no such tolerance: an absent `response_duration_ms` cell reads as `null` through
+ * [ResultRow.getOrNull], and there is no corrupt-value path to recover from.
+ *
  * @receiver A row of a `chat_messages` LEFT JOIN `assistant_messages` query.
  * @return The mapped assistant message, including its persisted completion state.
  */
@@ -99,7 +102,8 @@ fun ResultRow.toAssistantMessage(): ChatMessage.AssistantMessage {
         incompleteCause = incompleteCause,
         errorCode = errorCode,
         errorMessage = this.getOrNull(AssistantMessageTable.errorMessage),
-        usageStats = usageStats
+        usageStats = usageStats,
+        responseDurationMs = this.getOrNull(AssistantMessageTable.responseDurationMs)
     )
 }
 

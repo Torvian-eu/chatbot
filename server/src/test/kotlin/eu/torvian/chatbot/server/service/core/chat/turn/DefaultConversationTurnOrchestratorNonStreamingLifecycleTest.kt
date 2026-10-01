@@ -72,7 +72,7 @@ class DefaultConversationTurnOrchestratorNonStreamingLifecycleTest : DefaultConv
                 testModel,
                 testSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = null, usageStats = any())
+                reasoningItems = null, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
         val events = orchestrator.processNonStreamingTurn(

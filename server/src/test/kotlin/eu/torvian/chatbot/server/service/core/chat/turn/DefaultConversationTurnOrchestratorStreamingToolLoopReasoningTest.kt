@@ -131,7 +131,7 @@ class DefaultConversationTurnOrchestratorStreamingToolLoopReasoningTest : Defaul
                 reasoningSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantToolStarted, userMessage)
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -142,7 +142,7 @@ class DefaultConversationTurnOrchestratorStreamingToolLoopReasoningTest : Defaul
                 reasoningSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantFinal, assistantToolStarted)
         // First iteration streams reasoning + a tool call; second iteration ends the loop.
         val capturedContexts = mutableListOf<List<RawChatMessage>>()
@@ -169,10 +169,10 @@ class DefaultConversationTurnOrchestratorStreamingToolLoopReasoningTest : Defaul
             )
         } returns assistantToolFinished
         coEvery {
-            conversationTurnPersistence.updateAssistantMessageContent(assistantToolStarted.id, "", usageStats = any())
+            conversationTurnPersistence.updateAssistantMessageContent(assistantToolStarted.id, "", usageStats = any(), responseDurationMs = any())
         } returns assistantToolFinished
         coEvery {
-            conversationTurnPersistence.updateAssistantMessageContent(assistantFinal.id, "Done.", usageStats = any())
+            conversationTurnPersistence.updateAssistantMessageContent(assistantFinal.id, "Done.", usageStats = any(), responseDurationMs = any())
         } returns assistantFinal
         coEvery {
             conversationTurnPersistence.persistPendingToolCalls(
@@ -338,7 +338,7 @@ class DefaultConversationTurnOrchestratorStreamingToolLoopReasoningTest : Defaul
                 reasoningSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantToolStarted, userMessage)
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -349,7 +349,7 @@ class DefaultConversationTurnOrchestratorStreamingToolLoopReasoningTest : Defaul
                 reasoningSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantFinal, assistantToolStarted)
         val capturedContexts = mutableListOf<List<RawChatMessage>>()
         coEvery {
@@ -376,10 +376,10 @@ class DefaultConversationTurnOrchestratorStreamingToolLoopReasoningTest : Defaul
             )
         } returns assistantToolFinished
         coEvery {
-            conversationTurnPersistence.updateAssistantMessageContent(assistantToolStarted.id, "", usageStats = any())
+            conversationTurnPersistence.updateAssistantMessageContent(assistantToolStarted.id, "", usageStats = any(), responseDurationMs = any())
         } returns assistantToolFinished
         coEvery {
-            conversationTurnPersistence.updateAssistantMessageContent(assistantFinal.id, "Done.", usageStats = any())
+            conversationTurnPersistence.updateAssistantMessageContent(assistantFinal.id, "Done.", usageStats = any(), responseDurationMs = any())
         } returns assistantFinal
         coEvery {
             conversationTurnPersistence.persistPendingToolCalls(

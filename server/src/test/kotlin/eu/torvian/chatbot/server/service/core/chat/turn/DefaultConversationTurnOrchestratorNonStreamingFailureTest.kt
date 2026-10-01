@@ -78,7 +78,7 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure, usageStats = any())
+                completion = expectedFailure, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(failedAssistantMessage, userMessage)
 
         val events = orchestrator.processNonStreamingTurn(
@@ -162,7 +162,7 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
                     testSettings,
                     agentRoleId = testRoleId,
                     reasoningItems = null,
-                    completion = expectedFailure, usageStats = any())
+                    completion = expectedFailure, usageStats = any(), responseDurationMs = any())
             } returns PersistedAssistantMessage(failedAssistantMessage, userMessage)
 
             val events = orchestrator.processNonStreamingTurn(
@@ -273,7 +273,7 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
                     testSettings,
                     agentRoleId = testRoleId,
                     reasoningItems = null,
-                    completion = expectedFailure, usageStats = any())
+                    completion = expectedFailure, usageStats = any(), responseDurationMs = any())
             } returns PersistedAssistantMessage(partialAssistantMessage, userMessage)
 
             val events = orchestrator.processNonStreamingTurn(
@@ -312,10 +312,10 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
                     testSettings,
                     agentRoleId = testRoleId,
                     reasoningItems = null,
-                    completion = expectedFailure, usageStats = any())
+                    completion = expectedFailure, usageStats = any(), responseDurationMs = any())
             }
             // The message is written once with its content; nothing finalizes it afterwards.
-            coVerify(exactly = 0) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
+            coVerify(exactly = 0) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any(), responseDurationMs = any()) }
             assertTrue(events.none { it is ConversationTurnEvent.ToolCallsReceived })
             coVerify(exactly = 0) { conversationTurnPersistence.persistPendingToolCalls(any(), any(), any()) }
             verify(exactly = 0) {

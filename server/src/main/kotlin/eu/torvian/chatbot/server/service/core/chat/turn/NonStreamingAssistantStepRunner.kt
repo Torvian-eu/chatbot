@@ -12,6 +12,7 @@ import eu.torvian.chatbot.server.service.llm.sanitizeReasoningItems
 import eu.torvian.chatbot.server.service.llm.toAssistantMessageCompletionState
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import kotlin.time.Clock
 
 /**
  * Runs one non-streaming assistant iteration for the shared turn loop: the full-response LLM call, the
@@ -61,6 +62,9 @@ internal class NonStreamingAssistantStepRunner(
         isLastToolCallingIteration: Boolean,
         emit: suspend (ConversationTurnEvent) -> Unit
     ): AssistantStepOutcome? {
+        // The measured window opens immediately before the provider call is dispatched, so it covers the
+        // provider request itself (including any client-level retry and its backoff) and nothing else of the step.
+        val callStartedAt = Clock.System.now()
         val llmCompletionResult = run {
             llmApiClient.completeChat(
                 messages = currentContext,
@@ -75,9 +79,18 @@ internal class NonStreamingAssistantStepRunner(
             logger.error("LLM API call failed for session ${request.session.id}: $error")
             // A failed call still leaves a row: an empty failed message records that a response was attempted and
             // why it failed, so the transcript keeps a trace of it.
-            persistFailedAssistantStep(request, parentMessageId, error, emit)
+            persistFailedAssistantStep(
+                request = request,
+                parentMessageId = parentMessageId,
+                llmError = error,
+                responseDurationMs = elapsedMillisecondsSince(callStartedAt),
+                emit = emit
+            )
             return null
         }
+        // The full response is the terminal signal of this call, so the measurement is frozen here and nothing
+        // after it (reasoning-capability recording, persistence) may leak into the measured duration.
+        val responseDurationMs = elapsedMillisecondsSince(callStartedAt)
 
         logger.info("LLM API call successful for session ${request.session.id}")
 
@@ -95,6 +108,7 @@ internal class NonStreamingAssistantStepRunner(
                 llmError = LLMCompletionError.InvalidResponseError(
                     "LLM API returned success but no completion choices."
                 ),
+                responseDurationMs = responseDurationMs,
                 emit = emit
             )
             return null
@@ -164,7 +178,9 @@ internal class NonStreamingAssistantStepRunner(
             // A generation the provider declared incomplete reports no usable usage, and the server's own caps do
             // not change that: reaching a cap still means the provider completed and reported its counters, so only
             // a provider-declared ending drops the usage.
-            usageStats = llmCompletionResult.usage.takeIf { providerEndingFailure == null }
+            usageStats = llmCompletionResult.usage.takeIf { providerEndingFailure == null },
+            // The measured call time of this step, stored with the very row it produced.
+            responseDurationMs = responseDurationMs
         )
         emit(
             ConversationTurnEvent.AssistantMessageSaved(
@@ -279,12 +295,15 @@ internal class NonStreamingAssistantStepRunner(
      * @param request Immutable input bundle for the turn being processed.
      * @param parentMessageId Parent under which the failed assistant message should be persisted.
      * @param llmError Failure reported by the LLM client, mapped to a persisted code and bounded reason.
+     * @param responseDurationMs Measured wall-clock duration of the failed provider call. Always present, because
+     *        this path is only reached after a call was dispatched.
      * @param emit Sink used to publish lifecycle events.
      */
     private suspend fun persistFailedAssistantStep(
         request: ConversationTurnRequest,
         parentMessageId: Long,
         llmError: LLMCompletionError,
+        responseDurationMs: Long,
         emit: suspend (ConversationTurnEvent) -> Unit
     ) {
         val savedFailedStep = conversationTurnPersistence.saveAssistantMessage(
@@ -295,7 +314,9 @@ internal class NonStreamingAssistantStepRunner(
             settings = request.llmConfig.settings,
             agentRoleId = request.session.agentRoleId,
             reasoningItems = null,
-            completion = llmError.toAssistantMessageCompletionState()
+            completion = llmError.toAssistantMessageCompletionState(),
+            // Time elapsed whether or not the generation succeeded, so a failed call reports its attempt.
+            responseDurationMs = responseDurationMs
         )
         emit(
             ConversationTurnEvent.AssistantMessageSaved(

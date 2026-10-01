@@ -83,7 +83,8 @@ class DefaultConversationTurnPersistence(
         agentRoleId: Long?,
         reasoningItems: List<JsonObject>?,
         usageStats: UsageStats?,
-        completion: AssistantMessageCompletionState
+        completion: AssistantMessageCompletionState,
+        responseDurationMs: Long?
     ): PersistedAssistantMessage = transactionScope.transaction {
         val assistantMessage = messageDao.insertMessage(
             sessionId = sessionId,
@@ -98,7 +99,9 @@ class DefaultConversationTurnPersistence(
             usageStats = usageStats,
             // The completion state is part of the insert so no row ever exists without it; the streaming
             // placeholder and an empty failed row are created with their state already in place.
-            completion = completion
+            completion = completion,
+            // Written with the row so the non-streaming answer and its measured call time are stored atomically.
+            responseDurationMs = responseDurationMs
         ).getOrElse { daoError ->
             throw IllegalStateException(
                 "Failed to insert assistant message. Session id: $sessionId. " +
@@ -129,13 +132,15 @@ class DefaultConversationTurnPersistence(
         messageId: Long,
         content: String,
         completion: AssistantMessageCompletionState,
-        usageStats: UsageStats?
+        usageStats: UsageStats?,
+        responseDurationMs: Long?
     ): ChatMessage.AssistantMessage = transactionScope.transaction {
         messageDao.updateMessageContent(
             messageId,
             content,
             completion = completion,
-            usageStats = usageStats
+            usageStats = usageStats,
+            responseDurationMs = responseDurationMs
         ).getOrElse { error ->
             throw IllegalStateException("Failed to update assistant message content: $error")
         } as ChatMessage.AssistantMessage

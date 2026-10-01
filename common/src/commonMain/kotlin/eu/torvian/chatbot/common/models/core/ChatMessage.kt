@@ -101,6 +101,11 @@ sealed class ChatMessage {
      *            `null` when there is none to show: the provider reported no usage, the generation did not end
      *            normally, the row predates this field, or the message was inserted or edited by hand. `null`
      *            never means "zero tokens".
+     * @property responseDurationMs Wall-clock duration in milliseconds of the single LLM provider call that
+     *            produced this message, or `null` when nothing was measured. The duration runs from the dispatch of
+     *            the request to the terminal signal of the response, so it includes streamed reasoning output and
+     *            the tool-call requests the model emitted, and it excludes every tool execution. It is unrelated to
+     *            the client-side turn timer, which measures the whole turn including tool execution.
      */
     @Serializable
     data class AssistantMessage(
@@ -120,7 +125,8 @@ sealed class ChatMessage {
         val incompleteCause: AssistantMessageIncompleteCause? = null,
         val errorCode: AssistantMessageErrorCode? = null,
         val errorMessage: String? = null,
-        val usageStats: UsageStats? = null
+        val usageStats: UsageStats? = null,
+        val responseDurationMs: Long? = null
     ) : ChatMessage() {
         override val role: Role = Role.ASSISTANT
 
