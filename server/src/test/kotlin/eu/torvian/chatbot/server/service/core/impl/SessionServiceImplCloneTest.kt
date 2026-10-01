@@ -405,6 +405,81 @@ class SessionServiceImplCloneTest {
     }
 
     @Test
+    fun `cloneSession should copy the measured response duration of assistant messages`() = runTest {
+        // Arrange
+        val cloneName = "Cloned measured session"
+        val measuredDurationMs = 4200L
+        val measuredMessage = ChatMessage.AssistantMessage(
+            id = 501L,
+            sessionId = testSessionId,
+            content = "Answer",
+            createdAt = testTimestamp1,
+            updatedAt = testTimestamp1,
+            parentMessageId = null,
+            childrenMessageIds = emptyList(),
+            modelId = testModelId,
+            settingsId = testSettingsId,
+            responseDurationMs = measuredDurationMs
+        )
+        coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
+        coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
+        coEvery { sessionDao.insertSession(cloneName, testGroupId, testAgentRoleId, null) } returns
+                clonedSession.copy(name = cloneName, currentLeafMessageId = null).right()
+        coEvery { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) } returns Unit.right()
+        coEvery { messageDao.getMessagesBySessionId(testSessionId) } returns listOf(measuredMessage)
+        coEvery { toolCallDao.getToolCallsBySessionId(testSessionId) } returns emptyList()
+        coEvery {
+            messageDao.insertMessage(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
+        } answers {
+            measuredMessage.copy(id = 601L, sessionId = testClonedSessionId).right()
+        }
+        coEvery { sessionDao.updateSessionLeafMessageId(any(), any()) } returns Unit.right()
+        coEvery { sessionDao.getSessionById(testClonedSessionId) } returns clonedSession.right()
+
+        // Act
+        val result = sessionService.cloneSession(testSessionId, cloneName)
+
+        // Assert
+        assertTrue(result.isRight())
+        // The clone describes the same already measured generation, so the recorded duration must survive it.
+        coVerify {
+            messageDao.insertMessage(
+                sessionId = testClonedSessionId,
+                targetMessageId = null,
+                position = MessageInsertPosition.APPEND,
+                role = ChatMessage.Role.ASSISTANT,
+                content = "Answer",
+                modelId = testModelId,
+                settingsId = testSettingsId,
+                agentRoleId = null,
+                fileReferences = emptyList(),
+                reasoningItems = null,
+                createdAt = testTimestamp1,
+                updatedAt = testTimestamp1,
+                usageStats = any(),
+                completion = AssistantMessageCompletionState.Completed,
+                responseDurationMs = measuredDurationMs
+            )
+        }
+    }
+
+    @Test
     fun `cloneSession should preserve message timestamps`() = runTest {
         // Arrange
         val cloneName = "Cloned Session"
