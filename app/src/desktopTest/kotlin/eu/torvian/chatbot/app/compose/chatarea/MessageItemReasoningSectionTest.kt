@@ -30,7 +30,8 @@ import kotlin.time.Instant
  * The section is driven by the message alone: it exists once the message has reasoning to show, and a still-running
  * generation adds the thinking indicator only while no answer text has arrived. A generation that never produced
  * reasoning must therefore show no header, which is the behaviour these tests pin down — the derivation itself is
- * covered separately.
+ * covered separately. The section is also part of the message body, so collapsing the message takes it away without
+ * discarding its own expansion state.
  */
 @OptIn(ExperimentalTestApi::class)
 class MessageItemReasoningSectionTest {
@@ -133,11 +134,13 @@ class MessageItemReasoningSectionTest {
      * @param message Message to render.
      * @param isReasoningExpanded Provider of the current expansion state, read during composition.
      * @param onToggleReasoningSection Callback invoked when the section header is clicked.
+     * @param isCollapsed Provider of the current message collapse state, read during composition.
      */
     private fun androidx.compose.ui.test.ComposeUiTest.renderMessageItem(
         message: ChatMessage,
         isReasoningExpanded: () -> Boolean = { false },
-        onToggleReasoningSection: () -> Unit = {}
+        onToggleReasoningSection: () -> Unit = {},
+        isCollapsed: () -> Boolean = { false }
     ) {
         setContent {
             MessageItem(
@@ -149,6 +152,7 @@ class MessageItemReasoningSectionTest {
                 editingContent = null,
                 editingFileReferences = emptyList(),
                 editingBasePathOverride = null,
+                isCollapsed = isCollapsed(),
                 isReasoningExpanded = isReasoningExpanded(),
                 onToggleReasoningSection = { onToggleReasoningSection() }
             )
@@ -230,4 +234,37 @@ class MessageItemReasoningSectionTest {
         assertTrue(isExpanded)
         onNodeWithText(reasoningText).assertIsDisplayed()
     }
+
+    @Test
+    fun `a collapsed message hides its reasoning section`() = runComposeUiTest {
+        renderMessageItem(
+            message = assistantMessage(reasoningItems = listOf(reasoningItem(reasoningText)), isComplete = true),
+            isReasoningExpanded = { true },
+            isCollapsed = { true }
+        )
+
+        // Collapsing truncates the answer, so the reasoning must not be left standing beside it.
+        onNodeWithText(reasoningLabel).assertDoesNotExist()
+        onNodeWithText(reasoningText).assertDoesNotExist()
+    }
+
+    @Test
+    fun `expanding a collapsed message brings the reasoning section back in its previous state`() =
+        runComposeUiTest {
+            var isCollapsed by mutableStateOf(true)
+            renderMessageItem(
+                message = assistantMessage(reasoningItems = listOf(reasoningItem(reasoningText)), isComplete = true),
+                isReasoningExpanded = { true },
+                isCollapsed = { isCollapsed }
+            )
+
+            onNodeWithText(reasoningText).assertDoesNotExist()
+
+            isCollapsed = false
+            waitForIdle()
+
+            // The section comes back expanded, because the collapse must not consume the user's expansion choice.
+            onNodeWithText(reasoningLabel).assertIsDisplayed()
+            onNodeWithText(reasoningText).assertIsDisplayed()
+        }
 }
