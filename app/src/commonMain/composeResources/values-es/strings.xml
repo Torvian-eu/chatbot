@@ -36,6 +36,7 @@
     <string name="usage_dialog_created_label">Creado</string>
     <string name="usage_dialog_updated_label">Última actualización</string>
     <string name="usage_dialog_usage_section_title">Uso de tokens</string>
+    <string name="response_duration_label">Duración de la respuesta</string>
     <string name="usage_dialog_input_tokens_label">Tokens de entrada</string>
     <string name="usage_dialog_output_tokens_label">Tokens de salida</string>
     <string name="usage_dialog_total_tokens_label">Tokens totales</string>
