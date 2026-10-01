@@ -115,6 +115,7 @@ fun ChatScreen(
     val chatCollapsedMessageIds by chatViewModel.collapsedMessageIds.collectAsState()
     val chatExpandedReasoningMessageIds by chatViewModel.expandedReasoningMessageIds.collectAsState()
     val chatTurnExecutionState by chatViewModel.turnExecutionState.collectAsState()
+    val chatAssistantResponseTimer by chatViewModel.assistantResponseTimer.collectAsState()
     val chatDialogState by chatViewModel.dialogState.collectAsState()
     val toolCallsForCurrentSession by chatViewModel.toolCallsForCurrentSession.collectAsState()
     val pendingFileReferences by chatViewModel.pendingFileReferences.collectAsState()
@@ -261,7 +262,7 @@ fun ChatScreen(
         chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
         chatEditingFileReferences, chatEditingBasePathOverride, chatDisplayedMessages, chatCollapsedMessageIds,
         chatExpandedReasoningMessageIds,
-        chatTurnExecutionState, chatDialogState, toolCallsMap, pendingFileReferences,
+        chatTurnExecutionState, chatAssistantResponseTimer, chatDialogState, toolCallsMap, pendingFileReferences,
         isSearchActive, searchQuery, searchResults, currentSearchIndex,
     ) {
         ChatAreaState(
@@ -282,6 +283,7 @@ fun ChatScreen(
             collapsedMessageIds = chatCollapsedMessageIds,
             expandedReasoningMessageIds = chatExpandedReasoningMessageIds,
             turnExecutionState = chatTurnExecutionState,
+            assistantResponseTimer = chatAssistantResponseTimer,
             dialogState = chatDialogState,
             toolCallsMap = toolCallsMap,
             pendingFileReferences = pendingFileReferences,
