@@ -66,7 +66,7 @@ class DefaultConversationTurnOrchestratorStreamingLifecycleTest : DefaultConvers
                 streamingSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantStartedMessage, userMessage)
         coEvery {
             llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any())
@@ -76,7 +76,7 @@ class DefaultConversationTurnOrchestratorStreamingLifecycleTest : DefaultConvers
             LLMStreamChunk.Done.right()
         )
         coEvery {
-            conversationTurnPersistence.updateAssistantMessageContent(assistantStartedMessage.id, "Hello there", usageStats = any())
+            conversationTurnPersistence.updateAssistantMessageContent(assistantStartedMessage.id, "Hello there", usageStats = any(), responseDurationMs = any())
         } returns assistantFinishedMessage
 
         val events = orchestrator.processStreamingTurn(
@@ -102,7 +102,7 @@ class DefaultConversationTurnOrchestratorStreamingLifecycleTest : DefaultConvers
         assertEquals(ConversationTurnEvent.TurnCompleted, events[5])
 
         coVerify(exactly = 1) {
-            conversationTurnPersistence.updateAssistantMessageContent(assistantStartedMessage.id, "Hello there", usageStats = any())
+            conversationTurnPersistence.updateAssistantMessageContent(assistantStartedMessage.id, "Hello there", usageStats = any(), responseDurationMs = any())
         }
     }
 
@@ -182,7 +182,7 @@ class DefaultConversationTurnOrchestratorStreamingLifecycleTest : DefaultConvers
                 reasoningSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantStarted, userMessage)
         coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ReasoningDone(reasoningItem = reasoningItems[0]).right(),
@@ -197,7 +197,7 @@ class DefaultConversationTurnOrchestratorStreamingLifecycleTest : DefaultConvers
         coEvery {
             conversationTurnPersistence.updateAssistantMessageContent(
                 assistantStarted.id,
-                "Answer", usageStats = any())
+                "Answer", usageStats = any(), responseDurationMs = any())
         } returns assistantFinished
 
         orchestrator.processStreamingTurn(

@@ -106,7 +106,7 @@ abstract class DefaultConversationTurnOrchestratorStreamingTestBase : DefaultCon
                 testSettings.copy(stream = true),
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(placeholder, userMessage)
     }
 }

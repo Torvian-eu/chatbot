@@ -14,6 +14,8 @@ import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import java.util.concurrent.CancellationException
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * Collects one streaming LLM response and folds its chunk sequence into the caller's turn state.
@@ -70,11 +72,13 @@ internal class LlmStreamCollector(
      *        [accumulatedReasoningText] when it runs, so the recorded text never lags the forwarded delta.
      * @param onStreamComplete Callback invoked after the provider signals stream completion, receiving the
      *        parsed tool-call requests, the finish reason, whether the assistant-text or reasoning-text cap was
-     *        reached, how many tool calls the per-step and per-argument caps cut, and the authoritative usage the
-     *        provider reported for the generation (`null` when it reported none).
+     *        reached, how many tool calls the per-step and per-argument caps cut, the authoritative usage the
+     *        provider reported for the generation (`null` when it reported none), and the measured wall-clock
+     *        duration in milliseconds of the provider call.
      * @param onError Callback for streaming errors.
      * @param onUnfinalized Callback reporting an ending without a terminal chunk, carrying the text received so
-     *        far and the reason the stream stopped.
+     *        far and the reason the stream stopped, together with the measured wall-clock duration in milliseconds
+     *        of the provider call.
      */
     internal suspend fun handleLlmStreaming(
         context: List<RawChatMessage>,
@@ -98,12 +102,17 @@ internal class LlmStreamCollector(
             reasoningTruncated: Boolean,
             droppedToolCallCount: Int,
             clippedToolCallArgumentCount: Int,
-            usage: UsageStats?
+            usage: UsageStats?,
+            responseDurationMs: Long
         ) -> Unit,
         onError: suspend (error: LLMCompletionError) -> Unit,
-        onUnfinalized: suspend (unfinalized: UnfinalizedAssistantStream) -> Unit
+        onUnfinalized: suspend (unfinalized: UnfinalizedAssistantStream, responseDurationMs: Long) -> Unit
     ) {
         val state = StreamCollectionState()
+
+        // The measured window opens immediately before the provider call is dispatched, so it covers the provider
+        // request itself (including any client-level retry and its backoff) and nothing of the step after it.
+        val callStartedAt = Clock.System.now()
 
         try {
             llmApiClient.completeChatStreaming(context, model, provider, settings, apiKey, tools, systemMessage)
@@ -114,7 +123,7 @@ internal class LlmStreamCollector(
                             // A dialect that cannot parse a provider event reports it as a failed element of this
                             // stream, which is a terminal signal like any error chunk: recording it here is what
                             // keeps a later terminal event of the same stream from completing the message.
-                            if (state.recordEnding(StreamEnding.Failed(llmError))) {
+                            if (state.recordEnding(StreamEnding.Failed(llmError), elapsedMillisecondsSince(callStartedAt))) {
                                 logger.error("LLM API streaming error, provider ${provider.name}: $llmError")
                                 onError(llmError)
                             } else {
@@ -128,6 +137,7 @@ internal class LlmStreamCollector(
                             handleStreamChunk(
                                 chunk = chunk,
                                 state = state,
+                                callStartedAt = callStartedAt,
                                 accumulatedContent = accumulatedContent,
                                 accumulatedReasoningText = accumulatedReasoningText,
                                 onContentDelta = onContentDelta,
@@ -148,7 +158,10 @@ internal class LlmStreamCollector(
             // ending locally and the persisted state is read on the next session load.
             logger.info("LLM streaming cancelled, accumulated content length: ${accumulatedContent.length}")
             runCatching {
-                onUnfinalized(UnfinalizedAssistantStream.CancelledByUser(accumulatedContent.toString()))
+                onUnfinalized(
+                    UnfinalizedAssistantStream.CancelledByUser(accumulatedContent.toString()),
+                    state.endingElapsedMs ?: elapsedMillisecondsSince(callStartedAt)
+                )
             }.onFailure { handlerError ->
                 logger.error(
                     "Failed to persist interrupted assistant message: ${handlerError.message}",
@@ -164,7 +177,10 @@ internal class LlmStreamCollector(
             // context; wrapping this call in `NonCancellable` would suppress that delivery.
             logger.error("Unexpected failure during LLM streaming for provider ${provider.name}: $unexpected", unexpected)
             runCatching {
-                onUnfinalized(UnfinalizedAssistantStream.UnexpectedFailure(accumulatedContent.toString()))
+                onUnfinalized(
+                    UnfinalizedAssistantStream.UnexpectedFailure(accumulatedContent.toString()),
+                    state.endingElapsedMs ?: elapsedMillisecondsSince(callStartedAt)
+                )
             }.onFailure { handlerError ->
                 logger.error(
                     "Failed to persist unfinished assistant message: ${handlerError.message}",
@@ -180,17 +196,20 @@ internal class LlmStreamCollector(
         // to a user stop, because the user-visible cause of an interrupted turn is the interruption itself.
         val partialContent = accumulatedContent.toString()
         val ending = state.ending
+        // A provider-signalled ending owns the value it froze; an ending the provider never signalled is measured
+        // at the moment this call classifies it, since the stop/failure happened here.
+        val responseDurationMs = state.endingElapsedMs ?: elapsedMillisecondsSince(callStartedAt)
         when {
             ending is StreamEnding.Completed -> Unit
 
             controlSignal.isCancelled ->
-                onUnfinalized(UnfinalizedAssistantStream.CancelledByUser(partialContent))
+                onUnfinalized(UnfinalizedAssistantStream.CancelledByUser(partialContent), responseDurationMs)
 
             ending is StreamEnding.Failed ->
-                onUnfinalized(UnfinalizedAssistantStream.Failed(partialContent, ending.error))
+                onUnfinalized(UnfinalizedAssistantStream.Failed(partialContent, ending.error), responseDurationMs)
 
             else ->
-                onUnfinalized(UnfinalizedAssistantStream.StreamEndedUnexpectedly(partialContent))
+                onUnfinalized(UnfinalizedAssistantStream.StreamEndedUnexpectedly(partialContent), responseDurationMs)
         }
     }
 
@@ -210,6 +229,8 @@ internal class LlmStreamCollector(
      *
      * @param chunk Chunk emitted by the provider stream.
      * @param state Collection state of the current invocation, updated in place.
+     * @param callStartedAt Wall-clock instant captured immediately before the provider call was dispatched, used
+     *        to measure the elapsed time at a terminal signal.
      * @param accumulatedContent Accumulator owned by the caller, bounded here and appended in place.
      * @param accumulatedReasoningText Accumulator owned by the caller, bounded here and appended in place.
      * @param onContentDelta Callback for the accepted assistant text deltas.
@@ -218,13 +239,15 @@ internal class LlmStreamCollector(
      * @param onReasoningTextDelta Callback for the accepted reasoning-text deltas.
      * @param onStreamComplete Callback invoked after the provider signals stream completion, receiving the
      *        parsed tool-call requests, the finish reason, whether the assistant-text or reasoning-text cap was
-     *        reached, how many tool calls the per-step and per-argument caps cut, and the authoritative usage the
-     *        provider reported for the generation (`null` when it reported none).
+     *        reached, how many tool calls the per-step and per-argument caps cut, the authoritative usage the
+     *        provider reported for the generation (`null` when it reported none), and the measured wall-clock
+     *        duration in milliseconds of the provider call.
      * @param onError Callback for streaming errors that arrive as a chunk.
      */
     private suspend fun handleStreamChunk(
         chunk: LLMStreamChunk,
         state: StreamCollectionState,
+        callStartedAt: Instant,
         accumulatedContent: StringBuilder,
         accumulatedReasoningText: StringBuilder,
         onContentDelta: suspend (deltaContent: String) -> Unit,
@@ -238,7 +261,8 @@ internal class LlmStreamCollector(
             reasoningTruncated: Boolean,
             droppedToolCallCount: Int,
             clippedToolCallArgumentCount: Int,
-            usage: UsageStats?
+            usage: UsageStats?,
+            responseDurationMs: Long
         ) -> Unit,
         onError: suspend (error: LLMCompletionError) -> Unit
     ) {
@@ -393,7 +417,8 @@ internal class LlmStreamCollector(
                 // The provider signalled completion: from here on the caller finalizes the message itself and
                 // no abnormal-ending finalizer may run. An ending recorded earlier (an error chunk or a dialect
                 // parse failure) already owns the outcome, so this arm then changes nothing.
-                if (!state.recordEnding(StreamEnding.Completed)) {
+                val responseDurationMs = elapsedMillisecondsSince(callStartedAt)
+                if (!state.recordEnding(StreamEnding.Completed, responseDurationMs)) {
                     logger.debug("Ignoring a completion that arrived after the stream's ending")
                     return
                 }
@@ -421,12 +446,14 @@ internal class LlmStreamCollector(
                     state.reasoningTruncated,
                     state.droppedToolCallIndices.size,
                     state.toolCallsByIndex.values.count { it.argumentsClipped },
-                    state.finalUsage
+                    state.finalUsage,
+                    responseDurationMs
                 )
             }
 
             is LLMStreamChunk.Error -> {
-                if (!state.recordEnding(StreamEnding.Failed(chunk.llmError))) {
+                val endingElapsedMs = elapsedMillisecondsSince(callStartedAt)
+                if (!state.recordEnding(StreamEnding.Failed(chunk.llmError), endingElapsedMs)) {
                     logger.debug("Ignoring a second streaming error of the same stream: {}", chunk.llmError)
                     return
                 }
@@ -467,6 +494,8 @@ private sealed interface StreamEnding {
  *            the step turned out to carry tool calls.
  * @property ending How this stream ended, or `null` while none of the ending signals has been observed. An ending
  *            is written once and never replaced, so the value cannot describe two outcomes at the same time.
+ * @property endingElapsedMs Duration in milliseconds of the provider call, frozen together with [ending] when the
+ *            ending is recorded, or `null` while no ending was recorded.
  * @property toolCallsByIndex Tool-call accumulators of the current step, keyed by its sequential tool-call index;
  *            the insertion order is the order the calls were first seen in, which is the order the requests are
  *            materialized in.
@@ -481,6 +510,7 @@ private class StreamCollectionState {
     var reasoningTruncated: Boolean = false
     var finishReason: String? = null
     var ending: StreamEnding? = null
+    var endingElapsedMs: Long? = null
     var finalUsage: UsageStats? = null
     val toolCallsByIndex: MutableMap<Int, MutableToolCallAccumulator> = mutableMapOf()
     val droppedToolCallIndices: MutableSet<Int> = mutableSetOf()
@@ -489,14 +519,19 @@ private class StreamCollectionState {
      * Records [ending] as the ending of this stream, unless one is already recorded.
      *
      * The first ending wins, which is what makes a stream produce exactly one outcome: a signal that arrives
-     * later — an error, a completion or more content — cannot change what the caller persists.
+     * later — an error, a completion or more content — cannot change what the caller persists. The elapsed time of
+     * the call is frozen together with the ending because the duration measures the terminal signal of the
+     * response, not the moment the stream object finally closes: a failure would otherwise be overstated by
+     * whatever the provider kept emitting after its error.
      *
      * @param ending Ending observed on the provider stream.
+     * @param elapsedMs Duration in milliseconds of the provider call up to this terminal signal.
      * @return Whether this call recorded the ending, i.e. whether the caller owns its terminal handling.
      */
-    fun recordEnding(ending: StreamEnding): Boolean {
+    fun recordEnding(ending: StreamEnding, elapsedMs: Long): Boolean {
         if (this.ending != null) return false
         this.ending = ending
+        this.endingElapsedMs = elapsedMs
         return true
     }
 

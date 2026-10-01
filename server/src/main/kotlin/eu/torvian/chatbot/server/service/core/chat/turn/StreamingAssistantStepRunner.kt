@@ -141,7 +141,7 @@ internal class StreamingAssistantStepRunner(
                 // persisted on either ending can never disagree.
                 emit(ConversationTurnEvent.AssistantMessageReasoningDelta(assistantMessage.id, delta))
             },
-            onStreamComplete = { toolCallRequests, finishReason, contentTruncated, reasoningTruncated, droppedToolCallCount, clippedToolCallArgumentCount, usage ->
+            onStreamComplete = { toolCallRequests, finishReason, contentTruncated, reasoningTruncated, droppedToolCallCount, clippedToolCallArgumentCount, usage, responseDurationMs ->
                 // Sanitize once before the accumulated items enter persistence or the follow-up context.
                 val sanitizedReasoningItems = sanitizeReasoningItems(accumulatedReasoningItems)
                 // Persist accumulated reasoning (if any) alongside the finalized message content: the completed
@@ -195,7 +195,9 @@ internal class StreamingAssistantStepRunner(
                     completion = limitFailure ?: toolCallFailure ?: AssistantMessageCompletionState.Completed,
                     // The provider's authoritative usage of this step, written in the same statement that finalizes
                     // the content and the completion state.
-                    usageStats = usage
+                    usageStats = usage,
+                    // The measured provider-call time of this step, written with the same statement.
+                    responseDurationMs = responseDurationMs
                 )
                 guard.isFinalized = true
                 runCatching { emit(ConversationTurnEvent.AssistantMessageFinished(updatedAssistantMessage)) }
@@ -258,7 +260,7 @@ internal class StreamingAssistantStepRunner(
                 // AssistantMessageFinished -> TurnCompleted exactly once.
                 emit(ConversationTurnEvent.ExternalServiceError(llmError))
             },
-            onUnfinalized = { unfinalized ->
+            onUnfinalized = { unfinalized, responseDurationMs ->
                 val completion = when (unfinalized) {
                     is UnfinalizedAssistantStream.CancelledByUser ->
                         AssistantMessageCompletionState.InterruptedByUser
@@ -282,6 +284,7 @@ internal class StreamingAssistantStepRunner(
                     accumulatedContent = accumulatedContent,
                     reasoningItems = reasoningItemsToPersist,
                     completion = completion,
+                    responseDurationMs = responseDurationMs,
                     emit = emit
                 )
                 // A user stop deliberately ends the turn without a terminal frame, and an unexpected failure is
@@ -369,6 +372,9 @@ internal class StreamingAssistantStepRunner(
      * @param reasoningItems Reasoning items to persist with the ending, or `null` when the step produced no
      *        reasoning at all. They carry any partial reasoning the stream had already delivered.
      * @param completion Terminal state that explains why the generation stopped.
+     * @param responseDurationMs Measured wall-clock duration in milliseconds of the provider call that produced
+     *        this ending, or `null` when no call was measured. A generation that was interrupted or failed still
+     *        reports how long its attempt ran.
      * @param emit Sink used to publish the terminal event, after the write.
      */
     private suspend fun finalizeUnfinalized(
@@ -377,6 +383,7 @@ internal class StreamingAssistantStepRunner(
         accumulatedContent: StringBuilder,
         reasoningItems: List<JsonObject>?,
         completion: AssistantMessageCompletionState,
+        responseDurationMs: Long?,
         emit: suspend (ConversationTurnEvent) -> Unit
     ) {
         if (guard.isFinalized) {
@@ -403,7 +410,9 @@ internal class StreamingAssistantStepRunner(
                 completion = completion,
                 // Explicitly nothing: a generation that ended abnormally reported no usable usage, and the write
                 // that records the ending is what decides it.
-                usageStats = null
+                usageStats = null,
+                // The measured attempt owns the duration, so this write keeps it instead of clearing it.
+                responseDurationMs = responseDurationMs
             )
         }
         guard.isFinalized = true

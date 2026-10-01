@@ -48,7 +48,8 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
                 placeholder.id,
                 "Answer",
                 AssistantMessageCompletionState.Completed,
-                usageStats = reportedUsage
+                usageStats = reportedUsage,
+                responseDurationMs = any()
             )
         } returns placeholder.copy(content = "Answer", isComplete = true, usageStats = reportedUsage)
 
@@ -60,7 +61,8 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
                 placeholder.id,
                 "Answer",
                 AssistantMessageCompletionState.Completed,
-                usageStats = reportedUsage
+                usageStats = reportedUsage,
+                responseDurationMs = any()
             )
         }
         val finished = events.filterIsInstance<ConversationTurnEvent.AssistantMessageFinished>().single()
@@ -86,7 +88,8 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
                 placeholder.id,
                 "Partial answer",
                 any(),
-                usageStats = null
+                usageStats = null,
+                responseDurationMs = any()
             )
         } returns placeholder.copy(content = "Partial answer", isComplete = false)
 
@@ -97,7 +100,8 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
                 placeholder.id,
                 "Partial answer",
                 any(),
-                usageStats = null
+                usageStats = null,
+                responseDurationMs = any()
             )
         }
         val finished = events.filterIsInstance<ConversationTurnEvent.AssistantMessageFinished>().single()
@@ -121,7 +125,8 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
                 placeholder.id,
                 "Answer",
                 AssistantMessageCompletionState.Completed,
-                usageStats = null
+                usageStats = null,
+                responseDurationMs = any()
             )
         } returns placeholder.copy(content = "Answer", isComplete = true)
 
@@ -132,7 +137,8 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
                 placeholder.id,
                 "Answer",
                 AssistantMessageCompletionState.Completed,
-                usageStats = null
+                usageStats = null,
+                responseDurationMs = any()
             )
         }
         assertNull(
@@ -160,7 +166,8 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
                 placeholder.id,
                 "Answer",
                 AssistantMessageCompletionState.Completed,
-                usageStats = null
+                usageStats = null,
+                responseDurationMs = any()
             )
         } returns placeholder.copy(content = "Answer", isComplete = true)
 
@@ -191,7 +198,8 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
                 placeholder.id,
                 "Answer",
                 AssistantMessageCompletionState.Completed,
-                usageStats = null
+                usageStats = null,
+                responseDurationMs = any()
             )
         } returns placeholder.copy(content = "Answer", isComplete = true)
 
@@ -202,7 +210,8 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
                 placeholder.id,
                 "Answer",
                 AssistantMessageCompletionState.Completed,
-                usageStats = null
+                usageStats = null,
+                responseDurationMs = any()
             )
         }
         val finished = events.filterIsInstance<ConversationTurnEvent.AssistantMessageFinished>().single()
