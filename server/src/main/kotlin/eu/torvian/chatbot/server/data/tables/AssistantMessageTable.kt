@@ -15,6 +15,10 @@ import org.jetbrains.exposed.v1.core.Table
  *            provenance survives role deletion.
  * @property reasoningItemsJson JSON array of replay-safe reasoning output items emitted with the message, for
  *            Responses-capable models. Opaque and nullable; must not be logged or rendered.
+ * @property usageStatsJson JSON object of the provider-reported token usage of the generation that produced the
+ *            message, or `NULL` when there is no usage to report. Nullable because a provider may report none, a
+ *            generation may not have completed, and rows written before this column existed carry no value; a
+ *            counter the provider omitted stays absent instead of being stored as zero.
  * @property isComplete Whether the assistant message completed normally. `NOT NULL DEFAULT TRUE` so every row
  *            created before this column existed (and every row inserted without an explicit state) reads as
  *            completed.
@@ -49,6 +53,7 @@ object AssistantMessageTable : Table("assistant_messages") {
         onDelete = ReferenceOption.SET_NULL
     ).nullable()
     val reasoningItemsJson = text("reasoning_items_json").nullable()
+    val usageStatsJson = text("usage_stats").nullable()
     val isComplete = bool("is_complete").default(true)
     val incompleteCause = varchar("incomplete_cause", 50).nullable()
     val errorCode = varchar("error_code", 50).nullable()

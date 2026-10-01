@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.core.AssistantMessageErrorCode
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
@@ -82,8 +83,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure
-            )
+                completion = expectedFailure, usageStats = any())
         } returns PersistedAssistantMessage(failedAssistantMessage, userMessage)
 
         val events = orchestrator.processNonStreamingTurn(
@@ -176,8 +176,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure
-            )
+                completion = expectedFailure, usageStats = any())
         } returns PersistedAssistantMessage(failedAssistantMessage, userMessage)
         coEvery {
             conversationTurnPersistence.persistPendingToolCalls(
@@ -274,8 +273,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure
-            )
+                completion = expectedFailure, usageStats = any())
         } returns PersistedAssistantMessage(failedAssistantMessage, userMessage)
 
         val events = orchestrator.processNonStreamingTurn(
@@ -340,6 +338,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 any(),
                 any(),
                 any(),
+                any(),
                 capture(capturedCompletionStates)
             )
         } coAnswers {
@@ -377,8 +376,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure
-            )
+                completion = expectedFailure, usageStats = any())
         }
         assertEquals(
             ConversationTurnLimits.MAX_TOOL_CALLING_ITERATIONS.toLong(),
@@ -394,8 +392,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.Completed
-            )
+                completion = AssistantMessageCompletionState.Completed, usageStats = any())
         }
         // The bound does not drop calls: every iteration, including the final one, ran its tool call.
         coVerify(exactly = ConversationTurnLimits.MAX_TOOL_CALLING_ITERATIONS) {
@@ -517,8 +514,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure
-            )
+                completion = expectedFailure, usageStats = any())
         } returns PersistedAssistantMessage(flaggedAssistantMessage, firstUserMessage)
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -529,8 +525,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.Completed
-            )
+                completion = AssistantMessageCompletionState.Completed, usageStats = any())
         } returns PersistedAssistantMessage(secondAssistantMessage, secondUserMessage)
         coEvery {
             conversationTurnPersistence.persistPendingToolCalls(
@@ -670,7 +665,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                 toolCalls = toolCalls
             )
         ),
-        usage = LLMCompletionResult.UsageStats(1, 1, 2),
+        usage = UsageStats(1, 1, 2),
         metadata = emptyMap()
     )
 

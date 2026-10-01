@@ -4,6 +4,7 @@ import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
@@ -194,6 +195,141 @@ class DefaultConversationTurnPersistenceTest {
 
         assertEquals(updatedAssistantMessage, result)
         coVerify(exactly = 1) { messageDao.updateMessageContent(12L, "Final content") }
+    }
+
+    /**
+     * Verifies the reported usage of an assistant message reaches the DAO insert that creates the row.
+     */
+    @Test
+    fun `saveAssistantMessage forwards the reported usage to the DAO`() = runTest {
+        val reportedUsage = UsageStats(inputTokens = 10, outputTokens = 5, totalTokens = 15)
+        val savedAssistantMessage = ChatMessage.AssistantMessage(
+            id = 12L,
+            sessionId = 1L,
+            content = "Answer",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = 5L,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id,
+            usageStats = reportedUsage
+        )
+        val refreshedParent = ChatMessage.UserMessage(
+            id = 5L,
+            sessionId = 1L,
+            content = "Hello",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = listOf(savedAssistantMessage.id)
+        )
+
+        coEvery {
+            messageDao.insertMessage(
+                sessionId = 1L,
+                targetMessageId = 5L,
+                position = any(),
+                role = ChatMessage.Role.ASSISTANT,
+                content = "Answer",
+                modelId = testModel.id,
+                settingsId = testSettings.id,
+                agentRoleId = any(),
+                fileReferences = any(),
+                reasoningItems = any(),
+                usageStats = reportedUsage,
+                completion = any()
+            )
+        } returns savedAssistantMessage.right()
+        coEvery { sessionDao.updateSessionLeafMessageId(1L, savedAssistantMessage.id) } returns Unit.right()
+        coEvery { messageDao.getMessageById(5L) } returns refreshedParent.right()
+
+        val result = persistence.saveAssistantMessage(
+            1L,
+            "Answer",
+            5L,
+            testModel,
+            testSettings,
+            usageStats = reportedUsage
+        )
+
+        assertEquals(reportedUsage, result.assistantMessage.usageStats)
+    }
+
+    /**
+     * Verifies the terminal write of a turn forwards the usage it was given, so the finalized message and the
+     * stored usage come from one statement.
+     */
+    @Test
+    fun `updateAssistantMessageContent forwards the reported usage to the DAO`() = runTest {
+        val reportedUsage = UsageStats(inputTokens = 10, outputTokens = 5, totalTokens = 15)
+        val updatedAssistantMessage = ChatMessage.AssistantMessage(
+            id = 12L,
+            sessionId = 1L,
+            content = "Final content",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = 5L,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id,
+            usageStats = reportedUsage
+        )
+
+        coEvery {
+            messageDao.updateMessageContent(
+                id = 12L,
+                content = "Final content",
+                completion = AssistantMessageCompletionState.Completed,
+                usageStats = reportedUsage
+            )
+        } returns updatedAssistantMessage.right()
+
+        val result = persistence.updateAssistantMessageContent(
+            messageId = 12L,
+            content = "Final content",
+            completion = AssistantMessageCompletionState.Completed,
+            usageStats = reportedUsage
+        )
+
+        assertEquals(reportedUsage, result.usageStats)
+    }
+
+    /**
+     * Verifies a finalization that carries no usage clears whatever the message had stored.
+     */
+    @Test
+    fun `updateAssistantMessageContent forwards a cleared usage to the DAO`() = runTest {
+        val updatedAssistantMessage = ChatMessage.AssistantMessage(
+            id = 12L,
+            sessionId = 1L,
+            content = "Partial answer",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = 5L,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id,
+            usageStats = null
+        )
+
+        coEvery {
+            messageDao.updateMessageContent(
+                id = 12L,
+                content = "Partial answer",
+                completion = AssistantMessageCompletionState.Completed,
+                usageStats = null
+            )
+        } returns updatedAssistantMessage.right()
+
+        val result = persistence.updateAssistantMessageContent(
+            messageId = 12L,
+            content = "Partial answer",
+            completion = AssistantMessageCompletionState.Completed,
+            usageStats = null
+        )
+
+        assertEquals(null, result.usageStats)
     }
 
     /**

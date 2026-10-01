@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.llm
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -66,9 +67,9 @@ class RetryLLMApiClientTest {
                     index = 0
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(
-                promptTokens = 10,
-                completionTokens = 20,
+            usage = UsageStats(
+                inputTokens = 10,
+                outputTokens = 20,
                 totalTokens = 30
             )
         )

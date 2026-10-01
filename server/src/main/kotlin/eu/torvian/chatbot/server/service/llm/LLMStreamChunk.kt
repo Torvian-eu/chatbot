@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.service.llm
 
+import eu.torvian.chatbot.common.models.core.UsageStats
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -99,20 +100,26 @@ sealed class LLMStreamChunk {
     ) : LLMStreamChunk()
 
     /**
-     * Represents a usage statistics chunk (might be sent at the end).
+     * Represents an observation of the usage reported so far during a stream.
      *
-     * @property promptTokens Number of tokens in the prompt/context
-     * @property completionTokens Number of tokens in the generated completion
-     * @property totalTokens Total tokens used (prompt + completion)
-     * @property reasoningTokens Number of reasoning (chain-of-thought) tokens consumed, when the provider reports
-     *            them (e.g. OpenAI's Responses API), or `null` otherwise.
+     * This chunk is the designated place for intermediate observations; no layer above the dialects consumes it,
+     * and it is never the value that is persisted. The authoritative value of a generation is carried by
+     * [FinalUsageStats].
+     *
+     * @property usage Usage the provider reported at this point of the stream.
      */
-    data class UsageChunk(
-        val promptTokens: Int,
-        val completionTokens: Int,
-        val totalTokens: Int,
-        val reasoningTokens: Int? = null
-    ) : LLMStreamChunk()
+    data class UsageChunk(val usage: UsageStats) : LLMStreamChunk()
+
+    /**
+     * Represents the authoritative token usage of the whole generation.
+     *
+     * Every dialect emits this chunk in the order "final usage, then terminal chunk", and it is never a stream
+     * ending itself, so a consumer sees it while the stream is still open. It is the only usage value a caller
+     * persists: a stream that ends without it records no usage for its message.
+     *
+     * @property usage Usage the provider reported for the whole generation.
+     */
+    data class FinalUsageStats(val usage: UsageStats) : LLMStreamChunk()
 
     /**
      * Represents the final "done" signal from the LLM.

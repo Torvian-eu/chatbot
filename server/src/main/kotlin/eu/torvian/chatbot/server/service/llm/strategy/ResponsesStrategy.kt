@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.service.llm.*
@@ -229,14 +230,9 @@ class ResponsesStrategy(
                 ?.takeIf { it in PROVIDER_DECLARED_NON_SUCCESS_STATUSES }
 
             // A missing or JSON-null usage (`usage: null` is what providers send when they did not complete the
-            // generation) must not fail the mapping: only a real object contributes token counts.
-            val usage = response["usage"] as? JsonObject
-            val promptTokens = usage?.get("input_tokens")?.jsonPrimitive?.intOrNull ?: 0
-            val completionTokens = usage?.get("output_tokens")?.jsonPrimitive?.intOrNull ?: 0
-            val totalTokens = usage?.get("total_tokens")?.jsonPrimitive?.intOrNull ?: 0
-            val reasoningTokens = usage?.get("output_tokens_details")?.jsonObject
-                ?.get("reasoning_tokens")?.jsonPrimitive?.intOrNull
-
+            // generation) must not fail the mapping, and a usage that carries no counter at all is not a
+            // zero-filled value either: it means the provider reported no usage.
+            val usage = responsesUsageStats(response["usage"] as? JsonObject)
             val reasoningEffort = response["reasoning"]?.jsonObject?.get("effort")?.jsonPrimitive?.contentOrNull
 
             // Reasoning items are emitted verbatim so higher layers can persist (sanitized) and replay them
@@ -307,12 +303,7 @@ class ResponsesStrategy(
                         toolCalls = toolCalls.ifEmpty { null }
                     )
                 ),
-                usage = LLMCompletionResult.UsageStats(
-                    promptTokens = promptTokens,
-                    completionTokens = completionTokens,
-                    totalTokens = totalTokens,
-                    reasoningTokens = reasoningTokens
-                ),
+                usage = usage,
                 id = responseId,
                 reasoningItems = reasoningItems.ifEmpty { null },
                 metadata = buildMap {
@@ -364,6 +355,39 @@ class ResponsesStrategy(
                 errorBody
             )
         }
+    }
+
+    /**
+     * Applies the presence rule to the `usage` object of a Responses payload.
+     *
+     * A counter the provider omitted is `0` and a missing total falls back to the sum of input and output, but an
+     * object that carries no counter at all — and a missing or JSON-`null` object, which providers send for
+     * generations they did not complete — means that no usage was reported, which stays `null` instead of becoming
+     * a zero-filled value. The three optional counters stay `null` when the provider omits them, so "no reasoning
+     * tokens reported" is never presented as zero. Cache counters live in `input_tokens_details`, which providers
+     * that do not support prompt caching omit entirely.
+     *
+     * @param usage `usage` object of the payload, or `null` when it carried none.
+     * @return The reported usage, or `null` when no counter was reported.
+     */
+    private fun responsesUsageStats(usage: JsonObject?): UsageStats? {
+        if (usage == null) return null
+        val inputTokens = usage["input_tokens"]?.jsonPrimitive?.intOrNull
+        val outputTokens = usage["output_tokens"]?.jsonPrimitive?.intOrNull
+        val totalTokens = usage["total_tokens"]?.jsonPrimitive?.intOrNull
+        if (inputTokens == null && outputTokens == null && totalTokens == null) return null
+        val input = inputTokens ?: 0
+        val output = outputTokens ?: 0
+        val inputDetails = usage["input_tokens_details"]?.jsonObject
+        return UsageStats(
+            inputTokens = input,
+            outputTokens = output,
+            totalTokens = totalTokens ?: (input + output),
+            reasoningTokens = usage["output_tokens_details"]?.jsonObject
+                ?.get("reasoning_tokens")?.jsonPrimitive?.intOrNull,
+            cachedTokens = inputDetails?.get("cached_tokens")?.jsonPrimitive?.intOrNull,
+            cacheWriteTokens = inputDetails?.get("cache_write_tokens")?.jsonPrimitive?.intOrNull
+        )
     }
 
     /**
@@ -620,18 +644,10 @@ class ResponsesStrategy(
                         }
                         // Usage is delivered on this terminal event in the embedded response snapshot. A missing
                         // or JSON-null usage (providers do report `usage: null` on non-completions) must not fail
-                        // the whole stream, so only a real object contributes a usage chunk.
-                        val usage = response?.get("usage") as? JsonObject
-                        if (usage != null) {
-                            emit(
-                                LLMStreamChunk.UsageChunk(
-                                    promptTokens = usage["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
-                                    completionTokens = usage["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
-                                    totalTokens = usage["total_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
-                                    reasoningTokens = usage["output_tokens_details"]?.jsonObject
-                                        ?.get("reasoning_tokens")?.jsonPrimitive?.intOrNull
-                                ).right()
-                            )
+                        // the whole stream, so only a real object contributes a usage chunk. The chunk is emitted
+                        // before the terminal one, so the collector sees it while the stream is still open.
+                        responsesUsageStats(response?.get("usage") as? JsonObject)?.let { usage ->
+                            emit(LLMStreamChunk.FinalUsageStats(usage).right())
                         }
                         emit(LLMStreamChunk.Done.right())
                         return@collect

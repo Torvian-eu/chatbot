@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.core.AssistantMessageErrorCode
 import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -77,8 +78,7 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = expectedFailure
-            )
+                completion = expectedFailure, usageStats = any())
         } returns PersistedAssistantMessage(failedAssistantMessage, userMessage)
 
         val events = orchestrator.processNonStreamingTurn(
@@ -144,7 +144,7 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
             val emptyCompletion = LLMCompletionResult(
                 id = "completion-empty",
                 choices = emptyList(),
-                usage = LLMCompletionResult.UsageStats(1, 1, 2),
+                usage = UsageStats(1, 1, 2),
                 metadata = emptyMap()
             )
 
@@ -162,8 +162,7 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
                     testSettings,
                     agentRoleId = testRoleId,
                     reasoningItems = null,
-                    completion = expectedFailure
-                )
+                    completion = expectedFailure, usageStats = any())
             } returns PersistedAssistantMessage(failedAssistantMessage, userMessage)
 
             val events = orchestrator.processNonStreamingTurn(
@@ -255,7 +254,7 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
                         )
                     )
                 ),
-                usage = LLMCompletionResult.UsageStats(1, 1, 2),
+                usage = UsageStats(1, 1, 2),
                 providerFailure = providerFailure
             )
 
@@ -274,8 +273,7 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
                     testSettings,
                     agentRoleId = testRoleId,
                     reasoningItems = null,
-                    completion = expectedFailure
-                )
+                    completion = expectedFailure, usageStats = any())
             } returns PersistedAssistantMessage(partialAssistantMessage, userMessage)
 
             val events = orchestrator.processNonStreamingTurn(
@@ -314,11 +312,10 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
                     testSettings,
                     agentRoleId = testRoleId,
                     reasoningItems = null,
-                    completion = expectedFailure
-                )
+                    completion = expectedFailure, usageStats = any())
             }
             // The message is written once with its content; nothing finalizes it afterwards.
-            coVerify(exactly = 0) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+            coVerify(exactly = 0) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
             assertTrue(events.none { it is ConversationTurnEvent.ToolCallsReceived })
             coVerify(exactly = 0) { conversationTurnPersistence.persistPendingToolCalls(any(), any(), any()) }
             verify(exactly = 0) {

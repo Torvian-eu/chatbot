@@ -113,8 +113,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallAssemblyTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight
-            )
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
         } returns PersistedAssistantMessage(assistantStarted, userMessage)
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -125,8 +124,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallAssemblyTest : Default
                 testSettings,
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight
-            )
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
         } returns PersistedAssistantMessage(assistantFinal, assistantStarted)
         // First iteration: a malformed delta is streamed for live UI, then the authoritative ToolCallDone
         // overrides it. Second iteration: plain content ends the loop.
@@ -145,10 +143,10 @@ class DefaultConversationTurnOrchestratorStreamingToolCallAssemblyTest : Default
             )
         )
         coEvery {
-            conversationTurnPersistence.updateAssistantMessageContent(assistantStarted.id, "")
+            conversationTurnPersistence.updateAssistantMessageContent(assistantStarted.id, "", usageStats = any())
         } returns assistantFinished
         coEvery {
-            conversationTurnPersistence.updateAssistantMessageContent(assistantFinal.id, "Done")
+            conversationTurnPersistence.updateAssistantMessageContent(assistantFinal.id, "Done", usageStats = any())
         } returns assistantFinal
 
         val capturedRequests = mutableListOf<List<LLMCompletionResult.CompletionChoice.ToolCallRequest>>()

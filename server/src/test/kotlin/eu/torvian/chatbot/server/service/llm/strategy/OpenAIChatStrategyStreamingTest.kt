@@ -342,8 +342,8 @@ class OpenAIChatStrategyStreamingTest : OpenAIChatStrategyTestBase() {
     }
 
     @Test
-    @DisplayName("processStreamingResponse should emit UsageChunk when usage data is present")
-    fun processStreamingResponse_withUsageData_emitsUsageChunk() = runTest {
+    @DisplayName("processStreamingResponse should emit FinalUsageStats immediately before Done when usage data is present")
+    fun processStreamingResponse_withUsageData_emitsFinalUsageStats() = runTest {
         // Given
         val streamLines = listOf(
             "data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}",
@@ -358,7 +358,7 @@ class OpenAIChatStrategyStreamingTest : OpenAIChatStrategyTestBase() {
         val result = strategy.processStreamingResponse(responseStream).toList()
 
         // Then
-        assertEquals(4, result.size, "Should have 1 content chunk + 1 finish chunk + 1 usage chunk + 1 done chunk")
+        assertEquals(4, result.size, "Should have 1 content chunk + 1 finish chunk + 1 final usage chunk + 1 done chunk")
 
         // First chunk should be content
         assertTrue(result[0].isRight())
@@ -373,13 +373,14 @@ class OpenAIChatStrategyStreamingTest : OpenAIChatStrategyTestBase() {
         assertEquals("", secondChunk.deltaContent)
         assertEquals("stop", secondChunk.finishReason)
 
-        // Third chunk should be usage stats
+        // Third chunk should be the authoritative usage, emitted right before the terminal chunk
         assertTrue(result[2].isRight())
         val usageChunk = result[2].getOrNull()
-        assertTrue(usageChunk is LLMStreamChunk.UsageChunk)
-        assertEquals(10, usageChunk.promptTokens)
-        assertEquals(5, usageChunk.completionTokens)
-        assertEquals(15, usageChunk.totalTokens)
+        assertTrue(usageChunk is LLMStreamChunk.FinalUsageStats)
+        assertEquals(10, usageChunk.usage.inputTokens)
+        assertEquals(5, usageChunk.usage.outputTokens)
+        assertEquals(15, usageChunk.usage.totalTokens)
+        assertNull(usageChunk.usage.reasoningTokens)
 
         // Final chunk should be Done
         assertTrue(result[3].isRight())
@@ -403,10 +404,10 @@ class OpenAIChatStrategyStreamingTest : OpenAIChatStrategyTestBase() {
         val result = strategy.processStreamingResponse(responseStream).toList()
 
         // Then
-        assertEquals(3, result.size, "Should have 1 content chunk + 1 finish chunk + 1 done chunk (no usage chunk)")
+        assertEquals(3, result.size, "Should have 1 content chunk + 1 finish chunk + 1 done chunk (no final usage chunk)")
 
         // Verify no usage chunk is present
-        val usageChunks = result.mapNotNull { it.getOrNull() }.filterIsInstance<LLMStreamChunk.UsageChunk>()
+        val usageChunks = result.mapNotNull { it.getOrNull() }.filterIsInstance<LLMStreamChunk.FinalUsageStats>()
         assertTrue(usageChunks.isEmpty(), "Should not emit any usage chunks when usage data is not present")
 
         // Final chunk should still be Done
@@ -417,7 +418,7 @@ class OpenAIChatStrategyStreamingTest : OpenAIChatStrategyTestBase() {
 
     @Test
     @DisplayName("processStreamingResponse should handle usage data in chunk with empty choices")
-    fun processStreamingResponse_usageDataWithEmptyChoices_emitsUsageChunk() = runTest {
+    fun processStreamingResponse_usageDataWithEmptyChoices_emitsFinalUsageStats() = runTest {
         // Given - usage data appears in a chunk with empty choices array (common OpenAI behavior)
         val streamLines = listOf(
             "data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello World\"},\"finish_reason\":\"stop\"}]}",
@@ -430,7 +431,7 @@ class OpenAIChatStrategyStreamingTest : OpenAIChatStrategyTestBase() {
         val result = strategy.processStreamingResponse(responseStream).toList()
 
         // Then
-        assertEquals(3, result.size, "Should have 1 content chunk + 1 usage chunk + 1 done chunk")
+        assertEquals(3, result.size, "Should have 1 content chunk + 1 final usage chunk + 1 done chunk")
 
         // First chunk should be content with finish reason
         assertTrue(result[0].isRight())
@@ -439,13 +440,13 @@ class OpenAIChatStrategyStreamingTest : OpenAIChatStrategyTestBase() {
         assertEquals("Hello World", contentChunk.deltaContent)
         assertEquals("stop", contentChunk.finishReason)
 
-        // Second chunk should be usage stats (even though choices is empty)
+        // Second chunk should be the authoritative usage (even though choices is empty)
         assertTrue(result[1].isRight())
         val usageChunk = result[1].getOrNull()
-        assertTrue(usageChunk is LLMStreamChunk.UsageChunk)
-        assertEquals(25, usageChunk.promptTokens)
-        assertEquals(10, usageChunk.completionTokens)
-        assertEquals(35, usageChunk.totalTokens)
+        assertTrue(usageChunk is LLMStreamChunk.FinalUsageStats)
+        assertEquals(25, usageChunk.usage.inputTokens)
+        assertEquals(10, usageChunk.usage.outputTokens)
+        assertEquals(35, usageChunk.usage.totalTokens)
 
         // Final chunk should be Done
         assertTrue(result[2].isRight())

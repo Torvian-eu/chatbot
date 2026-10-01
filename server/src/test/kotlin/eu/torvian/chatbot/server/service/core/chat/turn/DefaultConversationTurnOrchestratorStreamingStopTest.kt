@@ -52,8 +52,7 @@ class DefaultConversationTurnOrchestratorStreamingStopTest : DefaultConversation
                 conversationTurnPersistence.updateAssistantMessageContent(
                     placeholder.id,
                     "Partial answer",
-                    AssistantMessageCompletionState.InterruptedByUser
-                )
+                    AssistantMessageCompletionState.InterruptedByUser, usageStats = any())
             }
             val finished = assertIs<ConversationTurnEvent.AssistantMessageFinished>(events.last())
             assertEquals("Partial answer", finished.assistantMessage.content)
@@ -90,8 +89,7 @@ class DefaultConversationTurnOrchestratorStreamingStopTest : DefaultConversation
             conversationTurnPersistence.updateAssistantMessageContent(
                 placeholder.id,
                 "",
-                AssistantMessageCompletionState.InterruptedByUser
-            )
+                AssistantMessageCompletionState.InterruptedByUser, usageStats = any())
         }
         val finished = assertIs<ConversationTurnEvent.AssistantMessageFinished>(events.last())
         assertEquals("", finished.assistantMessage.content)
@@ -133,10 +131,9 @@ class DefaultConversationTurnOrchestratorStreamingStopTest : DefaultConversation
             conversationTurnPersistence.updateAssistantMessageContent(
                 placeholder.id,
                 "Partial answer",
-                AssistantMessageCompletionState.InterruptedByUser
-            )
+                AssistantMessageCompletionState.InterruptedByUser, usageStats = any())
         }
-        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
         assertTrue(events.none { it == ConversationTurnEvent.TurnCompleted })
     }
 
@@ -175,8 +172,7 @@ class DefaultConversationTurnOrchestratorStreamingStopTest : DefaultConversation
             conversationTurnPersistence.updateAssistantMessageContent(
                 placeholder.id,
                 "Partial answer",
-                AssistantMessageCompletionState.InterruptedByUser
-            )
+                AssistantMessageCompletionState.InterruptedByUser, usageStats = any())
         }
         assertTrue(events.none { it == ConversationTurnEvent.TurnCompleted })
     }

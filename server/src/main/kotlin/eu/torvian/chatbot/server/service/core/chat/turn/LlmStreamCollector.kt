@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.ModelSettings
@@ -69,7 +70,8 @@ internal class LlmStreamCollector(
      *        [accumulatedReasoningText] when it runs, so the recorded text never lags the forwarded delta.
      * @param onStreamComplete Callback invoked after the provider signals stream completion, receiving the
      *        parsed tool-call requests, the finish reason, whether the assistant-text or reasoning-text cap was
-     *        reached, and how many tool calls the per-step and per-argument caps cut.
+     *        reached, how many tool calls the per-step and per-argument caps cut, and the authoritative usage the
+     *        provider reported for the generation (`null` when it reported none).
      * @param onError Callback for streaming errors.
      * @param onUnfinalized Callback reporting an ending without a terminal chunk, carrying the text received so
      *        far and the reason the stream stopped.
@@ -95,7 +97,8 @@ internal class LlmStreamCollector(
             contentTruncated: Boolean,
             reasoningTruncated: Boolean,
             droppedToolCallCount: Int,
-            clippedToolCallArgumentCount: Int
+            clippedToolCallArgumentCount: Int,
+            usage: UsageStats?
         ) -> Unit,
         onError: suspend (error: LLMCompletionError) -> Unit,
         onUnfinalized: suspend (unfinalized: UnfinalizedAssistantStream) -> Unit
@@ -215,7 +218,8 @@ internal class LlmStreamCollector(
      * @param onReasoningTextDelta Callback for the accepted reasoning-text deltas.
      * @param onStreamComplete Callback invoked after the provider signals stream completion, receiving the
      *        parsed tool-call requests, the finish reason, whether the assistant-text or reasoning-text cap was
-     *        reached, and how many tool calls the per-step and per-argument caps cut.
+     *        reached, how many tool calls the per-step and per-argument caps cut, and the authoritative usage the
+     *        provider reported for the generation (`null` when it reported none).
      * @param onError Callback for streaming errors that arrive as a chunk.
      */
     private suspend fun handleStreamChunk(
@@ -233,7 +237,8 @@ internal class LlmStreamCollector(
             contentTruncated: Boolean,
             reasoningTruncated: Boolean,
             droppedToolCallCount: Int,
-            clippedToolCallArgumentCount: Int
+            clippedToolCallArgumentCount: Int,
+            usage: UsageStats?
         ) -> Unit,
         onError: suspend (error: LLMCompletionError) -> Unit
     ) {
@@ -344,9 +349,19 @@ internal class LlmStreamCollector(
             }
 
             is LLMStreamChunk.UsageChunk -> {
+                // An observation only: it is never persisted, the value that counts is the one carried by the
+                // authoritative usage chunk below.
                 logger.debug(
-                    "Usage stats: prompt=${chunk.promptTokens}, completion=${chunk.completionTokens}, total=${chunk.totalTokens}, reasoning=${chunk.reasoningTokens}"
+                    "Usage observation: input=${chunk.usage.inputTokens}, output=${chunk.usage.outputTokens}, " +
+                        "total=${chunk.usage.totalTokens}, reasoning=${chunk.usage.reasoningTokens}"
                 )
+            }
+
+            is LLMStreamChunk.FinalUsageStats -> {
+                // The authoritative usage of the generation is remembered until the terminal chunk, which is the
+                // one that hands it to the caller. The chunk is not an ending itself, so the stream stays open and
+                // the freeze rule never drops it in the mandated "usage, then terminal chunk" order.
+                state.finalUsage = chunk.usage
             }
 
             is LLMStreamChunk.ReasoningDone -> {
@@ -405,7 +420,8 @@ internal class LlmStreamCollector(
                     state.contentTruncated,
                     state.reasoningTruncated,
                     state.droppedToolCallIndices.size,
-                    state.toolCallsByIndex.values.count { it.argumentsClipped }
+                    state.toolCallsByIndex.values.count { it.argumentsClipped },
+                    state.finalUsage
                 )
             }
 
@@ -457,12 +473,15 @@ private sealed interface StreamEnding {
  * @property droppedToolCallIndices Output indices of the tool calls refused by the per-step cap. The indices are
  *            collected in a set because one call can arrive in many chunks but counts once; nothing is
  *            accumulated for them, so the caller learns about the cap from this field alone.
+ * @property finalUsage Usage the provider declared for the whole generation, or `null` while none was reported.
+ *            Only a completion hands it to the caller; an abnormal ending discards it together with the stream.
  */
 private class StreamCollectionState {
     var contentTruncated: Boolean = false
     var reasoningTruncated: Boolean = false
     var finishReason: String? = null
     var ending: StreamEnding? = null
+    var finalUsage: UsageStats? = null
     val toolCallsByIndex: MutableMap<Int, MutableToolCallAccumulator> = mutableMapOf()
     val droppedToolCallIndices: MutableSet<Int> = mutableSetOf()
 

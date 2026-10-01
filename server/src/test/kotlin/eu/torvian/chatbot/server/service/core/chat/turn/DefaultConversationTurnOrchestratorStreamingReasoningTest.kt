@@ -270,8 +270,7 @@ class DefaultConversationTurnOrchestratorStreamingReasoningTest : DefaultConvers
             conversationTurnPersistence.updateAssistantMessageContent(
                 placeholder.id,
                 "",
-                reasoningOutputLimitExceededCompletionState(ConversationTurnLimits.MAX_REASONING_TEXT_CHARS)
-            )
+                reasoningOutputLimitExceededCompletionState(ConversationTurnLimits.MAX_REASONING_TEXT_CHARS), usageStats = any())
         }
         val finished = events.filterIsInstance<ConversationTurnEvent.AssistantMessageFinished>().single()
         assertFalse(finished.assistantMessage.isComplete)
@@ -318,8 +317,7 @@ class DefaultConversationTurnOrchestratorStreamingReasoningTest : DefaultConvers
                 AssistantMessageCompletionState.failed(
                     code = AssistantMessageErrorCode.PROVIDER_UNAVAILABLE,
                     message = "The provider could not be reached because of a network error."
-                )
-            )
+                ), usageStats = any())
         }
         val finished = events.filterIsInstance<ConversationTurnEvent.AssistantMessageFinished>().single()
         assertFalse(finished.assistantMessage.isComplete)

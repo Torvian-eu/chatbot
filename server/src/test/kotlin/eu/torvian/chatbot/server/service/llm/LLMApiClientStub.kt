@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.llm
 
 import arrow.core.Either
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.ModelSettings
@@ -34,9 +35,9 @@ class LLMApiClientStub : LLMApiClient {
                     index = 0
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(
-                promptTokens = messages.sumOf { (it.content ?: "").length / 4 + 1 } + 10,
-                completionTokens = 50,
+            usage = UsageStats(
+                inputTokens = messages.sumOf { (it.content ?: "").length / 4 + 1 } + 10,
+                outputTokens = 50,
                 totalTokens = messages.sumOf { (it.content ?: "").length / 4 + 1 } + 60
             ),
             metadata = mapOf(

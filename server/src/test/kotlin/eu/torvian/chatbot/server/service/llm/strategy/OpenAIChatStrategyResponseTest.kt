@@ -60,13 +60,94 @@ class OpenAIChatStrategyResponseTest : OpenAIChatStrategyTestBase() {
         assertEquals("stop", choice.finishReason)
         assertEquals(0, choice.index)
 
-        assertEquals(10, completionResult.usage.promptTokens)
-        assertEquals(5, completionResult.usage.completionTokens)
-        assertEquals(15, completionResult.usage.totalTokens)
+        assertEquals(10, completionResult.usage?.inputTokens)
+        assertEquals(5, completionResult.usage?.outputTokens)
+        assertEquals(15, completionResult.usage?.totalTokens)
 
         assertEquals("chat.completion", completionResult.metadata["api_object"])
         assertEquals(1677652288L, completionResult.metadata["api_created"])
         assertEquals("gpt-4o", completionResult.metadata["api_model"])
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should decode a response whose usage is absent")
+    fun processSuccessResponse_missingUsage_reportsNoUsage() {
+        val responseBody = """
+            {
+              "id": "chatcmpl-no-usage",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "gpt-4o",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Answer" },
+                  "finish_reason": "stop"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        assertTrue(result.isRight(), "A missing usage must not fail the response: ${result.leftOrNull()}")
+        assertNull(assertNotNull(result.getOrNull()).usage, "No reported usage must stay absent")
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should derive the total of a partially reported usage")
+    fun processSuccessResponse_partialUsage_derivesTotal() {
+        val responseBody = """
+            {
+              "id": "chatcmpl-partial-usage",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "gpt-4o",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Answer" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 10 }
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        val usage = assertNotNull(assertNotNull(result.getOrNull()).usage)
+        assertEquals(10, usage.inputTokens)
+        assertEquals(0, usage.outputTokens)
+        assertEquals(10, usage.totalTokens, "A missing total falls back to input + output")
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should report no usage when the usage object carries no counter")
+    fun processSuccessResponse_emptyUsage_reportsNoUsage() {
+        val responseBody = """
+            {
+              "id": "chatcmpl-empty-usage",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "gpt-4o",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Answer" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {}
+            }
+        """.trimIndent()
+
+        val result = strategy.processSuccessResponse(responseBody)
+
+        assertNull(
+            assertNotNull(result.getOrNull()).usage,
+            "An empty usage object must not become a zero-filled value"
+        )
     }
 
     @Test

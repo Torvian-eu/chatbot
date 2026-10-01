@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -81,6 +82,7 @@ class DefaultConversationTurnPersistence(
         settings: ModelSettings,
         agentRoleId: Long?,
         reasoningItems: List<JsonObject>?,
+        usageStats: UsageStats?,
         completion: AssistantMessageCompletionState
     ): PersistedAssistantMessage = transactionScope.transaction {
         val assistantMessage = messageDao.insertMessage(
@@ -93,6 +95,7 @@ class DefaultConversationTurnPersistence(
             settingsId = settings.id,
             agentRoleId = agentRoleId,
             reasoningItems = reasoningItems,
+            usageStats = usageStats,
             // The completion state is part of the insert so no row ever exists without it; the streaming
             // placeholder and an empty failed row are created with their state already in place.
             completion = completion
@@ -125,9 +128,15 @@ class DefaultConversationTurnPersistence(
     override suspend fun updateAssistantMessageContent(
         messageId: Long,
         content: String,
-        completion: AssistantMessageCompletionState
+        completion: AssistantMessageCompletionState,
+        usageStats: UsageStats?
     ): ChatMessage.AssistantMessage = transactionScope.transaction {
-        messageDao.updateMessageContent(messageId, content, completion = completion).getOrElse { error ->
+        messageDao.updateMessageContent(
+            messageId,
+            content,
+            completion = completion,
+            usageStats = usageStats
+        ).getOrElse { error ->
             throw IllegalStateException("Failed to update assistant message content: $error")
         } as ChatMessage.AssistantMessage
     }

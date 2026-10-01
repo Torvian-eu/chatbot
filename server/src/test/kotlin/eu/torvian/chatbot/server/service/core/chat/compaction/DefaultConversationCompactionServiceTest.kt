@@ -4,6 +4,7 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -643,7 +644,7 @@ class DefaultConversationCompactionServiceTest {
                     toolCalls = listOf(toolCall)
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2)
+            usage = UsageStats(1, 1, 2)
         )
         stubAuxiliarySuccess(completion)
 
@@ -763,7 +764,7 @@ class DefaultConversationCompactionServiceTest {
                 index = 0
             )
         ),
-        usage = LLMCompletionResult.UsageStats(1, 1, 2)
+        usage = UsageStats(1, 1, 2)
     )
 
     /**

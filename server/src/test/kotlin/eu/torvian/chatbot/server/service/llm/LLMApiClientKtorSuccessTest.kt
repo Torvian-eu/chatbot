@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.service.llm
 
+import eu.torvian.chatbot.common.models.core.UsageStats
 import arrow.core.Either
 import arrow.core.right
 import io.ktor.client.engine.mock.*
@@ -34,7 +35,7 @@ class LLMApiClientKtorSuccessTest : LLMApiClientKtorTestBase() {
         val expectedResult = LLMCompletionResult(
             id = "comp-123",
             choices = listOf(LLMCompletionResult.CompletionChoice("assistant", "Hello!", "stop", 0)),
-            usage = LLMCompletionResult.UsageStats(10, 5, 15),
+            usage = UsageStats(10, 5, 15),
             metadata = mapOf("api_object" to "chat.completion", "api_created" to 1678885370L, "api_model" to "gpt-4")
         )
 
@@ -100,7 +101,7 @@ class LLMApiClientKtorSuccessTest : LLMApiClientKtorTestBase() {
         val expectedResult = LLMCompletionResult(
             id = "empty-response",
             choices = listOf(LLMCompletionResult.CompletionChoice("assistant", "Empty response handled", "stop", 0)),
-            usage = LLMCompletionResult.UsageStats(0, 0, 0),
+            usage = UsageStats(0, 0, 0),
             metadata = emptyMap()
         )
 
@@ -155,7 +156,7 @@ class LLMApiClientKtorSuccessTest : LLMApiClientKtorTestBase() {
         val expectedResult = LLMCompletionResult(
             id = "comp-null-key",
             choices = listOf(LLMCompletionResult.CompletionChoice("assistant", "Response without API key", "stop", 0)),
-            usage = LLMCompletionResult.UsageStats(5, 5, 10),
+            usage = UsageStats(5, 5, 10),
             metadata = emptyMap()
         )
 

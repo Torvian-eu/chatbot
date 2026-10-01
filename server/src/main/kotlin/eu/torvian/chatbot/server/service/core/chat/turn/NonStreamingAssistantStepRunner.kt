@@ -160,7 +160,11 @@ internal class NonStreamingAssistantStepRunner(
             settings = request.llmConfig.settings,
             agentRoleId = request.session.agentRoleId,
             reasoningItems = sanitizedReasoningItems,
-            completion = stepFailure ?: toolCallFailure ?: AssistantMessageCompletionState.Completed
+            completion = stepFailure ?: toolCallFailure ?: AssistantMessageCompletionState.Completed,
+            // A generation the provider declared incomplete reports no usable usage, and the server's own caps do
+            // not change that: reaching a cap still means the provider completed and reported its counters, so only
+            // a provider-declared ending drops the usage.
+            usageStats = llmCompletionResult.usage.takeIf { providerEndingFailure == null }
         )
         emit(
             ConversationTurnEvent.AssistantMessageSaved(

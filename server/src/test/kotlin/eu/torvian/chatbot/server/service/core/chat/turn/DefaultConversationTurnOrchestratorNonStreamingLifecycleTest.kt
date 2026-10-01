@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
 import eu.torvian.chatbot.server.service.core.LLMConfig
@@ -54,7 +55,7 @@ class DefaultConversationTurnOrchestratorNonStreamingLifecycleTest : DefaultConv
                     index = 0
                 )
             ),
-            usage = LLMCompletionResult.UsageStats(1, 1, 2),
+            usage = UsageStats(1, 1, 2),
             metadata = emptyMap()
         )
 
@@ -71,8 +72,7 @@ class DefaultConversationTurnOrchestratorNonStreamingLifecycleTest : DefaultConv
                 testModel,
                 testSettings,
                 agentRoleId = testRoleId,
-                reasoningItems = null
-            )
+                reasoningItems = null, usageStats = any())
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
         val events = orchestrator.processNonStreamingTurn(

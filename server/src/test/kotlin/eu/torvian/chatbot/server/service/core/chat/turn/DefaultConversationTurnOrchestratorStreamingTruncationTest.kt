@@ -74,8 +74,7 @@ class DefaultConversationTurnOrchestratorStreamingTruncationTest : DefaultConver
             conversationTurnPersistence.updateAssistantMessageContent(
                 placeholder.id,
                 truncatedContent,
-                outputLimitExceededCompletionState(ConversationTurnLimits.MAX_ASSISTANT_MESSAGE_CHARS)
-            )
+                outputLimitExceededCompletionState(ConversationTurnLimits.MAX_ASSISTANT_MESSAGE_CHARS), usageStats = any())
         }
         // The former in-content truncation notice is gone: the reason lives in the message state now.
         assertFalse(truncatedContent.contains("[Output truncated"))
@@ -133,8 +132,7 @@ class DefaultConversationTurnOrchestratorStreamingTruncationTest : DefaultConver
                 testSettings.copy(stream = true),
                 agentRoleId = testRoleId,
                 reasoningItems = null,
-                completion = AssistantMessageCompletionState.InFlight
-            )
+                completion = AssistantMessageCompletionState.InFlight, usageStats = any())
         } returns PersistedAssistantMessage(secondPlaceholder, firstPlaceholder)
         val pendingToolCall = ToolCall(
             id = 543L,
@@ -194,15 +192,13 @@ class DefaultConversationTurnOrchestratorStreamingTruncationTest : DefaultConver
             conversationTurnPersistence.updateAssistantMessageContent(
                 firstPlaceholder.id,
                 "",
-                AssistantMessageCompletionState.Completed
-            )
+                AssistantMessageCompletionState.Completed, usageStats = any())
         }
         coVerify(exactly = 1) {
             conversationTurnPersistence.updateAssistantMessageContent(
                 secondPlaceholder.id,
                 oversizedContent.take(ConversationTurnLimits.MAX_ASSISTANT_MESSAGE_CHARS),
-                outputLimitExceededCompletionState(ConversationTurnLimits.MAX_ASSISTANT_MESSAGE_CHARS)
-            )
+                outputLimitExceededCompletionState(ConversationTurnLimits.MAX_ASSISTANT_MESSAGE_CHARS), usageStats = any())
         }
         // The completed iteration still persisted and executed its tool call before the truncation.
         coVerify(exactly = 1) { conversationTurnPersistence.persistPendingToolCalls(firstPlaceholder.id, any(), any()) }
@@ -260,11 +256,10 @@ class DefaultConversationTurnOrchestratorStreamingTruncationTest : DefaultConver
                     AssistantMessageCompletionState.failed(
                         code = AssistantMessageErrorCode.PROVIDER_OUTPUT_LIMIT_EXCEEDED,
                         message = "The provider stopped the response because the model reached its output limit."
-                    )
-                )
+                    ), usageStats = any())
             }
             // One terminal write, one transient frame, one terminal frame.
-            coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+            coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
             val finished = events.filterIsInstance<ConversationTurnEvent.AssistantMessageFinished>().single()
             assertEquals("Partial answer", finished.assistantMessage.content)
             assertFalse(finished.assistantMessage.isComplete)
@@ -313,8 +308,7 @@ class DefaultConversationTurnOrchestratorStreamingTruncationTest : DefaultConver
                 AssistantMessageCompletionState.failed(
                     code = AssistantMessageErrorCode.PROVIDER_OUTPUT_LIMIT_EXCEEDED,
                     message = "The provider stopped the response because the model reached its output limit."
-                )
-            )
+                ), usageStats = any())
         }
         val finished = events.filterIsInstance<ConversationTurnEvent.AssistantMessageFinished>().single()
         assertEquals(cappedContent, finished.assistantMessage.content)
@@ -346,10 +340,9 @@ class DefaultConversationTurnOrchestratorStreamingTruncationTest : DefaultConver
             conversationTurnPersistence.updateAssistantMessageContent(
                 placeholder.id,
                 "Complete answer",
-                AssistantMessageCompletionState.Completed
-            )
+                AssistantMessageCompletionState.Completed, usageStats = any())
         }
-        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any()) }
+        coVerify(exactly = 1) { conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any()) }
         assertTrue(events.none { it is ConversationTurnEvent.ExternalServiceError })
         assertEquals(1, events.count { it == ConversationTurnEvent.TurnCompleted })
     }

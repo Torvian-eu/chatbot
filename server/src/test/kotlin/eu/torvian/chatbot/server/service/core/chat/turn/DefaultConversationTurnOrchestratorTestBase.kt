@@ -134,7 +134,7 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
         // and completion state, so tests that only need the finalized message do not have to stub it and tests
         // that assert the written state can still verify the call (and override this stub when needed).
         coEvery {
-            conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any())
+            conversationTurnPersistence.updateAssistantMessageContent(any(), any(), any(), usageStats = any())
         } answers {
             val completion = thirdArg<AssistantMessageCompletionState>()
             ChatMessage.AssistantMessage(

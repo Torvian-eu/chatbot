@@ -141,7 +141,7 @@ internal class StreamingAssistantStepRunner(
                 // persisted on either ending can never disagree.
                 emit(ConversationTurnEvent.AssistantMessageReasoningDelta(assistantMessage.id, delta))
             },
-            onStreamComplete = { toolCallRequests, finishReason, contentTruncated, reasoningTruncated, droppedToolCallCount, clippedToolCallArgumentCount ->
+            onStreamComplete = { toolCallRequests, finishReason, contentTruncated, reasoningTruncated, droppedToolCallCount, clippedToolCallArgumentCount, usage ->
                 // Sanitize once before the accumulated items enter persistence or the follow-up context.
                 val sanitizedReasoningItems = sanitizeReasoningItems(accumulatedReasoningItems)
                 // Persist accumulated reasoning (if any) alongside the finalized message content: the completed
@@ -192,7 +192,10 @@ internal class StreamingAssistantStepRunner(
                 val updatedAssistantMessage = conversationTurnPersistence.updateAssistantMessageContent(
                     messageId = assistantMessage.id,
                     content = accumulatedContent.toString(),
-                    completion = limitFailure ?: toolCallFailure ?: AssistantMessageCompletionState.Completed
+                    completion = limitFailure ?: toolCallFailure ?: AssistantMessageCompletionState.Completed,
+                    // The provider's authoritative usage of this step, written in the same statement that finalizes
+                    // the content and the completion state.
+                    usageStats = usage
                 )
                 guard.isFinalized = true
                 runCatching { emit(ConversationTurnEvent.AssistantMessageFinished(updatedAssistantMessage)) }
@@ -397,7 +400,10 @@ internal class StreamingAssistantStepRunner(
                 messageId = assistantMessage.id,
                 // May be empty: a stop before any content still has to record the terminal state.
                 content = accumulatedContent.toString(),
-                completion = completion
+                completion = completion,
+                // Explicitly nothing: a generation that ended abnormally reported no usable usage, and the write
+                // that records the ending is what decides it.
+                usageStats = null
             )
         }
         guard.isFinalized = true
