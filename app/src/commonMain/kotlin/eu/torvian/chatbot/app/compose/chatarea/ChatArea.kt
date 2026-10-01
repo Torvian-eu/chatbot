@@ -20,6 +20,7 @@ import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.viewmodel.chat.state.AssistantResponseTimerState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -80,6 +81,7 @@ fun ChatArea(
                 inputContent = state.inputContent,
                 replyTargetMessage = state.replyTargetMessage,
                 turnExecutionState = state.turnExecutionState,
+                assistantResponseTimer = state.assistantResponseTimer,
                 canSend = state.canSend,
                 editingMessage = state.editingMessage,
                 editingContent = state.editingContent,
@@ -142,6 +144,7 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param inputContent The current text content in the message input field.
  * @param replyTargetMessage The message the user is currently explicitly replying to via the Reply action.
  * @param turnExecutionState Lifecycle state used by the composer action button.
+ * @param assistantResponseTimer Elapsed-time measurement of the active turn, shown beside the composer action button.
  * @param canSend Whether the composer is enabled (requires a resolvable agent role).
  * @param editingMessage The message currently being edited (E3.S1, E3.S2).
  * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
@@ -163,6 +166,7 @@ private fun SuccessStateDisplay(
     inputContent: String,
     replyTargetMessage: ChatMessage?,
     turnExecutionState: TurnExecutionState,
+    assistantResponseTimer: AssistantResponseTimerState,
     canSend: Boolean,
     editingMessage: ChatMessage?,
     editingContent: String?,
@@ -329,6 +333,7 @@ private fun SuccessStateDisplay(
                 inputContent = inputContent,
                 replyTargetMessage = replyTargetMessage,
                 turnExecutionState = turnExecutionState,
+                assistantResponseTimer = assistantResponseTimer,
                 canSend = canSend,
                 pendingFileReferences = pendingFileReferences,
                 searchQuery = searchQuery,
@@ -349,6 +354,7 @@ private fun SuccessStateDisplay(
                     actions = inputAreaActions,
                     replyTargetMessage = replyTargetMessage,
                     turnExecutionState = turnExecutionState,
+                    assistantResponseTimer = assistantResponseTimer,
                     canSend = canSend,
                     isExpanded = false,
                     fileReferences = pendingFileReferences,

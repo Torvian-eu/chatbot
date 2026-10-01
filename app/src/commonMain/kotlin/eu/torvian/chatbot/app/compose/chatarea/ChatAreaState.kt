@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.compose.chatarea
 import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.viewmodel.chat.state.AssistantResponseTimerState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
@@ -36,6 +37,7 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @property editingFileReferences The list of file references being edited (E3.S2).
  * @property editingBasePathOverride The base path override being edited (E3.S2).
  * @property turnExecutionState Lifecycle state used by the composer action button.
+ * @property assistantResponseTimer Elapsed-time measurement of the active turn, shown beside the composer action button.
  * @property dialogState The current dialog state for the chat area (e.g., delete confirmation).
  * @property toolCallsMap Tool calls for the current session, organized by message ID.
  * @property pendingFileReferences File references attached to the current message being composed.
@@ -62,6 +64,7 @@ data class ChatAreaState(
     val editingFileReferences: List<FileReference> = emptyList(),
     val editingBasePathOverride: String? = null,
     val turnExecutionState: TurnExecutionState = TurnExecutionState.IDLE,
+    val assistantResponseTimer: AssistantResponseTimerState = AssistantResponseTimerState.Hidden,
     val dialogState: ChatAreaDialogState = ChatAreaDialogState.None,
     val toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),
     val pendingFileReferences: List<FileReference> = emptyList(),

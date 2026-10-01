@@ -9,6 +9,7 @@ import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.SearchNavigationIntent
 import eu.torvian.chatbot.app.viewmodel.SearchNavigationState
+import eu.torvian.chatbot.app.viewmodel.chat.state.AssistantResponseTimerState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
@@ -218,6 +219,11 @@ class ChatViewModel(
      * Lifecycle state used by the chat input action button.
      */
     val turnExecutionState: StateFlow<TurnExecutionState> = state.turnExecutionState
+
+    /**
+     * Elapsed-time measurement of the active assistant turn, displayed next to the action button.
+     */
+    val assistantResponseTimer: StateFlow<AssistantResponseTimerState> = state.assistantResponseTimer
 
     /**
      * The current dialog state for the chat area (e.g., delete confirmation).

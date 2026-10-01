@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
+import kotlin.time.Clock
 
 import eu.torvian.chatbot.app.chat.search.MIN_QUERY_LENGTH
 
@@ -62,6 +63,7 @@ class ChatStateImpl(
     private val _editingFileReferences = MutableStateFlow<List<FileReference>>(emptyList())
     private val _editingBasePathOverride = MutableStateFlow<String?>(null)
     private val _turnExecutionState = MutableStateFlow(TurnExecutionState.IDLE)
+    private val _assistantResponseTimer = MutableStateFlow<AssistantResponseTimerState>(AssistantResponseTimerState.Hidden)
     private val _dialogState = MutableStateFlow<ChatAreaDialogState>(ChatAreaDialogState.None)
     private val _pendingFileReferences = MutableStateFlow<List<FileReference>>(emptyList())
     private val _basePathOverride = MutableStateFlow<String?>(null)
@@ -90,6 +92,7 @@ class ChatStateImpl(
     override val editingFileReferences: StateFlow<List<FileReference>> = _editingFileReferences.asStateFlow()
     override val editingBasePathOverride: StateFlow<String?> = _editingBasePathOverride.asStateFlow()
     override val turnExecutionState: StateFlow<TurnExecutionState> = _turnExecutionState.asStateFlow()
+    override val assistantResponseTimer: StateFlow<AssistantResponseTimerState> = _assistantResponseTimer.asStateFlow()
     override val dialogState: StateFlow<ChatAreaDialogState> = _dialogState.asStateFlow()
     override val pendingFileReferences: StateFlow<List<FileReference>> = _pendingFileReferences.asStateFlow()
     override val basePathOverride: StateFlow<String?> = _basePathOverride.asStateFlow()
@@ -438,8 +441,16 @@ class ChatStateImpl(
         _editingBasePathOverride.value = path
     }
 
+    /**
+     * Updates the turn lifecycle state and advances [assistantResponseTimer] with it.
+     *
+     * Deriving the timer here rather than from the caller keeps the measurement consistent with the turn
+     * state machine even when a turn starts and ends between two observations of the flows.
+     */
     override fun setTurnExecutionState(executionState: TurnExecutionState) {
         _turnExecutionState.value = executionState
+        _assistantResponseTimer.value =
+            _assistantResponseTimer.value.advanceFor(executionState, Clock.System.now())
     }
 
     override fun setDialogState(dialogState: ChatAreaDialogState) {
@@ -468,6 +479,8 @@ class ChatStateImpl(
         _editingFileReferences.value = emptyList()
         _editingBasePathOverride.value = null
         _turnExecutionState.value = TurnExecutionState.IDLE
+        // Cleared together with the turn state so a reused slot cannot display another session's value.
+        _assistantResponseTimer.value = AssistantResponseTimerState.Hidden
         _dialogState.value = ChatAreaDialogState.None
         _pendingFileReferences.value = emptyList()
         _basePathOverride.value = null

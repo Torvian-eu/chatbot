@@ -39,6 +39,7 @@ import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.generated.resources.*
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
+import eu.torvian.chatbot.app.viewmodel.chat.state.AssistantResponseTimerState
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import org.jetbrains.compose.resources.stringResource
 
@@ -55,6 +56,7 @@ import org.jetbrains.compose.resources.stringResource
  * @param actions Grouped callbacks for input area interactions.
  * @param replyTargetMessage The message being replied to, if any.
  * @param turnExecutionState Lifecycle state used to select the action button.
+ * @param assistantResponseTimer Elapsed-time measurement of the active turn, shown left of the action button.
  * @param canSend Whether the composer is enabled. False when no resolvable agent role is attached
  *                to the session; the send button is disabled and an inline hint is shown.
  * @param modifier Modifier applied to the input container.
@@ -71,6 +73,7 @@ fun InputArea(
     modifier: Modifier = Modifier,
     canSend: Boolean = true,
     isExpanded: Boolean = false,
+    assistantResponseTimer: AssistantResponseTimerState = AssistantResponseTimerState.Hidden,
     fileReferences: List<FileReference> = emptyList(),
     focusRequester: FocusRequester = remember { FocusRequester() },
     textFieldState: TextFieldState = rememberTextFieldState()
@@ -260,6 +263,12 @@ fun InputArea(
 
                     // Spacer to push send button to the right
                     Spacer(Modifier.weight(1f))
+
+                    AssistantResponseTimer(
+                        state = assistantResponseTimer
+                    )
+
+                    Spacer(Modifier.width(16.dp))
 
                     // Render exactly one action for the current turn lifecycle state.
                     when (turnExecutionState) {

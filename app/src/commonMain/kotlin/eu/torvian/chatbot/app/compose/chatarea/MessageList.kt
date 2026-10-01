@@ -31,6 +31,7 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.app.viewmodel.chat.state.AssistantResponseTimerState
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -57,6 +58,7 @@ import kotlinx.coroutines.yield
  * @param inputContent Current input content.
  * @param replyTargetMessage Current reply target, if replying.
  * @param turnExecutionState Lifecycle state used by the composer action button.
+ * @param assistantResponseTimer Elapsed-time measurement of the active turn, shown beside the inline composer action button.
  * @param canSend Whether the composer is enabled (requires a resolvable agent role).
  * @param pendingFileReferences File references attached to the composer.
  * @param searchQuery Current in-session search query.
@@ -88,6 +90,7 @@ fun MessageList(
     inputContent: String = "",
     replyTargetMessage: ChatMessage? = null,
     turnExecutionState: TurnExecutionState = TurnExecutionState.IDLE,
+    assistantResponseTimer: AssistantResponseTimerState = AssistantResponseTimerState.Hidden,
     canSend: Boolean = true,
     pendingFileReferences: List<FileReference> = emptyList(),
     searchQuery: String = "",
@@ -300,6 +303,7 @@ fun MessageList(
                                 actions = inputAreaActions,
                                 replyTargetMessage = replyTargetMessage,
                                 turnExecutionState = turnExecutionState,
+                                assistantResponseTimer = assistantResponseTimer,
                                 canSend = canSend,
                                 isExpanded = true,
                                 fileReferences = pendingFileReferences,
@@ -321,6 +325,7 @@ fun MessageList(
                             actions = inputAreaActions,
                             replyTargetMessage = replyTargetMessage,
                             turnExecutionState = turnExecutionState,
+                            assistantResponseTimer = assistantResponseTimer,
                             canSend = canSend,
                             isExpanded = true,
                             fileReferences = pendingFileReferences,
