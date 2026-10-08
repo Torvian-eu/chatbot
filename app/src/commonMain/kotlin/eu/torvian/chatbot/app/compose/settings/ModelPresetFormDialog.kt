@@ -5,7 +5,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import eu.torvian.chatbot.app.compose.common.ConfigDropdown
@@ -37,6 +39,11 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
  * Provider routing (for example OpenRouter's `{"provider":{"only":[…]}}`) is not editable here: a
  * preset carries no payload of its own (U-8). It is configured on the referenced settings profile in
  * Settings → Model Settings, so the form deliberately does not duplicate that profile's content.
+ *
+ * Conversation compaction is edited as two preset-level values: an enablement switch (ANDed with the
+ * user's own compaction preference, so a preset can only restrain compaction) and an optional token
+ * threshold. A blank threshold field means "use the user preference threshold", which is why the
+ * field is rendered empty rather than with a placeholder value.
  *
  * @param title Dialog title ("Add Model Preset" / "Edit Model Preset").
  * @param formState The current form draft.
@@ -173,6 +180,48 @@ fun ModelPresetFormDialog(
                                         "saving keeps the reference unchanged.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error
+                            )
+                        }
+
+                        // Conversation compaction: the preset may only restrain compaction (its flag is
+                        // ANDed with the user preference) and override the threshold; the auxiliary
+                        // summarization model stays a user preference.
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Conversation compaction", style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        text = "Disabling compaction here stops this preset's sessions from " +
+                                                "compacting, even when your compaction preference is enabled.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = formState.compactionEnabled,
+                                    onCheckedChange = { checked ->
+                                        onFormUpdate { it.copy(compactionEnabled = checked) }
+                                    }
+                                )
+                            }
+                            ConfigTextField(
+                                value = formState.compactionThresholdTokensText,
+                                onValueChange = { value ->
+                                    onFormUpdate { it.copy(compactionThresholdTokensText = value) }
+                                },
+                                label = "Compaction token threshold",
+                                singleLine = true,
+                                keyboardType = KeyboardType.Number,
+                                enabled = formState.compactionEnabled
+                            )
+                            Text(
+                                text = "Leave empty to use the user preference threshold (100,000 tokens by " +
+                                        "default). A value must be at least 1.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
