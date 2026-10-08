@@ -61,6 +61,20 @@ sealed interface CreateModelPresetError {
     ) : CreateModelPresetError
 
     /**
+     * The requested compaction threshold is invalid (zero or negative).
+     *
+     * `null` is always valid and means "use the user preference threshold", so only an explicit
+     * non-positive value is rejected; the caller (tool or REST) never persists anything.
+     *
+     * @property compactionThresholdTokens The rejected threshold value.
+     * @property reason Human-readable explanation of why the threshold is invalid.
+     */
+    data class InvalidCompactionThresholdTokens(
+        val compactionThresholdTokens: Long,
+        val reason: String
+    ) : CreateModelPresetError
+
+    /**
      * The ownership link for the newly created preset could not be inserted.
      *
      * @property reason Human-readable explanation of the failure.
@@ -95,6 +109,13 @@ fun CreateModelPresetError.toApiError(): ApiError = when (this) {
             "settingsId" to settingsId.toString(),
             "settingsModelId" to settingsModelId.toString(),
             "presetModelId" to presetModelId.toString()
+        )
+
+    is CreateModelPresetError.InvalidCompactionThresholdTokens ->
+        apiError(
+            CommonApiErrorCodes.INVALID_ARGUMENT,
+            "Invalid model preset compaction threshold: $reason",
+            "compactionThresholdTokens" to compactionThresholdTokens.toString()
         )
 
     is CreateModelPresetError.OwnerInsertFailed ->

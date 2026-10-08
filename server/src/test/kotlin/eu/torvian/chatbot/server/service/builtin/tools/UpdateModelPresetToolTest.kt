@@ -32,7 +32,8 @@ import kotlin.time.Instant
  *
  * Covers the PATCH semantics (ownership-checked load, merge of only the provided fields over the
  * persisted preset, the explicit clear sentinels, full-replacement update with the merged state),
- * the load failure aborting before the update, every update-error mapping, and input validation.
+ * the compaction merge matrix (`compaction_enabled` and `compaction_threshold_tokens`), the load
+ * failure aborting before the update, every update-error mapping, and input validation.
  */
 class UpdateModelPresetToolTest {
 
@@ -58,6 +59,8 @@ class UpdateModelPresetToolTest {
      * @param description Persisted description.
      * @param modelId Persisted model reference (nullable).
      * @param modelSettingsId Persisted settings reference (nullable).
+     * @param compactionEnabled Persisted compaction enablement flag.
+     * @param compactionThresholdTokens Persisted compaction threshold override (nullable).
      * @return The fixture preset.
      */
     private fun samplePreset(
@@ -65,7 +68,9 @@ class UpdateModelPresetToolTest {
         displayName: String? = "Smart model",
         description: String = "Bundles the smart model with the default settings profile",
         modelId: Long? = 11L,
-        modelSettingsId: Long? = 21L
+        modelSettingsId: Long? = 21L,
+        compactionEnabled: Boolean = true,
+        compactionThresholdTokens: Long? = null
     ) = ModelPresetDto(
         id = 3L,
         name = name,
@@ -73,6 +78,8 @@ class UpdateModelPresetToolTest {
         description = description,
         modelId = modelId,
         modelSettingsId = modelSettingsId,
+        compactionEnabled = compactionEnabled,
+        compactionThresholdTokens = compactionThresholdTokens,
         createdAt = Instant.parse("2024-01-01T00:00:00Z"),
         updatedAt = Instant.parse("2024-01-02T00:00:00Z")
     )
@@ -156,10 +163,105 @@ class UpdateModelPresetToolTest {
                         request.displayName == persisted.displayName &&
                         request.description == persisted.description &&
                         request.modelId == persisted.modelId &&
-                        request.modelSettingsId == persisted.modelSettingsId
+                        request.modelSettingsId == persisted.modelSettingsId &&
+                        request.compactionEnabled == persisted.compactionEnabled &&
+                        request.compactionThresholdTokens == persisted.compactionThresholdTokens
                 }
             )
         }
+    }
+
+    /**
+     * Verifies that explicit `null` compaction fields preserve the persisted values, exactly like the
+     * omitted case.
+     */
+    @Test
+    fun `explicit null compaction fields preserve the persisted values`() = runTest {
+        val modelPresetService = mockk<ModelPresetService>()
+        val persisted = samplePreset(compactionEnabled = false, compactionThresholdTokens = 50_000L)
+        coEvery { modelPresetService.getPresetById(userId, 3L) } returns persisted.right()
+        coEvery { modelPresetService.updatePreset(userId, 3L, any()) } returns persisted.right()
+        val tool = UpdateModelPresetTool(modelPresetService)
+
+        assertSuccess(
+            tool.execute(
+                buildJsonObject {
+                    put("model_preset_id", 3L)
+                    put("compaction_enabled", JsonNull)
+                    put("compaction_threshold_tokens", JsonNull)
+                },
+                context()
+            )
+        )
+
+        coVerify(exactly = 1) {
+            modelPresetService.updatePreset(
+                userId,
+                3L,
+                match<UpdateModelPresetRequest> { request ->
+                    !request.compactionEnabled && request.compactionThresholdTokens == 50_000L
+                }
+            )
+        }
+    }
+
+    /**
+     * Verifies the compaction merge matrix: an omitted value preserves, an explicit boolean sets
+     * `compaction_enabled`, `compaction_threshold_tokens = 0` clears the override, and a positive value
+     * sets it.
+     */
+    @Test
+    fun `merges the compaction fields per the documented sentinels`() = runTest {
+        // Omitted both: both persisted values are preserved.
+        val omitted = capturedUpdateRequest(
+            buildJsonObject { put("model_preset_id", 3L) },
+            persisted = samplePreset(compactionEnabled = false, compactionThresholdTokens = 50_000L)
+        )
+        assertEquals(false, omitted.compactionEnabled)
+        assertEquals(50_000L, omitted.compactionThresholdTokens)
+
+        // An explicit boolean sets the flag without touching the threshold (even when it is enabled).
+        val enabledSwitch = capturedUpdateRequest(
+            buildJsonObject { put("model_preset_id", 3L); put("compaction_enabled", true) },
+            persisted = samplePreset(compactionEnabled = false, compactionThresholdTokens = 50_000L)
+        )
+        assertEquals(true, enabledSwitch.compactionEnabled)
+        assertEquals(50_000L, enabledSwitch.compactionThresholdTokens)
+
+        // compaction_threshold_tokens = 0 clears the override back to the user preference threshold.
+        val cleared = capturedUpdateRequest(
+            buildJsonObject { put("model_preset_id", 3L); put("compaction_threshold_tokens", 0L) },
+            persisted = samplePreset(compactionEnabled = false, compactionThresholdTokens = 50_000L)
+        )
+        assertEquals(false, cleared.compactionEnabled)
+        assertNull(cleared.compactionThresholdTokens)
+
+        // A positive value sets the override.
+        val set = capturedUpdateRequest(
+            buildJsonObject { put("model_preset_id", 3L); put("compaction_threshold_tokens", 1_234L) },
+            persisted = samplePreset()
+        )
+        assertEquals(1_234L, set.compactionThresholdTokens)
+    }
+
+    /**
+     * Verifies a non-boolean `compaction_enabled` is rejected with the shared invalid-input error and
+     * that the preset is neither loaded nor written.
+     */
+    @Test
+    fun `rejects a non-boolean compaction_enabled without touching the persisted preset`() = runTest {
+        val modelPresetService = mockk<ModelPresetService>()
+        val tool = UpdateModelPresetTool(modelPresetService)
+
+        val result = tool.execute(
+            buildJsonObject { put("model_preset_id", 3L); put("compaction_enabled", "yes") },
+            context()
+        )
+
+        val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
+        assertTrue(error.message.contains("Argument 'compaction_enabled' must be a boolean"))
+        coVerify(exactly = 0) { modelPresetService.getPresetById(any(), any()) }
+        coVerify(exactly = 0) { modelPresetService.updatePreset(any(), any(), any()) }
     }
 
     /**
@@ -197,7 +299,9 @@ class UpdateModelPresetToolTest {
                         request.displayName == persisted.displayName &&
                         request.description == persisted.description &&
                         request.modelId == persisted.modelId &&
-                        request.modelSettingsId == persisted.modelSettingsId
+                        request.modelSettingsId == persisted.modelSettingsId &&
+                        request.compactionEnabled == persisted.compactionEnabled &&
+                        request.compactionThresholdTokens == persisted.compactionThresholdTokens
                 }
             )
         }
@@ -329,7 +433,9 @@ class UpdateModelPresetToolTest {
                 settingsId = 21L,
                 settingsModelId = 12L,
                 presetModelId = 11L
-            ) to "settings_model_mismatch"
+            ) to "settings_model_mismatch",
+            UpdateModelPresetError.InvalidCompactionThresholdTokens(-1L, "compactionThresholdTokens must be positive") to
+                "invalid_compaction_threshold_tokens"
         )
         cases.forEach { (serviceError, expected) ->
             val modelPresetService = mockk<ModelPresetService>()
@@ -375,5 +481,6 @@ class UpdateModelPresetToolTest {
         assertTrue(tool.description.contains("patch semantics"))
         assertTrue(tool.description.contains("pass 0"))
         assertTrue(tool.description.contains("empty string"))
+        assertTrue(tool.description.contains("compaction_threshold_tokens of 0"))
     }
 }

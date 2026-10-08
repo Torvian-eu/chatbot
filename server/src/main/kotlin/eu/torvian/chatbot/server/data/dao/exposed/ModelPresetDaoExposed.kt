@@ -97,16 +97,22 @@ class ModelPresetDaoExposed(
         displayName: String?,
         description: String,
         modelId: Long?,
-        modelSettingsId: Long?
+        modelSettingsId: Long?,
+        compactionEnabled: Boolean,
+        compactionThresholdTokens: Long?
     ): ModelPresetEntity =
         transactionScope.transaction {
             val now = System.currentTimeMillis()
+            // Every column is named explicitly, so the table's `compaction_enabled` default never
+            // applies here: the caller's value must be written as-is.
             val insertStatement = ModelPresetTable.insert {
                 it[ModelPresetTable.name] = name
                 it[ModelPresetTable.displayName] = displayName
                 it[ModelPresetTable.description] = description
                 it[ModelPresetTable.modelId] = modelId
                 it[ModelPresetTable.modelSettingsId] = modelSettingsId
+                it[ModelPresetTable.compactionEnabled] = compactionEnabled
+                it[ModelPresetTable.compactionThresholdTokens] = compactionThresholdTokens
                 it[ModelPresetTable.createdAt] = now
                 it[ModelPresetTable.updatedAt] = now
             }
@@ -123,6 +129,8 @@ class ModelPresetDaoExposed(
                     it[ModelPresetTable.description] = preset.description
                     it[ModelPresetTable.modelId] = preset.modelId
                     it[ModelPresetTable.modelSettingsId] = preset.modelSettingsId
+                    it[ModelPresetTable.compactionEnabled] = preset.compactionEnabled
+                    it[ModelPresetTable.compactionThresholdTokens] = preset.compactionThresholdTokens
                     it[ModelPresetTable.updatedAt] = System.currentTimeMillis()
                 }
                 ensure(updatedRowCount != 0) { ModelPresetError.NotFound(preset.id) }

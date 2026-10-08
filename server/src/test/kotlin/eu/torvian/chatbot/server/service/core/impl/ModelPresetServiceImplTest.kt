@@ -36,7 +36,8 @@ import kotlin.time.Instant
  * Unit tests for [ModelPresetServiceImpl].
  *
  * Verifies the owner-scoped CRUD behaviour, the name rules (trimmed, non-blank, ≤255, per-owner
- * uniqueness with self-exclusion on rename), the reference validation (existence **and** `READ`
+ * uniqueness with self-exclusion on rename), the compaction-threshold validation (a non-null value must
+ * be positive), the reference validation (existence **and** `READ`
  * accessibility, the model↔settings agreement, no `LLMModelType` restriction), the ownership collapse
  * (a foreign preset is reported as not found), the "nothing is persisted on validation failure"
  * guarantee, and the server-managed timestamps surfaced on the DTO.
@@ -66,6 +67,8 @@ class ModelPresetServiceImplTest {
         description = "Bundles the smart model",
         modelId = model.id,
         modelSettingsId = chatSettings.id,
+        compactionEnabled = true,
+        compactionThresholdTokens = null,
         createdAt = Instant.fromEpochMilliseconds(1_000L),
         updatedAt = Instant.fromEpochMilliseconds(1_000L)
     )
@@ -94,7 +97,7 @@ class ModelPresetServiceImplTest {
         coEvery { settingsDao.getAllAccessibleSettings(userId, AccessMode.READ) } returns
             listOf(chatSettings, chatSettings2)
         coEvery { modelPresetDao.presetNameExistsForUser(any(), any()) } returns false
-        coEvery { modelPresetDao.insertPreset(any(), any(), any(), any(), any()) } returns existingPreset
+        coEvery { modelPresetDao.insertPreset(any(), any(), any(), any(), any(), any(), any()) } returns existingPreset
         coEvery { modelPresetOwnershipDao.setOwner(any(), any()) } returns Unit.right()
         coEvery { modelPresetDao.updatePreset(any()) } returns Unit.right()
         coEvery { modelPresetDao.deletePreset(any()) } returns Unit.right()
@@ -172,7 +175,15 @@ class ModelPresetServiceImplTest {
         assertEquals(existingPreset.createdAt, dto.createdAt)
         assertEquals(existingPreset.updatedAt, dto.updatedAt)
         coVerify(exactly = 1) {
-            modelPresetDao.insertPreset("smart_model", "Smart model", "Bundles the smart model", model.id, chatSettings.id)
+            modelPresetDao.insertPreset(
+                "smart_model",
+                "Smart model",
+                "Bundles the smart model",
+                model.id,
+                chatSettings.id,
+                true,
+                null
+            )
         }
         coVerify(exactly = 1) { modelPresetOwnershipDao.setOwner(existingPreset.id, userId) }
     }
@@ -183,7 +194,7 @@ class ModelPresetServiceImplTest {
 
         assertTrue(result.isRight())
         coVerify(exactly = 1) { modelPresetDao.presetNameExistsForUser(userId, "smart_model") }
-        coVerify(exactly = 1) { modelPresetDao.insertPreset("smart_model", null, "", null, null) }
+        coVerify(exactly = 1) { modelPresetDao.insertPreset("smart_model", null, "", null, null, true, null) }
     }
 
     @Test
@@ -194,7 +205,7 @@ class ModelPresetServiceImplTest {
         val tooLong = service.createPreset(userId, CreateModelPresetRequest(name = "a".repeat(256)))
         assertIs<CreateModelPresetError.InvalidName>(tooLong.leftOrNull())
 
-        coVerify(exactly = 0) { modelPresetDao.insertPreset(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { modelPresetDao.insertPreset(any(), any(), any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { modelPresetOwnershipDao.setOwner(any(), any()) }
     }
 
@@ -206,7 +217,7 @@ class ModelPresetServiceImplTest {
 
         val error = assertIs<CreateModelPresetError.NameAlreadyExists>(result.leftOrNull())
         assertEquals("smart_model", error.name)
-        coVerify(exactly = 0) { modelPresetDao.insertPreset(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { modelPresetDao.insertPreset(any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -227,8 +238,76 @@ class ModelPresetServiceImplTest {
 
         assertTrue(result.isRight())
         coVerify(exactly = 1) {
-            modelPresetDao.insertPreset("embeddings", null, "", model.id, embeddingSettings.id)
+            modelPresetDao.insertPreset("embeddings", null, "", model.id, embeddingSettings.id, true, null)
         }
+    }
+
+    @Test
+    fun `createPreset persists the compaction configuration and echoes it on the DTO`() = runTest {
+        val createdRow = existingPreset.copy(compactionEnabled = false, compactionThresholdTokens = 50_000L)
+        coEvery { modelPresetDao.insertPreset(any(), any(), any(), any(), any(), any(), any()) } returns createdRow
+
+        val result = service.createPreset(
+            userId,
+            CreateModelPresetRequest(
+                name = "smart_model",
+                compactionEnabled = false,
+                compactionThresholdTokens = 50_000L
+            )
+        )
+
+        assertTrue(result.isRight())
+        val dto = assertNotNull(result.getOrNull())
+        assertEquals(false, dto.compactionEnabled)
+        assertEquals(50_000L, dto.compactionThresholdTokens)
+        coVerify(exactly = 1) {
+            modelPresetDao.insertPreset("smart_model", null, "", null, null, false, 50_000L)
+        }
+    }
+
+    @Test
+    fun `createPreset rejects a non-positive threshold without writing`() = runTest {
+        val zero = service.createPreset(
+            userId,
+            CreateModelPresetRequest(name = "smart_model", compactionThresholdTokens = 0L)
+        )
+        assertEquals(
+            0L,
+            assertIs<CreateModelPresetError.InvalidCompactionThresholdTokens>(zero.leftOrNull())
+                .compactionThresholdTokens
+        )
+
+        val negative = service.createPreset(
+            userId,
+            CreateModelPresetRequest(name = "smart_model", compactionThresholdTokens = -1L)
+        )
+        assertEquals(
+            -1L,
+            assertIs<CreateModelPresetError.InvalidCompactionThresholdTokens>(negative.leftOrNull())
+                .compactionThresholdTokens
+        )
+
+        coVerify(exactly = 0) { modelPresetDao.insertPreset(any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { modelPresetOwnershipDao.setOwner(any(), any()) }
+    }
+
+    @Test
+    fun `createPreset accepts a threshold of one and a null threshold`() = runTest {
+        assertTrue(
+            service.createPreset(
+                userId,
+                CreateModelPresetRequest(name = "smart_model", compactionThresholdTokens = 1L)
+            ).isRight()
+        )
+        assertTrue(
+            service.createPreset(
+                userId,
+                CreateModelPresetRequest(name = "smart_model", compactionThresholdTokens = null)
+            ).isRight()
+        )
+
+        coVerify(exactly = 1) { modelPresetDao.insertPreset("smart_model", null, "", null, null, true, 1L) }
+        coVerify(exactly = 1) { modelPresetDao.insertPreset("smart_model", null, "", null, null, true, null) }
     }
 
     @Test
@@ -237,7 +316,7 @@ class ModelPresetServiceImplTest {
 
         val error = assertIs<CreateModelPresetError.ModelNotFound>(result.leftOrNull())
         assertEquals(99L, error.modelId)
-        coVerify(exactly = 0) { modelPresetDao.insertPreset(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { modelPresetDao.insertPreset(any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -246,7 +325,7 @@ class ModelPresetServiceImplTest {
 
         val error = assertIs<CreateModelPresetError.SettingsNotFound>(result.leftOrNull())
         assertEquals(99L, error.settingsId)
-        coVerify(exactly = 0) { modelPresetDao.insertPreset(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { modelPresetDao.insertPreset(any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -261,7 +340,7 @@ class ModelPresetServiceImplTest {
         assertEquals(chatSettings2.id, error.settingsId)
         assertEquals(chatSettings2.modelId, error.settingsModelId)
         assertEquals(model.id, error.presetModelId)
-        coVerify(exactly = 0) { modelPresetDao.insertPreset(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { modelPresetDao.insertPreset(any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -320,6 +399,40 @@ class ModelPresetServiceImplTest {
             modelPresetDao.updatePreset(
                 match { it.id == existingPreset.id && it.name == "cheap_model" && it.modelSettingsId == null }
             )
+        }
+    }
+
+    @Test
+    fun `updatePreset rejects a non-positive threshold without writing`() = runTest {
+        val zero = service.updatePreset(
+            userId,
+            existingPreset.id,
+            UpdateModelPresetRequest(name = existingPreset.name, compactionThresholdTokens = 0L)
+        )
+        assertEquals(
+            0L,
+            assertIs<UpdateModelPresetError.InvalidCompactionThresholdTokens>(zero.leftOrNull())
+                .compactionThresholdTokens
+        )
+
+        coVerify(exactly = 0) { modelPresetDao.updatePreset(any()) }
+    }
+
+    @Test
+    fun `updatePreset writes a null threshold as the preference fallback`() = runTest {
+        val result = service.updatePreset(
+            userId,
+            existingPreset.id,
+            UpdateModelPresetRequest(
+                name = existingPreset.name,
+                compactionEnabled = false,
+                compactionThresholdTokens = null
+            )
+        )
+
+        assertTrue(result.isRight())
+        coVerify(exactly = 1) {
+            modelPresetDao.updatePreset(match { !it.compactionEnabled && it.compactionThresholdTokens == null })
         }
     }
 

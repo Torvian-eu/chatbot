@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.longOrNull
 
 /**
@@ -127,6 +128,33 @@ internal fun parseOptionalLong(
         return null
     }
     return element.longOrNull
+}
+
+/**
+ * Parses an optional boolean parameter.
+ *
+ * Absent and explicitly-`null` values both decode to `null`, so a caller can preserve the persisted
+ * value. Only the JSON literals `true` and `false` are accepted: strings (even `"true"`) and numbers
+ * are rejected, so a non-null result always means the caller sent an explicit boolean.
+ *
+ * @param input The raw tool input object.
+ * @param key The parameter name to read.
+ * @param validationErrors The accumulated validation error list.
+ * @return The parsed boolean, null when absent/null, or null with a recorded error when invalid.
+ */
+internal fun parseOptionalBoolean(
+    input: JsonObject,
+    key: String,
+    validationErrors: MutableList<String>,
+): Boolean? {
+    val element = input[key] ?: return null
+    if (element == JsonNull) return null
+    val value = (element as? JsonPrimitive)?.booleanOrNull
+    if (value == null) {
+        validationErrors.add("Argument '$key' must be a boolean")
+        return null
+    }
+    return value
 }
 
 /**

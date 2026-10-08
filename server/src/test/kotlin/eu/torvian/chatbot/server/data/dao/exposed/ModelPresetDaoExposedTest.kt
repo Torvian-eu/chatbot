@@ -72,7 +72,9 @@ class ModelPresetDaoExposedTest {
             displayName = "Smart model",
             description = "Bundles the smart model",
             modelId = TestDefaults.llmModel1.id,
-            modelSettingsId = TestDefaults.modelSettings1.id
+            modelSettingsId = TestDefaults.modelSettings1.id,
+            compactionEnabled = true,
+            compactionThresholdTokens = null
         )
 
         assertNotNull(created.id)
@@ -80,6 +82,8 @@ class ModelPresetDaoExposedTest {
         assertEquals("Smart model", created.displayName)
         assertEquals(TestDefaults.llmModel1.id, created.modelId)
         assertEquals(TestDefaults.modelSettings1.id, created.modelSettingsId)
+        assertTrue(created.compactionEnabled, "compaction is enabled by default")
+        assertNull(created.compactionThresholdTokens, "the threshold defaults to the user preference fallback")
         assertEquals(created.createdAt, created.updatedAt, "both timestamps are set on insert")
 
         val stored = testDataManager.getModelPreset(created.id)
@@ -94,7 +98,9 @@ class ModelPresetDaoExposedTest {
             displayName = "Smart model",
             description = "Bundles the smart model",
             modelId = TestDefaults.llmModel1.id,
-            modelSettingsId = TestDefaults.modelSettings1.id
+            modelSettingsId = TestDefaults.modelSettings1.id,
+            compactionEnabled = false,
+            compactionThresholdTokens = 1234L
         )
 
         val result = modelPresetDao.updatePreset(
@@ -102,7 +108,9 @@ class ModelPresetDaoExposedTest {
                 name = "cheap_model",
                 displayName = null,
                 description = "Re-pointed",
-                modelSettingsId = null
+                modelSettingsId = null,
+                compactionEnabled = true,
+                compactionThresholdTokens = null
             )
         )
 
@@ -112,8 +120,29 @@ class ModelPresetDaoExposedTest {
         assertNull(stored.displayName, "a null display name clears the column")
         assertEquals("Re-pointed", stored.description)
         assertNull(stored.modelSettingsId, "a null reference clears the column")
+        assertTrue(stored.compactionEnabled, "the update writes the compaction enablement flag")
+        assertNull(stored.compactionThresholdTokens, "a null threshold clears the override")
         assertEquals(created.createdAt, stored.createdAt, "created_at is never rewritten")
         assertTrue(stored.updatedAt >= created.updatedAt, "updated_at advances on update")
+    }
+
+    @Test
+    fun `insertPreset persists the compaction configuration verbatim`() = runTest {
+        val created = modelPresetDao.insertPreset(
+            name = "compacting_preset",
+            displayName = null,
+            description = "",
+            modelId = null,
+            modelSettingsId = null,
+            compactionEnabled = false,
+            compactionThresholdTokens = 1234L
+        )
+
+        val stored = assertNotNull(testDataManager.getModelPreset(created.id))
+        assertEquals(false, stored.compactionEnabled)
+        assertEquals(1234L, stored.compactionThresholdTokens)
+        assertEquals(false, created.compactionEnabled)
+        assertEquals(1234L, created.compactionThresholdTokens)
     }
 
     @Test
@@ -126,7 +155,7 @@ class ModelPresetDaoExposedTest {
 
     @Test
     fun `getPresetById returns the row or NotFound`() = runTest {
-        val created = modelPresetDao.insertPreset("smart_model", null, "", null, null)
+        val created = modelPresetDao.insertPreset("smart_model", null, "", null, null, true, null)
 
         assertEquals("smart_model", modelPresetDao.getPresetById(created.id).getOrNull()?.name)
         assertEquals(ModelPresetError.NotFound(999L), modelPresetDao.getPresetById(999L).leftOrNull())
@@ -135,11 +164,11 @@ class ModelPresetDaoExposedTest {
     @Test
     fun `owner-scoped reads list presets by id ascending and hide foreign rows`() = runTest {
         // Inserted in reverse name order so the assertion proves the ORDER BY (not insertion order).
-        val second = modelPresetDao.insertPreset("zzz_preset", null, "", null, null)
-        val first = modelPresetDao.insertPreset("aaa_preset", null, "", null, null)
+        val second = modelPresetDao.insertPreset("zzz_preset", null, "", null, null, true, null)
+        val first = modelPresetDao.insertPreset("aaa_preset", null, "", null, null, true, null)
         ownershipDao.setOwner(first.id, user.id)
         ownershipDao.setOwner(second.id, user.id)
-        val foreign = modelPresetDao.insertPreset("foreign_preset", null, "", null, null)
+        val foreign = modelPresetDao.insertPreset("foreign_preset", null, "", null, null, true, null)
         ownershipDao.setOwner(foreign.id, otherUser.id)
 
         val owned = modelPresetDao.getAllPresetsForUser(user.id)
@@ -160,7 +189,7 @@ class ModelPresetDaoExposedTest {
 
     @Test
     fun `presetNameExistsForUser is scoped per owner`() = runTest {
-        val created = modelPresetDao.insertPreset("smart_model", null, "", null, null)
+        val created = modelPresetDao.insertPreset("smart_model", null, "", null, null, true, null)
         ownershipDao.setOwner(created.id, user.id)
 
         assertTrue(modelPresetDao.presetNameExistsForUser(user.id, "smart_model"))
@@ -173,7 +202,7 @@ class ModelPresetDaoExposedTest {
 
     @Test
     fun `getOwner reports the owner or ResourceNotFound`() = runTest {
-        val created = modelPresetDao.insertPreset("smart_model", null, "", null, null)
+        val created = modelPresetDao.insertPreset("smart_model", null, "", null, null, true, null)
         ownershipDao.setOwner(created.id, user.id)
 
         assertEquals(user.id, ownershipDao.getOwner(created.id).getOrNull())
@@ -187,7 +216,9 @@ class ModelPresetDaoExposedTest {
             null,
             "",
             TestDefaults.llmModel1.id,
-            TestDefaults.modelSettings1.id
+            TestDefaults.modelSettings1.id,
+            true,
+            null
         )
 
         assertTrue(container.get<eu.torvian.chatbot.server.data.dao.SettingsDao>().deleteSettings(
@@ -214,7 +245,9 @@ class ModelPresetDaoExposedTest {
             null,
             "",
             TestDefaults.llmModel1.id,
-            TestDefaults.modelSettings1.id
+            TestDefaults.modelSettings1.id,
+            true,
+            null
         )
         ownershipDao.setOwner(preset.id, user.id)
         val role = TestDefaults.agentRole1.copy(id = 1L, modelPresetId = preset.id)

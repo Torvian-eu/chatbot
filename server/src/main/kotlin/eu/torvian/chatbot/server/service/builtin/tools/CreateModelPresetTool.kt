@@ -11,6 +11,7 @@ import eu.torvian.chatbot.server.service.builtin.ServerBuiltInToolHandlerError
 import eu.torvian.chatbot.server.service.builtin.addUnknownParameterErrors
 import eu.torvian.chatbot.server.service.builtin.encodeResult
 import eu.torvian.chatbot.server.service.builtin.invalidInputError
+import eu.torvian.chatbot.server.service.builtin.parseOptionalBoolean
 import eu.torvian.chatbot.server.service.builtin.parseOptionalLong
 import eu.torvian.chatbot.server.service.builtin.parseOptionalString
 import eu.torvian.chatbot.server.service.builtin.parseRequiredString
@@ -23,8 +24,10 @@ import kotlinx.serialization.json.JsonObject
  * `create_model_preset` server built-in tool.
  *
  * Creates a user-owned preset from the parsed input, reusing [CreateModelPresetRequest]. `name` is
- * required; `display_name`, `description`, `model_id`, and `model_settings_id` are optional and
- * fall back to the request DTO's defaults (`null`/empty description), so a preset may be created
+ * required; `display_name`, `description`, `model_id`, `model_settings_id`, `compaction_enabled`, and
+ * `compaction_threshold_tokens` are optional and
+ * fall back to the request DTO's defaults (`null`/empty description/`compactionEnabled = true`/no
+ * threshold override), so a preset may be created
  * without any LLM configuration and completed later — the service layer is deliberately permissive
  * and imposes no model-type restriction.
  *
@@ -64,7 +67,9 @@ class CreateModelPresetTool(
                 ServerBuiltInToolCatalog.DISPLAY_NAME_PROPERTY,
                 ServerBuiltInToolCatalog.DESCRIPTION_PROPERTY,
                 ServerBuiltInToolCatalog.MODEL_ID_PROPERTY,
-                ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY
+                ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY,
+                ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY,
+                ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY
             ),
             validationErrors
         )
@@ -76,19 +81,28 @@ class CreateModelPresetTool(
         val modelId = parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_ID_PROPERTY, validationErrors)
         val modelSettingsId =
             parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY, validationErrors)
+        val compactionEnabled =
+            parseOptionalBoolean(input, ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY, validationErrors)
+        val compactionThresholdTokens =
+            parseOptionalLong(input, ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY, validationErrors)
         if (validationErrors.isNotEmpty()) {
             raise(invalidInputError(validationErrors))
         }
 
         // name is non-null here: a null result always coincides with a recorded validation error,
         // and we bail out above when any error was recorded. Omitted optional fields fall back to
-        // the CreateModelPresetRequest defaults (no display name, empty description, no references).
+        // the CreateModelPresetRequest defaults (no display name, empty description, no references,
+        // compaction enabled, no threshold override). `compactionEnabled` defaults to true both when
+        // omitted and when it was rejected, but a rejected value raises InvalidInput above before the
+        // write.
         val request = CreateModelPresetRequest(
             name = name!!,
             displayName = displayName,
             description = description ?: "",
             modelId = modelId,
-            modelSettingsId = modelSettingsId
+            modelSettingsId = modelSettingsId,
+            compactionEnabled = compactionEnabled ?: true,
+            compactionThresholdTokens = compactionThresholdTokens
         )
         val preset = modelPresetService.createPreset(context.userId, request)
             .mapLeft { error -> error.toHandlerError() }
@@ -133,6 +147,13 @@ private fun CreateModelPresetError.toHandlerError(): ServerBuiltInToolHandlerErr
         ServerBuiltInToolHandlerError.OperationFailed(
             "settings_model_mismatch",
             "Model settings profile $settingsId belongs to model $settingsModelId, not $presetModelId."
+        )
+
+    is CreateModelPresetError.InvalidCompactionThresholdTokens ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "invalid_compaction_threshold_tokens",
+            "The compaction threshold must be at least 1 or left unset to use the user preference " +
+                "threshold, but was $compactionThresholdTokens."
         )
 
     is CreateModelPresetError.OwnerInsertFailed ->

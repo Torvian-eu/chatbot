@@ -86,6 +86,9 @@ class ModelPresetServiceImpl(
             logger.info("Creating model preset '$name' for user $userId")
 
             validateName(name) { reason -> CreateModelPresetError.InvalidName(name, reason) }
+            validateCompactionThresholdTokens(request.compactionThresholdTokens) { value, reason ->
+                CreateModelPresetError.InvalidCompactionThresholdTokens(value, reason)
+            }
             // Names are unique per owner user (not globally), so the check is owner-scoped.
             ensure(!modelPresetDao.presetNameExistsForUser(userId, name)) {
                 CreateModelPresetError.NameAlreadyExists(name)
@@ -107,7 +110,9 @@ class ModelPresetServiceImpl(
                 displayName = request.displayName,
                 description = request.description,
                 modelId = request.modelId,
-                modelSettingsId = request.modelSettingsId
+                modelSettingsId = request.modelSettingsId,
+                compactionEnabled = request.compactionEnabled,
+                compactionThresholdTokens = request.compactionThresholdTokens
             )
 
             // The ownership link is written atomically with the row, so a preset can never exist
@@ -135,6 +140,9 @@ class ModelPresetServiceImpl(
             val existing = loadOwnedPreset(userId, presetId, UpdateModelPresetError.NotFound(presetId))
 
             validateName(name) { reason -> UpdateModelPresetError.InvalidName(name, reason) }
+            validateCompactionThresholdTokens(request.compactionThresholdTokens) { value, reason ->
+                UpdateModelPresetError.InvalidCompactionThresholdTokens(value, reason)
+            }
             // The rename check only has to run when the name actually changes: the preset being updated
             // would otherwise be its own collision.
             if (name != existing.name) {
@@ -159,7 +167,9 @@ class ModelPresetServiceImpl(
                 displayName = request.displayName,
                 description = request.description,
                 modelId = request.modelId,
-                modelSettingsId = request.modelSettingsId
+                modelSettingsId = request.modelSettingsId,
+                compactionEnabled = request.compactionEnabled,
+                compactionThresholdTokens = request.compactionThresholdTokens
             )
 
             withError({ _: ModelPresetDaoError.NotFound -> UpdateModelPresetError.NotFound(presetId) }) {
@@ -207,6 +217,28 @@ class ModelPresetServiceImpl(
         }
         ensure(name.length <= MAX_MODEL_PRESET_NAME_LENGTH) {
             invalidName("Model preset name cannot exceed $MAX_MODEL_PRESET_NAME_LENGTH characters")
+        }
+    }
+
+    /**
+     * Validates the optional compaction threshold override.
+     *
+     * `null` means "fall back to the user preference threshold" and is always valid; a non-null value
+     * must be positive, mirroring the preference's own `thresholdTokens must be positive` rule. `0`
+     * therefore never reaches persistence, which keeps `0` free as the tool-level sentinel that clears
+     * an override back to `null`.
+     *
+     * @param compactionThresholdTokens The requested threshold override, or null.
+     * @param invalidThreshold Factory building the caller's invalid-threshold error.
+     * @return `null` on success or an error of type `E` via the raise scope.
+     */
+    private fun <E> Raise<E>.validateCompactionThresholdTokens(
+        compactionThresholdTokens: Long?,
+        invalidThreshold: (value: Long, reason: String) -> E
+    ) {
+        if (compactionThresholdTokens == null) return
+        ensure(compactionThresholdTokens >= 1L) {
+            invalidThreshold(compactionThresholdTokens, "compactionThresholdTokens must be positive")
         }
     }
 
@@ -298,6 +330,8 @@ class ModelPresetServiceImpl(
         description = description,
         modelId = modelId,
         modelSettingsId = modelSettingsId,
+        compactionEnabled = compactionEnabled,
+        compactionThresholdTokens = compactionThresholdTokens,
         createdAt = createdAt,
         updatedAt = updatedAt
     )

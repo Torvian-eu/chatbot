@@ -60,6 +60,8 @@ class ReadModelPresetToolTest {
         description = "Bundles the smart model with the default settings profile",
         modelId = 11L,
         modelSettingsId = 21L,
+        compactionEnabled = false,
+        compactionThresholdTokens = 50_000L,
         createdAt = Instant.parse("2024-01-01T00:00:00Z"),
         updatedAt = Instant.parse("2024-01-02T00:00:00Z")
     )
@@ -90,7 +92,8 @@ class ReadModelPresetToolTest {
     }
 
     /**
-     * Verifies that success returns the full preset JSON (the read-side payload convention).
+     * Verifies that success returns the full preset JSON (the read-side payload convention), including
+     * the preset's compaction configuration.
      */
     @Test
     fun `returns the full preset DTO JSON`() = runTest {
@@ -108,6 +111,8 @@ class ReadModelPresetToolTest {
         assertEquals("Smart model", decoded.getValue("displayName").jsonPrimitive.content)
         assertEquals(11L, decoded.getValue("modelId").jsonPrimitive.long)
         assertEquals(21L, decoded.getValue("modelSettingsId").jsonPrimitive.long)
+        assertEquals(false, decoded.getValue("compactionEnabled").jsonPrimitive.content.toBoolean())
+        assertEquals(50_000L, decoded.getValue("compactionThresholdTokens").jsonPrimitive.long)
         assertEquals("2024-01-01T00:00:00Z", decoded.getValue("createdAt").jsonPrimitive.content)
         assertEquals("2024-01-02T00:00:00Z", decoded.getValue("updatedAt").jsonPrimitive.content)
         coVerify(exactly = 1) { modelPresetService.getPresetById(userId, 3L) }
