@@ -133,20 +133,15 @@ class DefaultConversationTurnOrchestrator(
         // start: it initializes the rolling window (eligible prior summary + delta, or the full
         // thread) and the identity ledger, after which the full uncompressed content is released —
         // the window (one optional summary + additional uncompressed messages) and the ledger are the
-        // loop's only conversation state from here on. A structurally invalid preference fails here
-        // (InvalidConfiguration left) and aborts the turn before any counting or primary call.
+        // loop's only conversation state from here on. The effective configuration was already resolved
+        // and validated during preparation, so building the state cannot fail; the state snapshots the
+        // resolved threshold for the whole turn, so a later preset or preference edit cannot affect it.
         val compactionState = conversationCompactionService.beginTurn(
             userId = request.userId,
             sessionId = request.session.id,
-            initialUnits = preparedTurn.conversationContext.units
-        ).getOrElse { error ->
-            logger.error(
-                "Conversation compaction setup failed for session ${request.session.id}: $error"
-            )
-            emit(ConversationTurnEvent.CompactionFailed(error))
-            emit(ConversationTurnEvent.TurnCompleted)
-            return
-        }
+            initialUnits = preparedTurn.conversationContext.units,
+            resolvedCompaction = request.resolvedCompaction
+        )
 
         // A step that reached a tool-call limit ends the turn itself once its calls have run, so this condition is
         // the backstop that keeps a step violating that contract from looping forever.

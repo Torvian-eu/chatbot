@@ -18,7 +18,9 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
  * Full-width details page for a single model preset.
  *
  * Shows the preset's references as *resolved* values (the referenced model and settings profile, with
- * their names and the settings' model type) and an "Incomplete" mark while a reference is null.
+ * their names and the settings' model type) and an "Incomplete" mark while a reference is null. It also
+ * states the preset's conversation-compaction configuration, including whether the threshold comes from
+ * the preset or from the user's compaction preference.
  *
  * The page stays a pure reference view: the preset deliberately carries no LLM payload of its own
  * (U-8), and the referenced profile's content is not duplicated here — provider routing and custom
@@ -86,6 +88,7 @@ fun ModelPresetDetailPage(
 
             DetailRow(label = "Model", value = preset.modelLabel(modelsById))
             DetailRow(label = "Settings profile", value = preset.settingsLabel(settingsById))
+            DetailRow(label = "Compaction", value = preset.compactionLabel())
 
             Text(
                 text = "Updated ${formatRelativeTime(preset.updatedAt)}",

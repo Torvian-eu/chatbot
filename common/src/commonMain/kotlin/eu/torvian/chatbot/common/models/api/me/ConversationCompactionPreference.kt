@@ -14,17 +14,17 @@ import kotlinx.serialization.Serializable
  * (no system prompt), `enabled = true`, [DEFAULT_COMPACTION_THRESHOLD_TOKENS], and
  * [DEFAULT_COMPACTED_SUMMARY_LABEL] respectively.
  * [modelId] and [settingsId] are required keys but nullable: they are `null` when the referenced
- * model or settings row no longer exists (for example after a server-side deletion), so client code
- * can store the preference without fabricating a placeholder id. The server rejects non-null
- * non-positive ids and a blank instruction.
+ * model or settings row no longer exists (for example after a server-side deletion) and compaction is
+ * switched off. While [enabled] is `true` the server rejects a null or non-positive id, a blank
+ * instruction, and a non-positive threshold.
  *
  * Setting [enabled] to `false` disables automatic compaction for the user exactly like having no
  * `conversation_compaction` preference row — the original thread is always sent, no compaction runs,
  * and no configuration error is raised — while preserving the stored configuration for later
- * re-enabling. A preference whose [modelId] or [settingsId] is `null` stays stored (the referenced
- * rows no longer exist); at runtime no error is raised while the thread fits the threshold, but when
- * compaction becomes necessary the server reports an invalid-configuration error because no compactor
- * can be resolved.
+ * re-enabling. A null [modelId] or [settingsId] is legitimate only in that disabled state: an enabled
+ * preference must name positive ids, a non-blank instruction and a positive threshold, and the server
+ * rejects it at write time otherwise. An enabled preference with null ids therefore cannot be created
+ * through the API, so a turn rejected for that state comes from a legacy or hand-edited row.
  *
  * **Compaction-model context-window requirement:** the compaction model's context window should be at
  * least `threshold + headroom`, and at least the size of the largest single message, because the
@@ -41,13 +41,13 @@ import kotlinx.serialization.Serializable
  * summary that explains how the assistant should continue.
  *
  * @property modelId ID of the `LLMModel` used for the auxiliary summarization request, or `null` when
- *            the previously referenced model no longer exists; a `null` id raises an
- *            invalid-configuration error at runtime only when compaction is required, while
+ *            the previously referenced model no longer exists and compaction is disabled. An enabled
+ *            preference must carry a positive id, and the server rejects a null one at write time;
  *            `enabled = false` disables compaction without any error.
  * @property settingsId ID of the `ModelSettings` profile paired with [modelId], or `null` when the
- *            previously referenced settings no longer exist; only a non-streaming chat-like profile
- *            is valid for compaction. A `null` id raises an invalid-configuration error at runtime
- *            only when compaction is required.
+ *            previously referenced settings no longer exist and compaction is disabled; only a
+ *            non-streaming chat-like profile is valid for compaction. An enabled preference must carry
+ *            a positive id, and the server rejects a null one at write time.
  * @property instruction The compaction/summarization instruction sent to the auxiliary model.
  * @property systemMessage Optional system prompt for the auxiliary compaction call, or `null` when
  *            the compaction model runs without one; it is passed through to the auxiliary `LLMConfig`.

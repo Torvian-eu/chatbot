@@ -200,6 +200,9 @@ object TestDefaults {
         description = "Preset bundling the first model with its chat settings",
         modelId = llmModel1.id,
         modelSettingsId = modelSettings1.id,
+        // The defaults are the pre-feature behaviour: compaction stays governed by the user preference.
+        compactionEnabled = true,
+        compactionThresholdTokens = null,
         createdAt = DEFAULT_INSTANT,
         updatedAt = DEFAULT_INSTANT
     )
@@ -211,6 +214,8 @@ object TestDefaults {
         description = "Preset bundling the second model with its chat settings",
         modelId = llmModel2.id,
         modelSettingsId = modelSettings2.id,
+        compactionEnabled = true,
+        compactionThresholdTokens = null,
         createdAt = DEFAULT_INSTANT,
         updatedAt = DEFAULT_INSTANT
     )

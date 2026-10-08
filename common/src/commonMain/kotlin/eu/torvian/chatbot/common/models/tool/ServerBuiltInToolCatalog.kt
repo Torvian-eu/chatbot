@@ -91,6 +91,20 @@ object ServerBuiltInToolCatalog {
     /** JSON property holding the free-form role description. */
     const val DESCRIPTION_PROPERTY = "description"
 
+    /**
+     * JSON property holding a model preset's compaction enablement flag (create/update preset). When
+     * `false` the preset's sessions never compact, regardless of the user's `conversation_compaction`
+     * preference.
+     */
+    const val COMPACTION_ENABLED_PROPERTY = "compaction_enabled"
+
+    /**
+     * JSON property holding a model preset's optional compaction threshold in input tokens
+     * (create/update preset). Omitted or `null` means "use the user preference threshold"; on update,
+     * `0` is the sentinel that clears a stored value back to that fallback.
+     */
+    const val COMPACTION_THRESHOLD_TOKENS_PROPERTY = "compaction_threshold_tokens"
+
     /** JSON property holding the tool-definition ids attached to a role. */
     const val TOOL_IDS_PROPERTY = "tool_ids"
 
@@ -301,6 +315,17 @@ object ServerBuiltInToolCatalog {
      */
     private fun stringProperty(description: String): JsonObject = buildJsonObject {
         put("type", "string")
+        put("description", description)
+    }
+
+    /**
+     * Builds the JSON Schema for a boolean property.
+     *
+     * @param description Human-readable description of the property.
+     * @return The JSON Schema object for the boolean property.
+     */
+    private fun booleanProperty(description: String): JsonObject = buildJsonObject {
+        put("type", "boolean")
         put("description", description)
     }
 
@@ -862,7 +887,10 @@ object ServerBuiltInToolCatalog {
             description = "Lists all model presets owned by the current user, ordered by id, " +
                 "returning each preset's id, name, display name, description, referenced model " +
                 "id, referenced settings profile id (both null when unset), and its creation and " +
-                "update timestamps. A preset bundles one model with one settings profile and is " +
+                "update timestamps. Each preset also reports its compaction configuration: the " +
+                "compaction enabled flag and the optional per-preset token threshold (null when " +
+                "the preset defers to the user preference threshold). A preset bundles one model " +
+                "with one settings profile and is " +
                 "the sole source of the LLM configuration of every agent role bound to it. Use " +
                 "read_model_preset with a preset id to inspect a single preset.",
             inputSchema = emptyObjectSchema()
@@ -871,7 +899,9 @@ object ServerBuiltInToolCatalog {
             name = READ_MODEL_PRESET_NAME,
             description = "Reads one model preset owned by the current user by its id, returning " +
                 "the full preset with its name, display name, description, the referenced model " +
-                "id and settings profile id (null when unset), and its creation and update " +
+                "id and settings profile id (null when unset), its compaction enabled flag and " +
+                "optional per-preset token threshold (null when the preset defers to the user " +
+                "preference threshold), and its creation and update " +
                 "timestamps.",
             inputSchema = buildJsonObject {
                 put("type", "object")
@@ -895,7 +925,11 @@ object ServerBuiltInToolCatalog {
                 "longer-than-255-character value. Both references are optional and must be " +
                 "accessible by the current user; when both are given, the settings profile must " +
                 "belong to the given model. The preset layer imposes no model-type restriction, " +
-                "so an embedding model is accepted. Returns the created preset's full JSON " +
+                "so an embedding model is accepted. Compaction of the preset's sessions is " +
+                "controlled by this preset: it is enabled by default and additionally requires the " +
+                "user's own compaction preference to be present and enabled, while an omitted " +
+                "compaction_threshold_tokens uses the user preference's threshold (a supplied " +
+                "threshold must be at least 1). Returns the created preset's full JSON " +
                 "including its server-generated id and timestamps.",
             inputSchema = buildJsonObject {
                 put("type", "object")
@@ -922,6 +956,23 @@ object ServerBuiltInToolCatalog {
                                 "model_id is also given, must belong to that model."
                         )
                     )
+                    put(
+                        COMPACTION_ENABLED_PROPERTY,
+                        booleanProperty(
+                            "Whether turns running on this preset may compact their conversation. " +
+                                "Defaults to true; false disables compaction for the preset's " +
+                                "sessions even when the user's compaction preference is enabled."
+                        )
+                    )
+                    put(
+                        COMPACTION_THRESHOLD_TOKENS_PROPERTY,
+                        integerProperty(
+                            "Optional compaction threshold in input tokens for this preset. " +
+                                "Omit or pass null to use the user's compaction preference " +
+                                "threshold (100000 by default); a supplied value must be at " +
+                                "least 1."
+                        )
+                    )
                 })
                 put("required", buildJsonArray {
                     add(NAME_PROPERTY)
@@ -938,7 +989,13 @@ object ServerBuiltInToolCatalog {
                 "non-blank and " +
                 "unique per user). Both references must be accessible by the current user and, " +
                 "when both are set, the settings profile must belong to the model, so re-point " +
-                "both together. Returns a concise one-line summary of the operation.",
+                "both together. Compaction is patched the same way: an omitted or null " +
+                "compaction_enabled keeps the persisted flag, an explicit boolean sets it, an " +
+                "omitted or null compaction_threshold_tokens keeps the persisted threshold, and a " +
+                "compaction_threshold_tokens of 0 " +
+                "clears it back to the user preference's threshold (0 is never a valid stored " +
+                "threshold, so any value of at least 1 sets an override). Returns a concise " +
+                "one-line summary of the operation.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -980,6 +1037,25 @@ object ServerBuiltInToolCatalog {
                                 "(0 is never a valid settings id). The profile must be accessible " +
                                 "by the current user and, when model_id is also set, must belong " +
                                 "to that model."
+                        )
+                    )
+                    put(
+                        COMPACTION_ENABLED_PROPERTY,
+                        booleanProperty(
+                            "New compaction enablement flag for the preset's turns. Omit or pass " +
+                                "null to keep the persisted flag; true allows compaction (still " +
+                                "subject to the user's compaction preference), false disables it " +
+                                "for the preset's sessions."
+                        )
+                    )
+                    put(
+                        COMPACTION_THRESHOLD_TOKENS_PROPERTY,
+                        integerProperty(
+                            "New compaction threshold in input tokens. Omit or pass null to " +
+                                "keep the persisted threshold; pass 0 to clear it so the user's " +
+                                "compaction preference threshold applies again (0 is never a " +
+                                "valid stored threshold); a value of at least 1 sets an " +
+                                "override."
                         )
                     )
                 })

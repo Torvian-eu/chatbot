@@ -42,7 +42,9 @@ class KtorModelPresetApiClientTest {
         id: Long,
         name: String,
         modelId: Long? = 1L,
-        modelSettingsId: Long? = 2L
+        modelSettingsId: Long? = 2L,
+        compactionEnabled: Boolean = true,
+        compactionThresholdTokens: Long? = null
     ) = ModelPresetDto(
         id = id,
         name = name,
@@ -50,6 +52,8 @@ class KtorModelPresetApiClientTest {
         description = "",
         modelId = modelId,
         modelSettingsId = modelSettingsId,
+        compactionEnabled = compactionEnabled,
+        compactionThresholdTokens = compactionThresholdTokens,
         createdAt = Instant.fromEpochSeconds(id),
         updatedAt = Instant.fromEpochSeconds(id)
     )
@@ -191,6 +195,44 @@ class KtorModelPresetApiClientTest {
         val apiClient = createTestClient(mockEngine)
         when (val result = apiClient.createPreset(request)) {
             is Either.Right -> assertEquals("primary", result.value.name)
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `createPreset - sends the compaction configuration when it deviates from the defaults`() = runTest {
+        val request = CreateModelPresetRequest(
+            name = "primary",
+            modelId = 1L,
+            modelSettingsId = 2L,
+            compactionEnabled = false,
+            compactionThresholdTokens = 50_000L
+        )
+        val created = mockPreset(10, "primary", compactionEnabled = false, compactionThresholdTokens = 50_000L)
+        val mockEngine = MockEngine { mockRequest ->
+            val body = mockRequest.body.toByteArray().decodeToString()
+            // Non-default values are always encoded, so the server receives the user's intent.
+            assertTrue(
+                body.contains("\"compactionEnabled\": false"),
+                "Request body should carry compactionEnabled: $body"
+            )
+            assertTrue(
+                body.contains("\"compactionThresholdTokens\": 50000"),
+                "Request body should carry the threshold: $body"
+            )
+            respond(
+                content = json.encodeToString(created),
+                status = HttpStatusCode.Created,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.createPreset(request)) {
+            is Either.Right -> {
+                assertEquals(false, result.value.compactionEnabled)
+                assertEquals(50_000L, result.value.compactionThresholdTokens)
+            }
+
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
     }

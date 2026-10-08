@@ -12,7 +12,9 @@ import eu.torvian.chatbot.server.service.builtin.ToolCallExecutionContext
 import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.chat.compaction.CompactionTurnState
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionError
+import eu.torvian.chatbot.server.service.core.chat.compaction.EffectiveCompactionSettings
 import eu.torvian.chatbot.server.service.core.chat.compaction.PrimaryContextPreflight
+import eu.torvian.chatbot.server.service.core.chat.compaction.ResolvedCompactionConfig
 import eu.torvian.chatbot.server.service.core.chat.context.ConversationContextUnit
 import eu.torvian.chatbot.server.service.core.chat.context.SourceMessageSnapshot
 import eu.torvian.chatbot.server.service.core.chat.persistence.PersistedAssistantMessage
@@ -23,6 +25,7 @@ import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.slot
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
@@ -86,11 +89,11 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
         // The default base stub returns a disabled preflight; verify the policy is consulted exactly
         // once for a single-call turn, before the primary call. The Disabled state carries the units
         // the orchestrator handed to beginTurn, so the preflight sees the persisted user message.
-        coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any()) } coAnswers {
+        coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } coAnswers {
             CompactionTurnState.Disabled(
                 testSession.id,
                 thirdArg<List<ConversationContextUnit>>().toMutableList()
-            ).right()
+            )
         }
         val capturedStates = mutableListOf<CompactionTurnState>()
         coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } coAnswers {
@@ -107,6 +110,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                 userId = 1L,
                 session = testSession,
                 llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key"),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Preflight",
                 parentMessageId = null,
                 fileReferences = emptyList(),
@@ -116,7 +120,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
             )
         ).toList()
 
-        coVerify(exactly = 1) { conversationCompactionService.beginTurn(1L, testSession.id, any()) }
+        coVerify(exactly = 1) { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) }
         coVerify(exactly = 1) { conversationCompactionService.preparePrimaryContext(any(), any(), any()) }
         // The preflight saw the state initialized from the persisted user message.
         assertEquals(listOf(userMessage.id), capturedStates.single().units.map { it.source.id })
@@ -141,8 +145,8 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
 
-        coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any()) } returns
-            CompactionTurnState.Disabled(testSession.id, mutableListOf()).right()
+        coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
+            CompactionTurnState.Disabled(testSession.id, mutableListOf())
         coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
             ConversationCompactionError.InvalidConfiguration("broken preference").left()
 
@@ -151,6 +155,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                 userId = 1L,
                 session = testSession,
                 llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key"),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Oversized",
                 parentMessageId = null,
                 fileReferences = emptyList(),
@@ -322,11 +327,11 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
         )
 
         val preflightStates = mutableListOf<CompactionTurnState>()
-        coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any()) } coAnswers {
+        coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } coAnswers {
             CompactionTurnState.Disabled(
                 testSession.id,
                 thirdArg<List<ConversationContextUnit>>().toMutableList()
-            ).right()
+            )
         }
         coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } coAnswers {
             val state = firstArg<CompactionTurnState>()
@@ -342,6 +347,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                 userId = 1L,
                 session = testSession,
                 llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key", listOf(toolDefinition)),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Find docs",
                 parentMessageId = null,
                 fileReferences = emptyList(),
@@ -361,5 +367,91 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
         assertEquals(SourceMessageSnapshot(assistantToolMessage.id, assistantToolMessage.updatedAt), appendedUnit.source)
         assertTrue(appendedUnit.rawMessages.any { it is RawChatMessage.Assistant })
         assertTrue(appendedUnit.rawMessages.any { it is RawChatMessage.Tool })
+    }
+
+    /**
+     * Verifies the turn request's resolved compaction configuration is what reaches the compaction
+     * service, so the configuration is resolved once per turn (during preparation) and never re-read by
+     * the orchestrator.
+     */
+    @Test
+    fun `processNonStreamingTurn forwards the request resolved compaction to beginTurn`() = runTest {
+        val userMessage = ChatMessage.UserMessage(
+            id = 81L,
+            sessionId = testSession.id,
+            content = "Preset override",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = null,
+            childrenMessageIds = emptyList()
+        )
+        val assistantMessage = ChatMessage.AssistantMessage(
+            id = 82L,
+            sessionId = testSession.id,
+            content = "Done",
+            createdAt = baseInstant,
+            updatedAt = baseInstant,
+            parentMessageId = userMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = testModel.id,
+            settingsId = testSettings.id
+        )
+        coEvery {
+            conversationTurnPersistence.saveUserMessage(testSession.id, "Preset override", null, any())
+        } returns PersistedUserMessage(userMessage, null)
+        coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
+        coEvery {
+            llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any())
+        } returns LLMCompletionResult(
+            id = "c",
+            choices = listOf(
+                LLMCompletionResult.CompletionChoice(
+                    role = "assistant", content = assistantMessage.content, finishReason = "stop", index = 0
+                )
+            ),
+            usage = UsageStats(1, 1, 2)
+        ).right()
+        coEvery {
+            conversationTurnPersistence.saveAssistantMessage(
+                testSession.id, assistantMessage.content, userMessage.id, testModel, testSettings,
+                agentRoleId = testRoleId, reasoningItems = null, usageStats = any(), responseDurationMs = any())
+        } returns PersistedAssistantMessage(assistantMessage, userMessage)
+
+        val capturedResolvedCompaction = slot<ResolvedCompactionConfig>()
+        coEvery {
+            conversationCompactionService.beginTurn(1L, testSession.id, any(), capture(capturedResolvedCompaction))
+        } coAnswers {
+            CompactionTurnState.Disabled(
+                testSession.id,
+                thirdArg<List<ConversationContextUnit>>().toMutableList()
+            )
+        }
+
+        val resolvedCompaction = ResolvedCompactionConfig.Enabled(
+            settings = EffectiveCompactionSettings(
+                modelId = 1L,
+                settingsId = 1L,
+                instruction = "Summarize faithfully",
+                systemMessage = null,
+                summaryLabel = "Summary:\n",
+                thresholdTokens = 50_000L
+            )
+        )
+        orchestrator.processNonStreamingTurn(
+            ConversationTurnRequest(
+                userId = 1L,
+                session = testSession,
+                llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key"),
+                resolvedCompaction = resolvedCompaction,
+                content = "Preset override",
+                parentMessageId = null,
+                fileReferences = emptyList(),
+                toolApprovalFlow = emptyFlow(),
+                operatorToolResultFlow = emptyFlow(),
+                turnControlSignal = TurnControlSignal()
+            )
+        ).toList()
+
+        assertEquals(resolvedCompaction, capturedResolvedCompaction.captured)
     }
 }

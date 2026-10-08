@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.server.service.core.chat.compaction
 
-import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.server.service.core.chat.context.ConversationContextUnit
 import eu.torvian.chatbot.server.service.core.chat.context.SourceMessageSnapshot
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
@@ -8,15 +7,15 @@ import eu.torvian.chatbot.server.service.llm.RawChatMessage
 /**
  * Per-turn state of the automated conversation-compaction policy.
  *
- * Created once per turn from the current global preference, the retained chunks, and the initial
- * identity-bearing source units; preference changes never affect an in-flight tool loop. Owns the
- * rolling context window (one optional labeled summary + additional uncompressed messages) and the
- * content-free identity ledger: the service updates them on every preflight and the orchestrator grows
- * the window via [appendUnit] after each tool step.
+ * Created once per turn from the turn's resolved compaction configuration, the retained chunks, and
+ * the initial identity-bearing source units; later configuration changes never affect an in-flight
+ * tool loop. Owns the rolling context window (one optional labeled summary + additional uncompressed
+ * messages) and the content-free identity ledger: the service updates them on every preflight and the
+ * orchestrator grows the window via [appendUnit] after each tool step.
  *
- * The state is one of two variants: [Disabled] (no preference, or `enabled = false` — never raises)
- * or [Enabled] (a decoded enabled preference; a `null` model/settings reference raises
- * `InvalidConfiguration` only when compaction becomes necessary).
+ * The state is one of two variants: [Disabled] (the resolved configuration disables compaction — never
+ * raises) or [Enabled] (an enabled configuration; a configuration whose auxiliary rows vanished after
+ * preparation raises `InvalidConfiguration` only when compaction becomes necessary).
  */
 sealed interface CompactionTurnState {
 
@@ -42,9 +41,8 @@ sealed interface CompactionTurnState {
     }
 
     /**
-     * No global `conversation_compaction` preference exists, or the stored preference has
-     * `enabled = false`: automatic compaction is disabled, the original thread is always sent, and no
-     * configuration error is ever raised.
+     * The resolved configuration disables compaction for the turn. The original thread is always sent
+     * and no configuration error is ever raised.
      *
      * @property sessionId Owning chat session.
      * @property units Uncompressed window units; with compaction disabled this is the full thread and
@@ -56,13 +54,14 @@ sealed interface CompactionTurnState {
     ) : CompactionTurnState
 
     /**
-     * The global preference decoded successfully; automatic compaction is enabled.
+     * The resolved configuration enables compaction for the turn.
      *
      * @property sessionId Owning chat session.
      * @property ownerUserId Owner of the global preference, needed when compaction becomes required.
-     * @property preference The decoded preference snapshot for this turn.
-     * @property retainedChunks Chunks loaded once at turn start; grows in-memory as new chunks are
-     *            persisted during the same turn.
+     * @property settings The turn's effective settings, carrying the single effective threshold and the
+     *            auxiliary model, settings, instruction, system message and summary label.
+     * @property retainedChunks Chunks loaded once when the turn starts; grows in-memory as new chunks
+     *            are persisted during the same turn.
      * @property units Content-bearing uncompressed window units (never compacted content).
      * @property summaryMessage The current labeled summary message, or null before the first
      *            compaction or when no prior eligible chunk seeded the window.
@@ -75,7 +74,7 @@ sealed interface CompactionTurnState {
     data class Enabled(
         override val sessionId: Long,
         val ownerUserId: Long,
-        val preference: ConversationCompactionPreference,
+        val settings: EffectiveCompactionSettings,
         val retainedChunks: MutableList<ConversationCompactionChunk>,
         override var units: MutableList<ConversationContextUnit>,
         var summaryMessage: RawChatMessage.User?,

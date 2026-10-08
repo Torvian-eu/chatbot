@@ -32,9 +32,11 @@ import org.apache.logging.log4j.Logger
  * is chat-like and non-streaming. Runtime concerns — model activity, provider existence/access,
  * registered strategy, credential resolvability — are validated only when compaction actually runs,
  * by the fast runtime resolver.
- * A preference without a model/settings reference (null ids, e.g. after a server-side row deletion)
- * cannot be checked and is stored as-is; it raises an invalid-configuration error at runtime only
- * when compaction becomes necessary, while the thread-fits path passes through.
+ * A null model/settings reference is legitimate only while `enabled = false`: a disabled preference
+ * never resolves a compactor, so its references are not checked and it stays storable as the way out of
+ * a half-configured state. An enabled preference must carry positive ids, a non-blank instruction and a
+ * positive threshold and is rejected here before storage, so a turn rejected during preparation for an
+ * enabled preference with null ids can only come from a legacy or hand-edited row.
  *
  * @property json Shared JSON codec used to decode and canonically encode the preference.
  * @property userPreferenceDao Persists the global preference row.
@@ -97,19 +99,19 @@ class DefaultConversationCompactionConfigurationService(
             json.decodeFromString<ConversationCompactionPreference>(rawValue).right()
         } catch (_: Exception) {
             ConversationCompactionConfigurationError.InvalidValue(
-                "conversation_compaction must be a JSON object with modelId, settingsId (either may be " +
-                    "null when the referenced model/settings no longer exist), instruction, and optional " +
-                    "thresholdTokens, summaryLabel, enabled"
+                "conversation_compaction must be a JSON object with modelId, settingsId (both required " +
+                    "while enabled is true, and either may be null once it is false), instruction, and " +
+                    "optional thresholdTokens, summaryLabel, enabled"
             ).left()
         }
     }
 
     /**
-     * Applies the structural domain rules shared with the runtime path.
+     * Applies the structural domain rules of a stored preference.
      *
-     * Non-null ids must be positive; null ids are allowed (the referenced row no longer exists) and
-     * defer the access/correctness checks to runtime, handled inside
-     * [validateConfigurationForStorage].
+     * An enabled preference must name both auxiliary references, and any non-null id must be positive.
+     * A disabled preference may omit them: it can never compact, so a missing reference cannot make it
+     * unusable. Both cases require a non-blank instruction and a positive threshold.
      *
      * @param preference The decoded preference.
      * @return Either an [ConversationCompactionConfigurationError.InvalidValue] or Unit.
@@ -120,6 +122,20 @@ class DefaultConversationCompactionConfigurationService(
         // Locals allow the null-check smart casts (the properties are public API from another module).
         val modelId = preference.modelId
         val settingsId = preference.settingsId
+        // The flag is evaluated before the ids so a disabled preference is never asked for a compactor,
+        // mirroring the runtime resolver, which returns a disabled turn before validating any value.
+        if (preference.enabled) {
+            if (modelId == null) {
+                return ConversationCompactionConfigurationError.InvalidValue(
+                    "modelId is required while enabled is true"
+                ).left()
+            }
+            if (settingsId == null) {
+                return ConversationCompactionConfigurationError.InvalidValue(
+                    "settingsId is required while enabled is true"
+                ).left()
+            }
+        }
         if (modelId != null && modelId <= 0L) {
             return ConversationCompactionConfigurationError.InvalidValue("modelId must be positive").left()
         }
@@ -143,23 +159,22 @@ class DefaultConversationCompactionConfigurationService(
      * non-streaming (the auxiliary compaction call is a non-streaming chat request). The settings
      * lookup implies the model exists (settings reference an existing model). Runtime concerns (model
      * activity, provider, strategy, credential) are deliberately not checked here — they are validated
-     * by the fast runtime resolver when compaction actually runs. A preference with a null
-     * model/settings reference (referenced rows were deleted) cannot be checked and returns Unit so
-     * it is stored as-is; at runtime it raises an invalid-configuration error only when compaction is
-     * required.
+     * by the fast runtime resolver when compaction actually runs. A null model/settings reference only
+     * reaches this point on a disabled preference, which never compacts and therefore has nothing to
+     * check.
      *
      * @param userId Owner of the preference, checked for READ access.
-     * @param preference The decoded preference (references may be null).
+     * @param preference The decoded preference (references may be null while it is disabled).
      * @return Either a [ConversationCompactionConfigurationError] or Unit when the checks pass or
-     *         nothing can be checked (null reference).
+     *         nothing can be checked (null reference on a disabled preference).
      */
     private suspend fun validateConfigurationForStorage(
         userId: Long,
         preference: ConversationCompactionPreference
     ): Either<ConversationCompactionConfigurationError, Unit> {
-        // Locals allow the null-check smart casts (the properties are public API from another module);
-        // a null reference means the rows no longer exist, so there is nothing to check here and the
-        // failure is deferred to runtime (when compaction is required).
+        // Locals allow the null-check smart casts (the properties are public API from another module).
+        // Only a disabled preference can still carry a null reference here, and it never resolves a
+        // compactor, so there is nothing to check.
         val modelId = preference.modelId ?: return Unit.right()
         val settingsId = preference.settingsId ?: return Unit.right()
 

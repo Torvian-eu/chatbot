@@ -76,6 +76,10 @@ interface ModelPresetDao {
      * @param description Free-form description of the preset.
      * @param modelId Optional reference to the bundled LLM model.
      * @param modelSettingsId Optional reference to the bundled settings profile.
+     * @param compactionEnabled Whether turns running on the created preset may compact at all.
+     * @param compactionThresholdTokens Optional compaction threshold override in input tokens; `null`
+     *            defers to the user preference's threshold. A non-null value is validated by the
+     *            service layer.
      * @return The newly created [ModelPresetEntity].
      */
     suspend fun insertPreset(
@@ -83,11 +87,14 @@ interface ModelPresetDao {
         displayName: String?,
         description: String,
         modelId: Long?,
-        modelSettingsId: Long?
+        modelSettingsId: Long?,
+        compactionEnabled: Boolean,
+        compactionThresholdTokens: Long?
     ): ModelPresetEntity
 
     /**
-     * Updates an existing model-preset row (a full replacement of every writable column).
+     * Updates an existing model-preset row (a full replacement of every writable column, including
+     * the compaction enablement flag and threshold override).
      *
      * `created_at` is preserved; `updated_at` is set to the current time by the DAO.
      *

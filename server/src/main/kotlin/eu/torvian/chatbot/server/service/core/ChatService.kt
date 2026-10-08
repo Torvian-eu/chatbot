@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
+import eu.torvian.chatbot.server.service.core.chat.preparation.PreparedConversationTurn
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.toolcall.OperatorToolExecutionResult
@@ -23,7 +23,8 @@ interface ChatService {
      * @param content The message content (null for Branch & Continue mode)
      * @param parentMessageId Optional parent message ID. Must be non-null when [content] is null.
      * @param isStreaming Whether the message is being processed in streaming mode
-     * @return Either a validation error or a pair of (ChatSession, LLMConfig)
+     * @return Either a validation error or the session, LLM configuration and preset compaction
+     *         override resolved for the turn.
      */
     suspend fun validateProcessNewMessageRequest(
         userId: Long,
@@ -31,7 +32,7 @@ interface ChatService {
         content: String?,
         parentMessageId: Long?,
         isStreaming: Boolean
-    ): Either<ValidateNewMessageError, Pair<ChatSession, LLMConfig>>
+    ): Either<ValidateNewMessageError, PreparedConversationTurn>
 
     /**
      * Processes a new incoming user message with a non-streaming LLM.
@@ -54,8 +55,8 @@ interface ChatService {
      * 4. StreamCompleted - End of processing
      *
      * @param userId The ID of the user making the request (used for non-Local-MCP auto-approval preferences).
-     * @param session The session the message belongs to.
-     * @param llmConfig The LLM configuration to use for the request.
+     * @param preparedTurn The prepared session and LLM configuration of the turn, together with the
+     *                     preset's compaction override resolved during preparation.
      * @param content The user's message content. When null, no new user message is created and the
      *                assistant continues from the [parentMessageId] message (Branch & Continue mode).
      * @param parentMessageId Optional ID of the message being replied to. Must be non-null when [content] is null.
@@ -70,8 +71,7 @@ interface ChatService {
      */
     fun processNewMessage(
         userId: Long,
-        session: ChatSession,
-        llmConfig: LLMConfig,
+        preparedTurn: PreparedConversationTurn,
         content: String?,
         parentMessageId: Long? = null,
         fileReferences: List<FileReference> = emptyList(),
@@ -114,8 +114,8 @@ interface ChatService {
      * - All operations emit events for real-time UI updates via SSE
      *
      * @param userId The ID of the user making the request (used for non-Local-MCP auto-approval preferences).
-     * @param session The session the message belongs to.
-     * @param llmConfig The LLM configuration to use for the request (model, provider, settings, tools).
+     * @param preparedTurn The prepared session and LLM configuration of the turn, together with the
+     *                     preset's compaction override resolved during preparation.
      * @param content The user's message content. When null, no new user message is created and the
      *                assistant continues from the [parentMessageId] message (Branch & Continue mode).
      * @param parentMessageId Optional ID of the message being replied to. If provided, the new user
@@ -133,8 +133,7 @@ interface ChatService {
      */
     fun processNewMessageStreaming(
         userId: Long,
-        session: ChatSession,
-        llmConfig: LLMConfig,
+        preparedTurn: PreparedConversationTurn,
         content: String?,
         parentMessageId: Long? = null,
         fileReferences: List<FileReference> = emptyList(),

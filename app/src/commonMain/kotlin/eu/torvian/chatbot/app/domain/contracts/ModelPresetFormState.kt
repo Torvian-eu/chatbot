@@ -25,6 +25,10 @@ import eu.torvian.chatbot.common.models.llm.ModelPresetDto
  * @property description Free-form description of the preset's purpose.
  * @property modelId Selected model reference, or null for "No model".
  * @property modelSettingsId Selected settings-profile reference, or null for "No settings profile".
+ * @property compactionEnabled Whether turns running on this preset may compact their conversation at
+ *            all.
+ * @property compactionThresholdTokensText Compaction threshold as typed text; blank means "use the
+ *            user preference threshold".
  * @property errorMessage Optional validation error surfaced to the form.
  */
 data class ModelPresetFormState(
@@ -35,6 +39,8 @@ data class ModelPresetFormState(
     val description: String = "",
     val modelId: Long? = null,
     val modelSettingsId: Long? = null,
+    val compactionEnabled: Boolean = true,
+    val compactionThresholdTokensText: String = "",
     val errorMessage: String? = null
 ) {
 
@@ -45,10 +51,14 @@ data class ModelPresetFormState(
 
     /**
      * Validates the required fields. Only the name is mandatory; both references may be null because
-     * the server accepts a preset without a model, without a settings profile, or without either.
+     * the server accepts a preset without a model, without a settings profile, or without either. A
+     * blank [compactionThresholdTokensText] is also valid and means the preset defers to the user
+     * preference threshold; a non-blank value must be a whole number of at least 1.
      *
      * Per-owner name uniqueness and reference accessibility/model-agreement are **not** pre-checked
      * here: the server owns those rules and reports them as typed 4xx errors that the dialog shows.
+     * The threshold rule is mirrored locally only to give immediate feedback — the server enforces it
+     * again.
      *
      * @return A human-readable validation message, or null when the draft is valid.
      */
@@ -56,6 +66,14 @@ data class ModelPresetFormState(
         if (name.isBlank()) return "Preset name cannot be empty."
         if (name.length > MAX_MODEL_PRESET_NAME_LENGTH) {
             return "Preset name cannot exceed $MAX_MODEL_PRESET_NAME_LENGTH characters."
+        }
+        val compactionThresholdText = compactionThresholdTokensText.trim()
+        if (compactionThresholdText.isNotEmpty()) {
+            val threshold = compactionThresholdText.toLongOrNull()
+                ?: return "Compaction threshold must be a whole number, or left empty to use the user preference threshold."
+            if (threshold < 1L) {
+                return "Compaction threshold must be at least 1, or left empty to use the user preference threshold."
+            }
         }
         return null
     }
@@ -65,29 +83,35 @@ data class ModelPresetFormState(
      * [validate] returns null.
      *
      * A null reference is sent as-is (it means "no model"/"no settings profile"); the server treats
-     * both as valid.
+     * both as valid. A blank threshold is sent as `null`, which makes the server fall back to the user
+     * preference threshold.
      */
     fun toCreateRequest(): CreateModelPresetRequest = CreateModelPresetRequest(
         name = name.trim(),
         displayName = displayName.trim().takeIf { it.isNotBlank() },
         description = description.trim(),
         modelId = modelId,
-        modelSettingsId = modelSettingsId
+        modelSettingsId = modelSettingsId,
+        compactionEnabled = compactionEnabled,
+        compactionThresholdTokens = compactionThresholdTokensText.trim().takeIf { it.isNotBlank() }?.toLong()
     )
 
     /**
      * Builds an [UpdateModelPresetRequest] from this draft. Only valid when [mode] is EDIT and
      * [validate] returns null.
      *
-     * The update is a full replacement, so the draft's references are sent verbatim: an untouched
-     * persisted reference (including a settings profile on a model-less preset) round-trips unchanged.
+     * The update is a full replacement, so the draft's references and compaction settings are sent
+     * verbatim: an untouched persisted reference (including a settings profile on a model-less preset)
+     * round-trips unchanged, and a blank threshold keeps the preset on the user preference fallback.
      */
     fun toUpdateRequest(): UpdateModelPresetRequest = UpdateModelPresetRequest(
         name = name.trim(),
         displayName = displayName.trim().takeIf { it.isNotBlank() },
         description = description.trim(),
         modelId = modelId,
-        modelSettingsId = modelSettingsId
+        modelSettingsId = modelSettingsId,
+        compactionEnabled = compactionEnabled,
+        compactionThresholdTokens = compactionThresholdTokensText.trim().takeIf { it.isNotBlank() }?.toLong()
     )
 }
 
@@ -101,10 +125,13 @@ fun createEmptyModelPresetForm(): ModelPresetFormState = ModelPresetFormState(
 )
 
 /**
- * Creates an edit draft from an existing preset, preserving both references exactly as persisted.
+ * Creates an edit draft from an existing preset, preserving both references and the compaction
+ * configuration exactly as persisted.
  *
  * Copying the references verbatim is what makes the degenerate model-less-with-settings state safe:
  * the form displays it read-only and saves it back untouched unless the user deliberately changes it.
+ * An unset threshold is rendered as a blank field, because that is the "use the user preference"
+ * affordance.
  *
  * @receiver The preset to edit.
  * @return A [ModelPresetFormState] in EDIT mode pre-filled from the preset.
@@ -116,7 +143,9 @@ fun ModelPresetDto.toEditFormState(): ModelPresetFormState = ModelPresetFormStat
     displayName = displayName ?: "",
     description = description,
     modelId = modelId,
-    modelSettingsId = modelSettingsId
+    modelSettingsId = modelSettingsId,
+    compactionEnabled = compactionEnabled,
+    compactionThresholdTokensText = compactionThresholdTokens?.toString() ?: ""
 )
 
 /**

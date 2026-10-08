@@ -167,6 +167,9 @@ class ModelPresetRoutesTest {
             assertEquals("Smart model", created.displayName)
             assertEquals(model.id, created.modelId)
             assertEquals(settings.id, created.modelSettingsId)
+            // The compaction fields default to the pre-feature behaviour when the request omits them.
+            assertEquals(true, created.compactionEnabled)
+            assertEquals(null, created.compactionThresholdTokens)
             // created_at is set on create (OQ-2: both timestamps are exposed on the DTO).
             assertEquals(created.createdAt, created.updatedAt)
 
@@ -207,6 +210,95 @@ class ModelPresetRoutesTest {
         assertEquals(created.createdAt, updated.createdAt, "created_at is never rewritten")
         assertTrue(updated.updatedAt >= created.updatedAt, "updated_at must not go backwards")
     }
+
+    @Test
+    fun `POST and GET round-trip the preset compaction configuration`() = modelPresetTestApplication {
+        val response = client.post(href(ModelPresetResource())) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateModelPresetRequest(
+                    name = "cheap_model",
+                    modelId = model.id,
+                    modelSettingsId = settings.id,
+                    compactionEnabled = false,
+                    compactionThresholdTokens = 50_000L
+                )
+            )
+            authenticate(authToken)
+        }
+
+        assertEquals(HttpStatusCode.Created, response.status)
+        val created = assertNotNull(response.body<ModelPresetDto>())
+        assertEquals(false, created.compactionEnabled)
+        assertEquals(50_000L, created.compactionThresholdTokens)
+
+        val fetched = client.get(href(ModelPresetResource.ById(presetId = created.id))) {
+            authenticate(authToken)
+        }.body<ModelPresetDto>()
+        assertEquals(false, fetched.compactionEnabled)
+        assertEquals(50_000L, fetched.compactionThresholdTokens)
+    }
+
+    @Test
+    fun `PUT model preset round-trips an explicit compaction configuration`() = modelPresetTestApplication {
+        val created = createPreset("smart_model")
+
+        val response = client.put(href(ModelPresetResource.ById(presetId = created.id))) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                UpdateModelPresetRequest(
+                    name = "smart_model",
+                    modelId = model.id,
+                    modelSettingsId = settings.id,
+                    compactionEnabled = false,
+                    compactionThresholdTokens = 5_000L
+                )
+            )
+            authenticate(authToken)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val updated = assertNotNull(response.body<ModelPresetDto>())
+        assertEquals(false, updated.compactionEnabled)
+        assertEquals(5_000L, updated.compactionThresholdTokens)
+
+        // The request is a full replacement, so a caller that omits the fields resets them to their
+        // defaults; the clients are expected to send the current values.
+        val reset = client.put(href(ModelPresetResource.ById(presetId = created.id))) {
+            contentType(ContentType.Application.Json)
+            setBody(UpdateModelPresetRequest(name = "smart_model", modelId = model.id, modelSettingsId = settings.id))
+            authenticate(authToken)
+        }.body<ModelPresetDto>()
+        assertEquals(true, reset.compactionEnabled)
+        assertEquals(null, reset.compactionThresholdTokens)
+    }
+
+    @Test
+    fun `PUT model preset with a non-positive threshold returns 400 and persists nothing`() =
+        modelPresetTestApplication {
+            val created = createPreset("smart_model")
+
+            val response = client.put(href(ModelPresetResource.ById(presetId = created.id))) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    UpdateModelPresetRequest(
+                        name = "smart_model",
+                        modelId = model.id,
+                        modelSettingsId = settings.id,
+                        compactionThresholdTokens = 0L
+                    )
+                )
+                authenticate(authToken)
+            }
+
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            val error = response.body<eu.torvian.chatbot.common.api.ApiError>()
+            assertEquals("compactionThresholdTokens", error.details?.keys?.single())
+
+            val stored = listPresets().single()
+            assertEquals(null, stored.compactionThresholdTokens, "the rejected threshold must not be persisted")
+            assertEquals(true, stored.compactionEnabled)
+        }
 
     @Test
     fun `DELETE model preset detaches the bound role and keeps the role row`() = modelPresetTestApplication {

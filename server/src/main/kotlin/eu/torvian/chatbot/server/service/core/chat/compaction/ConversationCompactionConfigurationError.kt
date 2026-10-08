@@ -16,8 +16,8 @@ import eu.torvian.chatbot.common.api.apiError
 sealed interface ConversationCompactionConfigurationError {
 
     /**
-     * The preference value is malformed or structurally invalid (bad JSON, non-positive IDs,
-     * blank instruction, non-positive threshold).
+     * The preference value is malformed or structurally invalid (bad JSON, a missing or non-positive
+     * id, blank instruction, non-positive threshold).
      *
      * @property reason Human-readable description of the invalid value.
      */

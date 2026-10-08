@@ -15,7 +15,8 @@ import kotlin.test.assertEquals
 /**
  * Tests for [ModelPresetFormDialog], focused on the model-gated settings picker: the gate must make a
  * settings-only preset impossible to *create* through the UI while never rewriting a persisted
- * reference.
+ * reference. The compaction switch and threshold field are covered by their own tests, including the
+ * blank "use the user preference threshold" state.
  */
 @OptIn(ExperimentalTestApi::class)
 class ModelPresetFormDialogTest {
@@ -146,6 +147,46 @@ class ModelPresetFormDialogTest {
             onNodeWithText("Creative (CHAT)").assertIsDisplayed()
             // The other model's profile is not attachable, so it is not offered.
             onNodeWithText("Claude default (CHAT)").assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun `compaction controls render the draft and update it`() {
+        val draft = createEmptyModelPresetForm().copy(
+            name = "preset",
+            compactionEnabled = true,
+            compactionThresholdTokensText = "50000"
+        )
+
+        setForm(draft) { liveDraft ->
+            onNodeWithText(
+                "Leave empty to use the user preference threshold (100,000 tokens by default). " +
+                    "A value must be at least 1."
+            ).performScrollTo().assertIsDisplayed()
+
+            // The threshold field starts from the draft; clearing it is the "use user preference" state.
+            onNodeWithText("Compaction token threshold").performScrollTo().assertIsDisplayed()
+            onNodeWithText("50000").performScrollTo().assertIsDisplayed()
+
+            onNodeWithText("Conversation compaction").performScrollTo().assertIsDisplayed()
+            // The switch is on for the default draft; toggling it off updates the draft only.
+            onNode(isToggleable()).performScrollTo().performClick()
+
+            assertEquals(false, liveDraft().compactionEnabled)
+            assertEquals("50000", liveDraft().compactionThresholdTokensText)
+        }
+    }
+
+    @Test
+    fun `clearing the threshold field means using the user preference threshold`() {
+        val draft = createEmptyModelPresetForm().copy(name = "preset", compactionThresholdTokensText = "50000")
+
+        setForm(draft) { liveDraft ->
+            // Clearing the field is the affordance for "use the user preference threshold".
+            onNodeWithText("50000").performScrollTo().performTextClearance()
+
+            assertEquals("", liveDraft().compactionThresholdTokensText)
+            assertEquals("", liveDraft().toUpdateRequest().compactionThresholdTokens?.toString() ?: "")
         }
     }
 }

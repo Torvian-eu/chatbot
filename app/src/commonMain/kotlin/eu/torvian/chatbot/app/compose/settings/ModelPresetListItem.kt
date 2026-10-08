@@ -130,3 +130,20 @@ internal fun ModelPresetDto.settingsLabel(settingsById: Map<Long, ModelSettings>
  * @return True when the model or the settings reference is null.
  */
 internal fun ModelPresetDto.isIncomplete(): Boolean = modelId == null || modelSettingsId == null
+
+/**
+ * Describes the preset's conversation-compaction configuration as one user-facing label.
+ *
+ * A disabled preset never compacts, while an enabled preset either compacts at its own threshold or
+ * falls back to the user's compaction preference threshold. The label states which source is in effect,
+ * because an enabled preset alone does not mean the session will compact (the preference must also be
+ * present and enabled).
+ *
+ * @receiver The preset whose compaction fields are described.
+ * @return The compaction state, including the threshold in effect.
+ */
+internal fun ModelPresetDto.compactionLabel(): String = when {
+    !compactionEnabled -> "Disabled"
+    compactionThresholdTokens != null -> "Enabled (threshold: $compactionThresholdTokens tokens)"
+    else -> "Enabled (user preference threshold)"
+}

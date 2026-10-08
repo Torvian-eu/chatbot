@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core.chat.preparation
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.server.service.core.LLMConfig
+import eu.torvian.chatbot.server.service.core.chat.compaction.ResolvedCompactionConfig
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 
 /**
@@ -34,8 +35,11 @@ interface ConversationTurnPreparationService {
  *
  * @property session Loaded chat session that will receive the turn.
  * @property llmConfig Resolved LLM runtime configuration assembled for the turn.
+ * @property resolvedCompaction The turn's complete effective compaction configuration, resolved in the
+ *            same transaction as [llmConfig] so the two describe one consistent snapshot.
  */
 data class PreparedConversationTurn(
     val session: ChatSession,
-    val llmConfig: LLMConfig
+    val llmConfig: LLMConfig,
+    val resolvedCompaction: ResolvedCompactionConfig
 )

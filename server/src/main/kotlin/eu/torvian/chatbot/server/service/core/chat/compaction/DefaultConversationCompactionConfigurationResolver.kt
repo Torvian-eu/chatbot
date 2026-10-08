@@ -5,7 +5,6 @@ import arrow.core.left
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
-import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.LLMProviderService
@@ -45,21 +44,18 @@ class DefaultConversationCompactionConfigurationResolver(
 
     override suspend fun resolveAuxiliaryConfig(
         userId: Long,
-        preference: ConversationCompactionPreference
+        settings: EffectiveCompactionSettings
     ): Either<ConversationCompactionError, LLMConfig> {
-        // Structural requirements are validated before any lookup so a corrupt preference fails with
-        // a deterministic configuration error instead of a confusing missing-row error. A null
-        // model/settings reference means the referenced rows no longer exist: the runtime path reaches
-        // this resolver only when compaction is actually required (the thread-fits path never calls
-        // it), so the resolution attempt reports an invalid configuration right here.
-        val modelId = preference.modelId
-            ?: return invalid("Compaction modelId is not set").left()
-        val settingsId = preference.settingsId
-            ?: return invalid("Compaction settingsId is not set").left()
+        // Defense-in-depth re-checks of the value-level invariants turn preparation already enforced:
+        // they cost nothing and keep this resolver safe for any caller. A model/settings reference is
+        // never null here — the type makes the unresolvable-reference case unrepresentable — and a
+        // reference that no longer exists fails on the lookup below.
+        val modelId = settings.modelId
+        val settingsId = settings.settingsId
         if (modelId <= 0L) return invalid("Compaction modelId must be positive").left()
         if (settingsId <= 0L) return invalid("Compaction settingsId must be positive").left()
-        if (preference.instruction.isBlank()) return invalid("Compaction instruction must not be blank").left()
-        if (preference.thresholdTokens <= 0L) return invalid("Compaction thresholdTokens must be positive").left()
+        if (settings.instruction.isBlank()) return invalid("Compaction instruction must not be blank").left()
+        if (settings.thresholdTokens <= 0L) return invalid("Compaction thresholdTokens must be positive").left()
 
         return either {
             val model = withError({ error: GetModelError ->
@@ -69,14 +65,14 @@ class DefaultConversationCompactionConfigurationResolver(
             }
             ensure(model.active) { invalid("Compaction model ${model.name} is not active") }
 
-            val settings = withError({ error: GetSettingsByIdError ->
+            val modelSettings = withError({ error: GetSettingsByIdError ->
                 invalid("Compaction settings $settingsId not found: $error")
             }) {
                 modelSettingsService.getSettingsById(settingsId).bind()
             }
-            ensure(settings.modelId == model.id) {
+            ensure(modelSettings.modelId == model.id) {
                 invalid(
-                    "Compaction settings ${settings.name} belong to model ${settings.modelId}, " +
+                    "Compaction settings ${modelSettings.name} belong to model ${modelSettings.modelId}, " +
                         "not to compaction model ${model.id}"
                 )
             }
@@ -108,20 +104,20 @@ class DefaultConversationCompactionConfigurationResolver(
                 userId,
                 provider.id,
                 model.id,
-                settings.id
+                modelSettings.id
             )
 
             // The instruction is deliberately not part of the LLM config: the service appends it as
             // the final user message of the auxiliary request and persists it as chunk provenance.
-            // The config's system message carries the preference's optional system prompt (empty when
-            // the preference has none), so both roles stay distinct and non-overlapping.
+            // The config's system message carries the settings' optional system prompt (empty when
+            // there is none), so both roles stay distinct and non-overlapping.
             LLMConfig(
                 provider = provider,
                 model = model,
-                settings = settings,
+                settings = modelSettings,
                 apiKey = apiKey,
                 tools = null,
-                systemMessage = preference.systemMessage.orEmpty()
+                systemMessage = settings.systemMessage.orEmpty()
             )
         }
     }

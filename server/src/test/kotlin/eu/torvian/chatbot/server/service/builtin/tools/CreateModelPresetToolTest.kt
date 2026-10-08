@@ -30,7 +30,9 @@ import kotlin.time.Instant
  * Unit tests for [CreateModelPresetTool].
  *
  * Covers input validation (required `name`, optional `display_name`/`description`/`model_id`/
- * `model_settings_id`, accumulated errors, unknown parameters), the mapping of the parsed input
+ * `model_settings_id`/`compaction_enabled`/`compaction_threshold_tokens`, accumulated errors, unknown
+ * parameters), the
+ * mapping of the parsed input
  * into a [CreateModelPresetRequest] (including the empty defaults), the mapping of every
  * [CreateModelPresetError] to an LLM-readable handler error, and the full [ModelPresetDto] JSON
  * output shape.
@@ -64,6 +66,8 @@ class CreateModelPresetToolTest {
         description = "Bundles the smart model with the default settings profile",
         modelId = 11L,
         modelSettingsId = 21L,
+        compactionEnabled = true,
+        compactionThresholdTokens = null,
         createdAt = Instant.parse("2024-01-01T00:00:00Z"),
         updatedAt = Instant.parse("2024-01-01T00:00:00Z")
     )
@@ -113,7 +117,9 @@ class CreateModelPresetToolTest {
                         request.displayName == null &&
                         request.description == "" &&
                         request.modelId == null &&
-                        request.modelSettingsId == null
+                        request.modelSettingsId == null &&
+                        request.compactionEnabled &&
+                        request.compactionThresholdTokens == null
                 }
             )
         }
@@ -134,6 +140,8 @@ class CreateModelPresetToolTest {
             put("description", "Bundles the smart model with the default settings profile")
             put("model_id", 11L)
             put("model_settings_id", 21L)
+            put("compaction_enabled", false)
+            put("compaction_threshold_tokens", 50_000L)
         }
         tool.execute(input, context())
 
@@ -145,7 +153,63 @@ class CreateModelPresetToolTest {
                         request.displayName == "Smart model" &&
                         request.description == "Bundles the smart model with the default settings profile" &&
                         request.modelId == 11L &&
-                        request.modelSettingsId == 21L
+                        request.modelSettingsId == 21L &&
+                        !request.compactionEnabled &&
+                        request.compactionThresholdTokens == 50_000L
+                }
+            )
+        }
+    }
+
+    /**
+     * Verifies the compaction arguments are strict: `compaction_enabled` accepts only a JSON boolean
+     * and `compaction_threshold_tokens` only an integer, and a rejected value never reaches the service.
+     */
+    @Test
+    fun `rejects a non-boolean compaction_enabled and a non-integer threshold without calling the service`() =
+        runTest {
+            val modelPresetService = mockk<ModelPresetService>()
+            val tool = CreateModelPresetTool(modelPresetService, json)
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("name", "smart_model")
+                    put("compaction_enabled", "yes")
+                    put("compaction_threshold_tokens", "abc")
+                },
+                context()
+            )
+
+            val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
+            assertTrue(error.message.contains("Argument 'compaction_enabled' must be a boolean"))
+            assertTrue(error.message.contains("Argument 'compaction_threshold_tokens' must be an integer"))
+            coVerify(exactly = 0) { modelPresetService.createPreset(any(), any()) }
+        }
+
+    /**
+     * Verifies a JSON `null` compaction argument is treated as omitted, so the request falls back to
+     * the DTO defaults (compaction enabled, no threshold override).
+     */
+    @Test
+    fun `treats an explicit null compaction argument as omitted`() = runTest {
+        val modelPresetService = mockk<ModelPresetService>()
+        coEvery { modelPresetService.createPreset(userId, any()) } returns createdPreset().right()
+        val tool = CreateModelPresetTool(modelPresetService, json)
+
+        tool.execute(
+            buildJsonObject {
+                put("name", "smart_model")
+                put("compaction_enabled", kotlinx.serialization.json.JsonNull)
+                put("compaction_threshold_tokens", kotlinx.serialization.json.JsonNull)
+            },
+            context()
+        )
+
+        coVerify(exactly = 1) {
+            modelPresetService.createPreset(
+                userId,
+                match<CreateModelPresetRequest> { request ->
+                    request.compactionEnabled && request.compactionThresholdTokens == null
                 }
             )
         }
@@ -167,6 +231,8 @@ class CreateModelPresetToolTest {
                 settingsModelId = 12L,
                 presetModelId = 11L
             ) to "settings_model_mismatch",
+            CreateModelPresetError.InvalidCompactionThresholdTokens(0L, "compactionThresholdTokens must be positive") to
+                "invalid_compaction_threshold_tokens",
             CreateModelPresetError.OwnerInsertFailed("constraint violation") to "owner_insert_failed"
         )
         cases.forEach { (serviceError, expectedCode) ->
@@ -232,15 +298,17 @@ class CreateModelPresetToolTest {
             buildJsonObject {
                 put("name", 123)
                 put("model_id", "oops")
+                put("compaction_enabled", 1)
                 put("unknown", true)
             },
             context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
-        assertTrue(error.message.contains("3 error(s)"))
+        assertTrue(error.message.contains("4 error(s)"))
         assertTrue(error.message.contains("Argument 'name' must be a string"))
         assertTrue(error.message.contains("Argument 'model_id' must be an integer"))
+        assertTrue(error.message.contains("Argument 'compaction_enabled' must be a boolean"))
         assertTrue(error.message.contains("Unknown parameter: 'unknown'"))
         coVerify(exactly = 0) { modelPresetService.createPreset(any(), any()) }
     }

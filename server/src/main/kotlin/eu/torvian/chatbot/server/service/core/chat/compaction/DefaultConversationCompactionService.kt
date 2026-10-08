@@ -5,10 +5,7 @@ import arrow.core.left
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
-import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
-import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
 import eu.torvian.chatbot.server.data.dao.ConversationCompactionChunkDao
-import eu.torvian.chatbot.server.data.dao.UserPreferenceDao
 import eu.torvian.chatbot.server.data.dao.error.ConversationCompactionChunkDaoError
 import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.chat.context.ConversationContext
@@ -20,7 +17,6 @@ import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
-import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import kotlin.time.Duration
@@ -38,23 +34,19 @@ import kotlin.time.Duration.Companion.seconds
  * one immutable prefix chunk whose coverage equals the ledger, and never repeats the compaction in a
  * loop. Any failure aborts the turn before an oversized primary request is sent.
  *
- * @property userPreferenceDao Reads the global preference row (device rows cannot enable compaction).
  * @property chunkDao Loads retained chunks and persists verified new chunks.
  * @property configurationResolver Resolves/validates the auxiliary configuration when required.
  * @property tokenCounter Repository-owned approximate input token counter.
  * @property llmApiClient Provider-neutral client for the auxiliary non-streaming call.
- * @property json Shared JSON codec used to decode the preference.
  * @property auxiliaryTimeout Total timeout around the retrying auxiliary non-streaming call, including
  *            `RetryLLMApiClient` backoff; defaults to the approved 180 seconds. Injectable so tests can
  *            exercise the timeout path without waiting the full bound.
  */
 class DefaultConversationCompactionService(
-    private val userPreferenceDao: UserPreferenceDao,
     private val chunkDao: ConversationCompactionChunkDao,
     private val configurationResolver: ConversationCompactionConfigurationResolver,
     private val tokenCounter: ChatInputTokenCounter,
     private val llmApiClient: LLMApiClient,
-    private val json: Json,
     private val auxiliaryTimeout: Duration = AUXILIARY_COMPACTION_TIMEOUT_SECONDS.seconds
 ) : ConversationCompactionService {
 
@@ -76,45 +68,23 @@ class DefaultConversationCompactionService(
     override suspend fun beginTurn(
         userId: Long,
         sessionId: Long,
-        initialUnits: List<ConversationContextUnit>
-    ): Either<ConversationCompactionError, CompactionTurnState> = either {
-        val rawValue = userPreferenceDao.getGlobalPreference(userId, PreferenceKeys.CONVERSATION_COMPACTION)
-            ?.prefValue
-            ?: return@either CompactionTurnState.Disabled(sessionId, initialUnits.toMutableList())
+        initialUnits: List<ConversationContextUnit>,
+        resolvedCompaction: ResolvedCompactionConfig
+    ): CompactionTurnState = when (resolvedCompaction) {
+        // Disabled by absence or by configuration: this branch loads no retained chunk and counts
+        // nothing, so the original thread is always sent and no configuration error can be raised.
+        is ResolvedCompactionConfig.Disabled ->
+            CompactionTurnState.Disabled(sessionId, initialUnits.toMutableList())
 
-        // A structurally invalid preference is a hard configuration error reported at turn start as the
-        // Either left, carrying the serialization exception's own message for diagnostics: there is no
-        // partially-usable state (no threshold hint, no retained-chunk load), and the turn aborts
-        // before any counting or compaction can run.
-        val decoded = try {
-            json.decodeFromString<ConversationCompactionPreference>(rawValue)
-        } catch (e: Exception) {
-            raise(
-                ConversationCompactionError.InvalidConfiguration(
-                    "The conversation_compaction preference is structurally invalid: " +
-                        (e.message ?: "malformed JSON")
-                )
-            )
-        }
-
-        // A preference stored with `enabled = false` behaves exactly like an absent row: automatic
-        // compaction is off for this turn, the original thread is always sent, and only the initial
-        // units are retained — no retained-chunk load and no counting, so no configuration error is
-        // ever raised. A `null` model/settings reference is **not** treated as disabled here: the
-        // preference stays enabled and surfaces `InvalidConfiguration` only when compaction becomes
-        // necessary (see preparePrimaryContext).
-        if (!decoded.enabled) {
-            return@either CompactionTurnState.Disabled(sessionId, initialUnits.toMutableList())
-        }
-
-        // Retained chunks are loaded once per turn; later iterations extend the in-memory list as the
-        // service persists new chunks instead of reloading the database on every tool step.
-        val retainedChunks = chunkDao.getChunksBySessionId(sessionId).toMutableList()
-        CompactionTurnState.Enabled(
+        is ResolvedCompactionConfig.Enabled -> CompactionTurnState.Enabled(
             sessionId = sessionId,
             ownerUserId = userId,
-            preference = decoded,
-            retainedChunks = retainedChunks,
+            // Resolved once for the whole turn: a later preset edit cannot affect this turn, and
+            // persisted chunks keep the threshold that was in effect.
+            settings = resolvedCompaction.settings,
+            // Retained chunks are loaded once per turn; later iterations extend the in-memory list as the
+            // service persists new chunks instead of reloading the database on every tool step.
+            retainedChunks = chunkDao.getChunksBySessionId(sessionId).toMutableList(),
             units = initialUnits.toMutableList(),
             summaryMessage = null,
             coveredSnapshots = mutableListOf(),
@@ -135,10 +105,11 @@ class DefaultConversationCompactionService(
                 persistedChunkIfAny = null
             )
         }
-        // Every state reaching a preflight is enabled and decoded: an undecodable preference already
-        // failed beginTurn as an InvalidConfiguration left, so no threshold-hint fallback exists here.
+        // Every state reaching a preflight is enabled: a turn whose configuration could not be decoded
+        // or validated was rejected during preparation, so this branch always carries resolved settings
+        // and never fabricates a fallback threshold.
         val enabledState = state as CompactionTurnState.Enabled
-        val threshold = enabledState.preference.thresholdTokens
+        val threshold = enabledState.settings.thresholdTokens
 
         // --- First preflight only: "do not inject retained chunks when the full raw thread fits". ---
         // The full raw thread is counted once at turn start from the built context; after this point
@@ -182,7 +153,7 @@ class DefaultConversationCompactionService(
 
         val auxiliaryConfig = configurationResolver.resolveAuxiliaryConfig(
             userId = enabledState.ownerUserId,
-            preference = enabledState.preference
+            settings = enabledState.settings
         ).bind()
         logger.debug(
             "Running compaction for session {}: window {} tokens exceeds threshold {}",
@@ -194,9 +165,9 @@ class DefaultConversationCompactionService(
         // One-shot compaction (ND-3/ND-4): the entire over-threshold window becomes the input; the
         // result is a single new summary and the window becomes the summary alone. There is no loop.
         val input = buildCompactionInput(enabledState.summaryMessage, enabledState.units)
-        val generationResult = generateSummary(auxiliaryConfig, input, enabledState.preference.instruction).bind()
+        val generationResult = generateSummary(auxiliaryConfig, input, enabledState.settings.instruction).bind()
         val summaryText = validateSummaryOutput(generationResult).bind()
-        val newSummary = RawChatMessage.User(enabledState.preference.summaryLabel + summaryText)
+        val newSummary = RawChatMessage.User(enabledState.settings.summaryLabel + summaryText)
 
         // Post-count the one-summary primary request with the primary dialect/tools; insufficient
         // reduction is a failure (ND-4/ND-6) and must not persist a chunk or send the primary request.
@@ -221,7 +192,7 @@ class DefaultConversationCompactionService(
             sessionId = enabledState.sessionId,
             summary = summaryText,
             auxiliaryConfig = auxiliaryConfig,
-            instruction = enabledState.preference.instruction,
+            instruction = enabledState.settings.instruction,
             coveredSnapshots = enabledState.coveredSnapshots,
             sourceTokenCount = windowTokens,
             resultTokens = resultTokens,
@@ -242,8 +213,8 @@ class DefaultConversationCompactionService(
             }
             .bind()
 
-        // Self-update: the state owns the window/ledger, so the caller does not need to record the
-        // persisted chunk (the old `record` hook is gone).
+        // Self-update: the state owns the window and the content-free ledger, so the persisted chunk is
+        // recorded here and nothing outside this loop has to track it.
         enabledState.summaryChunkId = persistedChunk.id
         enabledState.retainedChunks.add(persistedChunk)
 
@@ -280,7 +251,7 @@ class DefaultConversationCompactionService(
         // seeds the window and the ledger.
         val largest = findLargestEligibleChunk(state.retainedChunks, ConversationContext(state.units))
             ?: return
-        state.summaryMessage = RawChatMessage.User(state.preference.summaryLabel + largest.summary)
+        state.summaryMessage = RawChatMessage.User(state.settings.summaryLabel + largest.summary)
         state.summaryChunkId = largest.id
         state.coveredSnapshots = largest.coverage
             .map { covered -> SourceMessageSnapshot(id = covered.messageId, updatedAt = covered.observedUpdatedAt) }
@@ -335,7 +306,7 @@ class DefaultConversationCompactionService(
      * is passed through normally, so the two roles never collide.
      *
      * @param config The validated auxiliary configuration (no tools; `systemMessage` carries the
-     *            preference's optional system prompt, empty when none is set).
+     *            compaction settings' optional system prompt, empty when none is set).
      * @param messages The bounded compaction input (the over-threshold window).
      * @param instruction The user's compaction instruction (guaranteed non-blank by the resolver),
      *            appended as the final user message.

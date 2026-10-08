@@ -111,6 +111,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                 userId = 1L,
                 session = testSession,
                 llmConfig = LLMConfig(testProvider, reasoningModel, reasoningSettings, "api-key"),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Reason",
                 parentMessageId = null,
                 fileReferences = emptyList(),
@@ -310,6 +311,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
                 llmConfig = LLMConfig(
                     testProvider, reasoningModel, reasoningSettings, "api-key", listOf(toolDefinition)
                 ),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Look up data",
                 parentMessageId = null,
                 fileReferences = emptyList(),

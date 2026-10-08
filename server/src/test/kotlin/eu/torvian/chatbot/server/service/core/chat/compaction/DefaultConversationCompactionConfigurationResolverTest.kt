@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.server.service.core.chat.compaction
 
 import arrow.core.right
-import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -15,14 +14,15 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 /**
- * Verifies the runtime auxiliary-configuration resolution for the compaction preference.
+ * Verifies the runtime auxiliary-configuration resolution for the compaction settings.
  *
- * Covers the single-source-of-truth contract for the auxiliary `LLMConfig`: the preference's
- * `systemMessage` is carried verbatim as the config's system message (empty when the preference has
- * none), the instruction is not part of the config, and no tools are enabled for the auxiliary call.
+ * Covers the single-source-of-truth contract for the auxiliary `LLMConfig`: the settings'
+ * `systemMessage` is carried verbatim as the config's system message (empty when there is none), the
+ * instruction is not part of the config, and no tools are enabled for the auxiliary call.
  */
 class DefaultConversationCompactionConfigurationResolverTest {
 
@@ -47,29 +47,47 @@ class DefaultConversationCompactionConfigurationResolverTest {
         credentialManager = mockk<CredentialManager>()
     )
 
-    private fun preferenceWith(systemMessage: String?) = ConversationCompactionPreference(
+    /**
+     * Builds one turn's effective compaction settings.
+     *
+     * @param systemMessage Optional auxiliary system prompt, or null for none.
+     */
+    private fun settingsWith(systemMessage: String?) = EffectiveCompactionSettings(
         modelId = 1L,
         settingsId = 2L,
         instruction = "Summarize faithfully",
-        systemMessage = systemMessage
+        systemMessage = systemMessage,
+        summaryLabel = "Summary:\n",
+        thresholdTokens = 1_000L
     )
 
     @Test
-    fun `preference system message is carried verbatim into the auxiliary config`() = runTest {
+    fun `settings system message is carried verbatim into the auxiliary config`() = runTest {
         val config = resolver()
-            .resolveAuxiliaryConfig(userId = 1L, preference = preferenceWith("You are a summarizer."))
+            .resolveAuxiliaryConfig(userId = 1L, settings = settingsWith("You are a summarizer."))
             .getOrNull()
         assertEquals("You are a summarizer.", config?.systemMessage)
     }
 
     @Test
-    fun `missing preference system message resolves to an empty config system message`() = runTest {
+    fun `missing settings system message resolves to an empty config system message`() = runTest {
         val config = resolver()
-            .resolveAuxiliaryConfig(userId = 1L, preference = preferenceWith(null))
+            .resolveAuxiliaryConfig(userId = 1L, settings = settingsWith(null))
             .getOrNull()
         assertEquals("", config?.systemMessage)
         // No tools are enabled for the auxiliary call (the instruction is not part of the config
         // either — the service appends it as the final user message).
         assertNull(config?.tools)
+    }
+
+    @Test
+    fun `a non-positive model reference is rejected before any lookup`() = runTest {
+        // Turn preparation forbids this value, so reaching it means an out-of-contract caller; the
+        // resolver still fails deterministically instead of querying for a meaningless id.
+        val result = resolver()
+            .resolveAuxiliaryConfig(userId = 1L, settings = settingsWith(null).copy(modelId = 0L))
+
+        val error = assertIs<ConversationCompactionError.InvalidConfiguration>(result.leftOrNull())
+        assertEquals("Compaction modelId must be positive", error.reason)
     }
 }

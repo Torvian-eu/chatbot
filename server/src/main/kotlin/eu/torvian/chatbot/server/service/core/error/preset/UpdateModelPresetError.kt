@@ -57,6 +57,20 @@ sealed interface UpdateModelPresetError {
         val settingsModelId: Long,
         val presetModelId: Long
     ) : UpdateModelPresetError
+
+    /**
+     * The requested compaction threshold is invalid (zero or negative).
+     *
+     * `null` is always valid and means "use the user preference threshold", so only an explicit
+     * non-positive value is rejected; nothing is persisted.
+     *
+     * @property compactionThresholdTokens The rejected threshold value.
+     * @property reason Human-readable explanation of why the threshold is invalid.
+     */
+    data class InvalidCompactionThresholdTokens(
+        val compactionThresholdTokens: Long,
+        val reason: String
+    ) : UpdateModelPresetError
 }
 
 /**
@@ -92,5 +106,12 @@ fun UpdateModelPresetError.toApiError(): ApiError = when (this) {
             "settingsId" to settingsId.toString(),
             "settingsModelId" to settingsModelId.toString(),
             "presetModelId" to presetModelId.toString()
+        )
+
+    is UpdateModelPresetError.InvalidCompactionThresholdTokens ->
+        apiError(
+            CommonApiErrorCodes.INVALID_ARGUMENT,
+            "Invalid model preset compaction threshold: $reason",
+            "compactionThresholdTokens" to compactionThresholdTokens.toString()
         )
 }

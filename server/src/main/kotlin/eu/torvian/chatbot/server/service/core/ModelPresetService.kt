@@ -52,14 +52,16 @@ interface ModelPresetService {
      * Creates a new model preset owned by the user.
      *
      * Validates the name (trimmed, non-blank, at most
-     * [eu.torvian.chatbot.common.models.llm.MAX_MODEL_PRESET_NAME_LENGTH] characters) and enforces
+     * [eu.torvian.chatbot.common.models.llm.MAX_MODEL_PRESET_NAME_LENGTH] characters), the optional
+     * compaction threshold (a non-null value must be at least `1`) and enforces
      * per-owner name uniqueness, then validates the two optional references: each must exist and be
      * `READ`-accessible to [userId], and when both are present they must describe the same model. The
      * ownership link is inserted atomically with the row, so nothing is persisted when validation
      * fails.
      *
      * @param userId The ID of the user who will own the preset.
-     * @param request The creation payload.
+     * @param request The creation payload; a null `compactionThresholdTokens` means the created preset
+     *            defers to the user's compaction preference threshold.
      * @return Either a [CreateModelPresetError] or the newly created [ModelPresetDto].
      */
     suspend fun createPreset(
@@ -70,14 +72,17 @@ interface ModelPresetService {
     /**
      * Updates an existing model preset owned by the user.
      *
-     * A full replacement of `name`, `displayName`, `description` and both references (a null reference
-     * clears it), applying the same name and reference validation as [createPreset]. The
+     * A full replacement of `name`, `displayName`, `description`, the compaction configuration and
+     * both references (a null reference clears it), applying the same name, compaction-threshold and
+     * reference validation as [createPreset]. The
      * rename-uniqueness check excludes the preset being updated, so keeping the current name is always
      * allowed. `createdAt` is preserved and `updatedAt` advances.
      *
      * @param userId The ID of the requesting user.
      * @param presetId The ID of the preset to update.
-     * @param request The update payload.
+     * @param request The update payload; because it replaces every writable field, an omitted
+     *            `compactionEnabled`/`compactionThresholdTokens` resets the compaction configuration to
+     *            its defaults.
      * @return Either an [UpdateModelPresetError] or the updated [ModelPresetDto].
      */
     suspend fun updatePreset(

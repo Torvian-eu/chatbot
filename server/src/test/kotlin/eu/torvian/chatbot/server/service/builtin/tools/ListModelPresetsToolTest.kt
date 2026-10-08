@@ -10,6 +10,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -62,6 +63,9 @@ class ListModelPresetsToolTest {
      * @param description Free-form description.
      * @param modelId Referenced model id, or `null` when unset.
      * @param modelSettingsId Referenced settings profile id, or `null` when unset.
+     * @param compactionEnabled Compaction enablement flag returned by the tool.
+     * @param compactionThresholdTokens Compaction threshold override, or `null` for the preference
+     *            fallback.
      * @param createdAt Creation timestamp.
      * @param updatedAt Last-update timestamp.
      * @return A preset DTO suitable for list-tool assertions.
@@ -73,6 +77,8 @@ class ListModelPresetsToolTest {
         description: String = "Bundles the smart model with the default settings profile",
         modelId: Long? = 11L,
         modelSettingsId: Long? = 21L,
+        compactionEnabled: Boolean = true,
+        compactionThresholdTokens: Long? = null,
         createdAt: Instant = Instant.parse("2024-01-01T00:00:00Z"),
         updatedAt: Instant = Instant.parse("2024-01-02T00:00:00Z")
     ) = ModelPresetDto(
@@ -82,6 +88,8 @@ class ListModelPresetsToolTest {
         description = description,
         modelId = modelId,
         modelSettingsId = modelSettingsId,
+        compactionEnabled = compactionEnabled,
+        compactionThresholdTokens = compactionThresholdTokens,
         createdAt = createdAt,
         updatedAt = updatedAt
     )
@@ -122,6 +130,8 @@ class ListModelPresetsToolTest {
             "description",
             "modelId",
             "modelSettingsId",
+            "compactionEnabled",
+            "compactionThresholdTokens",
             "createdAt",
             "updatedAt"
         )
@@ -143,6 +153,27 @@ class ListModelPresetsToolTest {
         assertTrue(second.getValue("modelSettingsId").jsonPrimitive.content == "null")
         assertEquals("2024-01-01T00:00:00Z", second.getValue("createdAt").jsonPrimitive.content)
         assertEquals("2024-01-02T00:00:00Z", second.getValue("updatedAt").jsonPrimitive.content)
+    }
+
+    /**
+     * Verifies the compaction configuration travels with the listed presets, so the LLM can see which
+     * presets override the user preference threshold.
+     */
+    @Test
+    fun `returns the compaction configuration of every preset`() = runTest {
+        val modelPresetService = mockk<ModelPresetService>()
+        coEvery { modelPresetService.getAllPresetsForUser(userId) } returns listOf(
+            samplePreset(compactionEnabled = false, compactionThresholdTokens = 50_000L),
+            samplePreset(id = 4L, name = "second", compactionEnabled = true, compactionThresholdTokens = null)
+        )
+        val tool = ListModelPresetsTool(modelPresetService, json)
+
+        val presets = json.parseToJsonElement(assertSuccess(tool.execute(buildJsonObject { }, context()))).jsonArray
+
+        assertEquals(false, presets[0].jsonObject.getValue("compactionEnabled").jsonPrimitive.boolean)
+        assertEquals(50_000L, presets[0].jsonObject.getValue("compactionThresholdTokens").jsonPrimitive.long)
+        assertEquals(true, presets[1].jsonObject.getValue("compactionEnabled").jsonPrimitive.boolean)
+        assertTrue(presets[1].jsonObject.getValue("compactionThresholdTokens").jsonPrimitive.content == "null")
     }
 
     /**

@@ -3,10 +3,10 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.chat.preparation.ConversationTurnPreparationService
+import eu.torvian.chatbot.server.service.core.chat.preparation.PreparedConversationTurn
 import eu.torvian.chatbot.server.service.core.chat.compaction.toCompactionCompletedPayload
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnEvent
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnOrchestrator
@@ -47,20 +47,19 @@ class ChatServiceImpl(
         content: String?,
         parentMessageId: Long?,
         isStreaming: Boolean
-    ): Either<ValidateNewMessageError, Pair<ChatSession, LLMConfig>> {
+    ): Either<ValidateNewMessageError, PreparedConversationTurn> {
         return when (
             val preparedTurn = conversationTurnPreparationService
                 .prepareNewMessageTurn(userId, sessionId, content, parentMessageId, isStreaming)
         ) {
             is Either.Left -> preparedTurn.value.left()
-            is Either.Right -> (preparedTurn.value.session to preparedTurn.value.llmConfig).right()
+            is Either.Right -> preparedTurn.value.right()
         }
     }
 
     override fun processNewMessage(
         userId: Long,
-        session: ChatSession,
-        llmConfig: LLMConfig,
+        preparedTurn: PreparedConversationTurn,
         content: String?,
         parentMessageId: Long?,
         fileReferences: List<FileReference>,
@@ -72,8 +71,9 @@ class ChatServiceImpl(
             conversationTurnOrchestrator.processNonStreamingTurn(
                 ConversationTurnRequest(
                     userId = userId,
-                    session = session,
-                    llmConfig = llmConfig,
+                    session = preparedTurn.session,
+                    llmConfig = preparedTurn.llmConfig,
+                    resolvedCompaction = preparedTurn.resolvedCompaction,
                     content = content,
                     parentMessageId = parentMessageId,
                     fileReferences = fileReferences,
@@ -88,7 +88,7 @@ class ChatServiceImpl(
             // Cancellation is the normal control path for a stopped turn; do not convert it to an API error.
             throw e
         } catch (e: Exception) {
-            val errorMessage = "Unexpected error in processNewMessage for session ${session.id}: ${e.message}"
+            val errorMessage = "Unexpected error in processNewMessage for session ${preparedTurn.session.id}: ${e.message}"
             logger.error(errorMessage, e)
             send(
                 ProcessNewMessageError.UnexpectedError(errorMessage).left()
@@ -99,8 +99,7 @@ class ChatServiceImpl(
 
     override fun processNewMessageStreaming(
         userId: Long,
-        session: ChatSession,
-        llmConfig: LLMConfig,
+        preparedTurn: PreparedConversationTurn,
         content: String?,
         parentMessageId: Long?,
         fileReferences: List<FileReference>,
@@ -112,8 +111,9 @@ class ChatServiceImpl(
             conversationTurnOrchestrator.processStreamingTurn(
                 ConversationTurnRequest(
                     userId = userId,
-                    session = session,
-                    llmConfig = llmConfig,
+                    session = preparedTurn.session,
+                    llmConfig = preparedTurn.llmConfig,
+                    resolvedCompaction = preparedTurn.resolvedCompaction,
                     content = content,
                     parentMessageId = parentMessageId,
                     fileReferences = fileReferences,
@@ -128,7 +128,7 @@ class ChatServiceImpl(
             // Cancellation is the normal control path for a stopped turn; do not convert it to an API error.
             throw e
         } catch (e: Exception) {
-            val errorMessage = "Unexpected error in processNewMessageStreaming for session ${session.id}: ${e.message}"
+            val errorMessage = "Unexpected error in processNewMessageStreaming for session ${preparedTurn.session.id}: ${e.message}"
             logger.error(errorMessage, e)
             send(
                 ProcessNewMessageError.UnexpectedError(errorMessage).left()

@@ -12,9 +12,10 @@ sealed interface ConversationCompactionError {
     /**
      * The configured compaction preference is structurally invalid or no longer resolvable.
      *
-     * Covers malformed/partial JSON, blank instruction, non-positive IDs/threshold, missing or
-     * inactive model/settings/provider, wrong settings-model pairing, streaming-only settings,
-     * revoked access, or an unusable provider credential.
+     * Covers a preset that no longer exists for the user or carries an invalid threshold override,
+     * malformed/partial JSON, blank instruction, non-positive IDs/threshold, missing or inactive
+     * model/settings/provider, wrong settings-model pairing, streaming-only settings, revoked access,
+     * or an unusable provider credential.
      *
      * @property reason Human-readable description of the invalid configuration.
      */

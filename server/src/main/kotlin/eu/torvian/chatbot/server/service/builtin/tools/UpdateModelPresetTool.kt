@@ -22,7 +22,13 @@ import kotlinx.serialization.json.JsonObject
  * - an explicit empty `display_name` clears the display name to `null`;
  * - `model_id = 0` and `model_settings_id = 0` clear the respective reference, mirroring the
  *   `model_preset_id = 0` / `project_id = 0` "clear" sentinels of the agent-role and project
- *   tools. Preset ids are positive `AUTOINCREMENT` values, so `0` can never address a real row.
+ *   tools. Preset ids are positive `AUTOINCREMENT` values, so `0` can never address a real row;
+ * - an omitted or `null` `compaction_enabled` preserves the persisted flag, while an explicit boolean
+ *   sets it ([parseOptionalBoolean] decodes both JSON literals);
+ * - `compaction_threshold_tokens = 0` clears the preset's compaction threshold override so the user
+ *   preference threshold applies again, and a value of at least `1` sets the override. `0` is free
+ *   as a sentinel because the service rejects a non-positive threshold, so it is never a stored
+ *   value.
  *
  * The merged state is then applied through the existing full-replacement update, so the service's
  * name, accessibility, and model/settings agreement validation still runs on the *merged* state:
@@ -63,7 +69,9 @@ class UpdateModelPresetTool(
                 ServerBuiltInToolCatalog.DISPLAY_NAME_PROPERTY,
                 ServerBuiltInToolCatalog.DESCRIPTION_PROPERTY,
                 ServerBuiltInToolCatalog.MODEL_ID_PROPERTY,
-                ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY
+                ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY,
+                ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY,
+                ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY
             ),
             validationErrors
         )
@@ -77,6 +85,10 @@ class UpdateModelPresetTool(
         val modelId = parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_ID_PROPERTY, validationErrors)
         val modelSettingsId =
             parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY, validationErrors)
+        val compactionEnabled =
+            parseOptionalBoolean(input, ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY, validationErrors)
+        val compactionThresholdTokens =
+            parseOptionalLong(input, ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY, validationErrors)
         if (validationErrors.isNotEmpty()) {
             raise(invalidInputError(validationErrors))
         }
@@ -111,6 +123,14 @@ class UpdateModelPresetTool(
                 null -> persisted.modelSettingsId
                 0L -> null
                 else -> modelSettingsId
+            },
+            compactionEnabled = compactionEnabled ?: persisted.compactionEnabled,
+            compactionThresholdTokens = when (compactionThresholdTokens) {
+                null -> persisted.compactionThresholdTokens
+                // `0` is the explicit "clear the override" sentinel; the service rejects it as a
+                // literal value, so it can never mean a stored threshold of zero.
+                0L -> null
+                else -> compactionThresholdTokens
             }
         )
 
@@ -163,5 +183,12 @@ private fun UpdateModelPresetError.toHandlerError(): ServerBuiltInToolHandlerErr
         ServerBuiltInToolHandlerError.OperationFailed(
             "settings_model_mismatch",
             "Model settings profile $settingsId belongs to model $settingsModelId, not $presetModelId."
+        )
+
+    is UpdateModelPresetError.InvalidCompactionThresholdTokens ->
+        ServerBuiltInToolHandlerError.OperationFailed(
+            "invalid_compaction_threshold_tokens",
+            "The compaction threshold must be at least 1, or 0 to clear the override and use the " +
+                "user preference threshold, but was $compactionThresholdTokens."
         )
 }

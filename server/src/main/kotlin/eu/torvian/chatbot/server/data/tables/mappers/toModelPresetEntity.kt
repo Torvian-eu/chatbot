@@ -22,6 +22,8 @@ fun ResultRow.toModelPresetEntity(): ModelPresetEntity = ModelPresetEntity(
     description = this[ModelPresetTable.description],
     modelId = this[ModelPresetTable.modelId]?.value,
     modelSettingsId = this[ModelPresetTable.modelSettingsId]?.value,
+    compactionEnabled = this[ModelPresetTable.compactionEnabled],
+    compactionThresholdTokens = this[ModelPresetTable.compactionThresholdTokens],
     createdAt = Instant.fromEpochMilliseconds(this[ModelPresetTable.createdAt]),
     updatedAt = Instant.fromEpochMilliseconds(this[ModelPresetTable.updatedAt])
 )

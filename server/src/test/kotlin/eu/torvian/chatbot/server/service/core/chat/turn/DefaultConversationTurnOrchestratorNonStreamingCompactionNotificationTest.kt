@@ -62,8 +62,8 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionNotificationTest 
                 conversationTurnPersistence.saveUserMessage(testSession.id, "Compacted input", null, any())
             } returns PersistedUserMessage(userMessage, null)
             coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-            coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any()) } returns
-                CompactionTurnState.Disabled(testSession.id, mutableListOf()).right()
+            coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
+                CompactionTurnState.Disabled(testSession.id, mutableListOf())
             coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
                 PrimaryContextPreflight(
                     primaryMessages = summaryMessages,
@@ -91,6 +91,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionNotificationTest 
                     userId = 1L,
                     session = testSession,
                     llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key"),
+                    resolvedCompaction = defaultResolvedCompaction,
                     content = "Compacted input",
                     parentMessageId = null,
                     fileReferences = emptyList(),
@@ -164,6 +165,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionNotificationTest 
                 userId = 1L,
                 session = testSession,
                 llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key"),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Fits threshold",
                 parentMessageId = null,
                 fileReferences = emptyList(),

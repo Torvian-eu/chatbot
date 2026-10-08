@@ -389,12 +389,39 @@ class MePreferencesRoutesTest {
         }
 
     @Test
-    fun `PUT conversation_compaction without model and settings stores the inactive preference`() = app {
-        // A preference whose model/settings rows no longer exist is stored as-is (no runtime
-        // resolution), so the client can persist null ids and re-configure a valid pair later.
+    fun `PUT conversation_compaction without model and settings is rejected as an invalid argument`() = app {
+        // An enabled preference must name the compactor it would run, so the route refuses to store a
+        // state that would make every turn of a compaction-enabled session fail. `enabled` defaults to
+        // true here because the request omits it.
         val token = authHelper.createUserAndGetToken(user1)
 
         val value = """{"modelId":null,"settingsId":null,"instruction":"Summarize"}"""
+        val response =
+            client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
+                authenticate(token)
+                contentType(ContentType.Application.Json)
+                setBody(
+                    UserPreferenceDTO(
+                        key = PreferenceKeys.CONVERSATION_COMPACTION,
+                        value = value,
+                        scope = PreferenceScope.GLOBAL
+                    )
+                )
+            }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
+        assertNull(storedCompactionPreference(user1.id))
+    }
+
+    @Test
+    fun `PUT conversation_compaction with compaction disabled stores the preference without references`() = app {
+        // Disabling compaction is the legal way to keep a preference whose model/settings rows are gone:
+        // a disabled preference never resolves a compactor, so the value is stored as-is.
+        val token = authHelper.createUserAndGetToken(user1)
+
+        val value = """{"modelId":null,"settingsId":null,"instruction":"Summarize","enabled":false}"""
         val response =
             client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
                 authenticate(token)
@@ -414,7 +441,8 @@ class MePreferencesRoutesTest {
             ConversationCompactionPreference(
                 modelId = null,
                 settingsId = null,
-                instruction = "Summarize"
+                instruction = "Summarize",
+                enabled = false
             )
         )
         assertEquals(canonical, storedCompactionPreference(user1.id))

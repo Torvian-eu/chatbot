@@ -57,6 +57,8 @@ import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompac
 import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationCompactionConfigurationResolver
 import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationCompactionConfigurationService
 import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationCompactionService
+import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultEffectiveCompactionConfigResolver
+import eu.torvian.chatbot.server.service.core.chat.compaction.EffectiveCompactionConfigResolver
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.FileReferenceContentBuilder
@@ -152,6 +154,7 @@ fun serviceModule() = module {
             llmProviderService = get(),
             credentialManager = get(),
             agentRoleService = get(),
+            effectiveCompactionConfigResolver = get(),
             systemPromptComposer = get(),
             transactionScope = get()
         )
@@ -171,6 +174,13 @@ fun serviceModule() = module {
             credentialManager = get()
         )
     }
+    single<EffectiveCompactionConfigResolver> {
+        DefaultEffectiveCompactionConfigResolver(
+            modelPresetDao = get(),
+            userPreferenceDao = get(),
+            json = get()
+        )
+    }
     single<ConversationCompactionConfigurationService> {
         DefaultConversationCompactionConfigurationService(
             json = get(),
@@ -182,12 +192,10 @@ fun serviceModule() = module {
     }
     single<ConversationCompactionService> {
         DefaultConversationCompactionService(
-            userPreferenceDao = get(),
             chunkDao = get(),
             configurationResolver = get(),
             tokenCounter = get(),
-            llmApiClient = get(),
-            json = get()
+            llmApiClient = get()
         )
     }
 

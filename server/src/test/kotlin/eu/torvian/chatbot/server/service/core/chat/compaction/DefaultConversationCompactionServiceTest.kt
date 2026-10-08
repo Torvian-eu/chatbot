@@ -3,16 +3,13 @@ package eu.torvian.chatbot.server.service.core.chat.compaction
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
-import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
 import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.ConversationCompactionChunkDao
-import eu.torvian.chatbot.server.data.dao.UserPreferenceDao
 import eu.torvian.chatbot.server.data.dao.error.ConversationCompactionChunkDaoError
-import eu.torvian.chatbot.server.data.entities.UserPreferenceEntity
 import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.chat.context.ConversationContext
 import eu.torvian.chatbot.server.service.core.chat.context.ConversationContextUnit
@@ -25,9 +22,9 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
@@ -40,21 +37,17 @@ import kotlin.time.Instant
 /**
  * Verifies the rolling-window pre-primary-call compaction policy end to end with mocked collaborators.
  *
- * Covers window initialization (eligible-chunk seeding, stale-chunk fallback, raw-fit originals),
- * the disabled-preference paths (absent row and `enabled = false`) that always send the original
- * thread, the content-free identity ledger and its chunk-coverage equality, one-shot compaction to a
- * single summary, hybrid reuse without an auxiliary call, `InsufficientReduction` (summary alone and
- * empty window), rolling across preflights, the verification invariant, tool-free auxiliary calls that
- * retain reasoning and append the instruction as the final user message, labels, and
- * timeout/provider/output/persistence failures that must prevent any primary request.
+ * The effective configuration is supplied to `beginTurn` directly, as turn preparation resolves it;
+ * its own resolution matrix is covered by [DefaultEffectiveCompactionConfigResolverTest]. Cases here
+ * cover window initialization (eligible-chunk seeding, stale-chunk fallback, raw-fit originals), the
+ * disabled configuration that always sends the original thread, the content-free identity ledger and
+ * its chunk-coverage equality, one-shot compaction to a single summary, hybrid reuse without an
+ * auxiliary call, `InsufficientReduction` (summary alone and empty window), rolling across preflights,
+ * the verification invariant, tool-free auxiliary calls that retain reasoning and append the
+ * instruction as the final user message, labels, and timeout/provider/output/persistence failures that
+ * must prevent any primary request.
  */
 class DefaultConversationCompactionServiceTest {
-
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        encodeDefaults = true
-    }
 
     private val t0 = Instant.fromEpochMilliseconds(1_000L)
     private val t1 = Instant.fromEpochMilliseconds(1_001L)
@@ -69,14 +62,22 @@ class DefaultConversationCompactionServiceTest {
     private val settings = ChatModelSettings(id = 1L, modelId = 1L, name = "Default", stream = false)
     private val primaryConfig = LLMConfig(provider, model, settings, apiKey = null)
 
-    private val preference = ConversationCompactionPreference(
+    private val effectiveSettings = EffectiveCompactionSettings(
         modelId = 1L,
         settingsId = 1L,
         instruction = "Summarize faithfully",
+        systemMessage = null,
+        summaryLabel = ConversationCompactionPreference.DEFAULT_COMPACTED_SUMMARY_LABEL,
         thresholdTokens = 1_000L
     )
 
-    private val userPreferenceDao = mockk<UserPreferenceDao>()
+    /**
+     * The effective compaction configuration of a session whose preset keeps its defaults: compaction
+     * is enabled with the settings' own threshold. Used by every case that is not about the resolved
+     * threshold itself.
+     */
+    private val defaultResolvedCompaction = ResolvedCompactionConfig.Enabled(settings = effectiveSettings)
+
     private val chunkDao = mockk<ConversationCompactionChunkDao>()
     private val configurationResolver = mockk<ConversationCompactionConfigurationResolver>()
     private val tokenCounter = mockk<ChatInputTokenCounter>()
@@ -84,12 +85,10 @@ class DefaultConversationCompactionServiceTest {
 
     /** All collaborators are mocked, so no DB is touched. */
     private fun service(auxiliaryTimeout: Duration = 180.seconds) = DefaultConversationCompactionService(
-        userPreferenceDao = userPreferenceDao,
         chunkDao = chunkDao,
         configurationResolver = configurationResolver,
         tokenCounter = tokenCounter,
         llmApiClient = llmApiClient,
-        json = json,
         auxiliaryTimeout = auxiliaryTimeout
     )
 
@@ -113,7 +112,7 @@ class DefaultConversationCompactionServiceTest {
     private fun stubCounter(
         unitTokens: Long = 5_000L,
         summaryTokens: Long = 50L,
-        summaryLabel: String = preference.summaryLabel
+        summaryLabel: String = effectiveSettings.summaryLabel
     ) {
         coEvery { tokenCounter.countPrimaryInput(any(), any(), any(), any(), any(), any()) } answers {
             val messages = arg<List<RawChatMessage>>(4)
@@ -126,17 +125,26 @@ class DefaultConversationCompactionServiceTest {
         every { tokenCounter.version } returns "test-fixed-v1"
     }
 
-    private fun stubGlobalPreference(row: UserPreferenceEntity?) {
-        coEvery { userPreferenceDao.getGlobalPreference(any(), PreferenceKeys.CONVERSATION_COMPACTION) } returns row
-        // Enabled/structurally-invalid states load retained chunks once at turn start.
+    /**
+     * Stubs the retained-chunk read of an enabled turn to an empty list; disabled turns never read
+     * chunks, so a stub set here goes unused for them.
+     */
+    private fun stubRetainedChunks() {
         coEvery { chunkDao.getChunksBySessionId(any()) } returns emptyList()
     }
 
+    /**
+     * Stubs a successful auxiliary resolution for the given effective settings.
+     *
+     * @param completion Completion the auxiliary client returns.
+     * @param compactionSettings Settings the service must resolve; defaults to the turn's effective
+     *            settings.
+     */
     private fun stubAuxiliarySuccess(
         completion: LLMCompletionResult = completionWith("A concise summary."),
-        pref: ConversationCompactionPreference = preference
+        compactionSettings: EffectiveCompactionSettings = effectiveSettings
     ) {
-        coEvery { configurationResolver.resolveAuxiliaryConfig(1L, pref) } returns primaryConfig.right()
+        coEvery { configurationResolver.resolveAuxiliaryConfig(1L, compactionSettings) } returns primaryConfig.right()
         coEvery {
             llmApiClient.completeChat(
                 any(),
@@ -150,23 +158,11 @@ class DefaultConversationCompactionServiceTest {
         } returns completion.right()
     }
 
-    private fun preferenceRow(pref: ConversationCompactionPreference = preference): UserPreferenceEntity =
-        UserPreferenceEntity(
-            id = 1L,
-            userId = 1L,
-            deviceId = null,
-            scopeId = "GLOBAL",
-            prefKey = PreferenceKeys.CONVERSATION_COMPACTION,
-            prefValue = json.encodeToString(ConversationCompactionPreference.serializer(), pref),
-            updatedAt = t0
-        )
-
     @Test
     fun `disabled state sends the original flattened thread`() = runTest {
-        stubGlobalPreference(null)
         val context = contextOf(1L to t0, 2L to t1)
 
-        val state = service().beginTurn(1L, 7L, context.units).getOrNull()!!
+        val state = service().beginTurn(1L, 7L, context.units, ResolvedCompactionConfig.Disabled)
         val preflight = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 2L)
             .getOrNull()
         assertNotNull(preflight)
@@ -176,11 +172,10 @@ class DefaultConversationCompactionServiceTest {
     }
 
     @Test
-    fun `disabled preference flag returns the disabled state and never compacts`() = runTest {
-        stubGlobalPreference(preferenceRow(preference.copy(enabled = false)))
+    fun `a disabled configuration returns the disabled state and never compacts`() = runTest {
         val context = contextOf(1L to t0, 2L to t1)
 
-        val state = service().beginTurn(1L, 7L, context.units).getOrNull()!!
+        val state = service().beginTurn(1L, 7L, context.units, ResolvedCompactionConfig.Disabled)
         assertIs<CompactionTurnState.Disabled>(state)
         // A disabled turn mirrors the absent-row path: retained chunks are never loaded because
         // nothing could seed a window, and no counting ever runs (threshold is irrelevant).
@@ -195,36 +190,40 @@ class DefaultConversationCompactionServiceTest {
     }
 
     @Test
-    fun `null model and settings references raise invalid configuration only when compaction is required`() =
+    fun `an auxiliary configuration that no longer resolves fails only when compaction is required`() =
         runTest {
-            // The referenced model/settings rows were deleted after the preference was written, so the
-            // client stored null ids. The preference is enabled: no error while the thread fits, but
+            // The referenced model/settings rows were deleted after the turn started, so the stored ids
+            // no longer resolve. The configuration stays enabled: no error while the thread fits, but
             // once the window exceeds the threshold the resolver reports an invalid configuration.
-            val nullReference = preference.copy(modelId = null, settingsId = null)
-            stubGlobalPreference(preferenceRow(nullReference))
+            val deletedRows = effectiveSettings.copy(modelId = 99L, settingsId = 98L)
+            val deletedRowsConfig = ResolvedCompactionConfig.Enabled(settings = deletedRows)
+            stubRetainedChunks()
             stubCounter() // 2-unit thread = 10,000 tokens > 1,000 threshold -> compaction required
-            coEvery { configurationResolver.resolveAuxiliaryConfig(1L, nullReference) } returns
-                ConversationCompactionError.InvalidConfiguration("Compaction modelId is not set").left()
+            coEvery { configurationResolver.resolveAuxiliaryConfig(1L, deletedRows) } returns
+                ConversationCompactionError.InvalidConfiguration("Compaction model 99 not found").left()
 
-            val state = service().beginTurn(1L, 7L, contextOf(1L to t0, 2L to t1).units).getOrNull()!!
+            val state = service().beginTurn(1L, 7L, contextOf(1L to t0, 2L to t1).units, deletedRowsConfig)
             assertIs<CompactionTurnState.Enabled>(state)
 
             val error = assertIs<ConversationCompactionError.InvalidConfiguration>(
                 service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 2L).leftOrNull()
             )
-            assertEquals("Compaction modelId is not set", error.reason)
+            assertEquals("Compaction model 99 not found", error.reason)
             // The resolver failure aborts before any auxiliary call or persistence.
             coVerify(exactly = 0) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any()) }
             coVerify(exactly = 0) { chunkDao.insertVerifiedChunk(any(), any()) }
         }
 
     @Test
-    fun `null model and settings references pass through while the thread fits`() = runTest {
-        val nullReference = preference.copy(modelId = null, settingsId = null)
-        stubGlobalPreference(preferenceRow(nullReference))
+    fun `an auxiliary configuration that no longer resolves passes through while the thread fits`() = runTest {
+        val deletedRows = effectiveSettings.copy(modelId = 99L, settingsId = 98L)
+        stubRetainedChunks()
         stubCounter(unitTokens = 100L) // 2-unit thread = 200 tokens <= 1,000 threshold -> fits
 
-        val state = service().beginTurn(1L, 7L, contextOf(1L to t0, 2L to t1).units).getOrNull()!!
+        val state = service().beginTurn(
+            1L, 7L, contextOf(1L to t0, 2L to t1).units,
+            ResolvedCompactionConfig.Enabled(settings = deletedRows)
+        )
         assertIs<CompactionTurnState.Enabled>(state)
         val preflight =
             service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 2L).getOrNull()
@@ -236,30 +235,12 @@ class DefaultConversationCompactionServiceTest {
     }
 
     @Test
-    fun `stored preference without the enabled field still enables compaction`() = runTest {
-        // Rows written before the enabled flag existed decode with the default `enabled = true`, so
-        // nothing silently disables compaction for existing configurations (backward compatibility).
-        stubGlobalPreference(
-            UserPreferenceEntity(
-                id = 1L, userId = 1L, deviceId = null, scopeId = "GLOBAL",
-                prefKey = PreferenceKeys.CONVERSATION_COMPACTION,
-                prefValue = """{"modelId":1,"settingsId":1,"instruction":"Summarize faithfully","thresholdTokens":1000}""",
-                updatedAt = t0
-            )
-        )
-
-        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units).getOrNull()!!
-        assertIs<CompactionTurnState.Enabled>(state)
-        assertEquals(preference.copy(enabled = true), state.preference)
-    }
-
-    @Test
     fun `full raw input that fits sends originals and ignores retained chunks`() = runTest {
-        stubGlobalPreference(preferenceRow())
+        stubRetainedChunks()
         stubCounter(unitTokens = 100L) // below threshold
         val context = contextOf(1L to t0, 2L to t1)
 
-        val state = service().beginTurn(1L, 7L, context.units).getOrNull()!!
+        val state = service().beginTurn(1L, 7L, context.units, defaultResolvedCompaction)
         val preflight = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 2L)
             .getOrNull()
         assertNotNull(preflight)
@@ -272,14 +253,14 @@ class DefaultConversationCompactionServiceTest {
     @Test
     fun `oversized window compacts one-shot, persists a ledger-backed chunk, and leaves the summary alone`() =
         runTest {
-            stubGlobalPreference(preferenceRow())
+            stubRetainedChunks()
             stubCounter()
             stubAuxiliarySuccess()
             val candidates = mutableListOf<ConversationCompactionChunkCandidate>()
             coEvery { chunkDao.insertVerifiedChunk(capture(candidates), 2L) } returns persistedChunk(id = 55L).right()
 
             val context = contextOf(1L to t0, 2L to t1)
-            val state = service().beginTurn(1L, 7L, context.units).getOrNull()!!
+            val state = service().beginTurn(1L, 7L, context.units, defaultResolvedCompaction)
             val preflight = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 2L)
                 .getOrNull()
             assertNotNull(preflight)
@@ -287,8 +268,8 @@ class DefaultConversationCompactionServiceTest {
             // Window after compaction is the summary message alone.
             assertEquals(1, preflight.primaryMessages.size)
             val summary = preflight.primaryMessages.single() as RawChatMessage.User
-            assertTrue(summary.content.startsWith(preference.summaryLabel))
-            assertEquals("A concise summary.", summary.content.removePrefix(preference.summaryLabel))
+            assertTrue(summary.content.startsWith(effectiveSettings.summaryLabel))
+            assertEquals("A concise summary.", summary.content.removePrefix(effectiveSettings.summaryLabel))
             assertEquals(55L, preflight.persistedChunkIfAny?.id)
 
             // The service updated its own state: the window is the summary only, the ledger holds the
@@ -315,30 +296,33 @@ class DefaultConversationCompactionServiceTest {
         }
 
     @Test
-    fun `the preference summary label prefixes the generated summary`() = runTest {
-        val customPreference = preference.copy(summaryLabel = "Custom summary:\n")
-        stubGlobalPreference(preferenceRow(customPreference))
-        stubCounter(summaryLabel = customPreference.summaryLabel)
-        stubAuxiliarySuccess(pref = customPreference)
+    fun `the settings summary label prefixes the generated summary`() = runTest {
+        val customSettings = effectiveSettings.copy(summaryLabel = "Custom summary:\n")
+        stubRetainedChunks()
+        stubCounter(summaryLabel = customSettings.summaryLabel)
+        stubAuxiliarySuccess(compactionSettings = customSettings)
         coEvery { chunkDao.insertVerifiedChunk(any(), any()) } returns persistedChunk(id = 56L).right()
 
         val context = contextOf(1L to t0, 2L to t1)
-        val state = service().beginTurn(1L, 7L, context.units).getOrNull()!!
+        val state = service().beginTurn(
+            1L, 7L, context.units,
+            ResolvedCompactionConfig.Enabled(settings = customSettings)
+        )
         val preflight = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 2L)
             .getOrNull()
         assertNotNull(preflight)
 
-        // The summary message is labeled with the preference's own summaryLabel, not a hardcoded label.
+        // The summary message is labeled with the settings' own summaryLabel, not a hardcoded label.
         val summary = preflight.primaryMessages.single() as RawChatMessage.User
-        assertTrue(summary.content.startsWith(customPreference.summaryLabel))
-        assertEquals("A concise summary.", summary.content.removePrefix(customPreference.summaryLabel))
+        assertTrue(summary.content.startsWith(customSettings.summaryLabel))
+        assertEquals("A concise summary.", summary.content.removePrefix(customSettings.summaryLabel))
         assertNotNull(preflight.persistedChunkIfAny)
     }
 
     @Test
     fun `window init with an eligible chunk seeds the summary and ledger and trims units to the delta`() =
         runTest {
-            stubGlobalPreference(preferenceRow())
+            stubRetainedChunks()
             // raw thread (3 units) exceeds the 1000 threshold; [summary] + delta fits.
             stubCounter(unitTokens = 500L, summaryTokens = 50L)
             val priorChunk = chunkOf(
@@ -349,7 +333,7 @@ class DefaultConversationCompactionServiceTest {
             coEvery { chunkDao.getChunksBySessionId(7L) } returns listOf(priorChunk)
 
             val context = contextOf(1L to t0, 2L to t1, 3L to t2)
-            val state = service().beginTurn(1L, 7L, context.units).getOrNull()!!
+            val state = service().beginTurn(1L, 7L, context.units, defaultResolvedCompaction)
             val preflight = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 3L)
                 .getOrNull()
             assertNotNull(preflight)
@@ -365,7 +349,7 @@ class DefaultConversationCompactionServiceTest {
             // Hybrid reuse: [summary] + additional messages sent as-is, no auxiliary call, no persistence.
             assertEquals(2, preflight.primaryMessages.size)
             assertTrue(
-                (preflight.primaryMessages[0] as RawChatMessage.User).content.startsWith(preference.summaryLabel)
+                (preflight.primaryMessages[0] as RawChatMessage.User).content.startsWith(effectiveSettings.summaryLabel)
             )
             assertEquals("m3", (preflight.primaryMessages[1] as RawChatMessage.User).content)
             assertNull(preflight.persistedChunkIfAny)
@@ -376,7 +360,7 @@ class DefaultConversationCompactionServiceTest {
 
     @Test
     fun `stale chunk falls back to the full thread with an empty ledger`() = runTest {
-        stubGlobalPreference(preferenceRow())
+        stubRetainedChunks()
         stubCounter(unitTokens = 500L, summaryTokens = 50L)
         // The chunk's recorded timestamp for message 2 (1001) no longer matches the edited message
         // (now 1002), so it is ineligible and the window stays the full thread with an empty ledger.
@@ -399,12 +383,12 @@ class DefaultConversationCompactionServiceTest {
                 any()
             )
         } returns completionWith("Rolled up.").right()
-        coEvery { configurationResolver.resolveAuxiliaryConfig(1L, preference) } returns primaryConfig.right()
+        coEvery { configurationResolver.resolveAuxiliaryConfig(1L, effectiveSettings) } returns primaryConfig.right()
         val candidates = mutableListOf<ConversationCompactionChunkCandidate>()
         coEvery { chunkDao.insertVerifiedChunk(capture(candidates), any()) } returns persistedChunk(id = 60L).right()
 
         val context = contextOf(1L to t0, 2L to t2, 3L to t3)
-        val state = service().beginTurn(1L, 7L, context.units).getOrNull()!!
+        val state = service().beginTurn(1L, 7L, context.units, defaultResolvedCompaction)
         service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 3L)
             .getOrNull()
 
@@ -419,13 +403,13 @@ class DefaultConversationCompactionServiceTest {
     @Test
     fun `hybrid reuse after a compaction performs no auxiliary call no config resolution and no persistence`() =
         runTest {
-            stubGlobalPreference(preferenceRow())
+            stubRetainedChunks()
             stubCounter(unitTokens = 500L, summaryTokens = 50L)
             stubAuxiliarySuccess()
             coEvery { chunkDao.insertVerifiedChunk(any(), 3L) } returns persistedChunk(id = 55L).right()
 
             val context = contextOf(1L to t0, 2L to t1, 3L to t2)
-            val state = service().beginTurn(1L, 7L, context.units).getOrNull()!!
+            val state = service().beginTurn(1L, 7L, context.units, defaultResolvedCompaction)
             val firstPreflight =
                 service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 3L).getOrNull()
             assertNotNull(firstPreflight)
@@ -443,21 +427,21 @@ class DefaultConversationCompactionServiceTest {
             assertNotNull(secondPreflight)
             assertEquals(2, secondPreflight.primaryMessages.size)
             assertTrue(
-                (secondPreflight.primaryMessages[0] as RawChatMessage.User).content.startsWith(preference.summaryLabel)
+                (secondPreflight.primaryMessages[0] as RawChatMessage.User).content.startsWith(effectiveSettings.summaryLabel)
             )
             assertEquals("m4", (secondPreflight.primaryMessages[1] as RawChatMessage.User).content)
             assertNull(secondPreflight.persistedChunkIfAny)
 
             // One auxiliary call and one persistence total (first preflight only).
             coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any()) }
-            coVerify(exactly = 1) { configurationResolver.resolveAuxiliaryConfig(1L, preference) }
+            coVerify(exactly = 1) { configurationResolver.resolveAuxiliaryConfig(1L, effectiveSettings) }
             coVerify(exactly = 1) { chunkDao.insertVerifiedChunk(any(), any()) }
         }
 
     @Test
     fun `rolling across preflights feeds the prior summary plus content since into the second compaction`() =
         runTest {
-            stubGlobalPreference(preferenceRow())
+            stubRetainedChunks()
             // 3-unit raw thread exceeds the 1000 threshold; [summary] alone fits; [summary] + a new unit
             // exceeds it again so the second preflight compacts once more.
             stubCounter(unitTokens = 600L, summaryTokens = 900L)
@@ -473,7 +457,7 @@ class DefaultConversationCompactionServiceTest {
                 llmApiClient.completeChat(capture(capturedInput), any(), any(), any(), any(), any(), any())
             } returns completionWith("Rolled up.").right()
 
-            val state = service().beginTurn(1L, 7L, contextOf(1L to t0, 2L to t1, 3L to t2).units).getOrNull()!!
+            val state = service().beginTurn(1L, 7L, contextOf(1L to t0, 2L to t1, 3L to t2).units, defaultResolvedCompaction)
             service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 3L).getOrNull()
             state.appendUnit(SourceMessageSnapshot(4L, t3), listOf(RawChatMessage.User("m4")))
             service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 4L).getOrNull()
@@ -483,7 +467,7 @@ class DefaultConversationCompactionServiceTest {
             assertEquals(2, capturedInput.size)
             val secondInput = capturedInput[1]
             assertEquals(3, secondInput.size)
-            assertTrue((secondInput[0] as RawChatMessage.User).content.startsWith(preference.summaryLabel))
+            assertTrue((secondInput[0] as RawChatMessage.User).content.startsWith(effectiveSettings.summaryLabel))
             assertEquals("m4", (secondInput[1] as RawChatMessage.User).content)
             assertEquals("Summarize faithfully", (secondInput[2] as RawChatMessage.User).content)
 
@@ -502,11 +486,11 @@ class DefaultConversationCompactionServiceTest {
     @Test
     fun `summary alone over threshold raises insufficient reduction with no chunk and no repeat loop`() =
         runTest {
-            stubGlobalPreference(preferenceRow())
+            stubRetainedChunks()
             stubCounter(unitTokens = 5_000L, summaryTokens = 2_000L) // post-count stays above threshold
             stubAuxiliarySuccess()
 
-            val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units).getOrNull()!!
+            val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units, defaultResolvedCompaction)
             val result = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 1L)
 
             val error = assertIs<ConversationCompactionError.InsufficientReduction>(result.leftOrNull())
@@ -526,7 +510,7 @@ class DefaultConversationCompactionServiceTest {
     @Test
     fun `empty window over threshold raises insufficient reduction without calling the auxiliary model`() =
         runTest {
-            stubGlobalPreference(preferenceRow())
+            stubRetainedChunks()
             // The chunk covers the entire window, so seeding leaves no units; the summary alone (900)
             // still exceeds the 800 threshold, so there is nothing left to compact.
             stubCounter(unitTokens = 500L, summaryTokens = 900L)
@@ -537,12 +521,11 @@ class DefaultConversationCompactionServiceTest {
             )
             coEvery { chunkDao.getChunksBySessionId(7L) } returns listOf(coveringChunk)
 
-            val preference = preference.copy(thresholdTokens = 800L)
-            coEvery {
-                userPreferenceDao.getGlobalPreference(any(), PreferenceKeys.CONVERSATION_COMPACTION)
-            } returns preferenceRow(preference)
-
-            val state = service().beginTurn(1L, 7L, contextOf(1L to t0, 2L to t1).units).getOrNull()!!
+            // The resolved threshold is 800 while the summary alone counts 900.
+            val state = service().beginTurn(
+                1L, 7L, contextOf(1L to t0, 2L to t1).units,
+                ResolvedCompactionConfig.Enabled(settings = effectiveSettings.copy(thresholdTokens = 800L))
+            )
             val result = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 2L)
 
             val error = assertIs<ConversationCompactionError.InsufficientReduction>(result.leftOrNull())
@@ -557,11 +540,11 @@ class DefaultConversationCompactionServiceTest {
     @Test
     fun `auxiliary call is tool-free keeps reasoning and appends the instruction as the final user message`() =
         runTest {
-            stubGlobalPreference(preferenceRow())
+            stubRetainedChunks()
             stubCounter()
             // The resolved auxiliary config has an empty system message; the instruction comes from
-            // the preference, not from the config.
-            coEvery { configurationResolver.resolveAuxiliaryConfig(1L, preference) } returns primaryConfig.right()
+            // the settings, not from the config.
+            coEvery { configurationResolver.resolveAuxiliaryConfig(1L, effectiveSettings) } returns primaryConfig.right()
 
             val capturedMessages = mutableListOf<List<RawChatMessage>>()
             val capturedTools = mutableListOf<List<eu.torvian.chatbot.common.models.tool.ToolDefinition>?>()
@@ -599,7 +582,7 @@ class DefaultConversationCompactionServiceTest {
                     )
                 )
             )
-            val state = service().beginTurn(1L, 7L, context.units).getOrNull()!!
+            val state = service().beginTurn(1L, 7L, context.units, defaultResolvedCompaction)
             service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 2L).getOrNull()
 
             val auxiliaryMessages = capturedMessages.single()
@@ -617,11 +600,11 @@ class DefaultConversationCompactionServiceTest {
 
     @Test
     fun `blank output is rejected as invalid and no chunk is persisted`() = runTest {
-        stubGlobalPreference(preferenceRow())
+        stubRetainedChunks()
         stubCounter()
         stubAuxiliarySuccess(completionWith("   "))
 
-        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units).getOrNull()!!
+        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units, defaultResolvedCompaction)
         val result = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 1L)
         assertIs<ConversationCompactionError.InvalidOutput>(result.leftOrNull())
         coVerify(exactly = 0) { chunkDao.insertVerifiedChunk(any(), any()) }
@@ -629,7 +612,7 @@ class DefaultConversationCompactionServiceTest {
 
     @Test
     fun `tool-calling auxiliary output is rejected`() = runTest {
-        stubGlobalPreference(preferenceRow())
+        stubRetainedChunks()
         stubCounter()
         val toolCall =
             LLMCompletionResult.CompletionChoice.ToolCallRequest(name = "search", arguments = "{}", toolCallId = "c1")
@@ -648,7 +631,7 @@ class DefaultConversationCompactionServiceTest {
         )
         stubAuxiliarySuccess(completion)
 
-        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units).getOrNull()!!
+        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units, defaultResolvedCompaction)
         val result = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 1L)
         assertIs<ConversationCompactionError.InvalidOutput>(result.leftOrNull())
         coVerify(exactly = 0) { chunkDao.insertVerifiedChunk(any(), any()) }
@@ -656,13 +639,13 @@ class DefaultConversationCompactionServiceTest {
 
     @Test
     fun `provider failure becomes a generation failure and blocks the primary request`() = runTest {
-        stubGlobalPreference(preferenceRow())
+        stubRetainedChunks()
         stubCounter()
-        coEvery { configurationResolver.resolveAuxiliaryConfig(1L, preference) } returns primaryConfig.right()
+        coEvery { configurationResolver.resolveAuxiliaryConfig(1L, effectiveSettings) } returns primaryConfig.right()
         coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any()) } returns
                 LLMCompletionError.ApiError(500, "upstream boom", null).left()
 
-        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units).getOrNull()!!
+        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units, defaultResolvedCompaction)
         val result = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 1L)
         assertIs<ConversationCompactionError.GenerationFailed>(result.leftOrNull())
         coVerify(exactly = 0) { chunkDao.insertVerifiedChunk(any(), any()) }
@@ -670,7 +653,7 @@ class DefaultConversationCompactionServiceTest {
 
     @Test
     fun `a provider-declared ending fails the summary instead of becoming a chunk`() = runTest {
-        stubGlobalPreference(preferenceRow())
+        stubRetainedChunks()
         stubCounter()
         // The provider answered with text, but declared that the generation did not complete: that text is a
         // truncated answer and must never be persisted as the summary of the messages it would cover.
@@ -680,7 +663,7 @@ class DefaultConversationCompactionServiceTest {
         )
         stubAuxiliarySuccess(completionWith("A cut-off summary.").copy(providerFailure = declaredEnding))
 
-        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units).getOrNull()!!
+        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units, defaultResolvedCompaction)
         val result = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 1L)
         assertIs<ConversationCompactionError.GenerationFailed>(result.leftOrNull())
         coVerify(exactly = 0) { chunkDao.insertVerifiedChunk(any(), any()) }
@@ -688,15 +671,15 @@ class DefaultConversationCompactionServiceTest {
 
     @Test
     fun `auxiliary timeout becomes a timed-out failure`() = runTest {
-        stubGlobalPreference(preferenceRow())
+        stubRetainedChunks()
         stubCounter()
-        coEvery { configurationResolver.resolveAuxiliaryConfig(1L, preference) } returns primaryConfig.right()
+        coEvery { configurationResolver.resolveAuxiliaryConfig(1L, effectiveSettings) } returns primaryConfig.right()
         coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
             delay(5_000.milliseconds)
             completionWith("late").right()
         }
 
-        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units).getOrNull()!!
+        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units, defaultResolvedCompaction)
         val result = service(auxiliaryTimeout = 20.milliseconds).preparePrimaryContext(
             state = state,
             primaryConfig = primaryConfig,
@@ -707,48 +690,83 @@ class DefaultConversationCompactionServiceTest {
 
     @Test
     fun `persistence failure blocks the primary request`() = runTest {
-        stubGlobalPreference(preferenceRow())
+        stubRetainedChunks()
         stubCounter()
         stubAuxiliarySuccess()
         coEvery { chunkDao.insertVerifiedChunk(any(), any()) } returns
                 ConversationCompactionChunkDaoError.PersistenceFailed("disk full", null).left()
 
-        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units).getOrNull()!!
+        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units, defaultResolvedCompaction)
         val result = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 1L)
         assertIs<ConversationCompactionError.PersistenceFailed>(result.leftOrNull())
     }
 
     @Test
     fun `source race during verified insert surfaces as source changed`() = runTest {
-        stubGlobalPreference(preferenceRow())
+        stubRetainedChunks()
         stubCounter()
         stubAuxiliarySuccess()
         coEvery { chunkDao.insertVerifiedChunk(any(), any()) } returns
                 ConversationCompactionChunkDaoError.SourceVerificationFailed("leaf changed").left()
 
-        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units).getOrNull()!!
+        val state = service().beginTurn(1L, 7L, contextOf(1L to t0).units, defaultResolvedCompaction)
         val result = service().preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 1L)
         assertIs<ConversationCompactionError.SourceChanged>(result.leftOrNull())
     }
 
     @Test
-    fun `structurally invalid preference fails at begin turn with an invalid-configuration error`() = runTest {
-        // The row is malformed (decode fails because required fields are missing); beginTurn reports
-        // the configuration error immediately as the Either left instead of returning a partially-usable
-        // state, so no counting, no retained-chunk load, and no compaction can ever run for this turn.
-        stubGlobalPreference(
-            UserPreferenceEntity(
-                id = 1L, userId = 1L, deviceId = null, scopeId = "GLOBAL",
-                prefKey = PreferenceKeys.CONVERSATION_COMPACTION,
-                prefValue = """{"thresholdTokens":1000}""", updatedAt = t0
+    fun `a resolved threshold above the thread keeps the originals`() = runTest {
+        // The settings' own threshold is 1_000 while the thread counts 10_000; the resolved threshold of
+        // 12_000 is what keeps the turn uncompacted.
+        stubRetainedChunks()
+        stubCounter(unitTokens = 5_000L, summaryTokens = 50L)
+        val context = contextOf(1L to t0, 2L to t1)
+        val service = service()
+        val state = assertIs<CompactionTurnState.Enabled>(
+            service.beginTurn(
+                1L, 7L, context.units,
+                ResolvedCompactionConfig.Enabled(settings = effectiveSettings.copy(thresholdTokens = 12_000L))
             )
         )
 
-        val result = service().beginTurn(1L, 7L, contextOf(1L to t0).units)
-        assertIs<ConversationCompactionError.InvalidConfiguration>(result.leftOrNull())
-        coVerify(exactly = 0) { tokenCounter.countPrimaryInput(any(), any(), any(), any(), any(), any()) }
-        coVerify(exactly = 0) { chunkDao.getChunksBySessionId(any()) }
-        coVerify(exactly = 0) { chunkDao.insertVerifiedChunk(any(), any()) }
+        val preflight = assertNotNull(
+            service.preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 2L).getOrNull()
+        )
+
+        assertEquals(12_000L, state.settings.thresholdTokens)
+        assertEquals(context.flatten(), preflight.primaryMessages)
+        assertNull(preflight.persistedChunkIfAny)
+        coVerify(exactly = 0) { configurationResolver.resolveAuxiliaryConfig(any(), any()) }
+    }
+
+    @Test
+    fun `a resolved threshold below the thread compacts and is recorded on the chunk`() = runTest {
+        // The settings' own threshold is raised above the thread so only the resolved threshold can
+        // trigger compaction, and the chunk must record the threshold that was actually in effect.
+        val raisedSettings = effectiveSettings.copy(thresholdTokens = 100_000L)
+        stubRetainedChunks()
+        stubAuxiliarySuccess(compactionSettings = raisedSettings.copy(thresholdTokens = 12_000L))
+        stubCounter(unitTokens = 5_000L, summaryTokens = 50L)
+        val candidate = slot<ConversationCompactionChunkCandidate>()
+        coEvery { chunkDao.insertVerifiedChunk(capture(candidate), any()) } returns persistedChunk(5L).right()
+        val context = contextOf(1L to t0, 2L to t1, 3L to t2)
+        val service = service()
+        val state = assertIs<CompactionTurnState.Enabled>(
+            service.beginTurn(
+                1L, 7L, context.units,
+                ResolvedCompactionConfig.Enabled(settings = raisedSettings.copy(thresholdTokens = 12_000L))
+            )
+        )
+
+        val preflight = service.preparePrimaryContext(state, primaryConfig, expectedLeafMessageId = 3L).getOrNull()
+
+        assertNotNull(preflight)
+        assertEquals(12_000L, state.settings.thresholdTokens)
+        assertEquals(
+            12_000L,
+            candidate.captured.thresholdTokens,
+            "the persisted chunk records the preset override"
+        )
     }
 
     /**
