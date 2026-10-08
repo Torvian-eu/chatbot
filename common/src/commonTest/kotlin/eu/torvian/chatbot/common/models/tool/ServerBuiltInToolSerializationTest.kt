@@ -238,6 +238,17 @@ class ServerBuiltInToolSerializationTest {
                     "integer",
                     properties[ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY]!!.jsonObject["type"]!!.jsonPrimitive.content
                 )
+                // The two compaction parameters are boolean/integer on both write tools.
+                assertEquals(
+                    "boolean",
+                    properties[ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY]!!.jsonObject["type"]!!
+                        .jsonPrimitive.content
+                )
+                assertEquals(
+                    "integer",
+                    properties[ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY]!!.jsonObject["type"]!!
+                        .jsonPrimitive.content
+                )
             }
 
         // update_model_preset accepts every writable field and documents the 0 = clear sentinel.
@@ -249,15 +260,30 @@ class ServerBuiltInToolSerializationTest {
                 ServerBuiltInToolCatalog.DISPLAY_NAME_PROPERTY,
                 ServerBuiltInToolCatalog.DESCRIPTION_PROPERTY,
                 ServerBuiltInToolCatalog.MODEL_ID_PROPERTY,
-                ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY
+                ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY,
+                ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY,
+                ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY
             ),
             updateProperties.keys
+        )
+        assertEquals(
+            "boolean",
+            updateProperties[ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY]!!.jsonObject["type"]!!
+                .jsonPrimitive.content
+        )
+        assertEquals(
+            "integer",
+            updateProperties[ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY]!!.jsonObject["type"]!!
+                .jsonPrimitive.content
         )
         val updateDescription = requireNotNull(
             ServerBuiltInToolCatalog.specFor(ServerBuiltInToolCatalog.UPDATE_MODEL_PRESET_NAME)
         ).description
         assertTrue(updateDescription.contains("patch semantics"))
         assertTrue(updateDescription.contains("pass 0"))
+        // The threshold's own clear sentinel is documented for the LLM, because 0 is never a stored
+        // threshold.
+        assertTrue(updateDescription.contains("compaction_threshold_tokens of 0"))
     }
 
     /**

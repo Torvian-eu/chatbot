@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 /**
  * Request body for updating an existing user-owned model preset.
  *
- * A **full replacement** of all five writable fields (mirroring
+ * A **full replacement** of all seven writable fields (mirroring
  * [eu.torvian.chatbot.common.models.api.project.UpdateProjectRequest] and the agent-role update):
  * fields the caller does not want to change must be sent with their current values, and a `null`
  * reference **clears** it. `createdAt`/`updatedAt` are deliberately absent — the server owns the
@@ -22,6 +22,13 @@ import kotlinx.serialization.Serializable
  * @property modelSettingsId The new settings-profile reference, or `null` to clear it. The profile
  *            must be accessible to the requesting user and, when [modelId] is also present, must
  *            belong to that model.
+ * @property compactionEnabled The new compaction enablement flag for turns running on this preset.
+ *            Because the request is a full replacement, an omitted value resets it to its default
+ *            (`true`), so a caller that wants to keep the persisted value must send it.
+ * @property compactionThresholdTokens The new per-preset compaction threshold in input tokens, or
+ *            `null` to fall back to the user preference's threshold. A non-null value must be at
+ *            least `1`; as with [compactionEnabled], an omitted value resets it to its default
+ *            (`null`).
  */
 @Serializable
 data class UpdateModelPresetRequest(
@@ -29,5 +36,7 @@ data class UpdateModelPresetRequest(
     val displayName: String? = null,
     val description: String = "",
     val modelId: Long? = null,
-    val modelSettingsId: Long? = null
+    val modelSettingsId: Long? = null,
+    val compactionEnabled: Boolean = true,
+    val compactionThresholdTokens: Long? = null
 )
