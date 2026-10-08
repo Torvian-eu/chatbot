@@ -207,6 +207,7 @@ class DefaultConversationTurnOrchestratorStreamingToolLoopReasoningTest : Defaul
                 llmConfig = LLMConfig(
                     testProvider, reasoningModel, reasoningSettings, "api-key", listOf(toolDefinition)
                 ),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Stream look up",
                 parentMessageId = null,
                 fileReferences = emptyList(),
@@ -414,6 +415,7 @@ class DefaultConversationTurnOrchestratorStreamingToolLoopReasoningTest : Defaul
                 llmConfig = LLMConfig(
                     testProvider, reasoningModel, reasoningSettings, "api-key", listOf(toolDefinition)
                 ),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Stream enough",
                 parentMessageId = null,
                 fileReferences = emptyList(),

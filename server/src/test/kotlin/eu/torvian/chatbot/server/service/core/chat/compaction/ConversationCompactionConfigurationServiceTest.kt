@@ -25,10 +25,12 @@ import kotlin.test.assertTrue
 /**
  * Verifies the `conversation_compaction` preference write/delete path.
  *
- * Covers structural validation, the 100,000-token default for an omitted threshold, the explicit
- * write-time checks for the non-runtime concerns only (READ access to the referenced model/settings,
- * settings existence and model pairing — never provider, model activity, strategy, or credentials),
- * canonical JSON persistence (including the `enabled` flag), and GLOBAL-scope deletion.
+ * Covers structural validation (including the requirement that an enabled preference names both
+ * auxiliary references), the 100,000-token default for an omitted threshold, the explicit write-time
+ * checks for the non-runtime concerns only (READ access to the referenced model/settings, settings
+ * existence and model pairing — never provider, model activity, strategy, or credentials), canonical
+ * JSON persistence (including the `enabled` flag), the disabled preference that may omit its
+ * references, and GLOBAL-scope deletion.
  */
 class ConversationCompactionConfigurationServiceTest {
 
@@ -150,16 +152,44 @@ class ConversationCompactionConfigurationServiceTest {
     }
 
     @Test
-    fun `preference without model and settings references is stored without validation`() = runTest {
-        // A preference whose model/settings rows were deleted (null ids) cannot be validated; it is
-        // still stored as-is, skipping access/correctness checks, so the client can persist it and
-        // re-configure a valid pair later.
-        val incomplete = validPreference.copy(modelId = null, settingsId = null)
+    fun `an enabled preference without model and settings references is rejected and nothing is stored`() = runTest {
+        // An enabled preference must name the compactor it would run: null references are legitimate only
+        // while compaction is disabled, so the write path refuses to store a state that would reject
+        // every turn of a compaction-enabled session.
         coEvery { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) } returns Unit
 
+        val incomplete = validPreference.copy(modelId = null, settingsId = null)
         val result = service().updateConfiguration(1L, json.encodeToString(incomplete))
-        assertTrue(result.isRight(), "Expected successful update: $result")
 
+        assertIs<ConversationCompactionConfigurationError.InvalidValue>(result.leftOrNull())
+        coVerify(exactly = 0) { authorizationService.requireAccess(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { modelSettingsService.getSettingsById(any()) }
+        coVerify(exactly = 0) { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `an enabled preference that omits the enabled flag is rejected for null references too`() = runTest {
+        // `enabled` defaults to true when the request omits it, so such a payload is an enabled
+        // preference and has to carry both references.
+        val raw = """{"modelId":null,"settingsId":null,"instruction":"Summarize","thresholdTokens":50000}"""
+
+        val result = service().updateConfiguration(1L, raw)
+
+        assertIs<ConversationCompactionConfigurationError.InvalidValue>(result.leftOrNull())
+        coVerify(exactly = 0) { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `a disabled preference is stored without references and without non-runtime checks`() = runTest {
+        // `enabled = false` is the legal way to keep a preference whose model/settings rows are gone: a
+        // disabled preference never resolves a compactor, so the access/correctness checks are skipped
+        // and the value is stored as-is.
+        val disabledWithoutIds = validPreference.copy(modelId = null, settingsId = null, enabled = false)
+        coEvery { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) } returns Unit
+
+        val result = service().updateConfiguration(1L, json.encodeToString(disabledWithoutIds))
+
+        assertTrue(result.isRight(), "Expected successful update: $result")
         coVerify(exactly = 0) { authorizationService.requireAccess(any(), any(), any(), any()) }
         coVerify(exactly = 0) { modelSettingsService.getSettingsById(any()) }
         coVerify(exactly = 1) {
@@ -168,7 +198,7 @@ class ConversationCompactionConfigurationServiceTest {
                 internalDeviceId = null,
                 clientDeviceId = null,
                 key = PreferenceKeys.CONVERSATION_COMPACTION,
-                value = json.encodeToString(incomplete)
+                value = json.encodeToString(disabledWithoutIds)
             )
         }
     }

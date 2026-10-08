@@ -36,6 +36,7 @@ abstract class DefaultConversationTurnOrchestratorStreamingTestBase : DefaultCon
         userId = 1L,
         session = testSession,
         llmConfig = LLMConfig(testProvider, testModel, testSettings.copy(stream = true), "api-key", tools),
+        resolvedCompaction = defaultResolvedCompaction,
         content = content,
         parentMessageId = null,
         fileReferences = emptyList(),

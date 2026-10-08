@@ -13,6 +13,7 @@ import eu.torvian.chatbot.server.service.core.chat.compaction.CompactionTurnStat
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionChunk
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionService
 import eu.torvian.chatbot.server.service.core.chat.compaction.PrimaryContextPreflight
+import eu.torvian.chatbot.server.service.core.chat.compaction.ResolvedCompactionConfig
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.context.ConversationContextUnit
@@ -90,6 +91,12 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
     /** Agent role id assigned to the default [testSession]; tool execution requires a role. */
     protected val testRoleId = 7L
 
+    /**
+     * Resolved compaction configuration that disables compaction. It keeps the suites that are not about
+     * the resolved configuration itself on today's behaviour: the original thread is sent unchanged.
+     */
+    protected val defaultResolvedCompaction: ResolvedCompactionConfig = ResolvedCompactionConfig.Disabled
+
     /** Default session receiving the turns under test. */
     protected val testSession = ChatSession(
         id = 1L,
@@ -118,11 +125,11 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
         // Compaction is disabled by default: beginTurn yields a Disabled state carrying the initial
         // units the orchestrator handed over, and every preflight returns the original flattened
         // window with no persisted chunk.
-        coEvery { conversationCompactionService.beginTurn(any(), any(), any()) } coAnswers {
+        coEvery { conversationCompactionService.beginTurn(any(), any(), any(), any()) } coAnswers {
             CompactionTurnState.Disabled(
                 testSession.id,
                 thirdArg<List<ConversationContextUnit>>().toMutableList()
-            ).right()
+            )
         }
         coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } coAnswers {
             PrimaryContextPreflight(

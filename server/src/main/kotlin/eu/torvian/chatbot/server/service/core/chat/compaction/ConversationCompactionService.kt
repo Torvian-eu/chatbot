@@ -13,30 +13,40 @@ import eu.torvian.chatbot.server.service.core.chat.context.ConversationContextUn
  * exactly one compaction — the entire over-threshold window becomes the auxiliary input and the
  * window becomes the new summary message alone, with the identity ledger extended and one verified
  * prefix chunk persisted. Any failure aborts the turn before an oversized primary request is sent.
+ *
+ * The effective enablement and threshold are resolved by turn preparation, inside the turn's
+ * transaction, and arrive here as a [ResolvedCompactionConfig]: the preset can only restrain
+ * compaction (its `enabled` flag is ANDed) and override the threshold, while the auxiliary
+ * summarization settings stay preference-owned.
  */
 interface ConversationCompactionService {
 
     /**
-     * Loads the per-turn compaction state for a user/session.
+     * Builds the per-turn compaction state for a user/session.
+     *
+     * Performs no IO besides the retained-chunk load of an enabled turn and cannot fail: the
+     * configuration was already resolved and validated during turn preparation.
      *
      * @param userId Owner of the global preference.
      * @param sessionId Session whose retained chunks are loaded.
      * @param initialUnits The identity-bearing source units built once at turn start; they initialize
      *            the rolling window, after which the full uncompressed content is released and not
      *            retained across the loop.
-     * @return Either [ConversationCompactionError.InvalidConfiguration] when the global preference row
-     *         exists but is structurally invalid (reported immediately, never as a partially-usable
-     *         state), or the right turn state: [CompactionTurnState.Disabled] when no preference
-     *         exists or the preference has `enabled = false`; [CompactionTurnState.Enabled] when it
-     *         decoded successfully and is enabled. An enabled preference with a `null` model/settings
-     *         reference is still [CompactionTurnState.Enabled] — the `InvalidConfiguration` surfaces
-     *         from [preparePrimaryContext] only when compaction becomes necessary.
+     * @param resolvedCompaction The turn's complete effective configuration. A
+     *            [ResolvedCompactionConfig.Disabled] value yields [CompactionTurnState.Disabled]
+     *            without loading retained chunks; an [ResolvedCompactionConfig.Enabled] value yields
+     *            [CompactionTurnState.Enabled] carrying its effective settings. A configuration whose
+     *            auxiliary rows vanished after preparation is still [CompactionTurnState.Enabled] —
+     *            the `InvalidConfiguration` surfaces from [preparePrimaryContext] only when compaction
+     *            becomes necessary.
+     * @return The turn state, snapshotted for the whole turn.
      */
     suspend fun beginTurn(
         userId: Long,
         sessionId: Long,
-        initialUnits: List<ConversationContextUnit>
-    ): Either<ConversationCompactionError, CompactionTurnState>
+        initialUnits: List<ConversationContextUnit>,
+        resolvedCompaction: ResolvedCompactionConfig
+    ): CompactionTurnState
 
     /**
      * Runs the preflight policy for one primary LLM call.

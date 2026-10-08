@@ -197,6 +197,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolLoopTest : DefaultConve
                 userId = 1L,
                 session = testSession,
                 llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key", listOf(toolDefinition)),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Find docs",
                 parentMessageId = null,
                 fileReferences = emptyList(),

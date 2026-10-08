@@ -18,6 +18,8 @@ import eu.torvian.chatbot.server.service.core.LLMProviderService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
 import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.agent.SystemPromptComposer
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionError
+import eu.torvian.chatbot.server.service.core.chat.compaction.EffectiveCompactionConfigResolver
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
@@ -50,6 +52,9 @@ import eu.torvian.chatbot.server.service.security.error.CredentialError
  * @property llmProviderService Service used to load the provider that owns the selected model.
  * @property credentialManager Service used to resolve provider credentials when required.
  * @property agentRoleService Service used to load the session's selected agent role.
+ * @property effectiveCompactionConfigResolver Resolves the turn's complete effective compaction
+ *            configuration, reading the role's preset and the stored preference inside the turn's
+ *            transaction.
  * @property systemPromptComposer Composer that builds the system prompt from the role's instructions.
  * @property transactionScope Transaction wrapper that keeps the validation lookup sequence consistent.
  */
@@ -62,6 +67,7 @@ class DefaultConversationTurnPreparationService(
     private val llmProviderService: LLMProviderService,
     private val credentialManager: CredentialManager,
     private val agentRoleService: AgentRoleService,
+    private val effectiveCompactionConfigResolver: EffectiveCompactionConfigResolver,
     private val systemPromptComposer: SystemPromptComposer,
     private val transactionScope: TransactionScope,
 ) : ConversationTurnPreparationService {
@@ -182,6 +188,19 @@ class DefaultConversationTurnPreparationService(
                 )
             }
 
+            // The whole effective compaction configuration is resolved here, inside this transaction:
+            // the resolver reads the role's preset and the global preference as one snapshot, and an
+            // unusable preset or preference rejects the turn as a model-configuration error before
+            // anything is persisted — a turn that cannot understand its compaction configuration must
+            // not save the user message.
+            val resolvedCompaction = withError({ error: ConversationCompactionError.InvalidConfiguration ->
+                ValidateNewMessageError.ModelConfigurationError(error.reason)
+            }) {
+                effectiveCompactionConfigResolver
+                    .resolve(userId = userId, presetId = modelPresetId)
+                    .bind()
+            }
+
             val provider = withError({ _: GetProviderError ->
                 throw IllegalStateException("Provider not found for model ID $modelId (provider ID: ${model.providerId})")
             }) {
@@ -226,7 +245,8 @@ class DefaultConversationTurnPreparationService(
 
             PreparedConversationTurn(
                 session = session,
-                llmConfig = LLMConfig(provider, model, settings, apiKey, tools, systemMessage)
+                llmConfig = LLMConfig(provider, model, settings, apiKey, tools, systemMessage),
+                resolvedCompaction = resolvedCompaction
             )
         }
     }

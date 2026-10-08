@@ -559,6 +559,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
                     messages = listOf(firstUserMessage, flaggedAssistantMessage)
                 ),
                 llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key", listOf(toolDefinition)),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = secondUserMessage.content,
                 parentMessageId = flaggedAssistantMessage.id,
                 fileReferences = emptyList(),
@@ -635,6 +636,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
             userId = 1L,
             session = testSession,
             llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key", tools),
+            resolvedCompaction = defaultResolvedCompaction,
             content = content,
             parentMessageId = null,
             fileReferences = emptyList(),

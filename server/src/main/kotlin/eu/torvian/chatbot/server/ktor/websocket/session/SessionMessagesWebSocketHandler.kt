@@ -11,14 +11,13 @@ import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
-import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.server.ktor.mappers.toChatEvent
 import eu.torvian.chatbot.server.ktor.mappers.toChatStreamEvent
 import eu.torvian.chatbot.server.ktor.routes.requireSessionAccess
 import eu.torvian.chatbot.server.service.core.ChatService
-import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.MessageEvent
 import eu.torvian.chatbot.server.service.core.MessageStreamEvent
+import eu.torvian.chatbot.server.service.core.chat.preparation.PreparedConversationTurn
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
@@ -110,7 +109,7 @@ class SessionMessagesWebSocketHandler(
                     }
                 }
 
-                val (session, llmConfig) = validationResult.getOrElse { apiError ->
+                val preparedTurn = validationResult.getOrElse { apiError ->
                     logger.error("Validation failed for session $sessionId: $apiError")
                     outgoing.send(Frame.Text(serializeErrorFrame(processRequest.isStreaming, apiError)))
                     close(CloseReason(CloseReason.Codes.NORMAL, "Validation failed"))
@@ -144,8 +143,7 @@ class SessionMessagesWebSocketHandler(
                     if (processRequest.isStreaming) {
                         processStreamingRequest(
                             userId = userId,
-                            session = session,
-                            llmConfig = llmConfig,
+                            preparedTurn = preparedTurn,
                             request = processRequest,
                             approvalResponseFlow = approvalResponseFlow,
                             operatorToolResultFlow = operatorToolResultFlow,
@@ -154,8 +152,7 @@ class SessionMessagesWebSocketHandler(
                     } else {
                         processNonStreamingRequest(
                             userId = userId,
-                            session = session,
-                            llmConfig = llmConfig,
+                            preparedTurn = preparedTurn,
                             request = processRequest,
                             approvalResponseFlow = approvalResponseFlow,
                             operatorToolResultFlow = operatorToolResultFlow,
@@ -289,8 +286,8 @@ class SessionMessagesWebSocketHandler(
      *
      * @receiver Live Ktor WebSocket session that will receive outbound protocol frames.
      * @param userId Authenticated user that owns the message-processing request.
-     * @param session Validated session resolved during initial request validation.
-     * @param llmConfig Validated LLM configuration resolved during initial request validation.
+     * @param preparedTurn Prepared session, LLM configuration and preset compaction override resolved
+     *            during initial request validation.
      * @param request Initial non-streaming request frame payload.
      * @param approvalResponseFlow Normalized approval submissions from subsequent client events.
      * @param operatorToolResultFlow Dedicated channel carrying operator tool execution results.
@@ -298,8 +295,7 @@ class SessionMessagesWebSocketHandler(
      */
     private suspend fun DefaultWebSocketServerSession.processNonStreamingRequest(
         userId: Long,
-        session: ChatSession,
-        llmConfig: LLMConfig,
+        preparedTurn: PreparedConversationTurn,
         request: ProcessNewMessageRequest,
         approvalResponseFlow: Flow<ToolCallApprovalSubmission>,
         operatorToolResultFlow: Flow<OperatorToolExecutionResult>,
@@ -307,8 +303,7 @@ class SessionMessagesWebSocketHandler(
     ) {
         chatService.processNewMessage(
             userId = userId,
-            session = session,
-            llmConfig = llmConfig,
+            preparedTurn = preparedTurn,
             content = request.content,
             parentMessageId = request.parentMessageId,
             fileReferences = request.fileReferences,
@@ -332,8 +327,8 @@ class SessionMessagesWebSocketHandler(
      *
      * @receiver Live Ktor WebSocket session that will receive outbound protocol frames.
      * @param userId Authenticated user that owns the message-processing request.
-     * @param session Validated session resolved during initial request validation.
-     * @param llmConfig Validated LLM configuration resolved during initial request validation.
+     * @param preparedTurn Prepared session, LLM configuration and preset compaction override resolved
+     *            during initial request validation.
      * @param request Initial streaming request frame payload.
      * @param approvalResponseFlow Normalized approval submissions from subsequent client events.
      * @param operatorToolResultFlow Dedicated channel carrying operator tool execution results.
@@ -341,8 +336,7 @@ class SessionMessagesWebSocketHandler(
      */
     private suspend fun DefaultWebSocketServerSession.processStreamingRequest(
         userId: Long,
-        session: ChatSession,
-        llmConfig: LLMConfig,
+        preparedTurn: PreparedConversationTurn,
         request: ProcessNewMessageRequest,
         approvalResponseFlow: Flow<ToolCallApprovalSubmission>,
         operatorToolResultFlow: Flow<OperatorToolExecutionResult>,
@@ -350,8 +344,7 @@ class SessionMessagesWebSocketHandler(
     ) {
         chatService.processNewMessageStreaming(
             userId = userId,
-            session = session,
-            llmConfig = llmConfig,
+            preparedTurn = preparedTurn,
             content = request.content,
             parentMessageId = request.parentMessageId,
             fileReferences = request.fileReferences,

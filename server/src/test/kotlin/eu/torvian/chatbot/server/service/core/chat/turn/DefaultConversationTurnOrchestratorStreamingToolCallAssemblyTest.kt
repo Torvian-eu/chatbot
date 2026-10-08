@@ -180,6 +180,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallAssemblyTest : Default
                 userId = 1L,
                 session = testSession,
                 llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key", listOf(toolDefinition)),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Weather?",
                 parentMessageId = null,
                 fileReferences = emptyList(),

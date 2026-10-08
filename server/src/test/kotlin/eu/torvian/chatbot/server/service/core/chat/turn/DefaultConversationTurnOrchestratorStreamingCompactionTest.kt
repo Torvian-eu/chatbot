@@ -66,8 +66,8 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                 conversationTurnPersistence.saveUserMessage(testSession.id, "Summarize", null, any())
             } returns PersistedUserMessage(userMessage, null)
             coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-            coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any()) } returns
-                    CompactionTurnState.Disabled(testSession.id, mutableListOf()).right()
+            coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
+                    CompactionTurnState.Disabled(testSession.id, mutableListOf())
             coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
                     PrimaryContextPreflight(primaryMessages = windowMessages, persistedChunkIfAny = null).right()
             coEvery {
@@ -94,6 +94,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                     userId = 1L,
                     session = testSession,
                     llmConfig = LLMConfig(testProvider, testModel, streamingSettings, "api-key"),
+                    resolvedCompaction = defaultResolvedCompaction,
                     content = "Summarize",
                     parentMessageId = null,
                     fileReferences = emptyList(),
@@ -129,8 +130,8 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
             conversationTurnPersistence.saveUserMessage(testSession.id, "Oversized stream", null, any())
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-        coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any()) } returns
-                CompactionTurnState.Disabled(testSession.id, mutableListOf()).right()
+        coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
+                CompactionTurnState.Disabled(testSession.id, mutableListOf())
         coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
                 ConversationCompactionError.InvalidConfiguration("broken preference").left()
 
@@ -139,6 +140,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                 userId = 1L,
                 session = testSession,
                 llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key"),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Oversized stream",
                 parentMessageId = null,
                 fileReferences = emptyList(),
@@ -197,8 +199,8 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                 conversationTurnPersistence.saveUserMessage(testSession.id, "Summarize now", null, any())
             } returns PersistedUserMessage(userMessage, null)
             coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-            coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any()) } returns
-                CompactionTurnState.Disabled(testSession.id, mutableListOf()).right()
+            coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
+                CompactionTurnState.Disabled(testSession.id, mutableListOf())
             coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
                 PrimaryContextPreflight(
                     primaryMessages = summaryMessages,
@@ -225,6 +227,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                     userId = 1L,
                     session = testSession,
                     llmConfig = LLMConfig(testProvider, testModel, streamingSettings, "api-key"),
+                    resolvedCompaction = defaultResolvedCompaction,
                     content = "Summarize now",
                     parentMessageId = null,
                     fileReferences = emptyList(),
@@ -278,8 +281,8 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
             conversationTurnPersistence.saveUserMessage(testSession.id, "Streams without compaction", null, any())
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-        coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any()) } returns
-            CompactionTurnState.Disabled(testSession.id, mutableListOf()).right()
+        coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
+            CompactionTurnState.Disabled(testSession.id, mutableListOf())
         coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
             PrimaryContextPreflight(primaryMessages = emptyList(), persistedChunkIfAny = null).right()
         coEvery {
@@ -303,6 +306,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                 userId = 1L,
                 session = testSession,
                 llmConfig = LLMConfig(testProvider, testModel, streamingSettings, "api-key"),
+                resolvedCompaction = defaultResolvedCompaction,
                 content = "Streams without compaction",
                 parentMessageId = null,
                 fileReferences = emptyList(),

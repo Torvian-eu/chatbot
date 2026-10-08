@@ -7,8 +7,11 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
+import eu.torvian.chatbot.server.service.core.chat.compaction.EffectiveCompactionSettings
+import eu.torvian.chatbot.server.service.core.chat.compaction.ResolvedCompactionConfig
 import eu.torvian.chatbot.server.service.core.chat.preparation.ConversationTurnPreparationService
 import eu.torvian.chatbot.server.service.core.chat.preparation.PreparedConversationTurn
+import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnRequest
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnEvent
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnOrchestrator
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
@@ -29,7 +32,8 @@ import kotlin.time.Instant
  * Unit tests for [ChatServiceImpl].
  *
  * This test suite verifies that [ChatServiceImpl] delegates validation/preparation and correctly maps
- * orchestrator events onto the public service API.
+ * orchestrator events onto the public service API, and that the prepared session, LLM configuration and
+ * preset compaction override are forwarded into the [ConversationTurnRequest] of both turn modes.
  */
 class ChatServiceImplTest {
 
@@ -110,6 +114,14 @@ class ChatServiceImplTest {
     )
 
     /**
+     * The resolved compaction configuration every prepared turn carries in these tests: compaction off,
+     * so the delegation assertions stay focused on forwarding rather than on compaction policy.
+     */
+    private val testResolvedCompaction = ResolvedCompactionConfig.Disabled
+
+    private val testPreparedTurn = PreparedConversationTurn(testSession, testLlmConfig, testResolvedCompaction)
+
+    /**
      * Recreates the chat service with fresh mocks and explicit helper collaborators for each test.
      */
     @BeforeEach
@@ -132,14 +144,14 @@ class ChatServiceImplTest {
 
     @Test
     fun `validateProcessNewMessageRequest should delegate to preparation service and map prepared turn`() = runTest {
-        val preparedTurn = PreparedConversationTurn(testSession, testLlmConfig)
+        val preparedTurn = testPreparedTurn
         coEvery {
             conversationTurnPreparationService.prepareNewMessageTurn(7L, 1L, "test content", 2L, true)
         } returns preparedTurn.right()
 
         val result = chatService.validateProcessNewMessageRequest(7L, 1L, "test content", 2L, true)
 
-        assertEquals((testSession to testLlmConfig).right(), result)
+        assertEquals(preparedTurn.right(), result)
         coVerify(exactly = 1) {
             conversationTurnPreparationService.prepareNewMessageTurn(7L, 1L, "test content", 2L, true)
         }
@@ -170,13 +182,46 @@ class ChatServiceImplTest {
         )
 
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), emptyFlow(), TurnControlSignal())
+        chatService.processNewMessage(1L, testPreparedTurn, "Hello", null, emptyList(), emptyFlow(), emptyFlow(), TurnControlSignal())
             .collect { event -> events.add(event) }
 
         assertEquals(3, events.size)
         assertIs<MessageEvent.UserMessageSaved>(events[0].getOrNull())
         assertIs<MessageEvent.AssistantMessageSaved>(events[1].getOrNull())
         assertIs<MessageEvent.StreamCompleted>(events[2].getOrNull())
+    }
+
+    @Test
+    fun `processNewMessage should forward the prepared turn into the orchestrator request`() = runTest {
+        val capturedRequest = slot<ConversationTurnRequest>()
+        every {
+            conversationTurnOrchestrator.processNonStreamingTurn(capture(capturedRequest))
+        } returns flowOf(ConversationTurnEvent.TurnCompleted)
+
+        val resolvedCompaction = ResolvedCompactionConfig.Enabled(
+            settings = EffectiveCompactionSettings(
+                modelId = 1L,
+                settingsId = 1L,
+                instruction = "Summarize faithfully",
+                systemMessage = null,
+                summaryLabel = "Summary:\n",
+                thresholdTokens = 50_000L
+            )
+        )
+        chatService.processNewMessage(
+            1L,
+            PreparedConversationTurn(testSession, testLlmConfig, resolvedCompaction),
+            "Hello",
+            null,
+            emptyList(),
+            emptyFlow(),
+            emptyFlow(),
+            TurnControlSignal()
+        ).collect { }
+
+        assertEquals(testSession, capturedRequest.captured.session)
+        assertEquals(testLlmConfig, capturedRequest.captured.llmConfig)
+        assertEquals(resolvedCompaction, capturedRequest.captured.resolvedCompaction)
     }
 
     @Test
@@ -190,7 +235,7 @@ class ChatServiceImplTest {
         )
 
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), emptyFlow(), TurnControlSignal())
+        chatService.processNewMessage(1L, testPreparedTurn, "Hello", null, emptyList(), emptyFlow(), emptyFlow(), TurnControlSignal())
             .collect { event -> events.add(event) }
 
         assertIs<ProcessNewMessageError.ExternalServiceError>(events[0].leftOrNull())
@@ -214,8 +259,7 @@ class ChatServiceImplTest {
         val events = mutableListOf<Either<ProcessNewMessageError, MessageStreamEvent>>()
         chatService.processNewMessageStreaming(
             1L,
-            testSession,
-            testLlmConfig.copy(settings = testSettings.copy(stream = true)),
+            testPreparedTurn.copy(llmConfig = testLlmConfig.copy(settings = testSettings.copy(stream = true))),
             "Hello",
             null,
             emptyList(),
@@ -239,7 +283,7 @@ class ChatServiceImplTest {
         every { conversationTurnOrchestrator.processNonStreamingTurn(any()) } throws IllegalStateException("boom")
 
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, "Hello", null, emptyList(), emptyFlow(), emptyFlow(), TurnControlSignal())
+        chatService.processNewMessage(1L, testPreparedTurn, "Hello", null, emptyList(), emptyFlow(), emptyFlow(), TurnControlSignal())
             .collect { event -> events.add(event) }
 
         assertIs<ProcessNewMessageError.UnexpectedError>(events[0].leftOrNull())
@@ -253,8 +297,7 @@ class ChatServiceImplTest {
         val events = mutableListOf<Either<ProcessNewMessageError, MessageStreamEvent>>()
         chatService.processNewMessageStreaming(
             1L,
-            testSession,
-            testLlmConfig.copy(settings = testSettings.copy(stream = true)),
+            testPreparedTurn.copy(llmConfig = testLlmConfig.copy(settings = testSettings.copy(stream = true))),
             "Hello",
             null,
             emptyList(),

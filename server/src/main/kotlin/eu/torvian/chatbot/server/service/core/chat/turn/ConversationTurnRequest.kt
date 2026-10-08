@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core.chat.turn
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.server.service.core.LLMConfig
+import eu.torvian.chatbot.server.service.core.chat.compaction.ResolvedCompactionConfig
 import eu.torvian.chatbot.server.service.core.toolcall.OperatorToolExecutionResult
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.runtime.TurnControlSignal
@@ -14,6 +15,10 @@ import kotlinx.coroutines.flow.Flow
  * @property userId User whose approval preferences apply to tool execution.
  * @property session Session whose message thread is being continued.
  * @property llmConfig Resolved provider/model/settings/tool configuration.
+ * @property resolvedCompaction The turn's complete effective compaction configuration, resolved during
+ *            turn preparation; carried here so the orchestrator snapshots it at turn start without
+ *            re-reading the preset or the preference. Deliberately not defaulted: every construction
+ *            site must supply the turn's actual resolved configuration.
  * @property content New user message content, or `null` for branch-and-continue mode.
  * @property parentMessageId Existing parent to continue from when branching or replying.
  * @property fileReferences File references attached to the new user message.
@@ -26,6 +31,7 @@ data class ConversationTurnRequest(
     val userId: Long,
     val session: ChatSession,
     val llmConfig: LLMConfig,
+    val resolvedCompaction: ResolvedCompactionConfig,
     val content: String?,
     val parentMessageId: Long?,
     val fileReferences: List<FileReference>,

@@ -263,6 +263,7 @@ class DefaultConversationTurnOrchestratorNonStreamingUsageTest : DefaultConversa
         userId = 1L,
         session = testSession,
         llmConfig = LLMConfig(testProvider, testModel, testSettings, "api-key"),
+        resolvedCompaction = defaultResolvedCompaction,
         content = content,
         parentMessageId = null,
         fileReferences = emptyList(),

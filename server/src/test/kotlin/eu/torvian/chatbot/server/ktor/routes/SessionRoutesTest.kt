@@ -9,9 +9,11 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.agent.UpdateSessionAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.core.*
+import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.server.data.dao.UserPreferenceDao
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.auth.authenticateWithWebSocketSubprotocol
@@ -60,6 +62,7 @@ class SessionRoutesTest {
     private lateinit var sessionTestApplication: KtorTestApp
     private lateinit var testDataManager: TestDataManager
     private lateinit var authHelper: TestAuthHelper
+    private lateinit var userPreferenceDao: UserPreferenceDao
     private lateinit var authToken: String
     private val json = Json
 
@@ -152,6 +155,7 @@ class SessionRoutesTest {
         )
 
         testDataManager = container.get()
+        userPreferenceDao = container.get()
         // Setup required tables and test data
         testDataManager.setup(
             dataSet = TestDataSet(
@@ -192,6 +196,12 @@ class SessionRoutesTest {
         // Set up authentication
         authHelper = TestAuthHelper(container)
         authToken = authHelper.createUserAndGetToken()
+
+        // Turn preparation resolves the role's model preset through its ownership link (presets are
+        // per-owner resources), so the seeded presets must be owned by the authenticated user.
+        testDataManager.insertModelPresetOwnership(testPreset.id, authHelper.defaultTestUser.id)
+        testDataManager.insertModelPresetOwnership(testPreset2.id, authHelper.defaultTestUser.id)
+        testDataManager.insertModelPresetOwnership(testNonStreamingPreset.id, authHelper.defaultTestUser.id)
     }
 
     @AfterEach
@@ -780,6 +790,63 @@ class SessionRoutesTest {
         val messages = testDataManager.getChatMessagesForSession(testSession.id)
         assertEquals(0, messages.size, "No messages should be created on error")
     }
+
+    /**
+     * Verifies that an enabled compaction preference without a compactor rejects the turn during
+     * preparation: the production resolver reads the stored row inside the turn's transaction, so the
+     * socket reports a model-configuration error and nothing is persisted.
+     */
+    @Test
+    fun `WS session message should emit a model-configuration error when the enabled compaction preference has no model`() =
+        sessionTestApplication {
+            // Arrange: an enabled preference that names no model/settings, the shape only a legacy or
+            // hand-edited row can have because the write path refuses to store it.
+            testDataManager.insertChatSession(testNonStreamingSession)
+            testDataManager.insertSessionOwnership(testNonStreamingSession.id, authHelper.defaultTestUser.id)
+            // Turn preparation resolves the agent role owner; the role must have an ownership row.
+            testDataManager.insertAgentRoleOwnership(
+                testNonStreamingAgentRole.id,
+                authHelper.defaultTestUser.id
+            )
+            userPreferenceDao.upsertPreference(
+                userId = authHelper.defaultTestUser.id,
+                internalDeviceId = null,
+                clientDeviceId = null,
+                key = PreferenceKeys.CONVERSATION_COMPACTION,
+                value = """{"modelId":null,"settingsId":null,"instruction":"Summarize","thresholdTokens":50000}"""
+            )
+            val processRequest = ProcessNewMessageRequest(content = "Test message", isStreaming = false)
+
+            // Act
+            val receivedEvents = mutableListOf<ChatEvent>()
+            client.webSocket(
+                urlString = href(
+                    SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id))
+                ),
+                request = {
+                    authenticate(authToken)
+                    offerWebSocketAuthSubprotocolMarker()
+                }
+            ) {
+                val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
+                send(Frame.Text(json.encodeToString(initialEvent)))
+
+                for (frame in incoming) {
+                    val textFrame = frame as? Frame.Text ?: continue
+                    val chatEvent = json.decodeFromString<ChatEvent>(textFrame.readText())
+                    receivedEvents.add(chatEvent)
+                }
+            }
+
+            // Assert - the resolver's rejection is the model-configuration error of the validation stage.
+            val errorEvent = receivedEvents.filterIsInstance<ChatEvent.ErrorOccurred>().firstOrNull()
+            assertNotNull(errorEvent, "Should receive error event")
+            assertEquals(ChatbotApiErrorCodes.MODEL_CONFIGURATION_ERROR.code, errorEvent.error.code)
+            assertEquals("Compaction modelId is not set", errorEvent.error.details?.get("details"))
+            // Rejected before persistence: no user message and no session leaf were written.
+            assertEquals(0, testDataManager.getChatMessagesForSession(testNonStreamingSession.id).size)
+            assertNull(testDataManager.getSessionCurrentLeaf(testNonStreamingSession.id))
+        }
 
     /**
      * Verifies that the session-messages WebSocket still rejects any non-start event as the first frame.
