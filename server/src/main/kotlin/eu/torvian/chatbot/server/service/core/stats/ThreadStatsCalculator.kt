@@ -1,5 +1,8 @@
 package eu.torvian.chatbot.server.service.core.stats
 
+import arrow.core.getOrElse
+import eu.torvian.chatbot.common.misc.thread.ThreadBranchError
+import eu.torvian.chatbot.common.misc.thread.resolveThreadBranch
 import eu.torvian.chatbot.common.models.api.core.DurationStats
 import eu.torvian.chatbot.common.models.api.core.ThreadStats
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -101,27 +104,22 @@ object ThreadStatsCalculator {
     ): List<ChatMessage> {
         if (currentLeafMessageId == null || sessionMessages.isEmpty()) return emptyList()
 
-        val messageById = sessionMessages.associateBy { it.id }
-        val branch = mutableListOf<ChatMessage>()
-        val visitedIds = mutableSetOf<Long>()
-        var currentId: Long? = currentLeafMessageId
-
-        while (currentId != null) {
-            if (!visitedIds.add(currentId)) {
+        return resolveThreadBranch(sessionMessages.associateBy { it.id }, currentLeafMessageId)
+            .getOrElse { error ->
                 throw IllegalStateException(
-                    "Cannot compute thread stats: cyclic parent chain detected at message $currentId"
+                    when (error) {
+                        is ThreadBranchError.LeafNotFound ->
+                            "Cannot compute thread stats: message ${error.leafId} does not exist in the session"
+
+                        is ThreadBranchError.BrokenChain ->
+                            "Cannot compute thread stats: message ${error.parentId} does not exist in the session"
+
+                        is ThreadBranchError.CyclicChain ->
+                            "Cannot compute thread stats: cyclic parent chain detected at message " +
+                                "${error.messageId}"
+                    }
                 )
             }
-            val message = messageById[currentId]
-                ?: throw IllegalStateException(
-                    "Cannot compute thread stats: message $currentId does not exist in the session"
-                )
-            branch.add(message)
-            currentId = message.parentMessageId
-        }
-
-        branch.reverse()
-        return branch
     }
 
     /**
