@@ -1,10 +1,8 @@
 package eu.torvian.chatbot.server.service.core.chat.compaction
 
 import arrow.core.Either
-import arrow.core.left
 import arrow.core.raise.either
 import arrow.core.raise.ensure
-import arrow.core.right
 import eu.torvian.chatbot.common.models.api.core.CompactionSkipReason
 import eu.torvian.chatbot.server.data.dao.ConversationCompactionChunkDao
 import eu.torvian.chatbot.server.data.dao.error.ConversationCompactionChunkDaoError
@@ -12,16 +10,9 @@ import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.chat.context.ConversationContext
 import eu.torvian.chatbot.server.service.core.chat.context.ConversationContextUnit
 import eu.torvian.chatbot.server.service.core.chat.context.SourceMessageSnapshot
-import eu.torvian.chatbot.server.service.llm.LLMApiClient
-import eu.torvian.chatbot.server.service.llm.LLMCompletionError
-import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Default [ConversationCompactionService] implementing the rolling-window pre-primary-call policy.
@@ -39,32 +30,17 @@ import kotlin.time.Duration.Companion.seconds
  * @property chunkDao Loads retained chunks and persists verified new chunks.
  * @property auxiliaryConfigResolver Resolves/validates the auxiliary configuration when required.
  * @property tokenCounter Repository-owned approximate input token counter.
- * @property llmApiClient Provider-neutral client for the auxiliary non-streaming call.
- * @property auxiliaryTimeout Total timeout around the retrying auxiliary non-streaming call, including
- *            `RetryLLMApiClient` backoff; defaults to the approved 180 seconds. Injectable so tests can
- *            exercise the timeout path without waiting the full bound.
+ * @property summarizer Runs the bounded auxiliary non-streaming call and validates its output.
  */
 class DefaultConversationCompactionService(
     private val chunkDao: ConversationCompactionChunkDao,
     private val auxiliaryConfigResolver: AuxiliaryCompactionConfigResolver,
     private val tokenCounter: ChatInputTokenCounter,
-    private val llmApiClient: LLMApiClient,
-    private val auxiliaryTimeout: Duration = AUXILIARY_COMPACTION_TIMEOUT_SECONDS.seconds
+    private val summarizer: AuxiliaryCompactionSummarizer
 ) : ConversationCompactionService {
 
     companion object {
         private val logger: Logger = LogManager.getLogger(DefaultConversationCompactionService::class.java)
-
-        /**
-         * Total timeout (in seconds) around the entire retrying auxiliary non-streaming call,
-         * including `RetryLLMApiClient` backoff. An operational bound, not a product decision.
-         */
-        private const val AUXILIARY_COMPACTION_TIMEOUT_SECONDS: Long = 180L
-
-        /**
-         * Maximum characters of a provider error message kept for the public failure surface.
-         */
-        private const val MAX_ERROR_MESSAGE_CHARS: Int = 300
     }
 
     /**
@@ -204,8 +180,8 @@ class DefaultConversationCompactionService(
         // window replacement mirror exactly what the persisted chunk covers.
         val newSummary = RawChatMessage.User(activeState.settings.summaryLabel + persistedChunk.summary)
         activeState.coveredSnapshots = (
-            activeState.coveredSnapshots + activeState.units.map { it.source }
-            ).toMutableList()
+                activeState.coveredSnapshots + activeState.units.map { it.source }
+                ).toMutableList()
         activeState.summaryMessage = newSummary
         activeState.units.clear()
         activeState.retainedChunks.add(persistedChunk)
@@ -249,7 +225,7 @@ class DefaultConversationCompactionService(
             is CompactionAttempt.NoReduction -> {
                 logger.info(
                     "Skipped forced compaction for session {}: a {} token summary does not shrink " +
-                        "the {} tokens it replaces",
+                            "the {} tokens it replaces",
                     sessionId,
                     attempt.resultTokenCount,
                     attempt.sourceTokenCount
@@ -322,8 +298,17 @@ class DefaultConversationCompactionService(
         // One-shot compaction: the entire window becomes the input; the result is a single new summary
         // and the window becomes the summary alone. There is no loop.
         val input = buildCompactionInput(summary, units)
-        val generationResult = generateSummary(auxiliaryConfig, input, settings.instruction).bind()
-        val summaryText = validateSummaryOutput(generationResult).bind()
+        val summaryText = summarizer.summarize(auxiliaryConfig, input, settings.instruction)
+            // Reported here, at the call site, so the failure keeps this service's logger category,
+            // level and message text.
+            .onLeft { error ->
+                if (error is ConversationCompactionError.TimedOut) {
+                    logger.error(
+                        "Compaction auxiliary call timed out after $AUXILIARY_COMPACTION_TIMEOUT_SECONDS seconds"
+                    )
+                }
+            }
+            .bind()
         val newSummary = RawChatMessage.User(settings.summaryLabel + summaryText)
 
         // Post-count the one-summary primary request with the primary dialect/tools; insufficient
@@ -453,110 +438,6 @@ class DefaultConversationCompactionService(
         messages = messages,
         tools = primaryConfig.tools
     )
-
-    /**
-     * Invokes the auxiliary compaction model under a bounded total timeout.
-     *
-     * The user's compaction instruction travels as the final user message of the request, not as the
-     * system message: the instruction reads naturally as the closing user turn that asks the model to
-     * summarize the conversation. The config's system message (the preference's optional system prompt)
-     * is passed through normally, so the two roles never collide.
-     *
-     * @param config The validated auxiliary configuration (no tools; `systemMessage` carries the
-     *            compaction settings' optional system prompt, empty when none is set).
-     * @param messages The bounded compaction input (the over-threshold window).
-     * @param instruction The user's compaction instruction (guaranteed non-blank by the resolver),
-     *            appended as the final user message.
-     * @return Either a compaction error or the raw completion result. A result whose generation the provider
-     *         declared incomplete is reported as a generation failure, because a summary cut off mid-generation
-     *         would silently replace the messages it covers with partial text.
-     */
-    private suspend fun generateSummary(
-        config: LLMConfig,
-        messages: List<RawChatMessage>,
-        instruction: String
-    ): Either<ConversationCompactionError, LLMCompletionResult> {
-        // The instruction is appended unconditionally as the closing user message: it tells the model
-        // what to produce and guarantees the request never ends on an assistant (or tool) message —
-        // a trailing assistant turn would ask the model to answer itself, which some providers reject
-        // with a 400. resolveAuxiliaryConfig already rejects a blank instruction, so the appended
-        // message is never empty.
-        val auxiliaryMessages = messages + RawChatMessage.User(instruction)
-        return try {
-            val result = withTimeout(auxiliaryTimeout) {
-                llmApiClient.completeChat(
-                    messages = auxiliaryMessages,
-                    modelConfig = config.model,
-                    provider = config.provider,
-                    settings = config.settings,
-                    apiKey = config.apiKey,
-                    tools = null,
-                    systemMessage = config.systemMessage.takeIf { it.isNotBlank() }
-                )
-            }
-            // A result that carries a provider-declared ending is not a summary: the provider answered, but it
-            // reported that the generation did not complete, so the text is truncated provider output and must
-            // never become a summary chunk.
-            val providerFailure = result.getOrNull()?.providerFailure
-            if (providerFailure != null) {
-                return ConversationCompactionError.GenerationFailed(providerFailure.sanitizedMessage()).left()
-            }
-            // TimeoutCancellationException is caught below; any other CancellationException (external
-            // socket cancellation) must propagate as a coroutine cancellation, not a compaction error.
-            result.mapLeft { llmError ->
-                ConversationCompactionError.GenerationFailed(llmError.sanitizedMessage())
-            }
-        } catch (_: TimeoutCancellationException) {
-            logger.error("Compaction auxiliary call timed out after $AUXILIARY_COMPACTION_TIMEOUT_SECONDS seconds")
-            ConversationCompactionError.TimedOut.left()
-        }
-    }
-
-    /**
-     * Extracts a bounded, provider-body-free description from an LLM completion error.
-     *
-     * @receiver The provider error to describe.
-     * @return A short message suitable for the public error surface and logs (never raw bodies).
-     */
-    private fun LLMCompletionError.sanitizedMessage(): String =
-        when (this) {
-            is LLMCompletionError.NetworkError -> message
-            is LLMCompletionError.ApiError ->
-                message?.take(MAX_ERROR_MESSAGE_CHARS) ?: "HTTP $statusCode"
-
-            is LLMCompletionError.InvalidResponseError -> message
-            is LLMCompletionError.ProviderFailureError -> message
-            is LLMCompletionError.AuthenticationError -> message
-            is LLMCompletionError.ConfigurationError -> message
-            is LLMCompletionError.OtherError -> message
-        }
-
-    /**
-     * Validates the auxiliary response and extracts the trimmed summary text.
-     *
-     * @param result The raw completion result.
-     * @return Either [ConversationCompactionError.InvalidOutput] or the trimmed non-blank summary.
-     */
-    private fun validateSummaryOutput(
-        result: LLMCompletionResult
-    ): Either<ConversationCompactionError, String> {
-        val choice = result.choices.firstOrNull()
-            ?: return ConversationCompactionError.InvalidOutput(
-                "Compaction model returned no completion choices"
-            ).left()
-        if (!choice.toolCalls.isNullOrEmpty()) {
-            return ConversationCompactionError.InvalidOutput(
-                "Compaction model requested tool calls; compaction is a non-tool-calling request"
-            ).left()
-        }
-        val content = choice.content?.trim()
-        if (content.isNullOrBlank()) {
-            return ConversationCompactionError.InvalidOutput(
-                "Compaction model returned blank or empty summary content"
-            ).left()
-        }
-        return content.right()
-    }
 
     /**
      * Builds the chunk candidate whose coverage is the identity ledger at persistence time.

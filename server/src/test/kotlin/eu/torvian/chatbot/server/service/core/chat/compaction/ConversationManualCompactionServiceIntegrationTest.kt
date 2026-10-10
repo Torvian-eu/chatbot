@@ -279,7 +279,7 @@ class ConversationManualCompactionServiceIntegrationTest {
                     }
             },
             tokenCounter = tokenCounter,
-            llmApiClient = llmApiClient
+            summarizer = AuxiliaryCompactionSummarizer(llmApiClient = llmApiClient)
         )
     }
 

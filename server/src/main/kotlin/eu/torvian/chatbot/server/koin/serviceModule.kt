@@ -52,6 +52,7 @@ import eu.torvian.chatbot.server.service.core.agent.SystemPromptComposer
 import eu.torvian.chatbot.server.service.core.chat.compaction.ApproximateChatInputTokenCounter
 import eu.torvian.chatbot.server.service.core.chat.compaction.ChatInputTokenCounter
 import eu.torvian.chatbot.server.service.core.chat.compaction.AuxiliaryCompactionConfigResolver
+import eu.torvian.chatbot.server.service.core.chat.compaction.AuxiliaryCompactionSummarizer
 import eu.torvian.chatbot.server.service.core.chat.compaction.CompactionPreferenceService
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionService
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationManualCompactionService
@@ -192,12 +193,13 @@ fun serviceModule() = module {
             transactionScope = get()
         )
     }
+    single { AuxiliaryCompactionSummarizer(llmApiClient = get()) }
     single<ConversationCompactionService> {
         DefaultConversationCompactionService(
             chunkDao = get(),
             auxiliaryConfigResolver = get(),
             tokenCounter = get(),
-            llmApiClient = get()
+            summarizer = get()
         )
     }
     single<ConversationManualCompactionService> {

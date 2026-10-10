@@ -17,6 +17,7 @@ import eu.torvian.chatbot.server.service.core.chat.compaction.ChatInputTokenCoun
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionChunk
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionChunkCandidate
 import eu.torvian.chatbot.server.service.core.chat.compaction.AuxiliaryCompactionConfigResolver
+import eu.torvian.chatbot.server.service.core.chat.compaction.AuxiliaryCompactionSummarizer
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionError
 import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationCompactionService
 import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationManualCompactionService
@@ -127,7 +128,7 @@ class SessionCompactionWebSocketCancellationTest {
                         tools: List<ToolDefinition>?
                     ): Either<ConversationCompactionError, Long> = (100L * messages.size).right()
                 },
-                llmApiClient = auxiliaryClient
+                summarizer = AuxiliaryCompactionSummarizer(llmApiClient = auxiliaryClient)
             )
         ),
         authorizationService = authorizationService,

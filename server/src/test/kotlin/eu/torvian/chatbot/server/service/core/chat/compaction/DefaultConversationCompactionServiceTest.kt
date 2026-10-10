@@ -112,8 +112,10 @@ class DefaultConversationCompactionServiceTest {
         chunkDao = chunkDao,
         auxiliaryConfigResolver = auxiliaryConfigResolver,
         tokenCounter = tokenCounter,
-        llmApiClient = llmApiClient,
-        auxiliaryTimeout = auxiliaryTimeout
+        summarizer = AuxiliaryCompactionSummarizer(
+            llmApiClient = llmApiClient,
+            auxiliaryTimeout = auxiliaryTimeout
+        )
     )
 
     /**

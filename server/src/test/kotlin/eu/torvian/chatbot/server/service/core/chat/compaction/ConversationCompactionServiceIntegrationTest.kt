@@ -214,7 +214,7 @@ class ConversationCompactionServiceIntegrationTest {
             chunkDao = chunkDao,
             auxiliaryConfigResolver = auxiliaryConfigResolver,
             tokenCounter = FixedTokenCounter,
-            llmApiClient = llmApiClient
+            summarizer = AuxiliaryCompactionSummarizer(llmApiClient = llmApiClient)
         )
         // The fixtures store valid preferences, so the production resolver cannot fail here.
         val resolved = DefaultEffectiveCompactionConfigResolver(
