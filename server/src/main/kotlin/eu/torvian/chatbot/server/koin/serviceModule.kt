@@ -51,12 +51,14 @@ import eu.torvian.chatbot.server.service.core.agent.SendMessageRequestBuilder
 import eu.torvian.chatbot.server.service.core.agent.SystemPromptComposer
 import eu.torvian.chatbot.server.service.core.chat.compaction.ApproximateChatInputTokenCounter
 import eu.torvian.chatbot.server.service.core.chat.compaction.ChatInputTokenCounter
-import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionConfigurationResolver
-import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionConfigurationService
+import eu.torvian.chatbot.server.service.core.chat.compaction.AuxiliaryCompactionConfigResolver
+import eu.torvian.chatbot.server.service.core.chat.compaction.CompactionPreferenceService
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionService
-import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationCompactionConfigurationResolver
-import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationCompactionConfigurationService
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationManualCompactionService
+import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultAuxiliaryCompactionConfigResolver
+import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultCompactionPreferenceService
 import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationCompactionService
+import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultConversationManualCompactionService
 import eu.torvian.chatbot.server.service.core.chat.compaction.DefaultEffectiveCompactionConfigResolver
 import eu.torvian.chatbot.server.service.core.chat.compaction.EffectiveCompactionConfigResolver
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
@@ -166,8 +168,8 @@ fun serviceModule() = module {
     single<ChatInputTokenCounter> {
         ApproximateChatInputTokenCounter(strategyResolver = get(), json = get())
     }
-    single<ConversationCompactionConfigurationResolver> {
-        DefaultConversationCompactionConfigurationResolver(
+    single<AuxiliaryCompactionConfigResolver> {
+        DefaultAuxiliaryCompactionConfigResolver(
             llmModelService = get(),
             modelSettingsService = get(),
             llmProviderService = get(),
@@ -181,8 +183,8 @@ fun serviceModule() = module {
             json = get()
         )
     }
-    single<ConversationCompactionConfigurationService> {
-        DefaultConversationCompactionConfigurationService(
+    single<CompactionPreferenceService> {
+        DefaultCompactionPreferenceService(
             json = get(),
             userPreferenceDao = get(),
             authorizationService = get(),
@@ -193,9 +195,18 @@ fun serviceModule() = module {
     single<ConversationCompactionService> {
         DefaultConversationCompactionService(
             chunkDao = get(),
-            configurationResolver = get(),
+            auxiliaryConfigResolver = get(),
             tokenCounter = get(),
             llmApiClient = get()
+        )
+    }
+    single<ConversationManualCompactionService> {
+        DefaultConversationManualCompactionService(
+            preparationService = get(),
+            conversationTurnPersistence = get(),
+            chatContextBuilder = get(),
+            chunkDao = get(),
+            compactionService = get()
         )
     }
 

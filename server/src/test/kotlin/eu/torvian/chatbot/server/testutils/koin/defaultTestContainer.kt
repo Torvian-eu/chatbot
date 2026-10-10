@@ -5,6 +5,8 @@ import eu.torvian.chatbot.server.domain.config.AccountSecurityMode
 import eu.torvian.chatbot.server.koin.daoModule
 import eu.torvian.chatbot.server.koin.miscModule
 import eu.torvian.chatbot.server.koin.serviceModule
+import eu.torvian.chatbot.server.service.llm.LLMApiClient
+import eu.torvian.chatbot.server.service.llm.LLMApiClientStub
 import org.koin.dsl.koinApplication
 
 /**
@@ -20,11 +22,14 @@ import org.koin.dsl.koinApplication
  *
  * @param accountSecurityMode The account security mode to bind into the container for feature tests.
  * @param selfRegistrationEnabled Whether the test server allows public self-registration.
+ * @param llmApiClient Client the container binds for LLM calls; defaults to the canned stub, and tests
+ *            that must hold an LLM call in flight pass their own double.
  * @return An instance of `KoinDIContainer` configured with the default test modules.
  */
 fun defaultTestContainer(
     accountSecurityMode: AccountSecurityMode = AccountSecurityMode.DISABLED,
-    selfRegistrationEnabled: Boolean = false
+    selfRegistrationEnabled: Boolean = false,
+    llmApiClient: LLMApiClient = LLMApiClientStub()
 ) = KoinDIContainer(
     koinApplication {
         // Uncomment for debugging:
@@ -35,7 +40,7 @@ fun defaultTestContainer(
             daoModule(),
             serviceModule(),
             miscModule(),
-            testSetupModule()
+            testSetupModule(llmApiClient)
         )
     }
 )

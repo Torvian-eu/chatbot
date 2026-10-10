@@ -9,10 +9,15 @@ import org.koin.dsl.module
 
 /**
  * Koin module for providing test-specific setup components.
+ *
+ * @param llmApiClient Client the application resolves for LLM calls; tests that must hold a call in
+ *            flight pass one that suspends until it is cancelled.
  */
-fun testSetupModule() = module {
+fun testSetupModule(
+    llmApiClient: LLMApiClient = LLMApiClientStub()
+) = module {
     single<TestDataManager> { ExposedTestDataManager(get()) }
-    single<LLMApiClient> { LLMApiClientStub() }
+    single<LLMApiClient> { llmApiClient }
     // --- JSON Serializer ---
     single<Json> {
         Json {

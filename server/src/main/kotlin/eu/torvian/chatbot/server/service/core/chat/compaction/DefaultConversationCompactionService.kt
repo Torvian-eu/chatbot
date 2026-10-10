@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.core.CompactionSkipReason
 import eu.torvian.chatbot.server.data.dao.ConversationCompactionChunkDao
 import eu.torvian.chatbot.server.data.dao.error.ConversationCompactionChunkDaoError
 import eu.torvian.chatbot.server.service.core.LLMConfig
@@ -27,15 +28,16 @@ import kotlin.time.Duration.Companion.seconds
  *
  * The loop's only conversation state is a rolling context window — one optional labeled summary plus
  * the additional uncompressed messages — together with a content-free identity ledger of every
- * compacted message's `(id, updatedAt)`. Every preflight verifies the exact window to be sent
- * against the threshold with the authoritative counter; when the window exceeds the threshold the
- * service performs exactly one compaction operation (the entire over-threshold window becomes the
- * auxiliary input, the result is one new summary, and the window becomes the summary alone), persists
- * one immutable prefix chunk whose coverage equals the ledger, and never repeats the compaction in a
- * loop. Any failure aborts the turn before an oversized primary request is sent.
+ * compacted message's `(id, updatedAt)`. The window is seeded from the largest eligible retained chunk
+ * and every preflight verifies the exact window to be sent against the threshold with the
+ * authoritative counter; when the window exceeds the threshold the service performs exactly one
+ * compaction operation (the entire over-threshold window becomes the auxiliary input, the result is
+ * one new summary, and the window becomes the summary alone), persists one immutable prefix chunk
+ * whose coverage equals the ledger, and never repeats the compaction in a loop. Any failure aborts the
+ * turn before an oversized primary request is sent.
  *
  * @property chunkDao Loads retained chunks and persists verified new chunks.
- * @property configurationResolver Resolves/validates the auxiliary configuration when required.
+ * @property auxiliaryConfigResolver Resolves/validates the auxiliary configuration when required.
  * @property tokenCounter Repository-owned approximate input token counter.
  * @property llmApiClient Provider-neutral client for the auxiliary non-streaming call.
  * @property auxiliaryTimeout Total timeout around the retrying auxiliary non-streaming call, including
@@ -44,7 +46,7 @@ import kotlin.time.Duration.Companion.seconds
  */
 class DefaultConversationCompactionService(
     private val chunkDao: ConversationCompactionChunkDao,
-    private val configurationResolver: ConversationCompactionConfigurationResolver,
+    private val auxiliaryConfigResolver: AuxiliaryCompactionConfigResolver,
     private val tokenCounter: ChatInputTokenCounter,
     private val llmApiClient: LLMApiClient,
     private val auxiliaryTimeout: Duration = AUXILIARY_COMPACTION_TIMEOUT_SECONDS.seconds
@@ -65,32 +67,64 @@ class DefaultConversationCompactionService(
         private const val MAX_ERROR_MESSAGE_CHARS: Int = 300
     }
 
+    /**
+     * Result of a compaction attempt that did not fail.
+     *
+     * [NoReduction] only ever comes from the forced (user-requested) path.
+     */
+    private sealed interface CompactionAttempt {
+
+        /**
+         * One verified prefix chunk was persisted.
+         *
+         * @property chunk The persisted chunk, ready to be used as primary context.
+         */
+        data class Persisted(val chunk: ConversationCompactionChunk) : CompactionAttempt
+
+        /**
+         * Nothing was persisted because the summary was not smaller than the content it replaces.
+         *
+         * @property sourceTokenCount Count of the window the summary would have replaced.
+         * @property resultTokenCount Count of the generated summary alone.
+         */
+        data class NoReduction(
+            val sourceTokenCount: Long,
+            val resultTokenCount: Long
+        ) : CompactionAttempt
+    }
+
     override suspend fun beginTurn(
         userId: Long,
         sessionId: Long,
         initialUnits: List<ConversationContextUnit>,
         resolvedCompaction: ResolvedCompactionConfig
     ): CompactionTurnState = when (resolvedCompaction) {
-        // Disabled by absence or by configuration: this branch loads no retained chunk and counts
-        // nothing, so the original thread is always sent and no configuration error can be raised.
-        is ResolvedCompactionConfig.Disabled ->
-            CompactionTurnState.Disabled(sessionId, initialUnits.toMutableList())
-
-        is ResolvedCompactionConfig.Enabled -> CompactionTurnState.Enabled(
-            sessionId = sessionId,
-            ownerUserId = userId,
-            // Resolved once for the whole turn: a later preset edit cannot affect this turn, and
-            // persisted chunks keep the threshold that was in effect.
-            settings = resolvedCompaction.settings,
+        is ResolvedCompactionConfig.Usable -> {
             // Retained chunks are loaded once per turn; later iterations extend the in-memory list as the
             // service persists new chunks instead of reloading the database on every tool step.
-            retainedChunks = chunkDao.getChunksBySessionId(sessionId).toMutableList(),
-            units = initialUnits.toMutableList(),
-            summaryMessage = null,
-            coveredSnapshots = mutableListOf(),
-            summaryChunkId = null,
-            initialized = false
-        )
+            val activeState = CompactionTurnState.Active(
+                sessionId = sessionId,
+                ownerUserId = userId,
+                // Resolved once for the whole turn: a later preset edit cannot affect this turn, and
+                // persisted chunks keep the threshold that was in effect.
+                settings = resolvedCompaction.settings,
+                automaticCompactionEnabled = resolvedCompaction.automaticCompactionEnabled,
+                retainedChunks = chunkDao.getChunksBySessionId(sessionId).toMutableList(),
+                units = initialUnits.toMutableList(),
+                summaryMessage = null,
+                coveredSnapshots = mutableListOf()
+            )
+            // The window and the ledger are seeded here, once, before the first preflight: seeding only
+            // touches state fields, all of which exist by now, so it need not be deferred.
+            initializeWindowFromEligibleChunk(activeState)
+            activeState
+        }
+
+        // No usable auxiliary configuration: this branch loads no retained chunk and counts nothing,
+        // so the original thread is always sent and no configuration error can be raised. A resolution
+        // that has to reject the turn never reaches here, because preparation rejects it first.
+        is ResolvedCompactionConfig.Unusable ->
+            CompactionTurnState.Inactive(sessionId, initialUnits.toMutableList())
     }
 
     override suspend fun preparePrimaryContext(
@@ -98,39 +132,39 @@ class DefaultConversationCompactionService(
         primaryConfig: LLMConfig,
         expectedLeafMessageId: Long
     ): Either<ConversationCompactionError, PrimaryContextPreflight> = either {
-        // Disabled by absence: count nothing, inject nothing, regenerate nothing.
-        if (state is CompactionTurnState.Disabled) {
+        // No usable configuration: count nothing, inject nothing, regenerate nothing.
+        if (state is CompactionTurnState.Inactive) {
             return@either PrimaryContextPreflight(
                 primaryMessages = flattenUnits(state.units),
                 persistedChunkIfAny = null
             )
         }
-        // Every state reaching a preflight is enabled: a turn whose configuration could not be decoded
-        // or validated was rejected during preparation, so this branch always carries resolved settings
-        // and never fabricates a fallback threshold.
-        val enabledState = state as CompactionTurnState.Enabled
-        val threshold = enabledState.settings.thresholdTokens
+        // Every state reaching a preflight has a usable configuration: a turn whose configuration could
+        // not be decoded or validated was rejected during preparation while automatic compaction was
+        // enabled, and otherwise ran as `Inactive`, so this branch always carries resolved settings and
+        // never fabricates a fallback threshold.
+        val activeState = state as CompactionTurnState.Active
+        val threshold = activeState.settings.thresholdTokens
 
-        // --- First preflight only: "do not inject retained chunks when the full raw thread fits". ---
-        // The full raw thread is counted once at turn start from the built context; after this point
-        // the window is the only context and the full uncompressed content is released.
-        if (!enabledState.initialized) {
-            enabledState.initialized = true
-            val fullRawTokens = countPrimaryInput(primaryConfig, flattenUnits(enabledState.units)).bind()
-            if (fullRawTokens <= threshold) {
-                return@either PrimaryContextPreflight(
-                    primaryMessages = flattenUnits(enabledState.units),
-                    persistedChunkIfAny = null
-                )
-            }
-            initializeWindowFromEligibleChunk(enabledState)
+        // The seeded window is the intended primary context, not an over-threshold fallback: it was
+        // seeded from the largest eligible retained chunk when the turn started, even below the
+        // threshold and even while automatic compaction is disabled.
+        val windowMessages = windowMessages(activeState)
+
+        // Automatic compaction disabled: the seeded window is sent as-is, with neither a count nor an
+        // auxiliary call. The threshold is deliberately not consulted, because the user asked for no
+        // automatic compaction.
+        if (!activeState.automaticCompactionEnabled) {
+            return@either PrimaryContextPreflight(
+                primaryMessages = windowMessages,
+                persistedChunkIfAny = null
+            )
         }
 
         // --- Window check (every preflight, including the first). ---
         // windowMessages is the hybrid context: [summary] + additional uncompressed messages (or the
         // raw thread before any summary exists). If it fits, it is sent as-is — the common steady
         // state reuses the current summary with no auxiliary call, no config resolution, no persistence.
-        val windowMessages = windowMessages(enabledState)
         val windowTokens = countPrimaryInput(primaryConfig, windowMessages).bind()
         if (windowTokens <= threshold) {
             return@either PrimaryContextPreflight(
@@ -140,66 +174,195 @@ class DefaultConversationCompactionService(
         }
 
         // --- Compaction required; auxiliary configuration errors fail only now. ---
-        // Empty-window edge case: when the over-threshold window is already just the summary (or
-        // empty), there is no uncompressed content left to compact — raising InsufficientReduction
-        // with the unreduced window count avoids a pointless auxiliary call and a summary-of-summary.
-        ensure(enabledState.units.isNotEmpty()) {
-            ConversationCompactionError.InsufficientReduction(
+        val persistedChunk = when (
+            val attempt = performCompaction(
+                userId = activeState.ownerUserId,
+                sessionId = activeState.sessionId,
+                settings = activeState.settings,
+                primaryConfig = primaryConfig,
+                summary = activeState.summaryMessage?.content,
+                units = activeState.units.toList(),
                 sourceTokenCount = windowTokens,
-                resultTokenCount = windowTokens,
+                coveredSnapshots = activeState.coveredSnapshots.toList(),
+                expectedLeafMessageId = expectedLeafMessageId
+            ).bind()
+        ) {
+            is CompactionAttempt.Persisted -> attempt.chunk
+            // Unreachable: a result that did not shrink below the threshold already failed above, and the
+            // window it replaces is over that threshold. Kept so an impossible state cannot read as success.
+            is CompactionAttempt.NoReduction -> raise(
+                ConversationCompactionError.InsufficientReduction(
+                    sourceTokenCount = attempt.sourceTokenCount,
+                    resultTokenCount = attempt.resultTokenCount,
+                    thresholdTokens = threshold
+                )
+            )
+        }
+
+        // Self-update: the state owns the window and the content-free ledger, so the persisted chunk is
+        // recorded here and nothing outside this loop has to track it. The ledger extension and the
+        // window replacement mirror exactly what the persisted chunk covers.
+        val newSummary = RawChatMessage.User(activeState.settings.summaryLabel + persistedChunk.summary)
+        activeState.coveredSnapshots = (
+            activeState.coveredSnapshots + activeState.units.map { it.source }
+            ).toMutableList()
+        activeState.summaryMessage = newSummary
+        activeState.units.clear()
+        activeState.retainedChunks.add(persistedChunk)
+
+        PrimaryContextPreflight(
+            primaryMessages = listOf(newSummary),
+            persistedChunkIfAny = persistedChunk
+        )
+    }
+
+    override suspend fun compactNow(
+        userId: Long,
+        sessionId: Long,
+        settings: EffectiveCompactionSettings,
+        primaryConfig: LLMConfig,
+        summary: String?,
+        units: List<ConversationContextUnit>,
+        coveredSnapshots: List<SourceMessageSnapshot>,
+        expectedLeafMessageId: Long
+    ): Either<ConversationCompactionError, ManualCompactionOutcome> = either {
+        // The source count is the count of the exact window to be summarized, so the persisted
+        // source/result pair keeps the same meaning as on the automatic path.
+        val sourceTokenCount = countPrimaryInput(
+            primaryConfig = primaryConfig,
+            messages = buildCompactionInput(summary, units)
+        ).bind()
+        when (
+            val attempt = performCompaction(
+                userId = userId,
+                sessionId = sessionId,
+                settings = settings,
+                primaryConfig = primaryConfig,
+                summary = summary,
+                units = units,
+                sourceTokenCount = sourceTokenCount,
+                coveredSnapshots = coveredSnapshots,
+                expectedLeafMessageId = expectedLeafMessageId
+            ).bind()
+        ) {
+            is CompactionAttempt.Persisted -> ManualCompactionOutcome.Persisted(attempt.chunk)
+            is CompactionAttempt.NoReduction -> {
+                logger.info(
+                    "Skipped forced compaction for session {}: a {} token summary does not shrink " +
+                        "the {} tokens it replaces",
+                    sessionId,
+                    attempt.resultTokenCount,
+                    attempt.sourceTokenCount
+                )
+                ManualCompactionOutcome.Skipped(CompactionSkipReason.SUMMARY_NOT_SMALLER)
+            }
+        }
+    }
+
+    /**
+     * Performs the one-shot compaction of a window and persists its verified chunk.
+     *
+     * Shared by the automatic preflight branch and [compactNow], so both paths produce interchangeable
+     * chunks: one auxiliary call, the same sufficiency post-count, the same cumulative coverage, and one
+     * atomic verified insert.
+     *
+     * The reduction rule is unconditional: a summary that is not smaller than the window it replaces is
+     * reported as [CompactionAttempt.NoReduction] instead of being persisted. Only the forced path can
+     * trigger it, because on the automatic path such a result fails the threshold check below first.
+     *
+     * @param userId Owner of the compaction preference supplying the auxiliary configuration.
+     * @param sessionId Session owning the new chunk.
+     * @param settings The effective compaction settings in effect for the request.
+     * @param primaryConfig The primary configuration whose threshold and counter decide sufficiency.
+     * @param summary The labeled summary text of an already-covered prefix (label included), or null
+     *            when the window is the whole thread.
+     * @param units The uncompressed units to summarize, in thread order.
+     * @param sourceTokenCount Estimated primary input of the window before this compaction.
+     * @param coveredSnapshots The cumulative identity ledger of already-compacted messages, in thread
+     *            order; empty when nothing has been compacted yet.
+     * @param expectedLeafMessageId Thread leaf the chunk must end at.
+     * @return Either a [ConversationCompactionError] or the attempt outcome; nothing is persisted for
+     *         a [CompactionAttempt.NoReduction] result.
+     */
+    private suspend fun performCompaction(
+        userId: Long,
+        sessionId: Long,
+        settings: EffectiveCompactionSettings,
+        primaryConfig: LLMConfig,
+        summary: String?,
+        units: List<ConversationContextUnit>,
+        sourceTokenCount: Long,
+        coveredSnapshots: List<SourceMessageSnapshot>,
+        expectedLeafMessageId: Long
+    ): Either<ConversationCompactionError, CompactionAttempt> = either {
+        val threshold = settings.thresholdTokens
+
+        // Empty-window edge case: when the window is already just the summary (or empty), there is no
+        // uncompressed content left to compact — raising InsufficientReduction with the unreduced
+        // window count avoids a pointless auxiliary call and a summary-of-summary.
+        ensure(units.isNotEmpty()) {
+            ConversationCompactionError.InsufficientReduction(
+                sourceTokenCount = sourceTokenCount,
+                resultTokenCount = sourceTokenCount,
                 thresholdTokens = threshold
             )
         }
 
-        val auxiliaryConfig = configurationResolver.resolveAuxiliaryConfig(
-            userId = enabledState.ownerUserId,
-            settings = enabledState.settings
+        val auxiliaryConfig = auxiliaryConfigResolver.resolveAuxiliaryConfig(
+            userId = userId,
+            settings = settings
         ).bind()
         logger.debug(
             "Running compaction for session {}: window {} tokens exceeds threshold {}",
-            enabledState.sessionId,
-            windowTokens,
+            sessionId,
+            sourceTokenCount,
             threshold
         )
 
-        // One-shot compaction (ND-3/ND-4): the entire over-threshold window becomes the input; the
-        // result is a single new summary and the window becomes the summary alone. There is no loop.
-        val input = buildCompactionInput(enabledState.summaryMessage, enabledState.units)
-        val generationResult = generateSummary(auxiliaryConfig, input, enabledState.settings.instruction).bind()
+        // One-shot compaction: the entire window becomes the input; the result is a single new summary
+        // and the window becomes the summary alone. There is no loop.
+        val input = buildCompactionInput(summary, units)
+        val generationResult = generateSummary(auxiliaryConfig, input, settings.instruction).bind()
         val summaryText = validateSummaryOutput(generationResult).bind()
-        val newSummary = RawChatMessage.User(enabledState.settings.summaryLabel + summaryText)
+        val newSummary = RawChatMessage.User(settings.summaryLabel + summaryText)
 
         // Post-count the one-summary primary request with the primary dialect/tools; insufficient
-        // reduction is a failure (ND-4/ND-6) and must not persist a chunk or send the primary request.
+        // reduction is a failure and must not persist a chunk.
         val resultTokens = countPrimaryInput(primaryConfig, listOf(newSummary)).bind()
         if (resultTokens > threshold) {
             raise(
                 ConversationCompactionError.InsufficientReduction(
-                    sourceTokenCount = windowTokens,
+                    sourceTokenCount = sourceTokenCount,
                     resultTokenCount = resultTokens,
                     thresholdTokens = threshold
                 )
             )
         }
 
-        // Ledger extension (whole window) before the content is dropped: every compacted message's
-        // identity is recorded content-free, so the chunk coverage below equals the ledger.
-        enabledState.coveredSnapshots.addAll(enabledState.units.map { it.source })
-        enabledState.summaryMessage = newSummary
-        enabledState.units.clear()
+        // Reduction rule: a summary that is not smaller than the window it replaces would only replace
+        // faithful content with a lossy equivalent of the same or greater size. Both sides are primary-input
+        // counts, so "smaller" means the summary message is cheaper than the `[summary] + units` window.
+        if (resultTokens >= sourceTokenCount) {
+            return@either CompactionAttempt.NoReduction(
+                sourceTokenCount = sourceTokenCount,
+                resultTokenCount = resultTokens
+            )
+        }
 
+        // The chunk's coverage is the cumulative compacted prefix: the incoming ledger extended by the
+        // source of every unit that was just summarized.
         val candidate = createChunkCandidate(
-            sessionId = enabledState.sessionId,
+            sessionId = sessionId,
             summary = summaryText,
             auxiliaryConfig = auxiliaryConfig,
-            instruction = enabledState.settings.instruction,
-            coveredSnapshots = enabledState.coveredSnapshots,
-            sourceTokenCount = windowTokens,
+            instruction = settings.instruction,
+            coveredSnapshots = coveredSnapshots + units.map { it.source },
+            sourceTokenCount = sourceTokenCount,
             resultTokens = resultTokens,
             threshold = threshold
         )
 
-        // The primary call must not start unless this atomic verified insert succeeds (root-to-leaf
+        // The caller must not use the summary unless this atomic verified insert succeeds (root-to-leaf
         // against expectedLeafMessageId; unchanged DAO contract).
         val persistedChunk = chunkDao.insertVerifiedChunk(candidate, expectedLeafMessageId)
             .mapLeft { daoError ->
@@ -213,11 +376,6 @@ class DefaultConversationCompactionService(
             }
             .bind()
 
-        // Self-update: the state owns the window and the content-free ledger, so the persisted chunk is
-        // recorded here and nothing outside this loop has to track it.
-        enabledState.summaryChunkId = persistedChunk.id
-        enabledState.retainedChunks.add(persistedChunk)
-
         logger.info(
             "Persisted compaction chunk {} for session {}: source {} -> result {} tokens (threshold {})",
             persistedChunk.id,
@@ -227,32 +385,31 @@ class DefaultConversationCompactionService(
             persistedChunk.thresholdTokens
         )
 
-        PrimaryContextPreflight(
-            primaryMessages = listOf(newSummary),
-            persistedChunkIfAny = persistedChunk
-        )
+        CompactionAttempt.Persisted(persistedChunk)
     }
 
     /**
-     * Initializes the rolling window from the largest eligible retained chunk (first preflight only).
+     * Seeds the rolling window from the largest eligible retained chunk.
      *
-     * When the full raw thread is over the threshold and an eligible prior chunk exists, the window is
-     * seeded with that chunk's labeled summary, the identity ledger is seeded from the chunk's
-     * persisted coverage, and the covered prefix is dropped from [CompactionTurnState.Enabled.units]
-     * (delta only; the full thread content is released). When no eligible chunk exists the window
-     * stays the full thread and the ledger stays empty — the first compaction is then a documented
-     * one-time full-thread cost.
+     * Runs once when the turn starts, so the first preflight already sees the window it will send.
+     * When an eligible prior chunk exists, the window is seeded with that chunk's labeled summary, the
+     * identity ledger is seeded from the chunk's persisted coverage, and the covered prefix is dropped
+     * from [CompactionTurnState.Active.units] (delta only; the full thread content is released). When no
+     * eligible chunk exists the window stays the full thread and the ledger stays empty — the first
+     * compaction is then a documented one-time full-thread cost.
      *
-     * @param state The enabled turn state being initialized.
+     * Runs for every active state, whether automatic compaction is enabled or disabled: an existing
+     * eligible summary is the intended primary context in both cases.
+     *
+     * @param state The active turn state being initialized.
      */
-    private fun initializeWindowFromEligibleChunk(state: CompactionTurnState.Enabled) {
+    private fun initializeWindowFromEligibleChunk(state: CompactionTurnState.Active) {
         // Eligible chunks are nested cumulative prefixes, so the chunk covering the most source
         // message ids also supersedes every smaller eligible chunk — a single selection fully
         // seeds the window and the ledger.
         val largest = findLargestEligibleChunk(state.retainedChunks, ConversationContext(state.units))
             ?: return
         state.summaryMessage = RawChatMessage.User(state.settings.summaryLabel + largest.summary)
-        state.summaryChunkId = largest.id
         state.coveredSnapshots = largest.coverage
             .map { covered -> SourceMessageSnapshot(id = covered.messageId, updatedAt = covered.observedUpdatedAt) }
             .toMutableList()
@@ -260,13 +417,13 @@ class DefaultConversationCompactionService(
     }
 
     /**
-     * Builds the rolling window messages for the current enabled state in primary order.
+     * Builds the rolling window messages for the current active state in primary order.
      *
-     * @param state The enabled turn state (summary is null only before the first compaction or when no
+     * @param state The active turn state (summary is null only before the first compaction or when no
      *            prior eligible chunk seeded the window).
      * @return `[summary] + flattened units`, or the flattened units when no summary exists.
      */
-    private fun windowMessages(state: CompactionTurnState.Enabled): List<RawChatMessage> =
+    private fun windowMessages(state: CompactionTurnState.Active): List<RawChatMessage> =
         listOfNotNull(state.summaryMessage) + flattenUnits(state.units)
 
     /**

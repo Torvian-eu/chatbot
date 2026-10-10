@@ -22,6 +22,8 @@ import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultCont
 import eu.torvian.chatbot.server.service.core.chat.context.DefaultChatContextBuilder
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
 import eu.torvian.chatbot.server.service.llm.LLMApiClientStub
+import eu.torvian.chatbot.server.service.llm.LLMCompletionError
+import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
@@ -33,6 +35,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -41,15 +44,16 @@ import kotlin.test.assertTrue
 /**
  * End-to-end service test with a real Exposed database and the stubbed LLM client.
  *
- * Covers the rolling-window flows against real chunk persistence: window init with an eligible chunk
+ * Covers the rolling-window flows against real chunk persistence: forced use of an eligible chunk
+ * below the threshold, window init with an eligible chunk
  * (summary + delta, ledger seeded), one-shot compaction persisting a prefix chunk whose coverage
  * equals the tracked ledger, hybrid context reuse within the threshold, summary-alone window after
- * compaction, `InsufficientReduction`, the disabled-preference (`enabled = false`) path that sends
- * the full thread with no chunk, the unresolved-compactor path (error only when compaction is
- * required, pass-through while it fits), edit invalidation with a replacement chunk (old rows
- * retained),
- * branch exclusion (inside range invalidates, at/after range keeps eligible), the fit-sends-originals
- * rule, and the guarantee that no synthetic summary is persisted into the visible transcript.
+ * compaction, `InsufficientReduction`, the disabled-preference (`automaticCompactionEnabled = false`)
+ * path that sends the full thread with no chunk, the unresolved-compactor path (error only when
+ * compaction is required, pass-through while it fits), edit invalidation with a replacement chunk
+ * (old rows retained),
+ * branch exclusion (inside range invalidates, at/after range keeps eligible), and the guarantee that
+ * no synthetic summary is persisted into the visible transcript.
  */
 class ConversationCompactionServiceIntegrationTest {
 
@@ -170,11 +174,14 @@ class ConversationCompactionServiceIntegrationTest {
      * `beginTurn` exactly as turn preparation would deliver it.
      *
      * @param preference Global compaction preference to store as the user's row.
+     * @param llmApiClient Client used for auxiliary calls; pass a counting wrapper to assert that a path
+     *            performs no summarization.
      * @return The service and the effective configuration the production resolver derives from the
      *         stored row.
      */
     private suspend fun runtime(
-        preference: ConversationCompactionPreference
+        preference: ConversationCompactionPreference,
+        llmApiClient: LLMApiClient = LLMApiClientStub()
     ): Pair<DefaultConversationCompactionService, ResolvedCompactionConfig> {
         val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
         userPreferenceDao.upsertPreference(
@@ -188,7 +195,7 @@ class ConversationCompactionServiceIntegrationTest {
         // fixtures' own model/settings while an unrelated id fails.
         val expectedModelId = model.id
         val expectedSettingsId = settings.id
-        val configurationResolver = object : ConversationCompactionConfigurationResolver {
+        val auxiliaryConfigResolver = object : AuxiliaryCompactionConfigResolver {
             override suspend fun resolveAuxiliaryConfig(
                 userId: Long,
                 settings: EffectiveCompactionSettings
@@ -203,10 +210,9 @@ class ConversationCompactionServiceIntegrationTest {
                     auxiliaryConfig.right()
                 }
         }
-        val llmApiClient: LLMApiClient = LLMApiClientStub()
         val service = DefaultConversationCompactionService(
             chunkDao = chunkDao,
-            configurationResolver = configurationResolver,
+            auxiliaryConfigResolver = auxiliaryConfigResolver,
             tokenCounter = FixedTokenCounter,
             llmApiClient = llmApiClient
         )
@@ -216,7 +222,6 @@ class ConversationCompactionServiceIntegrationTest {
             userPreferenceDao = userPreferenceDao,
             json = json
         ).resolve(TestDefaults.user1.id, TestDefaults.modelPreset1.id)
-            .getOrNull()!!
         return service to resolved
     }
 
@@ -265,25 +270,28 @@ class ConversationCompactionServiceIntegrationTest {
     }
 
     @Test
-    fun `disabled preference sends the full thread and persists nothing`() = runTest {
+    fun `a disabled preference sends the full thread and persists nothing`() = runTest {
         val (service, resolved) = runtime(
             ConversationCompactionPreference(
                 modelId = model.id,
                 settingsId = settings.id,
                 instruction = "Summarize faithfully",
                 thresholdTokens = 200L,
-                enabled = false
+                automaticCompactionEnabled = false
             )
         )
         val state =
             service.beginTurn(TestDefaults.user1.id, session.id, contextEndingAt(m3.id).units, resolved)
-        assertIs<CompactionTurnState.Disabled>(state)
+        // The stored configuration is usable, so the turn is active; only automatic compaction is
+        // disabled, which the active state records.
+        val active = assertIs<CompactionTurnState.Active>(state)
+        assertFalse(active.automaticCompactionEnabled)
 
         val preflight = service.preparePrimaryContext(state, auxiliaryConfig, expectedLeafMessageId = m3.id)
             .getOrNull()
         assertNotNull(preflight)
-        // The full thread is sent unchanged even though it exceeds the 200-token threshold: the
-        // `enabled = false` flag disables compaction exactly like an absent preference row.
+        // The full thread is sent unchanged even though it exceeds the 200-token threshold: automatic
+        // compaction is disabled and the counter is never consulted.
         assertEquals(3, preflight.primaryMessages.size)
         assertNull(preflight.persistedChunkIfAny)
         assertTrue(chunkDao.getChunksBySessionId(session.id).isEmpty())
@@ -305,7 +313,7 @@ class ConversationCompactionServiceIntegrationTest {
             )
             val state =
                 service.beginTurn(TestDefaults.user1.id, session.id, contextEndingAt(m3.id).units, resolved)
-            assertIs<CompactionTurnState.Enabled>(state)
+            assertIs<CompactionTurnState.Active>(state)
 
             val result = service.preparePrimaryContext(state, auxiliaryConfig, expectedLeafMessageId = m3.id)
             assertIs<ConversationCompactionError.InvalidConfiguration>(result.leftOrNull())
@@ -326,7 +334,7 @@ class ConversationCompactionServiceIntegrationTest {
         )
         val state =
             service.beginTurn(TestDefaults.user1.id, session.id, contextEndingAt(m3.id).units, resolved)
-        assertIs<CompactionTurnState.Enabled>(state)
+        assertIs<CompactionTurnState.Active>(state)
 
         val preflight = service.preparePrimaryContext(state, auxiliaryConfig, expectedLeafMessageId = m3.id)
             .getOrNull()
@@ -514,7 +522,7 @@ class ConversationCompactionServiceIntegrationTest {
     }
 
     @Test
-    fun `full raw input that fits sends originals and does not persist a replacement for stale chunks`() = runTest {
+    fun `below-threshold thread is served by the largest eligible chunk with no second auxiliary call`() = runTest {
         val (service, resolved) = runtime(
             ConversationCompactionPreference(
                 modelId = model.id,
@@ -525,31 +533,37 @@ class ConversationCompactionServiceIntegrationTest {
         )
         val state = service.beginTurn(TestDefaults.user1.id, session.id, contextEndingAt(m3.id).units, resolved)
         service.preparePrimaryContext(state, auxiliaryConfig, expectedLeafMessageId = m3.id)
-        assertEquals(1, chunkDao.getChunksBySessionId(session.id).size)
+        val persisted = chunkDao.getChunksBySessionId(session.id).single()
 
-        // Raise the threshold so the full raw thread fits; originals are sent and no new chunk is created.
+        // Raise the threshold so the full raw thread fits: the eligible chunk is still the primary
+        // context and the raw thread is never sent in its place.
+        val countingClient = CountingLLMApiClient()
         val (fittingService, fittingResolved) = runtime(
             ConversationCompactionPreference(
                 modelId = model.id,
                 settingsId = settings.id,
                 instruction = "Summarize faithfully",
                 thresholdTokens = 1_000L
-            )
+            ),
+            countingClient
         )
         val fitState = fittingService.beginTurn(TestDefaults.user1.id, session.id, contextEndingAt(m3.id).units, fittingResolved)
-        val preflight = fittingService.preparePrimaryContext(
-            fitState,
-            auxiliaryConfig,
-            expectedLeafMessageId = m3.id
+        val result = assertNotNull(
+            fittingService.preparePrimaryContext(fitState, auxiliaryConfig, expectedLeafMessageId = m3.id).getOrNull()
         )
-        val result = preflight.getOrNull()
-        assertNotNull(result)
+
+        // The eligible chunk covers the whole thread, so the window is the persisted summary alone.
+        assertEquals(1, result.primaryMessages.size)
+        assertEquals(
+            ConversationCompactionPreference.DEFAULT_COMPACTED_SUMMARY_LABEL + persisted.summary,
+            (result.primaryMessages.single() as RawChatMessage.User).content
+        )
         assertNull(result.persistedChunkIfAny)
-        assertEquals(contextEndingAt(m3.id).flatten(), result.primaryMessages)
+        assertEquals(0, countingClient.completeChatCalls, "Reusing a chunk must not summarize again")
         assertEquals(
             1,
             chunkDao.getChunksBySessionId(session.id).size,
-            "No eager replacement chunk is created while the raw thread fits"
+            "No eager replacement chunk is created while a chunk is reused"
         )
     }
 
@@ -572,5 +586,32 @@ class ConversationCompactionServiceIntegrationTest {
             messages.none { it.content.contains(ConversationCompactionPreference.DEFAULT_COMPACTED_SUMMARY_LABEL) },
             "The synthetic summary must never be persisted as a transcript message"
         )
+    }
+}
+
+/**
+ * [LLMApiClient] delegating to a stub while counting non-streaming completions, so a test can assert
+ * that a path performs no auxiliary call at all.
+ *
+ * @property delegate Client that answers the actual calls.
+ */
+private class CountingLLMApiClient(
+    private val delegate: LLMApiClient = LLMApiClientStub()
+) : LLMApiClient by delegate {
+    /** Number of non-streaming completions requested through this client. */
+    var completeChatCalls: Int = 0
+        private set
+
+    override suspend fun completeChat(
+        messages: List<RawChatMessage>,
+        modelConfig: LLMModel,
+        provider: LLMProvider,
+        settings: ModelSettings,
+        apiKey: String?,
+        tools: List<ToolDefinition>?,
+        systemMessage: String?
+    ): Either<LLMCompletionError, LLMCompletionResult> {
+        completeChatCalls++
+        return delegate.completeChat(messages, modelConfig, provider, settings, apiKey, tools, systemMessage)
     }
 }
