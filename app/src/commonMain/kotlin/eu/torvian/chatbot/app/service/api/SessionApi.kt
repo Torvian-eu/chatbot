@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.core.ThreadStats
 import eu.torvian.chatbot.common.models.api.project.UpdateSessionProjectResponse
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -158,4 +159,16 @@ interface SessionApi {
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
     suspend fun getSessionToolCalls(sessionId: Long): Either<ApiResourceError, List<ToolCall>>
+
+    /**
+     * Retrieves the aggregate statistics of the session's currently displayed thread.
+     *
+     * Corresponds to `GET /api/v1/sessions/{sessionId}/stats`. The server resolves the thread from the
+     * session's current leaf message, so no branch identifier is sent.
+     *
+     * @param sessionId The ID of the session whose thread is measured.
+     * @return [Either.Right] containing the [ThreadStats] of the session's current branch on success,
+     *         or [Either.Left] containing an [ApiResourceError] on failure.
+     */
+    suspend fun getThreadStats(sessionId: Long): Either<ApiResourceError, ThreadStats>
 }

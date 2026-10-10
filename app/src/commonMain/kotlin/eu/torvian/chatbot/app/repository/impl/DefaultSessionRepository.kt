@@ -16,6 +16,7 @@ import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.CompactionEvent
+import eu.torvian.chatbot.common.models.api.core.ThreadStats
 import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -195,6 +196,13 @@ class DefaultSessionRepository(
                 val toolCallsMap = toolCalls.groupBy { it.messageId }
                 toolCallsFlow.update { DataState.Success(toolCallsMap) }
                 toolCallsMap
+            }
+    }
+
+    override suspend fun getThreadStats(sessionId: Long): Either<RepositoryError, ThreadStats> {
+        return sessionApi.getThreadStats(sessionId)
+            .mapLeft { apiResourceError ->
+                apiResourceError.toRepositoryError("Failed to load thread stats")
             }
     }
 
