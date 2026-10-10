@@ -12,16 +12,19 @@ import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 /**
  * Conversation Compaction settings tab: compaction model selector, compatible non-streaming settings
  * selector, instruction editor, optional system-message editor, summary-label editor, token-threshold
- * editor (default 100,000), inline validation messages, an enable/disable toggle, and Save / Delete
- * actions backed by the GLOBAL `conversation_compaction` preference row.
+ * editor (default 100,000), inline validation messages, an "Automatic compaction" switch, and Save /
+ * Delete actions backed by the GLOBAL `conversation_compaction` preference row.
  *
- * An absent stored preference means automatic compaction is disabled and the form shows the disabled
- * defaults. The enable toggle is draft state persisted by Save: turning it off and saving keeps the
- * stored configuration while disabling compaction at runtime (the server stores `enabled = false`),
- * which is deliberately separate from the destructive Delete action. The form only renders
- * accessible, active models and chat-like non-streaming profiles, so the saved configuration is
- * compatible with the server's write-time validation. The form stays fully editable whether or not
- * compaction is enabled.
+ * The switch is the user-level flag for **automatic** (threshold-triggered) compaction only: the server
+ * compacts a turn automatically only while this flag AND the session preset's own flag are on, so the
+ * switch disables automatic compaction account-wide but cannot enable it for a session whose preset
+ * disables it. An absent stored preference means automatic compaction is disabled and the form shows the
+ * disabled defaults. Turning the switch off and saving keeps the stored configuration while disabling
+ * automatic compaction at runtime, which is deliberately separate from the destructive Delete action.
+ * User-requested compaction from the chat top bar is always available and only needs a usable
+ * configuration. The form only renders accessible, active models and chat-like non-streaming profiles,
+ * so the saved configuration is compatible with the server's write-time validation. The form stays
+ * fully editable whether or not automatic compaction is enabled.
  *
  * @param state The current tab state.
  * @param actions The action callbacks for the tab.
@@ -48,49 +51,45 @@ fun ConversationCompactionTab(
             )
         }
 
-        // Enable-status banner with the draft toggle. Disabling is decoupled from deletion: toggling
-        // off and saving writes `enabled = false` into the stored row (runtime-disabled, configuration
-        // preserved), while the destructive Delete action at the bottom removes the row entirely.
+        // Automatic-compaction switch as a plain settings row with no status container, matching the other
+        // rows: the flag is one of two conditions (ANDed with the session preset's own flag), so its state
+        // is conveyed by the switch itself and the description text rather than by a surface tint.
+        // Disabling is decoupled from deletion: switching off and saving writes the disabled flag into the
+        // stored row (automatic off, configuration preserved), while the destructive Delete action at the
+        // bottom removes the row entirely. Manual compaction from the chat top bar is available in every
+        // case.
         item {
             val stored = state.storedPreference
-            val effectiveEnabled = stored != null && stored.enabled
-            Surface(
-                color = if (effectiveEnabled) {
-                    MaterialTheme.colorScheme.secondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
-                },
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = when {
-                                stored != null && stored.enabled ->
-                                    "Automatic compaction is enabled (model: ${storedModelLabel(stored)}). " +
-                                        "Oversized primary contexts are summarized before the assistant responds."
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Automatic compaction", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = when {
+                            stored != null && stored.automaticCompactionEnabled ->
+                                "On. Oversized contexts are summarized before the assistant responds, provided " +
+                                    "the session's preset also allows it (model: ${storedModelLabel(stored)}). " +
+                                    "You can still compact a conversation manually from the chat top bar."
 
-                                stored != null ->
-                                    "Automatic compaction is disabled, but the stored configuration is preserved " +
-                                        "(model: ${storedModelLabel(stored)}). Toggle it on and save to re-enable."
+                            stored != null ->
+                                "Off, with the stored configuration preserved (model: ${storedModelLabel(stored)}). " +
+                                    "Switch it on and save to re-enable. Requesting compaction manually from the " +
+                                    "chat top bar keeps working as long as the configuration is complete."
 
-                                else ->
-                                    "Automatic compaction is disabled. No saved configuration exists; " +
-                                        "configure the form below and save to enable."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = state.enabled,
-                        onCheckedChange = actions::onToggleEnabled
+                            else ->
+                                "Off. No saved configuration exists; configure the form below and save to enable it. " +
+                                    "Manual compaction needs it too."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Switch(
+                    checked = state.automaticEnabled,
+                    onCheckedChange = actions::onToggleAutomaticEnabled
+                )
             }
         }
 
@@ -199,7 +198,8 @@ fun ConversationCompactionTab(
                 onValueChange = actions::onUpdateThreshold,
                 label = { Text("Token threshold") },
                 supportingText = {
-                    Text("Compaction triggers when the primary input exceeds this approximate token count. Default: 100,000.")
+                    Text("Compaction triggers when the primary input exceeds this approximate token count. Default: 100,000. " +
+                        "It applies to automatic compaction and to the sufficiency check of a manual request.")
                 },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
@@ -267,8 +267,11 @@ fun ConversationCompactionTab(
             Text(
                 text = "The compaction model receives the over-threshold window; only non-streaming chat-like " +
                     "settings profiles are compatible. Changing models clears the settings selection because " +
-                    "profiles belong to one model. Toggling compaction off and saving disables it temporarily " +
-                    "while keeping the configuration; Delete configuration removes the stored preference entirely.",
+                    "profiles belong to one model. The \"Automatic compaction\" switch only controls threshold-" +
+                    "triggered summarization, and only together with the session preset's own switch: switching " +
+                    "it off and saving disables it while keeping the configuration, and manual compaction from " +
+                    "the chat top bar remains available. Delete configuration removes the stored preference " +
+                    "entirely.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

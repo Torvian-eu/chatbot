@@ -67,7 +67,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
             } returns PersistedUserMessage(userMessage, null)
             coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
             coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
-                    CompactionTurnState.Disabled(testSession.id, mutableListOf())
+                    CompactionTurnState.Inactive(testSession.id, mutableListOf())
             coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
                     PrimaryContextPreflight(primaryMessages = windowMessages, persistedChunkIfAny = null).right()
             coEvery {
@@ -131,7 +131,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
-                CompactionTurnState.Disabled(testSession.id, mutableListOf())
+                CompactionTurnState.Inactive(testSession.id, mutableListOf())
         coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
                 ConversationCompactionError.InvalidConfiguration("broken preference").left()
 
@@ -200,7 +200,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
             } returns PersistedUserMessage(userMessage, null)
             coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
             coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
-                CompactionTurnState.Disabled(testSession.id, mutableListOf())
+                CompactionTurnState.Inactive(testSession.id, mutableListOf())
             coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
                 PrimaryContextPreflight(
                     primaryMessages = summaryMessages,
@@ -282,7 +282,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
-            CompactionTurnState.Disabled(testSession.id, mutableListOf())
+            CompactionTurnState.Inactive(testSession.id, mutableListOf())
         coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
             PrimaryContextPreflight(primaryMessages = emptyList(), persistedChunkIfAny = null).right()
         coEvery {

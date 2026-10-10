@@ -22,12 +22,14 @@ import kotlinx.serialization.Serializable
  * @property modelSettingsId The new settings-profile reference, or `null` to clear it. The profile
  *            must be accessible to the requesting user and, when [modelId] is also present, must
  *            belong to that model.
- * @property compactionEnabled The new compaction enablement flag for turns running on this preset.
+ * @property automaticCompactionEnabled The new automatic-compaction flag for turns running on this
+ *            preset; ANDed with the user's `conversation_compaction` preference and never restricting
+ *            user-requested compaction.
  *            Because the request is a full replacement, an omitted value resets it to its default
  *            (`true`), so a caller that wants to keep the persisted value must send it.
  * @property compactionThresholdTokens The new per-preset compaction threshold in input tokens, or
  *            `null` to fall back to the user preference's threshold. A non-null value must be at
- *            least `1`; as with [compactionEnabled], an omitted value resets it to its default
+ *            least `1`; as with [automaticCompactionEnabled], an omitted value resets it to its default
  *            (`null`).
  */
 @Serializable
@@ -37,6 +39,6 @@ data class UpdateModelPresetRequest(
     val description: String = "",
     val modelId: Long? = null,
     val modelSettingsId: Long? = null,
-    val compactionEnabled: Boolean = true,
+    val automaticCompactionEnabled: Boolean = true,
     val compactionThresholdTokens: Long? = null
 )

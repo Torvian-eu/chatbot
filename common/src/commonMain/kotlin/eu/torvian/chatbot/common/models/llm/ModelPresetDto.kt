@@ -49,10 +49,12 @@ const val MAX_MODEL_PRESET_NAME_LENGTH = 255
  *            the model was deleted (`ON DELETE SET NULL`).
  * @property modelSettingsId Identifier of the referenced [ModelSettings] profile, or `null` when the
  *            preset has no settings profile or the profile was deleted (`ON DELETE SET NULL`).
- * @property compactionEnabled Whether turns running on this preset may compact their conversation at
- *            all. It is combined with (ANDed with) the user's `conversation_compaction` preference, so
- *            a `false` value disables compaction for the preset's sessions regardless of the
- *            preference, and a `true` value still requires the preference to be present and enabled.
+ * @property automaticCompactionEnabled Whether threshold-triggered (automatic) compaction is enabled
+ *            for turns running on this preset. It is ANDed with the user's `conversation_compaction`
+ *            preference, so a `false` value disables automatic compaction for the preset's sessions
+ *            regardless of the preference, and a `true` value still requires the preference to be
+ *            enabled. It never restricts user-requested (manual) compaction, which only needs a usable
+ *            auxiliary configuration.
  * @property compactionThresholdTokens Optional per-preset compaction threshold in input tokens. A
  *            `null` value falls back to the `conversation_compaction` preference's threshold (100,000
  *            by default); a non-null value must be at least `1`.
@@ -69,7 +71,7 @@ data class ModelPresetDto(
     val description: String = "",
     val modelId: Long?,
     val modelSettingsId: Long?,
-    val compactionEnabled: Boolean = true,
+    val automaticCompactionEnabled: Boolean = true,
     val compactionThresholdTokens: Long? = null,
     val createdAt: Instant,
     val updatedAt: Instant

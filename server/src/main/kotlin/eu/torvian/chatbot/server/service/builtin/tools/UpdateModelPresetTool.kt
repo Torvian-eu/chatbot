@@ -23,7 +23,7 @@ import kotlinx.serialization.json.JsonObject
  * - `model_id = 0` and `model_settings_id = 0` clear the respective reference, mirroring the
  *   `model_preset_id = 0` / `project_id = 0` "clear" sentinels of the agent-role and project
  *   tools. Preset ids are positive `AUTOINCREMENT` values, so `0` can never address a real row;
- * - an omitted or `null` `compaction_enabled` preserves the persisted flag, while an explicit boolean
+ * - an omitted or `null` `automatic_compaction_enabled` preserves the persisted flag, while an explicit boolean
  *   sets it ([parseOptionalBoolean] decodes both JSON literals);
  * - `compaction_threshold_tokens = 0` clears the preset's compaction threshold override so the user
  *   preference threshold applies again, and a value of at least `1` sets the override. `0` is free
@@ -70,7 +70,7 @@ class UpdateModelPresetTool(
                 ServerBuiltInToolCatalog.DESCRIPTION_PROPERTY,
                 ServerBuiltInToolCatalog.MODEL_ID_PROPERTY,
                 ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY,
-                ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY,
+                ServerBuiltInToolCatalog.AUTOMATIC_COMPACTION_ENABLED_PROPERTY,
                 ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY
             ),
             validationErrors
@@ -85,8 +85,8 @@ class UpdateModelPresetTool(
         val modelId = parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_ID_PROPERTY, validationErrors)
         val modelSettingsId =
             parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY, validationErrors)
-        val compactionEnabled =
-            parseOptionalBoolean(input, ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY, validationErrors)
+        val automaticCompactionEnabled =
+            parseOptionalBoolean(input, ServerBuiltInToolCatalog.AUTOMATIC_COMPACTION_ENABLED_PROPERTY, validationErrors)
         val compactionThresholdTokens =
             parseOptionalLong(input, ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY, validationErrors)
         if (validationErrors.isNotEmpty()) {
@@ -124,7 +124,7 @@ class UpdateModelPresetTool(
                 0L -> null
                 else -> modelSettingsId
             },
-            compactionEnabled = compactionEnabled ?: persisted.compactionEnabled,
+            automaticCompactionEnabled = automaticCompactionEnabled ?: persisted.automaticCompactionEnabled,
             compactionThresholdTokens = when (compactionThresholdTokens) {
                 null -> persisted.compactionThresholdTokens
                 // `0` is the explicit "clear the override" sentinel; the service rejects it as a

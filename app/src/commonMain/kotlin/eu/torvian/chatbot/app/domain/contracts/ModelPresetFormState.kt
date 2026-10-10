@@ -25,8 +25,9 @@ import eu.torvian.chatbot.common.models.llm.ModelPresetDto
  * @property description Free-form description of the preset's purpose.
  * @property modelId Selected model reference, or null for "No model".
  * @property modelSettingsId Selected settings-profile reference, or null for "No settings profile".
- * @property compactionEnabled Whether turns running on this preset may compact their conversation at
- *            all.
+ * @property automaticCompactionEnabled Whether turns running on this preset may summarize at the
+ *            threshold automatically; it is ANDed with the user's own automatic-compaction flag, and
+ *            it never affects a user-requested compaction.
  * @property compactionThresholdTokensText Compaction threshold as typed text; blank means "use the
  *            user preference threshold".
  * @property errorMessage Optional validation error surfaced to the form.
@@ -39,7 +40,7 @@ data class ModelPresetFormState(
     val description: String = "",
     val modelId: Long? = null,
     val modelSettingsId: Long? = null,
-    val compactionEnabled: Boolean = true,
+    val automaticCompactionEnabled: Boolean = true,
     val compactionThresholdTokensText: String = "",
     val errorMessage: String? = null
 ) {
@@ -92,7 +93,7 @@ data class ModelPresetFormState(
         description = description.trim(),
         modelId = modelId,
         modelSettingsId = modelSettingsId,
-        compactionEnabled = compactionEnabled,
+        automaticCompactionEnabled = automaticCompactionEnabled,
         compactionThresholdTokens = compactionThresholdTokensText.trim().takeIf { it.isNotBlank() }?.toLong()
     )
 
@@ -110,7 +111,7 @@ data class ModelPresetFormState(
         description = description.trim(),
         modelId = modelId,
         modelSettingsId = modelSettingsId,
-        compactionEnabled = compactionEnabled,
+        automaticCompactionEnabled = automaticCompactionEnabled,
         compactionThresholdTokens = compactionThresholdTokensText.trim().takeIf { it.isNotBlank() }?.toLong()
     )
 }
@@ -144,7 +145,7 @@ fun ModelPresetDto.toEditFormState(): ModelPresetFormState = ModelPresetFormStat
     description = description,
     modelId = modelId,
     modelSettingsId = modelSettingsId,
-    compactionEnabled = compactionEnabled,
+    automaticCompactionEnabled = automaticCompactionEnabled,
     compactionThresholdTokensText = compactionThresholdTokens?.toString() ?: ""
 )
 

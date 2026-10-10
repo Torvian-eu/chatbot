@@ -63,7 +63,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionNotificationTest 
             } returns PersistedUserMessage(userMessage, null)
             coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
             coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
-                CompactionTurnState.Disabled(testSession.id, mutableListOf())
+                CompactionTurnState.Inactive(testSession.id, mutableListOf())
             coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
                 PrimaryContextPreflight(
                     primaryMessages = summaryMessages,

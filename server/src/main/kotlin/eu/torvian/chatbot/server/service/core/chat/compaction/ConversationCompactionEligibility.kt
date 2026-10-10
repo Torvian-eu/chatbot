@@ -102,17 +102,18 @@ private fun isEligibleChunk(
  * first preflight of a thread already over the threshold with no eligible prior chunk is a documented
  * one-time full-thread cost.
  *
- * @param summary The current labeled summary message, or null when nothing has been compacted yet
- *            (first compaction of a thread). Passed verbatim as the first input message.
+ * @param summary The current labeled summary text (label included by the caller), or null when nothing
+ *            has been compacted yet (first compaction of a thread). Wrapped into the first input
+ *            message verbatim.
  * @param units The uncompressed window units in thread order.
  * @return The auxiliary request messages in chronological order.
  */
 fun buildCompactionInput(
-    summary: RawChatMessage.User?,
+    summary: String?,
     units: List<ConversationContextUnit>
 ): List<RawChatMessage> {
     val result = mutableListOf<RawChatMessage>()
-    if (summary != null) result.add(summary)
+    if (summary != null) result.add(RawChatMessage.User(summary))
     units.forEach { unit -> result.addAll(unit.rawMessages) }
     return result
 }

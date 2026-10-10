@@ -21,8 +21,8 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  * @property modelSettingsId Optional reference to the bundled settings profile (`SET NULL` on delete).
  *            The referenced profile may be of any [eu.torvian.chatbot.common.models.llm.LLMModelType];
  *            chat capability is enforced where a preset drives an agent-role turn, not here.
- * @property compactionEnabled Whether turns running on this preset may compact at all, ANDed with the
- *            user's `conversation_compaction` preference.
+ * @property automaticCompactionEnabled Whether automatic compaction is enabled for turns running on this
+ *            preset, ANDed with the user's `conversation_compaction` preference.
  * @property compactionThresholdTokens Optional compaction threshold override in input tokens; `null`
  *            means the preference's threshold applies instead. A stored value is always at least `1`.
  * @property createdAt Timestamp when the preset was created.
@@ -35,7 +35,7 @@ object ModelPresetTable : LongIdTable("model_presets") {
     val modelId = reference("model_id", LLMModelTable, onDelete = ReferenceOption.SET_NULL).nullable()
     val modelSettingsId =
         reference("model_settings_id", ModelSettingsTable, onDelete = ReferenceOption.SET_NULL).nullable()
-    val compactionEnabled = bool("compaction_enabled").default(true)
+    val automaticCompactionEnabled = bool("automatic_compaction_enabled").default(true)
     val compactionThresholdTokens = long("compaction_threshold_tokens").nullable()
     val createdAt = long("created_at")
     val updatedAt = long("updated_at")

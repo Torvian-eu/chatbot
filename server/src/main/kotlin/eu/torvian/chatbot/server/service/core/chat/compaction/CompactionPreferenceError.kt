@@ -13,7 +13,7 @@ import eu.torvian.chatbot.common.api.apiError
  * [AccessDenied], a referenced row that no longer exists is [NotFound], and a structural mismatch
  * between the referenced model and settings is [IncompatibleConfiguration].
  */
-sealed interface ConversationCompactionConfigurationError {
+sealed interface CompactionPreferenceError {
 
     /**
      * The preference value is malformed or structurally invalid (bad JSON, a missing or non-positive
@@ -21,7 +21,7 @@ sealed interface ConversationCompactionConfigurationError {
      *
      * @property reason Human-readable description of the invalid value.
      */
-    data class InvalidValue(val reason: String) : ConversationCompactionConfigurationError
+    data class InvalidValue(val reason: String) : CompactionPreferenceError
 
     /**
      * The owner has no READ access to the referenced model or settings, so the preference cannot be
@@ -29,14 +29,14 @@ sealed interface ConversationCompactionConfigurationError {
      *
      * @property reason Human-readable description of the denied access.
      */
-    data class AccessDenied(val reason: String) : ConversationCompactionConfigurationError
+    data class AccessDenied(val reason: String) : CompactionPreferenceError
 
     /**
      * The preference references a settings row (or implicitly its model) that no longer exists.
      *
      * @property reason Human-readable description of the missing row.
      */
-    data class NotFound(val reason: String) : ConversationCompactionConfigurationError
+    data class NotFound(val reason: String) : CompactionPreferenceError
 
     /**
      * The preference is structurally valid and accessible but internally inconsistent: the referenced
@@ -46,7 +46,7 @@ sealed interface ConversationCompactionConfigurationError {
      *
      * @property reason Human-readable description of the incompatible configuration.
      */
-    data class IncompatibleConfiguration(val reason: String) : ConversationCompactionConfigurationError
+    data class IncompatibleConfiguration(val reason: String) : CompactionPreferenceError
 }
 
 /**
@@ -60,16 +60,16 @@ sealed interface ConversationCompactionConfigurationError {
  * @receiver The configuration error to map.
  * @return The corresponding [ApiError].
  */
-fun ConversationCompactionConfigurationError.toApiError(): ApiError = when (this) {
-    is ConversationCompactionConfigurationError.InvalidValue ->
+fun CompactionPreferenceError.toApiError(): ApiError = when (this) {
+    is CompactionPreferenceError.InvalidValue ->
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, reason)
 
-    is ConversationCompactionConfigurationError.AccessDenied ->
+    is CompactionPreferenceError.AccessDenied ->
         apiError(CommonApiErrorCodes.PERMISSION_DENIED, reason)
 
-    is ConversationCompactionConfigurationError.NotFound ->
+    is CompactionPreferenceError.NotFound ->
         apiError(CommonApiErrorCodes.NOT_FOUND, reason)
 
-    is ConversationCompactionConfigurationError.IncompatibleConfiguration ->
+    is CompactionPreferenceError.IncompatibleConfiguration ->
         apiError(ChatbotApiErrorCodes.MODEL_CONFIGURATION_ERROR, reason)
 }

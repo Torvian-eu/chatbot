@@ -92,10 +92,15 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
     protected val testRoleId = 7L
 
     /**
-     * Resolved compaction configuration that disables compaction. It keeps the suites that are not about
-     * the resolved configuration itself on today's behaviour: the original thread is sent unchanged.
+     * Resolved compaction configuration with no usable auxiliary configuration. It keeps the suites that
+     * are not about the resolved configuration itself on today's behaviour: the original thread is sent
+     * unchanged.
      */
-    protected val defaultResolvedCompaction: ResolvedCompactionConfig = ResolvedCompactionConfig.Disabled
+    protected val defaultResolvedCompaction: ResolvedCompactionConfig =
+        ResolvedCompactionConfig.Unusable(
+            reason = "no usable auxiliary configuration",
+            automaticCompactionEnabled = false
+        )
 
     /** Default session receiving the turns under test. */
     protected val testSession = ChatSession(
@@ -122,11 +127,11 @@ abstract class DefaultConversationTurnOrchestratorTestBase {
         // Recording is a no-op by default so tests not focused on reasoning do not need explicit stubs;
         // dedicated tests verify the recorder is invoked with the expected model and reasoning items.
         coEvery { reasoningCapabilityRecorder.record(any(), any()) } returns Unit
-        // Compaction is disabled by default: beginTurn yields a Disabled state carrying the initial
+        // Compaction is inactive by default: beginTurn yields an Inactive state carrying the initial
         // units the orchestrator handed over, and every preflight returns the original flattened
         // window with no persisted chunk.
         coEvery { conversationCompactionService.beginTurn(any(), any(), any(), any()) } coAnswers {
-            CompactionTurnState.Disabled(
+            CompactionTurnState.Inactive(
                 testSession.id,
                 thirdArg<List<ConversationContextUnit>>().toMutableList()
             )

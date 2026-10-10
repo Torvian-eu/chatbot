@@ -168,7 +168,7 @@ class ModelPresetRoutesTest {
             assertEquals(model.id, created.modelId)
             assertEquals(settings.id, created.modelSettingsId)
             // The compaction fields default to the pre-feature behaviour when the request omits them.
-            assertEquals(true, created.compactionEnabled)
+            assertEquals(true, created.automaticCompactionEnabled)
             assertEquals(null, created.compactionThresholdTokens)
             // created_at is set on create (OQ-2: both timestamps are exposed on the DTO).
             assertEquals(created.createdAt, created.updatedAt)
@@ -220,7 +220,7 @@ class ModelPresetRoutesTest {
                     name = "cheap_model",
                     modelId = model.id,
                     modelSettingsId = settings.id,
-                    compactionEnabled = false,
+                    automaticCompactionEnabled = false,
                     compactionThresholdTokens = 50_000L
                 )
             )
@@ -229,13 +229,13 @@ class ModelPresetRoutesTest {
 
         assertEquals(HttpStatusCode.Created, response.status)
         val created = assertNotNull(response.body<ModelPresetDto>())
-        assertEquals(false, created.compactionEnabled)
+        assertEquals(false, created.automaticCompactionEnabled)
         assertEquals(50_000L, created.compactionThresholdTokens)
 
         val fetched = client.get(href(ModelPresetResource.ById(presetId = created.id))) {
             authenticate(authToken)
         }.body<ModelPresetDto>()
-        assertEquals(false, fetched.compactionEnabled)
+        assertEquals(false, fetched.automaticCompactionEnabled)
         assertEquals(50_000L, fetched.compactionThresholdTokens)
     }
 
@@ -250,7 +250,7 @@ class ModelPresetRoutesTest {
                     name = "smart_model",
                     modelId = model.id,
                     modelSettingsId = settings.id,
-                    compactionEnabled = false,
+                    automaticCompactionEnabled = false,
                     compactionThresholdTokens = 5_000L
                 )
             )
@@ -259,7 +259,7 @@ class ModelPresetRoutesTest {
 
         assertEquals(HttpStatusCode.OK, response.status)
         val updated = assertNotNull(response.body<ModelPresetDto>())
-        assertEquals(false, updated.compactionEnabled)
+        assertEquals(false, updated.automaticCompactionEnabled)
         assertEquals(5_000L, updated.compactionThresholdTokens)
 
         // The request is a full replacement, so a caller that omits the fields resets them to their
@@ -269,7 +269,7 @@ class ModelPresetRoutesTest {
             setBody(UpdateModelPresetRequest(name = "smart_model", modelId = model.id, modelSettingsId = settings.id))
             authenticate(authToken)
         }.body<ModelPresetDto>()
-        assertEquals(true, reset.compactionEnabled)
+        assertEquals(true, reset.automaticCompactionEnabled)
         assertEquals(null, reset.compactionThresholdTokens)
     }
 
@@ -297,7 +297,7 @@ class ModelPresetRoutesTest {
 
             val stored = listPresets().single()
             assertEquals(null, stored.compactionThresholdTokens, "the rejected threshold must not be persisted")
-            assertEquals(true, stored.compactionEnabled)
+            assertEquals(true, stored.automaticCompactionEnabled)
         }
 
     @Test

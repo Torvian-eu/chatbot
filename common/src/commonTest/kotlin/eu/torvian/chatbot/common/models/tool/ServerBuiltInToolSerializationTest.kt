@@ -241,7 +241,7 @@ class ServerBuiltInToolSerializationTest {
                 // The two compaction parameters are boolean/integer on both write tools.
                 assertEquals(
                     "boolean",
-                    properties[ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY]!!.jsonObject["type"]!!
+                    properties[ServerBuiltInToolCatalog.AUTOMATIC_COMPACTION_ENABLED_PROPERTY]!!.jsonObject["type"]!!
                         .jsonPrimitive.content
                 )
                 assertEquals(
@@ -261,14 +261,14 @@ class ServerBuiltInToolSerializationTest {
                 ServerBuiltInToolCatalog.DESCRIPTION_PROPERTY,
                 ServerBuiltInToolCatalog.MODEL_ID_PROPERTY,
                 ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY,
-                ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY,
+                ServerBuiltInToolCatalog.AUTOMATIC_COMPACTION_ENABLED_PROPERTY,
                 ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY
             ),
             updateProperties.keys
         )
         assertEquals(
             "boolean",
-            updateProperties[ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY]!!.jsonObject["type"]!!
+            updateProperties[ServerBuiltInToolCatalog.AUTOMATIC_COMPACTION_ENABLED_PROPERTY]!!.jsonObject["type"]!!
                 .jsonPrimitive.content
         )
         assertEquals(

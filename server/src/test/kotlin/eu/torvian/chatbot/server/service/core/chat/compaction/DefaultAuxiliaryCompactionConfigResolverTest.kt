@@ -24,7 +24,7 @@ import kotlin.test.assertNull
  * `systemMessage` is carried verbatim as the config's system message (empty when there is none), the
  * instruction is not part of the config, and no tools are enabled for the auxiliary call.
  */
-class DefaultConversationCompactionConfigurationResolverTest {
+class DefaultAuxiliaryCompactionConfigResolverTest {
 
     private val model = LLMModel(id = 1L, name = "gpt-4o", providerId = 1L, active = true)
     private val settings = ChatModelSettings(id = 2L, modelId = 1L, name = "Default", stream = false)
@@ -34,7 +34,7 @@ class DefaultConversationCompactionConfigurationResolverTest {
     )
 
     /** All collaborators are mocked; the fixture provider has no API key, so no credential is used. */
-    private fun resolver() = DefaultConversationCompactionConfigurationResolver(
+    private fun resolver() = DefaultAuxiliaryCompactionConfigResolver(
         llmModelService = mockk<LLMModelService>().apply {
             coEvery { getModelById(1L) } returns model.right()
         },

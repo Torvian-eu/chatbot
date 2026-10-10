@@ -33,7 +33,7 @@ class ModelPresetRequestSerializationTest {
         description = "Bundles the smart model",
         modelId = 1L,
         modelSettingsId = 2L,
-        compactionEnabled = false,
+        automaticCompactionEnabled = false,
         compactionThresholdTokens = 50_000L,
         createdAt = Instant.fromEpochMilliseconds(1_700_000_000_000L),
         updatedAt = Instant.fromEpochMilliseconds(1_700_000_000_500L)
@@ -45,7 +45,7 @@ class ModelPresetRequestSerializationTest {
         assertTrue(wire.contains("\"name\":\"smart_model\""))
         assertTrue(wire.contains("\"createdAt\""))
         assertTrue(wire.contains("\"updatedAt\""))
-        assertTrue(wire.contains("\"compactionEnabled\":false"))
+        assertTrue(wire.contains("\"automaticCompactionEnabled\":false"))
         assertTrue(wire.contains("\"compactionThresholdTokens\":50000"))
 
         assertEquals(preset, json.decodeFromString(ModelPresetDto.serializer(), wire))
@@ -62,7 +62,7 @@ class ModelPresetRequestSerializationTest {
 
         val decoded = json.decodeFromString(ModelPresetDto.serializer(), legacyWire)
 
-        assertEquals(true, decoded.compactionEnabled)
+        assertEquals(true, decoded.automaticCompactionEnabled)
         assertEquals(null, decoded.compactionThresholdTokens)
     }
 
@@ -71,16 +71,16 @@ class ModelPresetRequestSerializationTest {
         val create = CreateModelPresetRequest(
             name = "cheap_model",
             modelId = 1L,
-            compactionEnabled = false,
+            automaticCompactionEnabled = false,
             compactionThresholdTokens = 50_000L
         )
         val createWire = json.encodeToString(CreateModelPresetRequest.serializer(), create)
-        assertTrue(createWire.contains("\"compactionEnabled\":false"))
+        assertTrue(createWire.contains("\"automaticCompactionEnabled\":false"))
         assertTrue(createWire.contains("\"compactionThresholdTokens\":50000"))
         assertEquals(create, json.decodeFromString(CreateModelPresetRequest.serializer(), createWire))
 
         val update = UpdateModelPresetRequest(name = "cheap_model", modelId = 1L)
-        assertEquals(true, update.compactionEnabled)
+        assertEquals(true, update.automaticCompactionEnabled)
         assertEquals(null, update.compactionThresholdTokens)
     }
 
@@ -112,7 +112,7 @@ class ModelPresetRequestSerializationTest {
         )
         // Omitting the compaction fields decode to the documented defaults, so an older caller keeps
         // creating presets that reproduce the preference-only behaviour.
-        assertEquals(true, create.compactionEnabled)
+        assertEquals(true, create.automaticCompactionEnabled)
         assertEquals(null, create.compactionThresholdTokens)
 
         val update = UpdateModelPresetRequest(name = "cheap_model", modelId = null, modelSettingsId = 2L)

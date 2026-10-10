@@ -70,7 +70,8 @@ fun miscModule() = module {
             appConfig = get(),
             userPreferenceService = get(),
             serverBuiltInToolNamePrefixService = get(),
-            conversationCompactionConfigurationService = get()
+            compactionPreferenceService = get(),
+            conversationManualCompactionService = get()
         )
     }
 }

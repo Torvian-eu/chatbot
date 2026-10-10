@@ -1,33 +1,46 @@
 package eu.torvian.chatbot.server.service.core.chat.compaction
 
 /**
- * Complete effective conversation-compaction configuration of one turn.
+ * Outcome of resolving a session's effective conversation-compaction configuration.
  *
- * The value is produced once by turn preparation, inside the turn's transaction, and is then fixed for
- * the whole turn: a preset or preference edit made afterwards only affects the next turn, and chunks
- * already persisted keep the threshold that was in effect when they were created.
+ * Produced once during turn preparation, inside the turn's transaction, and fixed for the whole turn,
+ * so a preset or preference edit made afterwards only affects the next turn. It answers whether a
+ * usable auxiliary configuration exists and carries the turn's effective automatic-compaction flag on
+ * either variant, because preparation has to reject a session that would have compacted automatically.
  *
- * The value carries the effective settings; resolving them into a usable `LLMConfig` still happens
- * lazily, only when a compaction becomes necessary.
+ * It is deliberately not an `Either`: an unusable configuration is a legitimate, non-failing state that
+ * only disables compaction and still has to reach the manual path as a reason.
  */
 sealed interface ResolvedCompactionConfig {
 
     /**
-     * Compaction is off for the turn.
+     * A complete auxiliary configuration exists that can run a compaction. Threshold-triggered
+     * compaction runs only when [automaticCompactionEnabled] is true; user-requested compaction and the
+     * injection of an existing eligible summary are available either way.
      *
-     * Three cases collapse here: the session's preset disables compaction (the preference is then
-     * never read, so a malformed one cannot fail the turn), no global preference row exists, or the
-     * stored preference has `enabled = false`.
+     * @property settings The turn's effective settings, carrying the effective threshold.
+     * @property automaticCompactionEnabled Whether automatic (threshold-triggered) compaction is
+     *            enabled: the preset's flag AND the stored preference's flag, with a missing preference
+     *            row counting as disabled. It applies only to automatic compaction; manual compaction
+     *            and summary injection ignore it.
      */
-    data object Disabled : ResolvedCompactionConfig
+    data class Usable(
+        val settings: EffectiveCompactionSettings,
+        val automaticCompactionEnabled: Boolean
+    ) : ResolvedCompactionConfig
 
     /**
-     * Compaction is on for the turn.
+     * No usable auxiliary configuration exists: it is absent, incomplete, or invalid. The turn proceeds
+     * with the raw thread, and a user-requested (manual) compaction fails with [reason].
      *
-     * @property settings The turn's effective compaction settings, carrying the single effective
-     *            threshold.
+     * @property reason Human-readable explanation of the missing or invalid configuration.
+     * @property automaticCompactionEnabled Whether automatic (threshold-triggered) compaction is
+     *            enabled, computed exactly as it is for a usable turn. When true, a session runtime
+     *            that would compact automatically must be rejected instead of running without a working
+     *            configuration.
      */
-    data class Enabled(
-        val settings: EffectiveCompactionSettings
+    data class Unusable(
+        val reason: String,
+        val automaticCompactionEnabled: Boolean
     ) : ResolvedCompactionConfig
 }

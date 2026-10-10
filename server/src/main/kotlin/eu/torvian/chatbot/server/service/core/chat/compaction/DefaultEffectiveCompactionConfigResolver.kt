@@ -1,12 +1,10 @@
 package eu.torvian.chatbot.server.service.core.chat.compaction
 
-import arrow.core.Either
-import arrow.core.raise.either
-import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
 import eu.torvian.chatbot.server.data.dao.ModelPresetDao
 import eu.torvian.chatbot.server.data.dao.UserPreferenceDao
+import eu.torvian.chatbot.server.data.entities.ModelPresetEntity
 import kotlinx.serialization.json.Json
 
 /**
@@ -23,80 +21,105 @@ class DefaultEffectiveCompactionConfigResolver(
     private val json: Json
 ) : EffectiveCompactionConfigResolver {
 
-    override suspend fun resolve(
-        userId: Long,
-        presetId: Long
-    ): Either<ConversationCompactionError.InvalidConfiguration, ResolvedCompactionConfig> = either {
+    override suspend fun resolve(userId: Long, presetId: Long): ResolvedCompactionConfig {
         // The preset read is ownership-scoped, so a preset of another user is as unusable as a deleted
         // one; the caller already proved the preset exists, and this read is defense-in-depth against a
-        // concurrent delete.
+        // concurrent delete. A missing preset cannot enable compaction, because its flag is unknown.
         val preset = modelPresetDao.getPresetsByIdsForUser(userId, listOf(presetId)).singleOrNull()
-            ?: raise(
-                ConversationCompactionError.InvalidConfiguration(
-                    "Model preset $presetId does not exist for user $userId, or is not owned by them"
-                )
+            ?: return ResolvedCompactionConfig.Unusable(
+                reason = "Model preset $presetId does not exist for user $userId, or is not owned by them",
+                automaticCompactionEnabled = false
             )
 
-        // Both preset write paths reject a non-positive threshold, so only a hand-edited row can reach a
-        // turn with one. Failing here keeps the compaction runtime's "stored threshold is positive"
-        // invariant without an extra lookup or a silent zero threshold.
-        val presetThresholdTokens = preset.compactionThresholdTokens
-        if (presetThresholdTokens != null && presetThresholdTokens < 1L) {
-            raise(
-                ConversationCompactionError.InvalidConfiguration(
-                    "Model preset $presetId has an invalid compaction threshold " +
-                        "$presetThresholdTokens: it must be at least 1, or unset to use " +
-                        "the user preference threshold"
-                )
-            )
-        }
-
-        // The preset check comes first so a preset-disabled turn never even reads or decodes the
-        // preference: a stored preference that is malformed cannot fail a turn that cannot compact.
-        if (!preset.compactionEnabled) {
-            return@either ResolvedCompactionConfig.Disabled
-        }
-
-        val rawValue = userPreferenceDao.getGlobalPreference(userId, PreferenceKeys.CONVERSATION_COMPACTION)
+        val rawValue = userPreferenceDao
+            .getGlobalPreference(userId, PreferenceKeys.CONVERSATION_COMPACTION)
             ?.prefValue
-            ?: return@either ResolvedCompactionConfig.Disabled
 
-        // A structurally invalid preference is a hard configuration error, carrying the serialization
-        // exception's own message for diagnostics: there is no partially-usable configuration (no
-        // threshold hint), so the turn is rejected before anything is persisted and before any counting
-        // or compaction can run.
-        val decoded = try {
-            json.decodeFromString<ConversationCompactionPreference>(rawValue)
-        } catch (e: Exception) {
-            raise(
-                ConversationCompactionError.InvalidConfiguration(
-                    "The conversation_compaction preference is structurally invalid: " +
-                        (e.message ?: "malformed JSON")
-                )
+        // Decoded before the effective flag is computed: an undecodable row keeps the field's enabled
+        // default, so a preset that does not disable automatic compaction still reports it as enabled.
+        val decodedResult = rawValue?.let { value ->
+            runCatching { json.decodeFromString<ConversationCompactionPreference>(value) }
+        }
+        val decoded = decodedResult?.getOrNull()
+
+        // Absent row means automatic compaction is disabled (the DTO default describes a stored row
+        // that omits the field, not a missing row), so an unconfigured user keeps today's behaviour: no automatic
+        // compaction, no rejection.
+        val automaticCompactionEnabled = preset.automaticCompactionEnabled &&
+            decodedResult != null &&
+            (decoded?.automaticCompactionEnabled ?: true)
+
+        return if (decoded != null) {
+            usableConfiguration(presetId, preset, decoded, automaticCompactionEnabled)
+        } else {
+            ResolvedCompactionConfig.Unusable(
+                reason = unusableReason(userId, presetId, preset, rawValue, decodedResult?.exceptionOrNull()),
+                automaticCompactionEnabled = automaticCompactionEnabled
+            )
+        }
+    }
+
+    /**
+     * Builds the resolved configuration of a decoded preference, or the reason it cannot be used.
+     *
+     * Every unusable outcome carries the turn's effective automatic-compaction flag, so the caller that
+     * decides whether to reject the runtime reads one fact from one place.
+     *
+     * @param presetId Preset driving the turn, used in the reason text.
+     * @param preset The resolved preset row, contributing the optional threshold override.
+     * @param decoded The successfully decoded preference.
+     * @param automaticCompactionEnabled Whether automatic compaction is enabled for the turn,
+     *            carried by the resolved configuration on success and reported on the negative variant
+     *            otherwise.
+     * @return A [ResolvedCompactionConfig.Usable] configuration, or an explanatory
+     *         [ResolvedCompactionConfig.Unusable].
+     */
+    private fun usableConfiguration(
+        presetId: Long,
+        preset: ModelPresetEntity,
+        decoded: ConversationCompactionPreference,
+        automaticCompactionEnabled: Boolean
+    ): ResolvedCompactionConfig {
+        val presetThresholdTokens = preset.compactionThresholdTokens
+        // A stored threshold below 1 is only reachable through a hand-edited row (both write paths
+        // reject it), and the compaction runtime requires a positive threshold.
+        if (presetThresholdTokens != null && presetThresholdTokens < 1L) {
+            return ResolvedCompactionConfig.Unusable(
+                reason = "Model preset $presetId has an invalid compaction threshold $presetThresholdTokens: " +
+                    "it must be at least 1, or unset to use the user preference threshold",
+                automaticCompactionEnabled = automaticCompactionEnabled
             )
         }
 
-        // A preference stored with `enabled = false` behaves exactly like an absent row: automatic
-        // compaction is off for this turn.
-        if (!decoded.enabled) {
-            return@either ResolvedCompactionConfig.Disabled
+        // The stored preference is validated here, once, with pure value checks that need no query: a
+        // half-configured row cannot be compacted at all, so it is reported as unusable instead of
+        // failing mid-turn when the thread finally exceeds the threshold. These checks judge the STORED
+        // value only: the preset's threshold override changes the threshold that is used, never whether
+        // the stored configuration is accepted.
+        val modelId = decoded.modelId
+            ?: return unusable(
+                reason = "Compaction modelId is not set",
+                automaticCompactionEnabled = automaticCompactionEnabled
+            )
+        val settingsId = decoded.settingsId
+            ?: return unusable(
+                reason = "Compaction settingsId is not set",
+                automaticCompactionEnabled = automaticCompactionEnabled
+            )
+        if (modelId <= 0L) {
+            return unusable("Compaction modelId must be positive", automaticCompactionEnabled)
+        }
+        if (settingsId <= 0L) {
+            return unusable("Compaction settingsId must be positive", automaticCompactionEnabled)
+        }
+        if (decoded.instruction.isBlank()) {
+            return unusable("Compaction instruction must not be blank", automaticCompactionEnabled)
+        }
+        if (decoded.thresholdTokens <= 0L) {
+            return unusable("Compaction thresholdTokens must be positive", automaticCompactionEnabled)
         }
 
-        // The stored preference is validated here, once, with pure value checks that need no query. A
-        // half-configured row cannot be compacted at all, so it is rejected before anything is
-        // persisted instead of failing mid-turn when the thread finally exceeds the threshold. These
-        // checks judge the STORED value only: the preset's threshold override changes the threshold
-        // that is used, never whether the stored configuration is accepted.
-        val modelId = decoded.modelId
-            ?: raise(ConversationCompactionError.InvalidConfiguration("Compaction modelId is not set"))
-        val settingsId = decoded.settingsId
-            ?: raise(ConversationCompactionError.InvalidConfiguration("Compaction settingsId is not set"))
-        ensure(modelId > 0L) { ConversationCompactionError.InvalidConfiguration("Compaction modelId must be positive") }
-        ensure(settingsId > 0L) { ConversationCompactionError.InvalidConfiguration("Compaction settingsId must be positive") }
-        ensure(decoded.instruction.isNotBlank()) { ConversationCompactionError.InvalidConfiguration("Compaction instruction must not be blank") }
-        ensure(decoded.thresholdTokens > 0L) { ConversationCompactionError.InvalidConfiguration("Compaction thresholdTokens must be positive") }
-
-        ResolvedCompactionConfig.Enabled(
+        return ResolvedCompactionConfig.Usable(
             settings = EffectiveCompactionSettings(
                 modelId = modelId,
                 settingsId = settingsId,
@@ -106,7 +129,56 @@ class DefaultEffectiveCompactionConfigResolver(
                 // The preset override wins for the whole turn; a null override defers to the preference
                 // (which itself defaults to 100_000).
                 thresholdTokens = presetThresholdTokens ?: decoded.thresholdTokens
-            )
+            ),
+            automaticCompactionEnabled = automaticCompactionEnabled
         )
+    }
+
+    /**
+     * Builds the negative resolution of a stored-preference validation failure.
+     *
+     * @param reason User-facing explanation of the invalid stored value.
+     * @param automaticCompactionEnabled Whether automatic compaction is enabled for the turn, reported
+     *            alongside the reason.
+     * @return The [ResolvedCompactionConfig.Unusable] resolution for that failure.
+     */
+    private fun unusable(reason: String, automaticCompactionEnabled: Boolean): ResolvedCompactionConfig =
+        ResolvedCompactionConfig.Unusable(
+            reason = reason,
+            automaticCompactionEnabled = automaticCompactionEnabled
+        )
+
+    /**
+     * Explains why no configuration could be decoded.
+     *
+     * @param userId Owner of the preference, used in the reason text.
+     * @param presetId Preset driving the turn, used in the reason text.
+     * @param preset The resolved preset row, contributing the optional threshold override.
+     * @param rawValue The raw stored preference value, or `null` when no row exists.
+     * @param decodeFailure The decoding exception, or `null` when decoding succeeded.
+     * @return The user-facing reason for the unusable configuration.
+     */
+    private fun unusableReason(
+        userId: Long,
+        presetId: Long,
+        preset: ModelPresetEntity,
+        rawValue: String?,
+        decodeFailure: Throwable?
+    ): String {
+        val presetThresholdTokens = preset.compactionThresholdTokens
+        if (presetThresholdTokens != null && presetThresholdTokens < 1L) {
+            return "Model preset $presetId has an invalid compaction threshold " +
+                "$presetThresholdTokens: it must be at least 1, or unset to use " +
+                "the user preference threshold"
+        }
+        if (rawValue == null) {
+            return "No conversation_compaction preference is stored for user $userId: " +
+                "configure the compaction model and settings first"
+        }
+        // A structurally invalid preference is a hard configuration error, carrying the serialization
+        // exception's own message for diagnostics: there is no partially-usable configuration (no
+        // threshold hint), so nothing can be compacted and both paths report the same reason.
+        return "The conversation_compaction preference is structurally invalid: " +
+            (decodeFailure?.message ?: "malformed JSON")
     }
 }

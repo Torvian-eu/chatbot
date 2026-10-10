@@ -18,28 +18,28 @@ import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
 /**
- * Default [ConversationCompactionConfigurationResolver].
+ * Default [AuxiliaryCompactionConfigResolver].
  *
  * The runtime fast path used when compaction is required: loads the model/settings/provider rows and
  * validates the concerns that can change after the preference was stored (existence, activity,
  * model/settings pairing, credential availability). It deliberately does **not** re-check READ access
  * or the chat-like/non-streaming settings profile — those are static write-time concerns enforced by
- * the configuration service.
+ * the preference service.
  *
  * @property llmModelService Loads the compaction model.
  * @property modelSettingsService Loads the compaction settings profile.
  * @property llmProviderService Loads the provider owning the compaction model.
  * @property credentialManager Resolves the provider credential when configured.
  */
-class DefaultConversationCompactionConfigurationResolver(
+class DefaultAuxiliaryCompactionConfigResolver(
     private val llmModelService: LLMModelService,
     private val modelSettingsService: ModelSettingsService,
     private val llmProviderService: LLMProviderService,
     private val credentialManager: CredentialManager,
-) : ConversationCompactionConfigurationResolver {
+) : AuxiliaryCompactionConfigResolver {
 
     companion object {
-        private val logger: Logger = LogManager.getLogger(DefaultConversationCompactionConfigurationResolver::class.java)
+        private val logger: Logger = LogManager.getLogger(DefaultAuxiliaryCompactionConfigResolver::class.java)
     }
 
     override suspend fun resolveAuxiliaryConfig(

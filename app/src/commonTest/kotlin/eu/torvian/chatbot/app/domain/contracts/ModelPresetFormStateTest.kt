@@ -21,7 +21,7 @@ class ModelPresetFormStateTest {
         description: String = "",
         modelId: Long? = 10L,
         modelSettingsId: Long? = 20L,
-        compactionEnabled: Boolean = true,
+        automaticCompactionEnabled: Boolean = true,
         compactionThresholdTokens: Long? = null
     ): ModelPresetDto = ModelPresetDto(
         id = id,
@@ -30,7 +30,7 @@ class ModelPresetFormStateTest {
         description = description,
         modelId = modelId,
         modelSettingsId = modelSettingsId,
-        compactionEnabled = compactionEnabled,
+        automaticCompactionEnabled = automaticCompactionEnabled,
         compactionThresholdTokens = compactionThresholdTokens,
         createdAt = Instant.fromEpochSeconds(id),
         updatedAt = Instant.fromEpochSeconds(id)
@@ -138,9 +138,9 @@ class ModelPresetFormStateTest {
     fun `empty form defaults to compaction enabled with the user preference threshold`() {
         val form = createEmptyModelPresetForm()
 
-        assertEquals(true, form.compactionEnabled)
+        assertEquals(true, form.automaticCompactionEnabled)
         assertEquals("", form.compactionThresholdTokensText)
-        assertEquals(true, form.toCreateRequest().compactionEnabled)
+        assertEquals(true, form.toCreateRequest().automaticCompactionEnabled)
         assertNull(form.toCreateRequest().compactionThresholdTokens)
     }
 
@@ -177,13 +177,13 @@ class ModelPresetFormStateTest {
     fun `requests carry the compaction fields with a blank threshold meaning the fallback`() {
         val form = createEmptyModelPresetForm().copy(
             name = "Name",
-            compactionEnabled = false,
+            automaticCompactionEnabled = false,
             compactionThresholdTokensText = "  50000  "
         )
 
-        assertEquals(false, form.toCreateRequest().compactionEnabled)
+        assertEquals(false, form.toCreateRequest().automaticCompactionEnabled)
         assertEquals(50_000L, form.toCreateRequest().compactionThresholdTokens)
-        assertEquals(false, form.toUpdateRequest().compactionEnabled)
+        assertEquals(false, form.toUpdateRequest().automaticCompactionEnabled)
         assertEquals(50_000L, form.toUpdateRequest().compactionThresholdTokens)
 
         val blank = form.copy(compactionThresholdTokensText = "")
@@ -193,22 +193,22 @@ class ModelPresetFormStateTest {
 
     @Test
     fun `toEditFormState renders an unset threshold as a blank field`() {
-        val withOverride = preset(compactionEnabled = false, compactionThresholdTokens = 50_000L).toEditFormState()
-        assertEquals(false, withOverride.compactionEnabled)
+        val withOverride = preset(automaticCompactionEnabled = false, compactionThresholdTokens = 50_000L).toEditFormState()
+        assertEquals(false, withOverride.automaticCompactionEnabled)
         assertEquals("50000", withOverride.compactionThresholdTokensText)
 
-        val fallback = preset(compactionEnabled = true, compactionThresholdTokens = null).toEditFormState()
-        assertEquals(true, fallback.compactionEnabled)
+        val fallback = preset(automaticCompactionEnabled = true, compactionThresholdTokens = null).toEditFormState()
+        assertEquals(true, fallback.automaticCompactionEnabled)
         assertEquals("", fallback.compactionThresholdTokensText)
     }
 
     @Test
     fun `toEditFormState round-trips the compaction configuration`() {
-        val original = preset(compactionEnabled = false, compactionThresholdTokens = 12_345L)
+        val original = preset(automaticCompactionEnabled = false, compactionThresholdTokens = 12_345L)
 
         val request = original.toEditFormState().toUpdateRequest()
 
-        assertEquals(original.compactionEnabled, request.compactionEnabled)
+        assertEquals(original.automaticCompactionEnabled, request.automaticCompactionEnabled)
         assertEquals(original.compactionThresholdTokens, request.compactionThresholdTokens)
     }
 

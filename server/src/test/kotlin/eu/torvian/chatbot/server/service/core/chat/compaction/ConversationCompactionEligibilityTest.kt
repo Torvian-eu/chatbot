@@ -202,12 +202,12 @@ class ConversationCompactionEligibilityTest {
     @Test
     fun `buildCompactionInput emits the prior summary first then all unit raws in order`() {
         val context = contextOf(1L to t0, 2L to t1, 3L to t2)
-        val priorSummary = RawChatMessage.User(ConversationCompactionPreference.DEFAULT_COMPACTED_SUMMARY_LABEL + "prior")
+        val priorSummary = ConversationCompactionPreference.DEFAULT_COMPACTED_SUMMARY_LABEL + "prior"
 
         val input = buildCompactionInput(priorSummary, context.units)
 
         assertEquals(4, input.size)
-        assertEquals(priorSummary, input[0])
+        assertEquals(priorSummary, (input[0] as RawChatMessage.User).content)
         assertEquals("m1", (input[1] as RawChatMessage.User).content)
         assertEquals("m2", (input[2] as RawChatMessage.User).content)
         assertEquals("m3", (input[3] as RawChatMessage.User).content)

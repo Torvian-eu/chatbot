@@ -59,5 +59,12 @@ class SessionResource(val parent: Api = Api()) {
          */
         @Resource("toolcalls")
         class ToolCalls(val parent: ById)
+
+        /**
+         * Resource for the manual conversation-compaction socket:
+         * /api/v1/sessions/{sessionId}/compaction
+         */
+        @Resource("compaction")
+        class Compaction(val parent: ById)
     }
 }

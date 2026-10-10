@@ -32,7 +32,7 @@ import kotlin.test.assertTrue
  * JSON persistence (including the `enabled` flag), the disabled preference that may omit its
  * references, and GLOBAL-scope deletion.
  */
-class ConversationCompactionConfigurationServiceTest {
+class CompactionPreferenceServiceTest {
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -53,7 +53,7 @@ class ConversationCompactionConfigurationServiceTest {
     /**
      * Builds the service under test with all collaborators mocked.
      */
-    private fun service() = DefaultConversationCompactionConfigurationService(
+    private fun service() = DefaultCompactionPreferenceService(
         json = json,
         userPreferenceDao = userPreferenceDao,
         authorizationService = authorizationService,
@@ -131,9 +131,10 @@ class ConversationCompactionConfigurationServiceTest {
 
     @Test
     fun `disabled preference round-trips through validation and is stored canonically`() = runTest {
-        // `enabled = false` is a stored configuration, not a bypass: it must still decode, validate,
-        // and persist like any other preference, and it disables compaction only at runtime.
-        val disabled = validPreference.copy(enabled = false)
+        // `automaticCompactionEnabled = false` is a stored configuration, not a bypass: it must still
+        // decode, validate, and persist like any other preference, and it disables automatic
+        // compaction only at runtime.
+        val disabled = validPreference.copy(automaticCompactionEnabled = false)
         stubValidConfiguration()
         coEvery { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) } returns Unit
 
@@ -161,7 +162,7 @@ class ConversationCompactionConfigurationServiceTest {
         val incomplete = validPreference.copy(modelId = null, settingsId = null)
         val result = service().updateConfiguration(1L, json.encodeToString(incomplete))
 
-        assertIs<ConversationCompactionConfigurationError.InvalidValue>(result.leftOrNull())
+        assertIs<CompactionPreferenceError.InvalidValue>(result.leftOrNull())
         coVerify(exactly = 0) { authorizationService.requireAccess(any(), any(), any(), any()) }
         coVerify(exactly = 0) { modelSettingsService.getSettingsById(any()) }
         coVerify(exactly = 0) { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) }
@@ -175,16 +176,17 @@ class ConversationCompactionConfigurationServiceTest {
 
         val result = service().updateConfiguration(1L, raw)
 
-        assertIs<ConversationCompactionConfigurationError.InvalidValue>(result.leftOrNull())
+        assertIs<CompactionPreferenceError.InvalidValue>(result.leftOrNull())
         coVerify(exactly = 0) { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) }
     }
 
     @Test
     fun `a disabled preference is stored without references and without non-runtime checks`() = runTest {
-        // `enabled = false` is the legal way to keep a preference whose model/settings rows are gone: a
-        // disabled preference never resolves a compactor, so the access/correctness checks are skipped
-        // and the value is stored as-is.
-        val disabledWithoutIds = validPreference.copy(modelId = null, settingsId = null, enabled = false)
+        // `automaticCompactionEnabled = false` is the legal way to keep a preference whose model/settings
+        // rows are gone: a preference with automatic compaction disabled never resolves a compactor,
+        // so the access/correctness checks are skipped and the value is stored as-is.
+        val disabledWithoutIds =
+            validPreference.copy(modelId = null, settingsId = null, automaticCompactionEnabled = false)
         coEvery { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) } returns Unit
 
         val result = service().updateConfiguration(1L, json.encodeToString(disabledWithoutIds))
@@ -206,7 +208,7 @@ class ConversationCompactionConfigurationServiceTest {
     @Test
     fun `malformed JSON is rejected as an invalid value and nothing is stored`() = runTest {
         val result = service().updateConfiguration(1L, "not-json{")
-        assertIs<ConversationCompactionConfigurationError.InvalidValue>(result.leftOrNull())
+        assertIs<CompactionPreferenceError.InvalidValue>(result.leftOrNull())
         coVerify(exactly = 0) { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) }
     }
 
@@ -215,22 +217,22 @@ class ConversationCompactionConfigurationServiceTest {
         coEvery { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) } returns Unit
 
         val badModel = validPreference.copy(modelId = 0L)
-        assertIs<ConversationCompactionConfigurationError.InvalidValue>(
+        assertIs<CompactionPreferenceError.InvalidValue>(
             service().updateConfiguration(1L, json.encodeToString(badModel)).leftOrNull()
         )
 
         val badSettings = validPreference.copy(settingsId = -1L)
-        assertIs<ConversationCompactionConfigurationError.InvalidValue>(
+        assertIs<CompactionPreferenceError.InvalidValue>(
             service().updateConfiguration(1L, json.encodeToString(badSettings)).leftOrNull()
         )
 
         val blankInstruction = validPreference.copy(instruction = "   ")
-        assertIs<ConversationCompactionConfigurationError.InvalidValue>(
+        assertIs<CompactionPreferenceError.InvalidValue>(
             service().updateConfiguration(1L, json.encodeToString(blankInstruction)).leftOrNull()
         )
 
         val badThreshold = validPreference.copy(thresholdTokens = 0L)
-        assertIs<ConversationCompactionConfigurationError.InvalidValue>(
+        assertIs<CompactionPreferenceError.InvalidValue>(
             service().updateConfiguration(1L, json.encodeToString(badThreshold)).leftOrNull()
         )
 
@@ -249,7 +251,7 @@ class ConversationCompactionConfigurationServiceTest {
         ).left()
 
         val result = service().updateConfiguration(1L, json.encodeToString(validPreference))
-        assertIs<ConversationCompactionConfigurationError.AccessDenied>(result.leftOrNull())
+        assertIs<CompactionPreferenceError.AccessDenied>(result.leftOrNull())
         coVerify(exactly = 0) { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) }
     }
 
@@ -268,7 +270,7 @@ class ConversationCompactionConfigurationServiceTest {
         ).left()
 
         val result = service().updateConfiguration(1L, json.encodeToString(validPreference))
-        assertIs<ConversationCompactionConfigurationError.AccessDenied>(result.leftOrNull())
+        assertIs<CompactionPreferenceError.AccessDenied>(result.leftOrNull())
         coVerify(exactly = 0) { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) }
     }
 
@@ -284,7 +286,7 @@ class ConversationCompactionConfigurationServiceTest {
             GetSettingsByIdError.SettingsNotFound(2L).left()
 
         val result = service().updateConfiguration(1L, json.encodeToString(validPreference))
-        assertIs<ConversationCompactionConfigurationError.NotFound>(result.leftOrNull())
+        assertIs<CompactionPreferenceError.NotFound>(result.leftOrNull())
         coVerify(exactly = 0) { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) }
     }
 
@@ -297,7 +299,7 @@ class ConversationCompactionConfigurationServiceTest {
         coEvery { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) } returns Unit
 
         val result = service().updateConfiguration(1L, json.encodeToString(validPreference))
-        assertIs<ConversationCompactionConfigurationError.IncompatibleConfiguration>(result.leftOrNull())
+        assertIs<CompactionPreferenceError.IncompatibleConfiguration>(result.leftOrNull())
         coVerify(exactly = 0) { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) }
     }
 
@@ -310,7 +312,7 @@ class ConversationCompactionConfigurationServiceTest {
         coEvery { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) } returns Unit
 
         val result = service().updateConfiguration(1L, json.encodeToString(validPreference))
-        assertIs<ConversationCompactionConfigurationError.IncompatibleConfiguration>(result.leftOrNull())
+        assertIs<CompactionPreferenceError.IncompatibleConfiguration>(result.leftOrNull())
         coVerify(exactly = 0) { userPreferenceDao.upsertPreference(any(), any(), any(), any(), any()) }
     }
 

@@ -86,11 +86,11 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                 agentRoleId = testRoleId, reasoningItems = null, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
-        // The default base stub returns a disabled preflight; verify the policy is consulted exactly
-        // once for a single-call turn, before the primary call. The Disabled state carries the units
+        // The default base stub returns an inactive preflight; verify the policy is consulted exactly
+        // once for a single-call turn, before the primary call. The Inactive state carries the units
         // the orchestrator handed to beginTurn, so the preflight sees the persisted user message.
         coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } coAnswers {
-            CompactionTurnState.Disabled(
+            CompactionTurnState.Inactive(
                 testSession.id,
                 thirdArg<List<ConversationContextUnit>>().toMutableList()
             )
@@ -146,7 +146,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
 
         coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } returns
-            CompactionTurnState.Disabled(testSession.id, mutableListOf())
+            CompactionTurnState.Inactive(testSession.id, mutableListOf())
         coEvery { conversationCompactionService.preparePrimaryContext(any(), any(), any()) } returns
             ConversationCompactionError.InvalidConfiguration("broken preference").left()
 
@@ -328,7 +328,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
 
         val preflightStates = mutableListOf<CompactionTurnState>()
         coEvery { conversationCompactionService.beginTurn(1L, testSession.id, any(), defaultResolvedCompaction) } coAnswers {
-            CompactionTurnState.Disabled(
+            CompactionTurnState.Inactive(
                 testSession.id,
                 thirdArg<List<ConversationContextUnit>>().toMutableList()
             )
@@ -421,13 +421,13 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
         coEvery {
             conversationCompactionService.beginTurn(1L, testSession.id, any(), capture(capturedResolvedCompaction))
         } coAnswers {
-            CompactionTurnState.Disabled(
+            CompactionTurnState.Inactive(
                 testSession.id,
                 thirdArg<List<ConversationContextUnit>>().toMutableList()
             )
         }
 
-        val resolvedCompaction = ResolvedCompactionConfig.Enabled(
+        val resolvedCompaction = ResolvedCompactionConfig.Usable(
             settings = EffectiveCompactionSettings(
                 modelId = 1L,
                 settingsId = 1L,
@@ -435,7 +435,8 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
                 systemMessage = null,
                 summaryLabel = "Summary:\n",
                 thresholdTokens = 50_000L
-            )
+            ),
+            automaticCompactionEnabled = true
         )
         orchestrator.processNonStreamingTurn(
             ConversationTurnRequest(

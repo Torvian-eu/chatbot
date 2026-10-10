@@ -7,14 +7,14 @@ import arrow.core.Either
  *
  * PUT of the well-known key is branched from the generic preference path so a malformed or
  * incompatible value is rejected before storage, while GET/DELETE retain the existing generic
- * surface. DELETE removes only the global row and a stored preference with `enabled = false` both
- * disable runtime compaction without any error, while the stored configuration is preserved for later
- * re-enabling. A null (deleted) model/settings reference is legitimate only while the preference is
- * disabled: an enabled preference must carry positive ids, a non-blank instruction and a positive
- * threshold, so the write path rejects a half-configured one instead of storing a state that makes
- * every turn of a compaction-enabled session fail.
+ * surface. DELETE removes only the global row, and a stored preference with
+ * `automaticCompactionEnabled = false` also disables runtime compaction without any error, while the
+ * stored configuration is preserved for later re-enabling. A null (deleted) model/settings reference
+ * is legitimate only while that flag is false: an enabled preference must carry positive ids, a
+ * non-blank instruction and a positive threshold, so the write path rejects a half-configured one
+ * instead of storing a state that makes every turn of a compaction-enabled session fail.
  */
-interface ConversationCompactionConfigurationService {
+interface CompactionPreferenceService {
 
     /**
      * Validates the raw JSON preference and stores its canonical JSON form in the GLOBAL scope.
@@ -30,12 +30,12 @@ interface ConversationCompactionConfigurationService {
      *
      * @param userId Owner of the preference.
      * @param rawValue The raw JSON string to validate and store.
-     * @return Either a [ConversationCompactionConfigurationError] or Unit on success.
+     * @return Either a [CompactionPreferenceError] or Unit on success.
      */
     suspend fun updateConfiguration(
         userId: Long,
         rawValue: String
-    ): Either<ConversationCompactionConfigurationError, Unit>
+    ): Either<CompactionPreferenceError, Unit>
 
     /**
      * Deletes the user's global `conversation_compaction` preference row.
@@ -44,9 +44,9 @@ interface ConversationCompactionConfigurationService {
      * disabled for the user.
      *
      * @param userId Owner of the preference.
-     * @return Either a [ConversationCompactionConfigurationError] or Unit on success.
+     * @return Either a [CompactionPreferenceError] or Unit on success.
      */
     suspend fun deleteConfiguration(
         userId: Long
-    ): Either<ConversationCompactionConfigurationError, Unit>
+    ): Either<CompactionPreferenceError, Unit>
 }

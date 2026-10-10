@@ -11,8 +11,10 @@ import eu.torvian.chatbot.common.models.api.project.UpdateSessionProjectRequest
 import eu.torvian.chatbot.common.models.api.project.UpdateSessionProjectResponse
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
+import eu.torvian.chatbot.server.ktor.websocket.session.SessionCompactionWebSocketHandler
 import eu.torvian.chatbot.server.ktor.websocket.session.SessionMessagesWebSocketHandler
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationManualCompactionService
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
 import eu.torvian.chatbot.server.service.core.error.agent.toApiError
 import eu.torvian.chatbot.server.service.core.error.project.ProjectError
@@ -37,10 +39,17 @@ fun Route.configureSessionRoutes(
     agentRoleService: AgentRoleService,
     projectService: ProjectService,
     authorizationService: AuthorizationService,
+    conversationManualCompactionService: ConversationManualCompactionService,
     json: Json
 ) {
     val sessionMessagesWebSocketHandler = SessionMessagesWebSocketHandler(
         chatService = chatService,
+        authorizationService = authorizationService,
+        json = json
+    )
+
+    val sessionCompactionWebSocketHandler = SessionCompactionWebSocketHandler(
+        manualCompactionService = conversationManualCompactionService,
         authorizationService = authorizationService,
         json = json
     )
@@ -209,6 +218,17 @@ fun Route.configureSessionRoutes(
             val sessionId = resource.parent.sessionId
             val userId = call.getUserId()
             sessionMessagesWebSocketHandler.handle(
+                socket = this,
+                userId = userId,
+                sessionId = sessionId
+            )
+        }
+
+        // WebSocket /api/v1/sessions/{sessionId}/compaction - Request a forced compaction of the session
+        webSocket<SessionResource.ById.Compaction>(protocol = CommonWebSocketProtocols.CHATBOT_AUTH) { resource ->
+            val sessionId = resource.parent.sessionId
+            val userId = call.getUserId()
+            sessionCompactionWebSocketHandler.handle(
                 socket = this,
                 userId = userId,
                 sessionId = sessionId

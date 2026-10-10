@@ -4,9 +4,14 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.ChatbotApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.MessageResource
+import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
+import eu.torvian.chatbot.common.models.api.core.CompactionCompletedPayload
+import eu.torvian.chatbot.common.models.api.core.CompactionEvent
+import eu.torvian.chatbot.common.models.api.core.CompactionSkipReason
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
@@ -244,6 +249,49 @@ class KtorChatApiClientTest {
             is Either.Left -> {
                 fail("Expected success, but got error: ${result.value}")
             }
+        }
+    }
+
+    @Test
+    fun `the compaction socket targets the dedicated session resource`() {
+        // The socket URL is the whole request: no client event is sent, so the resource path is the
+        // contract the server's route registration must match.
+        val resource = SessionResource.ById.Compaction(SessionResource.ById(SessionResource(), 123L))
+
+        assertEquals("/api/v1/sessions/123/compaction", href(resource))
+    }
+
+    @Test
+    fun `every compaction event variant decodes from its wire form`() {
+        // The client decodes the socket with the dedicated hierarchy, so each terminal variant must
+        // deserialize to its own type.
+        val payload = CompactionCompletedPayload(
+            chunkId = 42L,
+            sessionId = 123L,
+            coveredMessageIds = listOf(1L, 2L),
+            modelId = 1L,
+            settingsId = 2L,
+            providerId = 3L,
+            modelName = "Model",
+            settingsName = "Settings",
+            providerName = "Provider",
+            sourceTokenCount = 4_500L,
+            resultTokenCount = 2_000L,
+            summaryPreview = "A concise summary.",
+            createdAt = 1_700_000_000_100L
+        )
+        val events: List<CompactionEvent> = listOf(
+            CompactionEvent.Completed(payload),
+            CompactionEvent.Skipped(CompactionSkipReason.ALREADY_COMPACTED),
+            CompactionEvent.ErrorOccurred(
+                apiError(ChatbotApiErrorCodes.CONVERSATION_COMPACTION_FAILED, "Compaction failed")
+            ),
+            CompactionEvent.StreamCompleted
+        )
+
+        events.forEach { event ->
+            val wire = json.encodeToString(CompactionEvent.serializer(), event)
+            assertEquals(event, json.decodeFromString(CompactionEvent.serializer(), wire))
         }
     }
 

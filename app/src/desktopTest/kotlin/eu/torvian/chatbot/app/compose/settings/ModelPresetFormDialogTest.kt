@@ -154,7 +154,7 @@ class ModelPresetFormDialogTest {
     fun `compaction controls render the draft and update it`() {
         val draft = createEmptyModelPresetForm().copy(
             name = "preset",
-            compactionEnabled = true,
+            automaticCompactionEnabled = true,
             compactionThresholdTokensText = "50000"
         )
 
@@ -168,11 +168,11 @@ class ModelPresetFormDialogTest {
             onNodeWithText("Compaction token threshold").performScrollTo().assertIsDisplayed()
             onNodeWithText("50000").performScrollTo().assertIsDisplayed()
 
-            onNodeWithText("Conversation compaction").performScrollTo().assertIsDisplayed()
+            onNodeWithText("Automatic compaction").performScrollTo().assertIsDisplayed()
             // The switch is on for the default draft; toggling it off updates the draft only.
             onNode(isToggleable()).performScrollTo().performClick()
 
-            assertEquals(false, liveDraft().compactionEnabled)
+            assertEquals(false, liveDraft().automaticCompactionEnabled)
             assertEquals("50000", liveDraft().compactionThresholdTokensText)
         }
     }

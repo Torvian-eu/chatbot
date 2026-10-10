@@ -23,8 +23,9 @@ import kotlinx.serialization.Serializable
  * @property modelSettingsId Optional identifier of the settings profile the preset bundles. The
  *            profile must be accessible to the requesting user and, when [modelId] is also present,
  *            must belong to that model. The preset layer does not restrict the settings' model type.
- * @property compactionEnabled Whether turns running on the new preset may compact their conversation
- *            at all; combined with the user's `conversation_compaction` preference.
+ * @property automaticCompactionEnabled Whether threshold-triggered compaction is enabled for turns
+ *            running on the new preset; ANDed with the user's `conversation_compaction` preference and
+ *            never restricting user-requested compaction.
  * @property compactionThresholdTokens Optional per-preset compaction threshold in input tokens;
  *            `null` uses the user preference's threshold. A non-null value must be at least `1`, and
  *            the server rejects `0` and negative values.
@@ -36,6 +37,6 @@ data class CreateModelPresetRequest(
     val description: String = "",
     val modelId: Long? = null,
     val modelSettingsId: Long? = null,
-    val compactionEnabled: Boolean = true,
+    val automaticCompactionEnabled: Boolean = true,
     val compactionThresholdTokens: Long? = null
 )

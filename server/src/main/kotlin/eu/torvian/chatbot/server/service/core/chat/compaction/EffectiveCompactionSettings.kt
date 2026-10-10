@@ -1,17 +1,16 @@
 package eu.torvian.chatbot.server.service.core.chat.compaction
 
 /**
- * Effective compaction settings of one enabled turn.
+ * Effective compaction settings of one turn.
  *
- * Assembled once by the resolution step from the stored `conversation_compaction` preference, with the
- * preset's threshold override already applied. It carries exactly what compaction consumes and nothing
- * else: there is no `enabled` flag (the carrier variant conveys that compaction is on) and exactly one
- * threshold, the effective one.
+ * Assembled once by resolution from the stored `conversation_compaction` preference, with the preset's
+ * threshold override already applied, so a later edit cannot affect an in-flight turn. It describes the
+ * auxiliary summarization configuration only: whether the turn may compact automatically is a separate
+ * fact carried by the resolution. It is only ever built for a usable configuration: a missing,
+ * incomplete or invalid preference is reported as [ResolvedCompactionConfig.Unusable] instead.
  *
- * The references are never null: a stored preference without an auxiliary model or settings is rejected
- * during turn preparation, so this value can only be built for a resolvable configuration. Turning it
- * into a usable runtime configuration (model/settings/provider/credential) is still deferred until
- * compaction is actually required.
+ * Turning these settings into a usable runtime configuration (model/settings/provider/credential) is
+ * still deferred until compaction is actually required.
  *
  * @property modelId Auxiliary summarization model referenced by the stored preference. Always positive.
  * @property settingsId Auxiliary settings profile referenced by the stored preference. Always positive.

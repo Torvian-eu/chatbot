@@ -47,7 +47,7 @@ class ConversationCompactionViewModelTest {
         instruction: String = "Keep it short.",
         systemMessage: String? = null,
         summaryLabel: String = ConversationCompactionPreference.DEFAULT_COMPACTED_SUMMARY_LABEL,
-        enabled: Boolean = true
+        automaticCompactionEnabled: Boolean = true
     ) = ConversationCompactionPreference(
         modelId = modelId,
         settingsId = settingsId,
@@ -55,7 +55,7 @@ class ConversationCompactionViewModelTest {
         systemMessage = systemMessage,
         summaryLabel = summaryLabel,
         thresholdTokens = 50_000L,
-        enabled = enabled
+        automaticCompactionEnabled = automaticCompactionEnabled
     )
 
     @BeforeTest
@@ -94,7 +94,7 @@ class ConversationCompactionViewModelTest {
         viewModel.selectSettings(20L)
         viewModel.updateInstruction("Summarize faithfully; keep decisions, names, open questions.")
         viewModel.updateThresholdText("50000")
-        viewModel.setEnabled(false)
+        viewModel.setAutomaticEnabled(false)
 
         viewModel.save()
 
@@ -105,7 +105,7 @@ class ConversationCompactionViewModelTest {
                         preference.settingsId == 20L &&
                         preference.instruction == "Summarize faithfully; keep decisions, names, open questions." &&
                         preference.thresholdTokens == 50_000L &&
-                        !preference.enabled
+                        !preference.automaticCompactionEnabled
                 }
             )
         }
@@ -119,13 +119,13 @@ class ConversationCompactionViewModelTest {
         viewModel.selectModel(10L)
         viewModel.selectSettings(20L)
         viewModel.updateInstruction("Summarize faithfully.")
-        viewModel.setEnabled(true)
+        viewModel.setAutomaticEnabled(true)
 
         viewModel.save()
 
         coVerify(exactly = 1) {
             userPreferenceRepository.setCompactionPreference(
-                match<ConversationCompactionPreference> { preference -> preference.enabled }
+                match<ConversationCompactionPreference> { preference -> preference.automaticCompactionEnabled }
             )
         }
     }
@@ -139,7 +139,7 @@ class ConversationCompactionViewModelTest {
         viewModel.selectSettings(20L)
         viewModel.updateInstruction("Summarize faithfully.")
         viewModel.updateSystemMessage("  Be neutral and complete.  ")
-        viewModel.setEnabled(true)
+        viewModel.setAutomaticEnabled(true)
 
         viewModel.save()
 
@@ -161,7 +161,7 @@ class ConversationCompactionViewModelTest {
         viewModel.selectSettings(20L)
         viewModel.updateInstruction("Summarize faithfully.")
         viewModel.updateSystemMessage("   ")
-        viewModel.setEnabled(true)
+        viewModel.setAutomaticEnabled(true)
 
         viewModel.save()
 
@@ -181,7 +181,7 @@ class ConversationCompactionViewModelTest {
         viewModel.selectSettings(20L)
         viewModel.updateInstruction("Summarize faithfully.")
         viewModel.updateSummaryLabel("Digest: ")
-        viewModel.setEnabled(true)
+        viewModel.setAutomaticEnabled(true)
 
         viewModel.save()
 
@@ -203,7 +203,7 @@ class ConversationCompactionViewModelTest {
         viewModel.selectSettings(20L)
         viewModel.updateInstruction("Summarize faithfully.")
         viewModel.updateSummaryLabel("   ")
-        viewModel.setEnabled(true)
+        viewModel.setAutomaticEnabled(true)
 
         viewModel.save()
 
@@ -219,6 +219,8 @@ class ConversationCompactionViewModelTest {
     @Test
     fun `save with missing model validates without calling the api`() = runTest(dispatcher) {
         viewModel.applyStoredPreference(null)
+        // The missing model/settings check applies to an automatic-enabled draft only.
+        viewModel.setAutomaticEnabled(true)
         viewModel.updateInstruction("Only an instruction; no model or settings selected.")
 
         viewModel.save()
@@ -245,13 +247,13 @@ class ConversationCompactionViewModelTest {
     fun `applying a stored disabled row keeps the form editable with the toggle off`() {
         viewModel.applyStoredPreference(
             preference(
-                enabled = false,
+                automaticCompactionEnabled = false,
                 systemMessage = "Be neutral and complete.",
                 summaryLabel = "Digest: "
             )
         )
 
-        assertFalse(viewModel.draftEnabled.value)
+        assertFalse(viewModel.draftAutomaticEnabled.value)
         assertEquals(7L, viewModel.selectedModelId.value)
         assertEquals(8L, viewModel.selectedSettingsId.value)
         assertEquals("Keep it short.", viewModel.instruction.value)
@@ -262,14 +264,14 @@ class ConversationCompactionViewModelTest {
 
     @Test
     fun `clear deletes the row entirely and resets the draft to disabled defaults`() = runTest(dispatcher) {
-        viewModel.applyStoredPreference(preference(enabled = true))
-        viewModel.setEnabled(true)
+        viewModel.applyStoredPreference(preference(automaticCompactionEnabled = true))
+        viewModel.setAutomaticEnabled(true)
         coEvery { userPreferenceRepository.clearCompactionPreference() } returns Either.Right(Unit)
 
         viewModel.clear()
 
         coVerify(exactly = 1) { userPreferenceRepository.clearCompactionPreference() }
-        assertFalse(viewModel.draftEnabled.value)
+        assertFalse(viewModel.draftAutomaticEnabled.value)
         assertNull(viewModel.selectedModelId.value)
         assertNull(viewModel.selectedSettingsId.value)
         assertEquals("", viewModel.instruction.value)

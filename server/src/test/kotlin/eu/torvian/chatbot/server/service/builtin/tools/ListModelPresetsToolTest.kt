@@ -63,7 +63,7 @@ class ListModelPresetsToolTest {
      * @param description Free-form description.
      * @param modelId Referenced model id, or `null` when unset.
      * @param modelSettingsId Referenced settings profile id, or `null` when unset.
-     * @param compactionEnabled Compaction enablement flag returned by the tool.
+     * @param automaticCompactionEnabled Compaction enablement flag returned by the tool.
      * @param compactionThresholdTokens Compaction threshold override, or `null` for the preference
      *            fallback.
      * @param createdAt Creation timestamp.
@@ -77,7 +77,7 @@ class ListModelPresetsToolTest {
         description: String = "Bundles the smart model with the default settings profile",
         modelId: Long? = 11L,
         modelSettingsId: Long? = 21L,
-        compactionEnabled: Boolean = true,
+        automaticCompactionEnabled: Boolean = true,
         compactionThresholdTokens: Long? = null,
         createdAt: Instant = Instant.parse("2024-01-01T00:00:00Z"),
         updatedAt: Instant = Instant.parse("2024-01-02T00:00:00Z")
@@ -88,7 +88,7 @@ class ListModelPresetsToolTest {
         description = description,
         modelId = modelId,
         modelSettingsId = modelSettingsId,
-        compactionEnabled = compactionEnabled,
+        automaticCompactionEnabled = automaticCompactionEnabled,
         compactionThresholdTokens = compactionThresholdTokens,
         createdAt = createdAt,
         updatedAt = updatedAt
@@ -130,7 +130,7 @@ class ListModelPresetsToolTest {
             "description",
             "modelId",
             "modelSettingsId",
-            "compactionEnabled",
+            "automaticCompactionEnabled",
             "compactionThresholdTokens",
             "createdAt",
             "updatedAt"
@@ -163,16 +163,16 @@ class ListModelPresetsToolTest {
     fun `returns the compaction configuration of every preset`() = runTest {
         val modelPresetService = mockk<ModelPresetService>()
         coEvery { modelPresetService.getAllPresetsForUser(userId) } returns listOf(
-            samplePreset(compactionEnabled = false, compactionThresholdTokens = 50_000L),
-            samplePreset(id = 4L, name = "second", compactionEnabled = true, compactionThresholdTokens = null)
+            samplePreset(automaticCompactionEnabled = false, compactionThresholdTokens = 50_000L),
+            samplePreset(id = 4L, name = "second", automaticCompactionEnabled = true, compactionThresholdTokens = null)
         )
         val tool = ListModelPresetsTool(modelPresetService, json)
 
         val presets = json.parseToJsonElement(assertSuccess(tool.execute(buildJsonObject { }, context()))).jsonArray
 
-        assertEquals(false, presets[0].jsonObject.getValue("compactionEnabled").jsonPrimitive.boolean)
+        assertEquals(false, presets[0].jsonObject.getValue("automaticCompactionEnabled").jsonPrimitive.boolean)
         assertEquals(50_000L, presets[0].jsonObject.getValue("compactionThresholdTokens").jsonPrimitive.long)
-        assertEquals(true, presets[1].jsonObject.getValue("compactionEnabled").jsonPrimitive.boolean)
+        assertEquals(true, presets[1].jsonObject.getValue("automaticCompactionEnabled").jsonPrimitive.boolean)
         assertTrue(presets[1].jsonObject.getValue("compactionThresholdTokens").jsonPrimitive.content == "null")
     }
 

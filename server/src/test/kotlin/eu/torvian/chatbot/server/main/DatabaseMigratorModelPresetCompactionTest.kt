@@ -14,10 +14,13 @@ import kotlin.test.assertTrue
 /**
  * Regression tests for the `V35__model_preset_compaction_config.sql` migration.
  *
- * They pin the properties the per-preset compaction configuration depends on: `compaction_enabled` is a
+ * They pin the properties the per-preset compaction configuration depends on: `automatic_compaction_enabled` is a
  * non-null column defaulting to `true` and `compaction_threshold_tokens` is a nullable `BIGINT` with no
  * default, so every row that existed before the upgrade — or is inserted without naming either column
  * — reproduces the pre-feature behaviour (compaction governed by the user preference alone).
+ *
+ * The second test applies the V35 script on its own, so it observes the column under its pre-rename
+ * name; the rename itself is covered by `DatabaseMigratorAutomaticCompactionRenameTest`.
  */
 class DatabaseMigratorModelPresetCompactionTest {
 
@@ -48,10 +51,10 @@ class DatabaseMigratorModelPresetCompactionTest {
             )
 
             val columns = tableColumns(config.url, "model_presets")
-            val enabled = assertNotNull(columns["compaction_enabled"], "model_presets.compaction_enabled must exist")
+            val enabled = assertNotNull(columns["automatic_compaction_enabled"], "model_presets.automatic_compaction_enabled must exist")
             assertEquals("BOOLEAN", enabled.type.uppercase())
-            assertEquals(1, enabled.notNull, "compaction_enabled must be non-null")
-            assertEquals("1", enabled.defaultValue, "compaction_enabled must default to true")
+            assertEquals(1, enabled.notNull, "automatic_compaction_enabled must be non-null")
+            assertEquals("1", enabled.defaultValue, "automatic_compaction_enabled must default to true")
 
             val threshold = assertNotNull(
                 columns["compaction_threshold_tokens"],
@@ -125,6 +128,9 @@ class DatabaseMigratorModelPresetCompactionTest {
 
     /**
      * Reads the raw compaction columns of the given preset row.
+     *
+     * The V35 column name is read here because this helper is only used on a database where the V35
+     * script was applied directly, without the later rename.
      *
      * @receiver An open SQLite connection to a database in which V35 was applied.
      * @param presetId Primary key of the preset row to inspect.

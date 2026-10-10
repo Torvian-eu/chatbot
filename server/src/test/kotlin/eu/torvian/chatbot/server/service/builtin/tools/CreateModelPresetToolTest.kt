@@ -30,7 +30,7 @@ import kotlin.time.Instant
  * Unit tests for [CreateModelPresetTool].
  *
  * Covers input validation (required `name`, optional `display_name`/`description`/`model_id`/
- * `model_settings_id`/`compaction_enabled`/`compaction_threshold_tokens`, accumulated errors, unknown
+ * `model_settings_id`/`automatic_compaction_enabled`/`compaction_threshold_tokens`, accumulated errors, unknown
  * parameters), the
  * mapping of the parsed input
  * into a [CreateModelPresetRequest] (including the empty defaults), the mapping of every
@@ -66,7 +66,7 @@ class CreateModelPresetToolTest {
         description = "Bundles the smart model with the default settings profile",
         modelId = 11L,
         modelSettingsId = 21L,
-        compactionEnabled = true,
+        automaticCompactionEnabled = true,
         compactionThresholdTokens = null,
         createdAt = Instant.parse("2024-01-01T00:00:00Z"),
         updatedAt = Instant.parse("2024-01-01T00:00:00Z")
@@ -118,7 +118,7 @@ class CreateModelPresetToolTest {
                         request.description == "" &&
                         request.modelId == null &&
                         request.modelSettingsId == null &&
-                        request.compactionEnabled &&
+                        request.automaticCompactionEnabled &&
                         request.compactionThresholdTokens == null
                 }
             )
@@ -140,7 +140,7 @@ class CreateModelPresetToolTest {
             put("description", "Bundles the smart model with the default settings profile")
             put("model_id", 11L)
             put("model_settings_id", 21L)
-            put("compaction_enabled", false)
+            put("automatic_compaction_enabled", false)
             put("compaction_threshold_tokens", 50_000L)
         }
         tool.execute(input, context())
@@ -154,7 +154,7 @@ class CreateModelPresetToolTest {
                         request.description == "Bundles the smart model with the default settings profile" &&
                         request.modelId == 11L &&
                         request.modelSettingsId == 21L &&
-                        !request.compactionEnabled &&
+                        !request.automaticCompactionEnabled &&
                         request.compactionThresholdTokens == 50_000L
                 }
             )
@@ -162,11 +162,11 @@ class CreateModelPresetToolTest {
     }
 
     /**
-     * Verifies the compaction arguments are strict: `compaction_enabled` accepts only a JSON boolean
+     * Verifies the compaction arguments are strict: `automatic_compaction_enabled` accepts only a JSON boolean
      * and `compaction_threshold_tokens` only an integer, and a rejected value never reaches the service.
      */
     @Test
-    fun `rejects a non-boolean compaction_enabled and a non-integer threshold without calling the service`() =
+    fun `rejects a non-boolean automatic_compaction_enabled and a non-integer threshold without calling the service`() =
         runTest {
             val modelPresetService = mockk<ModelPresetService>()
             val tool = CreateModelPresetTool(modelPresetService, json)
@@ -174,14 +174,14 @@ class CreateModelPresetToolTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("name", "smart_model")
-                    put("compaction_enabled", "yes")
+                    put("automatic_compaction_enabled", "yes")
                     put("compaction_threshold_tokens", "abc")
                 },
                 context()
             )
 
             val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
-            assertTrue(error.message.contains("Argument 'compaction_enabled' must be a boolean"))
+            assertTrue(error.message.contains("Argument 'automatic_compaction_enabled' must be a boolean"))
             assertTrue(error.message.contains("Argument 'compaction_threshold_tokens' must be an integer"))
             coVerify(exactly = 0) { modelPresetService.createPreset(any(), any()) }
         }
@@ -199,7 +199,7 @@ class CreateModelPresetToolTest {
         tool.execute(
             buildJsonObject {
                 put("name", "smart_model")
-                put("compaction_enabled", kotlinx.serialization.json.JsonNull)
+                put("automatic_compaction_enabled", kotlinx.serialization.json.JsonNull)
                 put("compaction_threshold_tokens", kotlinx.serialization.json.JsonNull)
             },
             context()
@@ -209,7 +209,7 @@ class CreateModelPresetToolTest {
             modelPresetService.createPreset(
                 userId,
                 match<CreateModelPresetRequest> { request ->
-                    request.compactionEnabled && request.compactionThresholdTokens == null
+                    request.automaticCompactionEnabled && request.compactionThresholdTokens == null
                 }
             )
         }
@@ -298,7 +298,7 @@ class CreateModelPresetToolTest {
             buildJsonObject {
                 put("name", 123)
                 put("model_id", "oops")
-                put("compaction_enabled", 1)
+                put("automatic_compaction_enabled", 1)
                 put("unknown", true)
             },
             context()
@@ -308,7 +308,7 @@ class CreateModelPresetToolTest {
         assertTrue(error.message.contains("4 error(s)"))
         assertTrue(error.message.contains("Argument 'name' must be a string"))
         assertTrue(error.message.contains("Argument 'model_id' must be an integer"))
-        assertTrue(error.message.contains("Argument 'compaction_enabled' must be a boolean"))
+        assertTrue(error.message.contains("Argument 'automatic_compaction_enabled' must be a boolean"))
         assertTrue(error.message.contains("Unknown parameter: 'unknown'"))
         coVerify(exactly = 0) { modelPresetService.createPreset(any(), any()) }
     }

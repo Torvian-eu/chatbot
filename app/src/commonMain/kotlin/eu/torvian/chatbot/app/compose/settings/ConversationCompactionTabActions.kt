@@ -27,10 +27,10 @@ interface ConversationCompactionTabActions {
     /**
      * Toggles automatic compaction in the draft (persisted only by [onSave]).
      *
-     * @param enable True to enable, false to disable temporarily while keeping the stored
-     *            configuration.
+     * @param enable True to enable automatic compaction, false to disable it temporarily while keeping
+     *            the stored configuration.
      */
-    fun onToggleEnabled(enable: Boolean)
+    fun onToggleAutomaticEnabled(enable: Boolean)
 
     /**
      * Updates the compaction-instruction draft.
@@ -61,14 +61,15 @@ interface ConversationCompactionTabActions {
     fun onUpdateThreshold(text: String)
 
     /**
-     * Validates and persists the current draft (including its enabled toggle) as the GLOBAL
+     * Validates and persists the current draft (including its automatic-compaction switch) as the GLOBAL
      * preference row.
      */
     fun onSave()
 
     /**
      * Deletes the GLOBAL preference row entirely, discarding the stored configuration (destructive).
-     * Use [onToggleEnabled] with [onSave] to disable temporarily while preserving the configuration.
+     * Use [onToggleAutomaticEnabled] with [onSave] to disable it automatically while preserving the
+     * configuration.
      */
     fun onClear()
 }

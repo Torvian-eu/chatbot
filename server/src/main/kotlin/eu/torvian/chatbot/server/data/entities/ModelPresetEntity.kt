@@ -17,8 +17,8 @@ import kotlin.time.Instant
  *            the model was deleted (`SET NULL`).
  * @property modelSettingsId Optional identifier of the bundled settings profile; null when the preset
  *            has no settings profile or the profile was deleted (`SET NULL`).
- * @property compactionEnabled Whether turns running on this preset may compact at all, ANDed with the
- *            user's `conversation_compaction` preference.
+ * @property automaticCompactionEnabled Whether automatic compaction is enabled for turns running on this
+ *            preset, ANDed with the user's `conversation_compaction` preference.
  * @property compactionThresholdTokens Optional compaction threshold override in input tokens; null
  *            means the preference's threshold applies instead.
  * @property createdAt Timestamp when the preset was created.
@@ -31,7 +31,7 @@ data class ModelPresetEntity(
     val description: String,
     val modelId: Long?,
     val modelSettingsId: Long?,
-    val compactionEnabled: Boolean,
+    val automaticCompactionEnabled: Boolean,
     val compactionThresholdTokens: Long?,
     val createdAt: Instant,
     val updatedAt: Instant

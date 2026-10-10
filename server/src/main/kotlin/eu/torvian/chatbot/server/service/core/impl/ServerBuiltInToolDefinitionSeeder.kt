@@ -9,12 +9,11 @@ import eu.torvian.chatbot.common.models.tool.ServerBuiltInToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.ServerBuiltInToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.ServerBuiltInToolDefinitionError
-import eu.torvian.chatbot.server.data.tables.ServerBuiltInToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.UsersTable
 import eu.torvian.chatbot.server.service.core.ServerBuiltInToolNamePrefixResolver
 import eu.torvian.chatbot.server.service.core.ToolService
-import eu.torvian.chatbot.server.service.core.error.tool.SeedServerBuiltInToolsError
 import eu.torvian.chatbot.server.service.core.error.tool.DeleteToolError
+import eu.torvian.chatbot.server.service.core.error.tool.SeedServerBuiltInToolsError
 import eu.torvian.chatbot.server.service.core.error.tool.UpdateToolError
 import eu.torvian.chatbot.server.service.core.error.tool.ValidateToolError
 import eu.torvian.chatbot.server.service.setup.DataInitializer
@@ -42,6 +41,11 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
  * user-edited descriptions or input schemas — the full catalog repair lives exclusively in
  * [resetToDefaults] (the explicit reset action). [ensureForUser] is also invoked right after user
  * registration so new users get their instances immediately.
+ *
+ * Consequence for catalog changes: a user whose persisted rows still advertise an older schema keeps
+ * seeing that schema to their LLM until [resetToDefaults] runs, because no migration rewrites
+ * description/schema columns. A property that was renamed in the catalog is therefore accepted only
+ * after the reset, never by a startup reconcile.
  *
  * @property serverBuiltInToolDefinitionDao DAO for the server built-in linkage table.
  * @property toolService Service used to create the base tool definition rows.

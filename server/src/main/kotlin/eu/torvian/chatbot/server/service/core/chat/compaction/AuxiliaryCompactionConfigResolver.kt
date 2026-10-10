@@ -9,11 +9,10 @@ import eu.torvian.chatbot.server.service.core.LLMConfig
  * This is the runtime fast path: it validates that the referenced rows exist, are active and
  * mutually consistent, and resolve a usable credential — but it does **not** re-check READ access
  * or the chat-like/non-streaming settings profile (both are static write-time concerns enforced by
- * the configuration service). Correctness and access are enforced explicitly by the configuration
- * service when the preference is stored; at runtime the compaction path resolves as quickly as
- * possible.
+ * the preference service). Correctness and access are enforced explicitly by that same service when
+ * the preference is stored; at runtime the compaction path resolves as quickly as possible.
  */
-interface ConversationCompactionConfigurationResolver {
+interface AuxiliaryCompactionConfigResolver {
 
     /**
      * Resolves the turn's effective compaction settings into a usable auxiliary [LLMConfig].
@@ -30,7 +29,7 @@ interface ConversationCompactionConfigurationResolver {
      *         (empty when there is none). The instruction is not part of the config: the service
      *         appends it as the final user message of the auxiliary request and persists it as chunk
      *         provenance. READ access is not checked here (it is validated at write time by the
-     *         configuration service).
+     *         preference service).
      */
     suspend fun resolveAuxiliaryConfig(
         userId: Long,

@@ -30,13 +30,16 @@ import kotlinx.coroutines.launch
  * Lets the user pick an accessible compaction model, a compatible non-streaming chat-like settings
  * profile for that model, edit the compaction instruction, an optional system message, the summary
  * label, and the token threshold (defaulting to 100,000), and save the configuration as one GLOBAL
- * `conversation_compaction` preference row or delete it (destructive DELETE). Enabling is a draft
- * toggle persisted by [save]; flipping the toggle off and saving disables automatic compaction
- * **temporarily** while the stored configuration stays intact (the server treats `enabled = false`
- * exactly like an absent row at runtime), which is deliberately separate from [clear], which removes
- * the row entirely. Validation of the client-editable fields mirrors the server's structural rules
- * (positive ids, non-blank instruction, threshold > 0) and is surfaced as inline messages before any
- * network write.
+ * `conversation_compaction` preference row or delete it (destructive DELETE). The switch is the
+ * user-level flag for **automatic** (threshold-triggered) compaction only: the server compacts
+ * automatically only while this flag AND the session preset's own flag are on, so turning it off and
+ * saving keeps the stored configuration intact while disabling automatic summarization, and a preset
+ * that disables it is never overridden. Manual compaction from the chat top bar is always available
+ * and only needs a usable configuration; it is deliberately separate from [clear], which removes the row
+ * entirely. Validation of the client-editable fields mirrors the server's structural rules (positive
+ * ids, non-blank instruction, threshold > 0) and is surfaced as inline messages before any network
+ * write; the model/settings pair is required only while the automatic switch is on, matching the
+ * server's write-time leniency.
  *
  * @property userPreferenceRepository Repository backing the global preference row.
  * @property modelRepository Repository listing accessible models.
@@ -53,22 +56,23 @@ class ConversationCompactionViewModel(
 ) : ViewModel() {
 
     /**
-     * Reactive stream of the stored global preference; `null` means no row exists yet. Whether
-     * compaction actually runs also depends on the row's own `enabled` flag (see
-     * [ConversationCompactionPreference.enabled]).
+     * Reactive stream of the stored global preference; `null` means no row exists yet. Whether automatic
+     * compaction actually runs also depends on the row's own switch (see
+     * [ConversationCompactionPreference.automaticCompactionEnabled]) and on the preset's flag.
      */
     val storedPreference: StateFlow<ConversationCompactionPreference?> =
         userPreferenceRepository.compactionPreference
 
     /**
-     * Draft-level enable flag: whether automatic compaction should be on after the next [save].
+     * Draft-level automatic-compaction switch: whether automatic compaction should be enabled after the
+     * next [save].
      *
      * Unlike [storedPreference], this flow only reflects the in-form toggle and is persisted solely
      * by [save]; turning it off and saving keeps the stored configuration intact while disabling
-     * compaction at runtime, because the server stores the `enabled` flag with the row.
+     * automatic compaction at runtime, because the server stores the flag with the row.
      */
-    private val _draftEnabled = MutableStateFlow(false)
-    val draftEnabled: StateFlow<Boolean> = _draftEnabled.asStateFlow()
+    private val _draftAutomaticEnabled = MutableStateFlow(false)
+    val draftAutomaticEnabled: StateFlow<Boolean> = _draftAutomaticEnabled.asStateFlow()
 
     /**
      * Reactive stream of accessible models, filtered to active ones (inactive models cannot drive an
@@ -184,12 +188,12 @@ class ConversationCompactionViewModel(
                 ConversationCompactionPreference.DEFAULT_COMPACTED_SUMMARY_LABEL
             _thresholdText.value =
                 ConversationCompactionPreference.DEFAULT_COMPACTION_THRESHOLD_TOKENS.toString()
-            _draftEnabled.value = false
+            _draftAutomaticEnabled.value = false
             return
         }
         // A stored preference always carries a whole configuration (the server stores one row), so
-        // overwriting the whole draft keeps the form consistent. The toggle initializes from the
-        // stored flag: a row with `enabled = false` shows a disabled form that remains fully editable.
+        // overwriting the whole draft keeps the form consistent. The switch initializes from the stored
+        // flag: a disabled row shows an editable form that is still fully usable for manual compaction.
         _selectedModelId.value = preference.modelId
         _selectedSettingsId.value = preference.settingsId
         _instruction.value = preference.instruction
@@ -198,20 +202,20 @@ class ConversationCompactionViewModel(
             ConversationCompactionPreference.DEFAULT_COMPACTED_SUMMARY_LABEL
         }
         _thresholdText.value = preference.thresholdTokens.toString()
-        _draftEnabled.value = preference.enabled
+        _draftAutomaticEnabled.value = preference.automaticCompactionEnabled
     }
 
     /**
-     * Toggles the draft-level enable flag.
+     * Toggles the draft-level automatic-compaction switch.
      *
      * The toggle is draft state only; the server row is updated by [save]. This is the mechanism for
-     * disabling compaction **temporarily**: toggling off and saving writes `enabled = false` into the
-     * stored row so the configuration survives, unlike [clear], which deletes the row outright.
+     * disabling automatic compaction **temporarily**: toggling off and saving writes the disabled flag
+     * into the stored row so the configuration survives, unlike [clear], which deletes the row outright.
      *
      * @param enable True to enable automatic compaction, false to disable it temporarily.
      */
-    fun setEnabled(enable: Boolean) {
-        _draftEnabled.value = enable
+    fun setAutomaticEnabled(enable: Boolean) {
+        _draftAutomaticEnabled.value = enable
     }
 
     /**
@@ -270,32 +274,31 @@ class ConversationCompactionViewModel(
     }
 
     /**
-     * Validates the current draft and persists it (including the [draftEnabled] toggle) as the
+     * Validates the current draft and persists it (including the [draftAutomaticEnabled] switch) as the
      * GLOBAL `conversation_compaction` row.
      *
-     * Saving a draft whose toggle is off writes `enabled = false`, which disables compaction at
-     * runtime while preserving the stored configuration for a later re-enable. On success the stored
-     * preference flow is refreshed by the repository, keeping the UI in sync with the server's
-     * canonical encoding. No write is attempted while validation errors exist: the errors are shown
-     * inline instead.
+     * Saving a draft whose switch is off writes the disabled flag, which keeps the configuration at rest
+     * while automatic compaction never runs; manual compaction stays available and only needs the stored
+     * configuration to be usable. On success the stored preference flow is refreshed by the repository,
+     * keeping the UI in sync with the server's canonical encoding. No write is attempted while validation
+     * errors exist: the errors are shown inline instead.
      */
     fun save() {
         val validationErrors = validateDraft()
         _validationErrors.value = validationErrors
         if (validationErrors.isNotEmpty()) return
 
-        val modelId = _selectedModelId.value
-        val settingsId = _selectedSettingsId.value
-        val threshold = _thresholdText.value.trim().toLongOrNull()
-        if (modelId == null || settingsId == null || threshold == null) return
+        val threshold = _thresholdText.value.trim().toLongOrNull() ?: return
 
         viewModelScope.launch(uiDispatcher) {
             _saving.value = true
             try {
                 userPreferenceRepository.setCompactionPreference(
                     ConversationCompactionPreference(
-                        modelId = modelId,
-                        settingsId = settingsId,
+                        // Null references are accepted while automatic compaction is disabled; a manual
+                        // request then fails server-side because the configuration is incomplete.
+                        modelId = _selectedModelId.value,
+                        settingsId = _selectedSettingsId.value,
                         instruction = _instruction.value.trim(),
                         // Blank system message maps to null (no system prompt); trimming keeps the
                         // stored value canonical.
@@ -306,9 +309,9 @@ class ConversationCompactionViewModel(
                             ConversationCompactionPreference.DEFAULT_COMPACTED_SUMMARY_LABEL
                         },
                         thresholdTokens = threshold,
-                        // Persist the draft toggle: disabling temporarily must keep the stored
-                        // configuration row (server: `enabled = false` behaves like an absent row).
-                        enabled = _draftEnabled.value
+                        // Persist the draft switch: disabling must keep the stored configuration row so
+                        // it stays editable and manual compaction stays possible.
+                        automaticCompactionEnabled = _draftAutomaticEnabled.value
                     )
                 ).onLeft { error ->
                     notificationService.repositoryError(
@@ -327,8 +330,9 @@ class ConversationCompactionViewModel(
     /**
      * Deletes the GLOBAL row entirely, discarding the stored configuration (destructive).
      *
-     * This is the permanent removal action; a temporary disable that preserves the configuration is
-     * [setEnabled]`(false)` followed by [save]. The server contract treats an absent row as disabled.
+     * This is the permanent removal action; a temporary disabling that preserves the configuration is
+     * [setAutomaticEnabled]`(false)` followed by [save]. The server contract treats an absent row as an
+     * unusable configuration, so neither automatic nor manual compaction can run afterwards.
      */
     fun clear() {
         viewModelScope.launch(uiDispatcher) {
@@ -343,8 +347,8 @@ class ConversationCompactionViewModel(
                     }
                     .onRight {
                         _validationErrors.value = emptyList()
-                        // Deleting the row disables compaction; reset the draft so the form shows the
-                        // disabled defaults instead of a stale configuration.
+                        // Deleting the row makes every configuration unusable; reset the draft so the
+                        // form shows the disabled defaults instead of a stale configuration.
                         applyStoredPreference(null)
                     }
             } finally {
@@ -356,15 +360,21 @@ class ConversationCompactionViewModel(
     /**
      * Validates the client-editable fields against the server's structural rules.
      *
+     * The model/settings pair is required only while the automatic switch is on, mirroring the server's
+     * write-time leniency: a disabled row may omit the references, and a manual request then fails with a
+     * typed error instead of the client blocking a save the server would accept.
+     *
      * @return A list of human-readable validation messages; empty when the draft is valid.
      */
     private fun validateDraft(): List<String> {
         val errors = mutableListOf<String>()
-        if (_selectedModelId.value == null) {
-            errors += "Select an accessible compaction model."
-        }
-        if (_selectedSettingsId.value == null) {
-            errors += "Select a non-streaming settings profile for the chosen model."
+        if (_draftAutomaticEnabled.value) {
+            if (_selectedModelId.value == null) {
+                errors += "Select an accessible compaction model."
+            }
+            if (_selectedSettingsId.value == null) {
+                errors += "Select a non-streaming settings profile for the chosen model."
+            }
         }
         if (_instruction.value.isBlank()) {
             errors += "The compaction instruction must not be blank."
