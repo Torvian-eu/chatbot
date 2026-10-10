@@ -4,6 +4,7 @@ import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.ModelSettings
@@ -11,7 +12,9 @@ import eu.torvian.chatbot.server.data.entities.*
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.*
 import eu.torvian.chatbot.server.data.toEntity
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.leftJoin
@@ -360,6 +363,14 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                     it[modelId] = chatMessage.modelId
                     it[settingsId] = chatMessage.settingsId
                     it[agentRoleId] = chatMessage.agentRoleId
+                    // The measured fields are written from the seeded DTO too, so tests can seed the inputs of
+                    // usage- and duration-based reads instead of patching the row through the DAO afterwards.
+                    it[reasoningItemsJson] = chatMessage.reasoningItems
+                        ?.takeIf { items -> items.isNotEmpty() }
+                        ?.let { items -> Json.encodeToString(ListSerializer(JsonObject.serializer()), items) }
+                    it[usageStatsJson] = chatMessage.usageStats
+                        ?.let { usage -> Json.encodeToString(UsageStats.serializer(), usage) }
+                    it[responseDurationMs] = chatMessage.responseDurationMs
                     // Completion state is taken from the seeded DTO, mirroring the production insert path, so
                     // a test can seed an incomplete message simply by constructing it with `isComplete`,
                     // `incompleteCause`, `errorCode` and `errorMessage`; a plain assistant message stays

@@ -40,6 +40,7 @@ fun Route.configureSessionRoutes(
     projectService: ProjectService,
     authorizationService: AuthorizationService,
     conversationManualCompactionService: ConversationManualCompactionService,
+    threadStatsService: ThreadStatsService,
     json: Json
 ) {
     val sessionMessagesWebSocketHandler = SessionMessagesWebSocketHandler(
@@ -242,6 +243,21 @@ fun Route.configureSessionRoutes(
             val result = either {
                 requireSessionAccess(authorizationService, userId, sessionId, AccessMode.READ)
                 toolCallService.getToolCallsBySessionId(sessionId)
+            }
+            call.respondEither(result)
+        }
+
+        // GET /api/v1/sessions/{sessionId}/stats - Statistics of the session's current thread
+        get<SessionResource.ById.Stats> { resource ->
+            val userId = call.getUserId()
+            val sessionId = resource.parent.sessionId
+            val result = either {
+                // The session authorizer enforces ownership regardless of the requested access mode, so
+                // this single check already restricts the statistics to the session's owner.
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.READ)
+                withError({ e: GetThreadStatsError -> e.toApiError() }) {
+                    threadStatsService.getThreadStats(sessionId).bind()
+                }
             }
             call.respondEither(result)
         }

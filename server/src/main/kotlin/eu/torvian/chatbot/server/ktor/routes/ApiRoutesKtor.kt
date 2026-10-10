@@ -57,7 +57,8 @@ class ApiRoutesKtor(
     private val userPreferenceService: UserPreferenceService,
     private val serverBuiltInToolNamePrefixService: ServerBuiltInToolNamePrefixService,
     private val compactionPreferenceService: CompactionPreferenceService,
-    private val conversationManualCompactionService: ConversationManualCompactionService
+    private val conversationManualCompactionService: ConversationManualCompactionService,
+    private val threadStatsService: ThreadStatsService
 ) {
     /**
      * Configures the API routes using the Ktor Resources plugin.
@@ -178,6 +179,7 @@ class ApiRoutesKtor(
             projectService,
             authorizationService,
             conversationManualCompactionService,
+            threadStatsService,
             json
         )
     }
