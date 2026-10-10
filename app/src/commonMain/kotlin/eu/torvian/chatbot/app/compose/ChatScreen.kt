@@ -19,6 +19,7 @@ import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelSlotManager
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelStoreOwnerProvider
+import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.app.viewmodel.settings.AgentRolesViewModel
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.core.ChatGroup
@@ -141,7 +142,8 @@ fun ChatScreen(
     val searchQuery by chatViewModel.searchQuery.collectAsState()
     val searchResults by chatViewModel.searchResults.collectAsState()
     val currentSearchIndex by chatViewModel.currentSearchIndex.collectAsState()
-    val canReturnToPreviousThread = chatViewModel.canReturnToPreviousThread
+    val canReturnToPreviousThread = chatViewModel.canReturnToPreviousThread &&
+        chatTurnExecutionState == TurnExecutionState.IDLE
 
     // Derive whether the composer is enabled: a resolvable role (with a model and settings) is required.
     val canSend = currentAgentRole != null && currentModel != null && currentSettings != null
@@ -177,6 +179,8 @@ fun ChatScreen(
                 isSessionListCollapsed = isSessionListCollapsed,
                 onToggleSessionList = { isSessionListCollapsed = !isSessionListCollapsed },
                 onCopyThread = { chatViewModel.copyThreadToClipboard() },
+                isCompactionEnabled = chatTurnExecutionState == TurnExecutionState.IDLE,
+                onCompactConversation = { chatViewModel.compactConversation() },
                 isSearchActive = isSearchActive,
                 searchQuery = searchQuery,
                 currentSearchIndex = currentSearchIndex,
@@ -304,6 +308,7 @@ fun ChatScreen(
             }
             override fun onCancelSendMessage() = chatViewModel.cancelSendMessage()
             override fun onPauseSendMessage() = chatViewModel.pauseSendMessage()
+            override fun onCancelCompaction() = chatViewModel.cancelCompaction()
             override fun onStartReplyTo(message: ChatMessage) = chatViewModel.startReplyTo(message)
             override fun onCancelReply() = chatViewModel.cancelReply()
             override fun onStartEditing(message: ChatMessage) = chatViewModel.startEditing(message)

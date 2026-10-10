@@ -85,6 +85,24 @@ class ChatStateAssistantResponseTimerTest {
         assertEquals(started, state.assistantResponseTimer.value)
     }
 
+    /**
+     * Verifies a compaction is not a measured turn: it starts no live measurement and freezes nothing when
+     * it finishes, so the composer timer never reports compaction time as response time.
+     */
+    @Test
+    fun `a compaction leaves the measurement untouched`() = runTest {
+        val state = createState(this)
+
+        state.setTurnExecutionState(TurnExecutionState.COMPACTING)
+
+        assertIs<AssistantResponseTimerState.Hidden>(state.assistantResponseTimer.value)
+
+        state.setTurnExecutionState(TurnExecutionState.IDLE)
+
+        // The compaction's own completion must not fabricate a frozen duration either.
+        assertIs<AssistantResponseTimerState.Hidden>(state.assistantResponseTimer.value)
+    }
+
     /** Verifies a reset discards the measurement together with the turn state. */
     @Test
     fun `reset clears the measurement`() = runTest {

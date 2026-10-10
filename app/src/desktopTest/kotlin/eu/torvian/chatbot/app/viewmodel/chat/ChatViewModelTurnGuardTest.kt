@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
 /**
  * Tests for the defense-in-depth turn guards in [ChatViewModel].
@@ -35,6 +36,19 @@ class ChatViewModelTurnGuardTest {
     private lateinit var sendMessageUC: SendMessageUseCase
     private lateinit var deleteMessageUC: DeleteMessageUseCase
     private lateinit var insertMessageUC: InsertMessageUseCase
+    private lateinit var compactConversationUC: CompactConversationUseCase
+
+    /** Editing is never allowed to start while a compaction runs; the mock records any attempt. */
+    private val editMessageUC = mockk<EditMessageUseCase>(relaxed = true)
+
+    /** Branch switching is never allowed while a compaction runs. */
+    private val switchBranchUC = mockk<SwitchBranchUseCase>(relaxed = true)
+
+    /** Role switching stays allowed while a compaction runs. */
+    private val selectAgentRoleUC = mockk<SelectAgentRoleUseCase>(relaxed = true)
+
+    /** Project switching stays allowed while a compaction runs. */
+    private val selectProjectUC = mockk<SelectProjectUseCase>(relaxed = true)
     private lateinit var turnState: MutableStateFlow<TurnExecutionState>
     private lateinit var normalScope: CoroutineScope
     private lateinit var backgroundScope: CoroutineScope
@@ -63,6 +77,7 @@ class ChatViewModelTurnGuardTest {
         sendMessageUC = mockk(relaxed = true)
         deleteMessageUC = mockk(relaxed = true)
         insertMessageUC = mockk(relaxed = true)
+        compactConversationUC = mockk(relaxed = true)
 
         normalScope = CoroutineScope(UnconfinedTestDispatcher())
         backgroundScope = CoroutineScope(UnconfinedTestDispatcher())
@@ -72,13 +87,14 @@ class ChatViewModelTurnGuardTest {
             loadSessionUC = mockk(relaxed = true),
             sendMessageUC = sendMessageUC,
             replyUC = mockk(relaxed = true),
-            editMessageUC = mockk(relaxed = true),
+            editMessageUC = editMessageUC,
             deleteMessageUC = deleteMessageUC,
             insertMessageUC = insertMessageUC,
-            switchBranchUC = mockk(relaxed = true),
-            selectAgentRoleUC = mockk(relaxed = true),
+            switchBranchUC = switchBranchUC,
+            compactConversationUC = compactConversationUC,
+            selectAgentRoleUC = selectAgentRoleUC,
             loadAgentRolesUC = mockk(relaxed = true),
-            selectProjectUC = mockk(relaxed = true),
+            selectProjectUC = selectProjectUC,
             loadProjectsUC = mockk(relaxed = true),
             updateInputUC = mockk(relaxed = true),
             copyToClipboardUC = mockk(relaxed = true),
@@ -91,7 +107,7 @@ class ChatViewModelTurnGuardTest {
 
     @AfterTest
     fun tearDown() {
-        clearMocks(state, sendMessageUC, deleteMessageUC, insertMessageUC)
+        clearMocks(state, sendMessageUC, deleteMessageUC, insertMessageUC, compactConversationUC)
     }
 
     // --- sendMessage ---
@@ -222,5 +238,85 @@ class ChatViewModelTurnGuardTest {
 
         // Assert - the insert use case was never invoked
         verify(exactly = 0) { insertMessageUC.execute(any(), any(), any(), any(), any()) }
+    }
+
+    // --- compaction ---
+
+    @Test
+    fun `compactConversation starts the compaction when idle`() = runTest {
+        turnState.value = TurnExecutionState.IDLE
+        every { state.activeSessionId } returns MutableStateFlow(1L)
+
+        viewModel.compactConversation()
+
+        verify(exactly = 1) { compactConversationUC.start(1L) }
+    }
+
+    @Test
+    fun `compactConversation is refused while a turn is active`() = runTest {
+        turnState.value = TurnExecutionState.RUNNING
+        every { state.activeSessionId } returns MutableStateFlow(1L)
+
+        viewModel.compactConversation()
+
+        verify(exactly = 0) { compactConversationUC.start(any()) }
+    }
+
+    @Test
+    fun `compactConversation is refused while a compaction is already running`() = runTest {
+        // Double-trigger defense in depth: the use case also refuses a concurrent start, and the second
+        // click must not even reach it.
+        turnState.value = TurnExecutionState.COMPACTING
+        every { state.activeSessionId } returns MutableStateFlow(1L)
+
+        viewModel.compactConversation()
+
+        verify(exactly = 0) { compactConversationUC.start(any()) }
+    }
+
+    @Test
+    fun `handlePauseOrStop in COMPACTING delegates to the compaction stop path`() = runTest {
+        turnState.value = TurnExecutionState.COMPACTING
+
+        viewModel.handlePauseOrStop()
+
+        verify(exactly = 1) { compactConversationUC.cancel() }
+        // The compaction state is cleared by the use case's job completion, never by the drain path.
+        assertEquals(TurnExecutionState.COMPACTING, turnState.value)
+    }
+
+    @Test
+    fun `thread-affecting actions are blocked while compacting`() = runTest {
+        turnState.value = TurnExecutionState.COMPACTING
+        every { state.displayedMessages } returns MutableStateFlow(listOf(user, assistant))
+        every { state.rollbackTarget } returns MutableStateFlow(1L)
+
+        viewModel.startEditing(assistant)
+        viewModel.saveEditing()
+        viewModel.saveEditingAsCopy()
+        viewModel.switchBranchToMessage(2L)
+        viewModel.returnToPreviousThread()
+        viewModel.sendMessage()
+        viewModel.requestDeleteMessage(assistant)
+        viewModel.onRequestInsertMessage(assistant)
+
+        verify(exactly = 0) { state.setEditingMessage(any()) }
+        coVerify(exactly = 0) { editMessageUC.save() }
+        coVerify(exactly = 0) { editMessageUC.saveAsCopy() }
+        coVerify(exactly = 0) { switchBranchUC.execute(any()) }
+        coVerify(exactly = 0) { sendMessageUC.execute(any()) }
+        verify(exactly = 0) { state.setDialogState(any()) }
+    }
+
+    @Test
+    fun `role and project switching stay allowed while compacting`() = runTest {
+        turnState.value = TurnExecutionState.COMPACTING
+
+        viewModel.selectAgentRole(5L)
+        viewModel.selectProject(7L)
+
+        coVerify(exactly = 1) { selectAgentRoleUC.execute(5L) }
+        coVerify(exactly = 1) { selectProjectUC.execute(7L) }
+        verify(exactly = 0) { compactConversationUC.cancel() }
     }
 }

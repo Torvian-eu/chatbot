@@ -706,9 +706,7 @@ class SendMessageUseCase(
                                     // creates/replaces transcript messages; the repository also keeps the
                                     // session cache untouched.
                                     notificationService.genericSuccess(
-                                        "Conversation compacted: ${chatUpdate.payload.coveredMessageIds.size} " +
-                                            "messages summarized (${chatUpdate.payload.sourceTokenCount} → " +
-                                            "${chatUpdate.payload.resultTokenCount} tokens)"
+                                        CompactionNotifications.successText(chatUpdate.payload)
                                     )
                                 }
 
@@ -814,9 +812,7 @@ class SendMessageUseCase(
                                 // creates/replaces transcript messages; the repository also keeps the
                                 // session cache untouched.
                                 notificationService.genericSuccess(
-                                    "Conversation compacted: ${event.payload.coveredMessageIds.size} " +
-                                        "messages summarized (${event.payload.sourceTokenCount} → " +
-                                        "${event.payload.resultTokenCount} tokens)"
+                                    CompactionNotifications.successText(event.payload)
                                 )
                             }
 

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.send_message_button_description
@@ -15,6 +16,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.getString
 import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -128,6 +130,26 @@ class AssistantResponseTimerTest {
         onNodeWithText("00:12").assertDoesNotExist()
         onNodeWithContentDescription(sendButtonDescription).assertIsDisplayed()
     }
+
+    /**
+     * Verifies the composer replaces the send button with the stop button while a compaction runs, and that
+     * the button cancels the compaction instead of the turn.
+     */
+    @Test
+    fun inputArea_showsCompactionStopButton() = runComposeUiTest {
+        var cancellations = 0
+        setContent {
+            InputArea(
+                actions = noOpInputAreaActions().copy(onCancelCompaction = { cancellations++ }),
+                replyTargetMessage = null,
+                turnExecutionState = TurnExecutionState.COMPACTING
+            )
+        }
+
+        onNodeWithContentDescription(sendButtonDescription).assertDoesNotExist()
+        onNodeWithContentDescription("Cancel compaction").assertIsDisplayed().performClick()
+        assertEquals(1, cancellations)
+    }
 }
 
 /**
@@ -140,6 +162,7 @@ private fun noOpInputAreaActions() = InputAreaActions(
     onSendMessage = {},
     onCancelSendMessage = {},
     onPauseSendMessage = {},
+    onCancelCompaction = {},
     onCancelReply = {},
     onAddFileReferences = {},
     onRemoveFileReference = {},

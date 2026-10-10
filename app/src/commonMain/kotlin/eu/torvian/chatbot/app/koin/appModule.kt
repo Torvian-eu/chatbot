@@ -502,6 +502,10 @@ fun appModule(config: AppConfiguration): Module = module {
         SwitchBranchUseCase(get<SessionRepository>(), get(), chatState, get())
     }
 
+    factory<CompactConversationUseCase> { (chatState: ChatState, scope: CoroutineScope) ->
+        CompactConversationUseCase(get<SessionRepository>(), chatState, get(), scope)
+    }
+
     factory<SendMessageUseCase> { (chatState: ChatState) ->
         SendMessageUseCase(
             get<SessionRepository>(),
@@ -560,6 +564,7 @@ fun appModule(config: AppConfiguration): Module = module {
             deleteMessageUC = get { parametersOf(chatState) },
             insertMessageUC = get { parametersOf(chatState) },
             switchBranchUC = get { parametersOf(chatState) },
+            compactConversationUC = get { parametersOf(chatState, normalScope) },
             selectAgentRoleUC = get { parametersOf(chatState) },
             loadAgentRolesUC = get { parametersOf(chatState) },
             selectProjectUC = get { parametersOf(chatState) },

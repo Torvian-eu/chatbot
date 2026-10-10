@@ -25,7 +25,8 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
  * @param messageActions All available actions for the message item.
  * @param hovered Whether the parent [MessageItem] is currently hovered.
  * @param turnExecutionState Lifecycle state of the active assistant turn. Actions that start a
- * new LLM turn (Regenerate, Branch & Continue) are disabled while a turn is active.
+ * new LLM turn (Regenerate, Branch & Continue) are disabled while a turn is active, and every
+ * thread-affecting action (including Edit and branch navigation) is disabled while a compaction runs.
  * @param modifier Modifier to be applied to the component.
  */
 @Composable
@@ -40,6 +41,10 @@ fun MessageActionRow(
 ) {
     // Track if the "More" menu is expanded to keep controls visible
     var moreMenuExpanded by remember { mutableStateOf(false) }
+
+    // Only a compaction blocks these actions: a running turn keeps today's behaviour, where the thread
+    // stays editable.
+    val threadEditable = turnExecutionState != TurnExecutionState.COMPACTING
 
     // Calculate branch navigation data within MessageActionRow
     val branchNavData = remember(message, allMessagesMap, allRootMessageIds) {
@@ -62,7 +67,8 @@ fun MessageActionRow(
                 messageActions = messageActions,
                 moreMenuExpanded = moreMenuExpanded,
                 onMoreMenuExpandedChange = { moreMenuExpanded = it },
-                turnExecutionState = turnExecutionState
+                turnExecutionState = turnExecutionState,
+                threadEditable = threadEditable
             )
         } else {
             Spacer(Modifier.width(0.dp)) // Placeholder to maintain layout structure
@@ -72,7 +78,8 @@ fun MessageActionRow(
         if (branchNavData.showNavigation) {
             BranchNavigationControls(
                 branchNavigationData = branchNavData,
-                onSwitchBranchToMessage = messageActions.onSwitchBranchToMessage
+                onSwitchBranchToMessage = messageActions.onSwitchBranchToMessage,
+                enabled = threadEditable
             )
         }
     }
@@ -87,6 +94,7 @@ fun MessageActionRow(
  * @param onMoreMenuExpandedChange Callback to update the expanded state of the "More" menu.
  * @param turnExecutionState Lifecycle state of the active assistant turn; used to disable
  * actions that would start a conflicting LLM turn.
+ * @param threadEditable Whether thread-affecting actions may run at all (false during a compaction).
  * @param modifier Modifier to be applied to the component.
  */
 @Composable
@@ -96,6 +104,7 @@ private fun GeneralMessageControls(
     moreMenuExpanded: Boolean,
     onMoreMenuExpandedChange: (Boolean) -> Unit,
     turnExecutionState: TurnExecutionState,
+    threadEditable: Boolean,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -104,7 +113,11 @@ private fun GeneralMessageControls(
         horizontalArrangement = Arrangement.spacedBy(6.dp) // Spacing between action icons
     ) {
         // Edit Button
-        EditButton(message = message, onEditMessage = messageActions.onEditMessage)
+        EditButton(
+            message = message,
+            onEditMessage = messageActions.onEditMessage,
+            enabled = threadEditable
+        )
 
         // Reply Button
         ReplyButton(message = message, onReplyMessage = messageActions.onReplyMessage)
@@ -151,13 +164,19 @@ private fun GeneralMessageControls(
  *
  * @param message The message to be edited.
  * @param onEditMessage Callback for the edit action.
+ * @param enabled Whether the edit action may run; false while a compaction owns the thread.
  */
 @Composable
-private fun EditButton(message: ChatMessage, onEditMessage: (ChatMessage) -> Unit) {
+private fun EditButton(
+    message: ChatMessage,
+    onEditMessage: (ChatMessage) -> Unit,
+    enabled: Boolean
+) {
     PlainTooltipBox(text = "Edit message") {
         IconButton(
             onClick = { onEditMessage(message) },
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(24.dp),
+            enabled = enabled
         ) {
             Icon(
                 Icons.Default.Edit,
@@ -460,12 +479,14 @@ private fun DeleteThreadMenuItem(
  *
  * @param branchNavigationData Pre-calculated data for branch navigation.
  * @param onSwitchBranchToMessage Callback to switch to a different thread branch.
+ * @param enabled Whether branch switching may run; false while a compaction owns the thread.
  * @param modifier Modifier to be applied to the component.
  */
 @Composable
 private fun BranchNavigationControls(
     branchNavigationData: BranchNavigationData,
     onSwitchBranchToMessage: (Long) -> Unit,
+    enabled: Boolean,
     modifier: Modifier = Modifier
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -477,7 +498,8 @@ private fun BranchNavigationControls(
                         val prevIdx = branchNavigationData.zeroBasedIndex - 1
                         onSwitchBranchToMessage(branchNavigationData.alternativeBranchMessageIds[prevIdx])
                     },
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(24.dp),
+                    enabled = enabled
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBackIos,
@@ -506,7 +528,8 @@ private fun BranchNavigationControls(
                         val nextIdx = branchNavigationData.zeroBasedIndex + 1
                         onSwitchBranchToMessage(branchNavigationData.alternativeBranchMessageIds[nextIdx])
                     },
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(24.dp),
+                    enabled = enabled
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowForwardIos,

@@ -33,6 +33,11 @@ interface ChatAreaActions {
     fun onPauseSendMessage()
 
     /**
+     * Callback for when the user cancels the running conversation compaction.
+     */
+    fun onCancelCompaction()
+
+    /**
      * Callback for when the user starts replying to a specific message.
      * @param message The message the user is replying to.
      */

@@ -339,6 +339,26 @@ fun InputArea(
                                 }
                             }
                         }
+
+                        // A compaction is not a turn: it reuses the stop button, whose label is the only
+                        // thing that tells the user what is being cancelled. Nothing has been requested yet,
+                        // so the icon stays steady — the pulse marks a cancellation already in flight
+                        // (PAUSING, STOPPING) and would wrongly suggest this stop was already pressed.
+                        TurnExecutionState.COMPACTING -> {
+                            PlainTooltipBox(text = "Compaction in progress — cancel") {
+                                FilledIconButton(
+                                    onClick = actions.onCancelCompaction,
+                                    modifier = Modifier.size(48.dp),
+                                    enabled = true
+                                ) {
+                                    Icon(
+                                        Icons.Default.Stop,
+                                        contentDescription = "Cancel compaction",
+                                        tint = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

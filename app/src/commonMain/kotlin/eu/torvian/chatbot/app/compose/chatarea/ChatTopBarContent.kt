@@ -40,6 +40,8 @@ import eu.torvian.chatbot.common.models.project.ProjectDto
  * @param isSessionListCollapsed whether the session list panel is collapsed.
  * @param onToggleSessionList toggles the session list panel.
  * @param onCopyThread copies the current displayed thread to the clipboard.
+ * @param isCompactionEnabled whether the manual compaction entry point can be activated right now.
+ * @param onCompactConversation requests a forced compaction of the current displayed thread.
  * @param isSearchActive whether top-bar search mode is currently enabled.
  * @param searchQuery current in-session search query.
  * @param currentSearchIndex currently selected result index, or `-1` when none is selected.
@@ -69,6 +71,8 @@ fun RowScope.ChatTopBarContent(
     isSessionListCollapsed: Boolean,
     onToggleSessionList: () -> Unit,
     onCopyThread: () -> Unit,
+    isCompactionEnabled: Boolean,
+    onCompactConversation: () -> Unit,
     isSearchActive: Boolean,
     searchQuery: String,
     currentSearchIndex: Int,
@@ -160,6 +164,8 @@ fun RowScope.ChatTopBarContent(
             MoreActionsMenu(
                 onCopyThread = onCopyThread,
                 onShowSearch = onShowSearch,
+                isCompactionEnabled = isCompactionEnabled,
+                onCompactConversation = onCompactConversation,
             )
         }
     }
@@ -351,15 +357,21 @@ private fun CompactProjectSelector(
 
 /**
  * More actions menu for the chat top bar.
- * Includes thread-level utility actions such as copy and search.
+ * Includes thread-level utility actions such as copy, search and manual compaction.
  *
  * @param onCopyThread copies the currently displayed thread.
  * @param onShowSearch enables in-session search mode.
+ * @param isCompactionEnabled whether the item can be activated: false while the session is busy
+ *            with a turn or another compaction. The item itself is always rendered, because the server
+ *            validates the configuration when it is requested.
+ * @param onCompactConversation requests a forced compaction of the displayed thread.
  */
 @Composable
 private fun MoreActionsMenu(
     onCopyThread: () -> Unit,
     onShowSearch: () -> Unit,
+    isCompactionEnabled: Boolean,
+    onCompactConversation: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -401,6 +413,20 @@ private fun MoreActionsMenu(
                     },
                     onClick = {
                         onCopyThread()
+                        expanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Compact Conversation") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Compress,
+                            contentDescription = null
+                        )
+                    },
+                    enabled = isCompactionEnabled,
+                    onClick = {
+                        onCompactConversation()
                         expanded = false
                     }
                 )

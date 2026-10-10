@@ -247,6 +247,7 @@ private fun SuccessStateDisplay(
                 onSendMessage = actions::onSendMessage,
                 onCancelSendMessage = actions::onCancelSendMessage,
                 onPauseSendMessage = actions::onPauseSendMessage,
+                onCancelCompaction = actions::onCancelCompaction,
                 onCancelReply = actions::onCancelReply,
                 onToggleExpansion = onToggleExpansion,
                 onAddFileReferences = actions::onAddFileReferences,

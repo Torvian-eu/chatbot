@@ -14,5 +14,12 @@ enum class TurnExecutionState {
     PAUSING,
 
     /** A hard cancellation was requested and terminal server events are being drained. */
-    STOPPING
+    STOPPING,
+
+    /**
+     * A user-requested conversation compaction is running. The composer shows the stop button with a
+     * compaction-specific tooltip, whose click cancels the operation, and thread-affecting actions are
+     * blocked until it finishes or is cancelled.
+     */
+    COMPACTING
 }

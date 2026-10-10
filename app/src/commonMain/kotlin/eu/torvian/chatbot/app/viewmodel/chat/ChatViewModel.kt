@@ -69,6 +69,7 @@ class ChatViewModel(
     private val deleteMessageUC: DeleteMessageUseCase,
     private val insertMessageUC: InsertMessageUseCase,
     private val switchBranchUC: SwitchBranchUseCase,
+    private val compactConversationUC: CompactConversationUseCase,
     private val selectAgentRoleUC: SelectAgentRoleUseCase,
     private val loadAgentRolesUC: LoadAgentRolesUseCase,
     private val selectProjectUC: SelectProjectUseCase,
@@ -106,6 +107,16 @@ class ChatViewModel(
      */
     private val isTurnActive: Boolean
         get() = state.turnExecutionState.value != TurnExecutionState.IDLE
+
+    /**
+     * Whether a user-requested compaction currently owns the session.
+     *
+     * Compared against [TurnExecutionState.COMPACTING] rather than against [TurnExecutionState.IDLE] so
+     * the actions it blocks are exactly the thread-affecting ones, leaving role, project and model
+     * switching (and the behaviour of a running turn) untouched.
+     */
+    private val isCompactionInProgress: Boolean
+        get() = state.turnExecutionState.value == TurnExecutionState.COMPACTING
 
     // --- Public State Properties (delegated to Reactive ChatState) ---
 
@@ -308,7 +319,7 @@ class ChatViewModel(
         if (isMessageVisible) {
             // No branch switch needed, no rollback target
             state.setRollbackTarget(null)
-        } else {
+        } else if (!isCompactionInProgress) {
             // Branch switch needed - capture current leaf as rollback target
             state.setRollbackTarget(currentLeafBeforeSwitch)
             switchBranchUC.execute(intent.messageId)
@@ -419,6 +430,7 @@ class ChatViewModel(
      *
      * RUNNING deliberately sends only Pause, while PAUSING sends Cancel and starts the bounded
      * drain. STOPPING is intentionally inert because another click cannot improve cancellation.
+     * COMPACTING has nothing to drain: the compaction socket is cancelled directly.
      */
     fun handlePauseOrStop() {
         when (state.turnExecutionState.value) {
@@ -457,7 +469,28 @@ class ChatViewModel(
 
             TurnExecutionState.STOPPING,
             TurnExecutionState.IDLE -> Unit
+
+            TurnExecutionState.COMPACTING -> cancelCompaction()
         }
+    }
+
+    /**
+     * Requests an immediate forced compaction of the current session's displayed thread.
+     *
+     * The operation runs on the session's state, so it is refused while the session is already busy
+     * (a turn or a compaction); the UI disables the entry point for the same cases.
+     */
+    fun compactConversation() {
+        if (isTurnActive) return
+        val sessionId = state.activeSessionId.value ?: return
+        compactConversationUC.start(sessionId)
+    }
+
+    /**
+     * Cancels the running compaction, if any.
+     */
+    fun cancelCompaction() {
+        compactConversationUC.cancel()
     }
 
     /**
@@ -535,6 +568,8 @@ class ChatViewModel(
      * Sets the state to indicate a message is being edited.
      */
     fun startEditing(message: ChatMessage) {
+        // Editing the thread while it is being summarized would race the compaction's source snapshot.
+        if (isCompactionInProgress) return
         editMessageUC.start(message)
     }
 
@@ -549,6 +584,7 @@ class ChatViewModel(
      * Saves the edited message content.
      */
     fun saveEditing() {
+        if (isCompactionInProgress) return
         normalScope.launch {
             editMessageUC.save()
         }
@@ -558,6 +594,7 @@ class ChatViewModel(
      * Saves the edited message content as a new copy (sibling).
      */
     fun saveEditingAsCopy() {
+        if (isCompactionInProgress) return
         normalScope.launch {
             editMessageUC.saveAsCopy()
         }
@@ -619,6 +656,9 @@ class ChatViewModel(
      * @return Job that can be used to wait for the branch switch to complete.
      */
     fun switchBranchToMessage(targetMessageId: Long): Job {
+        // Switching the branch would move the compaction's source thread under it; the no-op job keeps
+        // awaiting callers working.
+        if (isCompactionInProgress) return normalScope.launch {}
         return normalScope.launch {
             switchBranchUC.execute(targetMessageId)
         }
@@ -714,6 +754,7 @@ class ChatViewModel(
      * once the rollback action has been used.
      */
     fun returnToPreviousThread() {
+        if (isCompactionInProgress) return
         val rollbackTarget = rollbackTarget.value ?: return
         // Clear rollback target immediately so button disappears after use
         state.setRollbackTarget(null)

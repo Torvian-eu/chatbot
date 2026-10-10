@@ -4,6 +4,7 @@ import eu.torvian.chatbot.app.testutils.data.assistantMessage
 import eu.torvian.chatbot.app.viewmodel.SearchNavigationState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
+import eu.torvian.chatbot.app.viewmodel.chat.usecase.CompactConversationUseCase
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.CopyToClipboardUseCase
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.DeleteMessageUseCase
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.EditMessageUseCase
@@ -84,6 +85,7 @@ class ChatViewModelMessageUsageDetailsTest {
             deleteMessageUC = mockk<DeleteMessageUseCase>(relaxed = true),
             insertMessageUC = mockk<InsertMessageUseCase>(relaxed = true),
             switchBranchUC = mockk<SwitchBranchUseCase>(relaxed = true),
+            compactConversationUC = mockk<CompactConversationUseCase>(relaxed = true),
             selectAgentRoleUC = mockk<SelectAgentRoleUseCase>(relaxed = true),
             loadAgentRolesUC = mockk<LoadAgentRolesUseCase>(relaxed = true),
             selectProjectUC = mockk<SelectProjectUseCase>(relaxed = true),
