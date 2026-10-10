@@ -5,6 +5,7 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
+import eu.torvian.chatbot.common.models.api.core.CompactionEvent
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -268,6 +269,18 @@ interface SessionRepository {
         sessionId: Long,
         clientEvents: Flow<ChatClientEvent>
     ): Flow<Either<RepositoryError, ChatStreamEvent>>
+
+    /**
+     * Requests a forced conversation compaction of a session's displayed thread.
+     *
+     * This is a non-transcript operation: it persists one compaction chunk server-side and never
+     * creates, replaces or removes a message, so the session cache is deliberately not updated. The
+     * flow completes after the server's terminal compaction event.
+     *
+     * @param sessionId The ID of the session whose displayed thread is compacted.
+     * @return Flow of Either containing the terminal compaction event or RepositoryError on failure.
+     */
+    fun compactConversation(sessionId: Long): Flow<Either<RepositoryError, CompactionEvent>>
 
     /**
      * Updates the content and optionally file references of an existing message.

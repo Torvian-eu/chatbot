@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
+import eu.torvian.chatbot.common.models.api.core.CompactionEvent
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import kotlinx.coroutines.flow.Flow
@@ -46,6 +47,20 @@ interface ChatApi {
      *         The flow will emit various [ChatStreamEvent] types until the connection is closed.
      */
     fun processNewMessageStreaming(sessionId: Long, clientEvents: Flow<ChatClientEvent>): Flow<Either<ApiResourceError, ChatStreamEvent>>
+
+    /**
+     * Opens the manual conversation-compaction socket for a session.
+     *
+     * Corresponds to a WebSocket connection to `WS /api/v1/sessions/{sessionId}/compaction`. Connecting
+     * is the request: no client event is sent, and the server answers with exactly one terminal
+     * [CompactionEvent] followed by [CompactionEvent.StreamCompleted]. Cancelling the collecting
+     * coroutine closes the socket, which aborts the operation and persists nothing.
+     *
+     * @param sessionId The ID of the session whose displayed thread is compacted.
+     * @return A [Flow] of [Either<ApiResourceError, CompactionEvent>] representing the terminal
+     *         compaction outcome.
+     */
+    fun compactConversation(sessionId: Long): Flow<Either<ApiResourceError, CompactionEvent>>
 
     /**
      * Updates the content and optionally file references of an existing message.

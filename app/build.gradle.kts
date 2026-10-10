@@ -186,6 +186,10 @@ kotlin {
         desktopTest.dependencies {
             // Mocking library (JVM-specific)
             implementation(libs.mockk)
+            // Real WebSocket handshake and test-host server, used to exercise the client transport
+            // contracts (the socket the compaction action opens) against a live route.
+            implementation(libs.ktor.server.test.host)
+            implementation(libs.ktor.server.websockets)
         }
 
         desktopAndroidMain.dependencies {

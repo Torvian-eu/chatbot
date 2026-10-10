@@ -15,6 +15,7 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
+import eu.torvian.chatbot.common.models.api.core.CompactionEvent
 import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -400,6 +401,15 @@ class DefaultSessionRepository(
             }
             .map {
                 it.mapLeft { err -> err.toRepositoryError("Failed to process new message") }
+            }
+    }
+
+    override fun compactConversation(sessionId: Long): Flow<Either<RepositoryError, CompactionEvent>> {
+        // Deliberately no applyStreamEvent: a compaction never mutates the transcript or the cached
+        // session, so only the caller's notification layer consumes these events.
+        return chatApi.compactConversation(sessionId)
+            .map {
+                it.mapLeft { err -> err.toRepositoryError("Failed to compact the conversation") }
             }
     }
 

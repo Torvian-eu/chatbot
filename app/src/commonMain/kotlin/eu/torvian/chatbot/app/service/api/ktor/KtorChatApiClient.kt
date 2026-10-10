@@ -24,6 +24,7 @@ import io.ktor.client.request.*
 import io.ktor.http.HttpHeaders
 import io.ktor.websocket.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
@@ -59,28 +60,50 @@ class KtorChatApiClient(
         sessionId: Long,
         clientEvents: Flow<ChatClientEvent>
     ): Flow<Either<ApiResourceError, ChatEvent>> =
-        connectAndProcessMessages(sessionId, clientEvents)
+        connectAndProcessMessages(
+            resourceUrl = href(
+                SessionResource.ById.Messages(SessionResource.ById(SessionResource(), sessionId))
+            ),
+            sessionId = sessionId,
+            clientEvents = clientEvents
+        )
 
     override fun processNewMessageStreaming(
         sessionId: Long,
         clientEvents: Flow<ChatClientEvent>
     ): Flow<Either<ApiResourceError, ChatStreamEvent>> =
-        connectAndProcessMessages(sessionId, clientEvents)
+        connectAndProcessMessages(
+            resourceUrl = href(
+                SessionResource.ById.Messages(SessionResource.ById(SessionResource(), sessionId))
+            ),
+            sessionId = sessionId,
+            clientEvents = clientEvents
+        )
+
+    override fun compactConversation(sessionId: Long): Flow<Either<ApiResourceError, CompactionEvent>> =
+        connectAndProcessMessages(
+            resourceUrl = href(
+                SessionResource.ById.Compaction(SessionResource.ById(SessionResource(), sessionId))
+            ),
+            sessionId = sessionId
+        )
 
     /**
      * Generic helper function to establish a WebSocket connection and handle the bidirectional event flow.
      *
-     * @param sessionId The ID of the session to connect to.
-     * @param clientEvents The outbound flow of events to send to the server.
+     * @param resourceUrl Absolute WebSocket URL of the resource to connect to.
+     * @param sessionId The ID of the session the connection belongs to (log context only).
+     * @param clientEvents The outbound flow of events to send to the server; empty when the connection
+     *            itself is the request.
      * @return An inbound flow of deserialized events from the server.
      */
     private inline fun <reified T : Any> connectAndProcessMessages(
+        resourceUrl: String,
         sessionId: Long,
-        clientEvents: Flow<ChatClientEvent>
+        clientEvents: Flow<ChatClientEvent> = emptyFlow()
     ): Flow<Either<ApiResourceError, T>> = flow {
         try {
-            val sessionUrl = href(SessionResource.ById.Messages(SessionResource.ById(SessionResource(), sessionId)))
-            logger.info("Connecting to WebSocket: $sessionUrl")
+            logger.info("Connecting to WebSocket: $resourceUrl")
             val providedSubprotocols = webSocketAuthSubprotocolProvider?.getSubprotocols().orEmpty()
             // For non-browser targets we still offer the marker so protocol negotiation succeeds consistently.
             val subprotocols = providedSubprotocols.ifEmpty {
@@ -88,7 +111,7 @@ class KtorChatApiClient(
             }
             logger.debug("WS requested subprotocols: ${subprotocols.map { it.redactProtocolValue() }}")
 
-            client.webSocket(path = sessionUrl, wss = wss, subprotocols = subprotocols) {
+            client.webSocket(path = resourceUrl, wss = wss, subprotocols = subprotocols) {
                 val negotiatedSubprotocol = runCatching {
                     call.response.headers[HttpHeaders.SecWebSocketProtocol]
                 }.getOrNull()
