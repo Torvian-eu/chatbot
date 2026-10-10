@@ -52,6 +52,7 @@ import kotlinx.coroutines.launch
  * @param updateInputUC Use case for updating input content
  * @param copyToClipboardUC Use case for copying content to clipboard
  * @param fileReferenceUC Use case for managing file references
+ * @param showThreadStatsUC Use case for the thread statistics dialog
  * @param navigationState State holder for cross-session search navigation intent.
  * @param normalScope Coroutine scope for UI operations
  * @param backgroundScope Coroutine scope for background operations (should only differ from normalScope in tests)
@@ -73,6 +74,7 @@ class ChatViewModel(
     private val updateInputUC: UpdateInputUseCase,
     private val copyToClipboardUC: CopyToClipboardUseCase,
     private val fileReferenceUC: FileReferenceUseCase,
+    private val showThreadStatsUC: ShowThreadStatsUseCase,
     private val navigationState: SearchNavigationState,
     private val normalScope: CoroutineScope,
     private val backgroundScope: CoroutineScope
@@ -792,6 +794,13 @@ class ChatViewModel(
      */
     fun showFileReferencesManagement() {
         fileReferenceUC.showFileReferencesManagementDialog()
+    }
+
+    /**
+     * Shows the statistics of the currently displayed thread, fetched from the server for the active session.
+     */
+    fun showThreadStats() {
+        showThreadStatsUC.show()
     }
 
     /**

@@ -99,6 +99,7 @@ class ChatViewModelTurnGuardTest {
             updateInputUC = mockk(relaxed = true),
             copyToClipboardUC = mockk(relaxed = true),
             fileReferenceUC = mockk(relaxed = true),
+            showThreadStatsUC = mockk(relaxed = true),
             navigationState = mockk<SearchNavigationState>(relaxed = true),
             normalScope = normalScope,
             backgroundScope = backgroundScope

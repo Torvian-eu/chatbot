@@ -14,9 +14,12 @@ import eu.torvian.chatbot.app.chat.search.SearchDirection
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.thread_stats_menu_item
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.project.ProjectDto
+import org.jetbrains.compose.resources.stringResource
 
 
 /**
@@ -40,6 +43,7 @@ import eu.torvian.chatbot.common.models.project.ProjectDto
  * @param isSessionListCollapsed whether the session list panel is collapsed.
  * @param onToggleSessionList toggles the session list panel.
  * @param onCopyThread copies the current displayed thread to the clipboard.
+ * @param onShowThreadStats opens the statistics dialog of the current displayed thread.
  * @param isCompactionEnabled whether the manual compaction entry point can be activated right now.
  * @param onCompactConversation requests a forced compaction of the current displayed thread.
  * @param isSearchActive whether top-bar search mode is currently enabled.
@@ -71,6 +75,7 @@ fun RowScope.ChatTopBarContent(
     isSessionListCollapsed: Boolean,
     onToggleSessionList: () -> Unit,
     onCopyThread: () -> Unit,
+    onShowThreadStats: () -> Unit,
     isCompactionEnabled: Boolean,
     onCompactConversation: () -> Unit,
     isSearchActive: Boolean,
@@ -163,6 +168,7 @@ fun RowScope.ChatTopBarContent(
             // More actions menu
             MoreActionsMenu(
                 onCopyThread = onCopyThread,
+                onShowThreadStats = onShowThreadStats,
                 onShowSearch = onShowSearch,
                 isCompactionEnabled = isCompactionEnabled,
                 onCompactConversation = onCompactConversation,
@@ -360,6 +366,7 @@ private fun CompactProjectSelector(
  * Includes thread-level utility actions such as copy, search and manual compaction.
  *
  * @param onCopyThread copies the currently displayed thread.
+ * @param onShowThreadStats opens the statistics dialog of the currently displayed thread.
  * @param onShowSearch enables in-session search mode.
  * @param isCompactionEnabled whether the item can be activated: false while the session is busy
  *            with a turn or another compaction. The item itself is always rendered, because the server
@@ -369,6 +376,7 @@ private fun CompactProjectSelector(
 @Composable
 private fun MoreActionsMenu(
     onCopyThread: () -> Unit,
+    onShowThreadStats: () -> Unit,
     onShowSearch: () -> Unit,
     isCompactionEnabled: Boolean,
     onCompactConversation: () -> Unit,
@@ -413,6 +421,19 @@ private fun MoreActionsMenu(
                     },
                     onClick = {
                         onCopyThread()
+                        expanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(Res.string.thread_stats_menu_item)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.QueryStats,
+                            contentDescription = null
+                        )
+                    },
+                    onClick = {
+                        onShowThreadStats()
                         expanded = false
                     }
                 )

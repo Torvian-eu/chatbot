@@ -77,6 +77,14 @@ fun Dialogs(dialogState: ChatAreaDialogState) {
             )
         }
 
+        is ChatAreaDialogState.ThreadStatsDetails -> {
+            ThreadStatsDialog(
+                stats = dialogState.stats,
+                onReload = dialogState.onReload,
+                onDismiss = dialogState.onDismiss
+            )
+        }
+
         ChatAreaDialogState.None -> {
             // No dialog
         }

@@ -51,6 +51,7 @@ fun appSettingsModule(): Module = module {
             updateInputUC = get { parametersOf(chatState) },
             copyToClipboardUC = get { parametersOf(chatState) },
             fileReferenceUC = get { parametersOf(chatState, normalScope) },
+            showThreadStatsUC = get { parametersOf(chatState, normalScope) },
             navigationState = get(),
             normalScope = normalScope,
             backgroundScope = backgroundScope,

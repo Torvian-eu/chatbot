@@ -168,6 +168,10 @@ fun appChatModule(): Module = module {
         FileReferenceUseCase(chatState, get(), scope)
     }
 
+    factory<ShowThreadStatsUseCase> { (chatState: ChatState, scope: CoroutineScope) ->
+        ShowThreadStatsUseCase(get<SessionRepository>(), chatState, scope)
+    }
+
     // Provide the long-lived slot manager that maps sessions to ChatViewModel slots.
     single<ChatViewModelSlotManager> {
         ChatViewModelSlotManager(maxSlots = ChatViewModelSlotManager.DEFAULT_MAX_SLOTS)
