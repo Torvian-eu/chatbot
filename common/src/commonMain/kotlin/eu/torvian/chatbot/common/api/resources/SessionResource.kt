@@ -61,6 +61,12 @@ class SessionResource(val parent: Api = Api()) {
         class ToolCalls(val parent: ById)
 
         /**
+         * Resource for the thread statistics of a session: /api/v1/sessions/{sessionId}/stats
+         */
+        @Resource("stats")
+        class Stats(val parent: ById)
+
+        /**
          * Resource for the manual conversation-compaction socket:
          * /api/v1/sessions/{sessionId}/compaction
          */
