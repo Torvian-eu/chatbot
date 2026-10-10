@@ -16,12 +16,10 @@ import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
-import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolCall
-import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -52,6 +50,7 @@ import kotlinx.coroutines.launch
  * @param updateInputUC Use case for updating input content
  * @param copyToClipboardUC Use case for copying content to clipboard
  * @param fileReferenceUC Use case for managing file references
+ * @param showThreadStatsUC Use case for the thread statistics dialog
  * @param navigationState State holder for cross-session search navigation intent.
  * @param normalScope Coroutine scope for UI operations
  * @param backgroundScope Coroutine scope for background operations (should only differ from normalScope in tests)
@@ -73,6 +72,7 @@ class ChatViewModel(
     private val updateInputUC: UpdateInputUseCase,
     private val copyToClipboardUC: CopyToClipboardUseCase,
     private val fileReferenceUC: FileReferenceUseCase,
+    private val showThreadStatsUC: ShowThreadStatsUseCase,
     private val navigationState: SearchNavigationState,
     private val normalScope: CoroutineScope,
     private val backgroundScope: CoroutineScope
@@ -100,14 +100,14 @@ class ChatViewModel(
     )
 
     /**
-     * Whether an assistant turn is currently in progress (RUNNING, PAUSING, or STOPPING).
+     * Whether an assistant turn is currently in progress (RUNNING, PAUSING, STOPPING or COMPACTING).
      *
      * Conversation-mutating and turn-starting actions must not run while a turn is active.
      * This is a defense-in-depth guard behind the disabled UI controls: even if a caller
      * bypasses the UI, no conflicting generation or destructive edit can start mid-turn.
      */
     private val isTurnActive: Boolean
-        get() = turnController.isTurnActive
+        get() = state.isTurnActive
 
     /**
      * Whether a user-requested compaction currently owns the session.
@@ -512,28 +512,6 @@ class ChatViewModel(
     }
 
     /**
-     * Deletes a specific message.
-     */
-    private fun deleteMessage(messageId: Long) {
-        // Deleting while a generation is streaming could corrupt the active conversation.
-        if (isTurnActive) return
-        normalScope.launch {
-            deleteMessageUC.execute(messageId)
-        }
-    }
-
-    /**
-     * Deletes a specific message and all its replies recursively.
-     */
-    private fun deleteMessageRecursively(messageId: Long) {
-        // Deleting while a generation is streaming could corrupt the active conversation.
-        if (isTurnActive) return
-        normalScope.launch {
-            deleteMessageUC.execute(messageId, recursive = true)
-        }
-    }
-
-    /**
      * Switches the currently displayed chat branch to the one that includes the given message ID.
      *
      * @return Job that can be used to wait for the branch switch to complete.
@@ -709,48 +687,15 @@ class ChatViewModel(
         }
     }
 
-    // --- Tool Approval ---
-
-    /**
-     * Approves a tool call and updates its status to EXECUTING.
-     */
-    private fun approveToolCall(toolCall: ToolCall) {
-        backgroundScope.launch {
-            sendMessageUC.approveToolCall(toolCall)
-        }
-    }
-
-    /**
-     * Denies a tool call and updates its status to USER_DENIED.
-     */
-    private fun denyToolCall(toolCall: ToolCall, reason: String?) {
-        backgroundScope.launch {
-            sendMessageUC.denyToolCall(toolCall, reason)
-        }
-    }
-
     // --- Dialog Management ---
+
     /**
-     * Shows the tool call details dialog.
-     * If the tool call is awaiting approval, approval actions will be available.
+     * Shows the tool call details dialog, offering the approval actions while the call awaits approval.
+     *
+     * @param toolCall Tool call to display.
      */
     fun showToolCallDetails(toolCall: ToolCall) {
-        val isAwaitingApproval = toolCall.status == ToolCallStatus.AWAITING_APPROVAL
-
-        state.setDialogState(
-            ChatAreaDialogState.ToolCallDetails(
-                toolCall = toolCall,
-                onDismiss = {
-                    state.setDialogState(ChatAreaDialogState.None)
-                },
-                onApprove = if (isAwaitingApproval) {
-                    { approveToolCall(toolCall) }
-                } else null,
-                onDeny = if (isAwaitingApproval) {
-                    { reason -> denyToolCall(toolCall, reason) }
-                } else null
-            )
-        )
+        sendMessageUC.showToolCallDetails(toolCall)
     }
 
     /**
@@ -780,7 +725,7 @@ class ChatViewModel(
                     ?.let { settingsId -> state.settingsById.value[settingsId] }
                     ?.name,
                 onDismiss = {
-                    state.setDialogState(ChatAreaDialogState.None)
+                    state.cancelDialog()
                 }
             )
         )
@@ -795,42 +740,34 @@ class ChatViewModel(
     }
 
     /**
-     * Shows the delete message confirmation dialog with pre-bound actions.
-     * This is called when the user signals an intent to delete.
+     * Shows the statistics of the currently displayed thread, fetched from the server for the active session.
      */
-    fun requestDeleteMessage(message: ChatMessage) {
-        // Do not offer deletion while a turn is active; the UI disables the trigger, but this
-        // also guards against callers bypassing the UI or racing an in-flight generation.
-        if (isTurnActive) return
-        state.setDialogState(
-            ChatAreaDialogState.DeleteMessage(
-                message = message,
-                onDeleteConfirm = {
-                    deleteMessage(message.id)
-                },
-                onDismiss = {
-                    cancelDialog()
-                }
-            ))
+    fun showThreadStats() {
+        showThreadStatsUC.show()
     }
 
     /**
-     * Shows the delete thread (recursive) confirmation dialog with pre-bound actions.
+     * Shows the delete message confirmation dialog.
+     * This is called when the user signals an intent to delete.
+     *
+     * @param message Message the user asked to delete.
+     */
+    fun requestDeleteMessage(message: ChatMessage) {
+        // Refused while a turn is active: a deletion racing an in-flight generation could corrupt the conversation.
+        if (isTurnActive) return
+        deleteMessageUC.requestDeleteMessage(message)
+    }
+
+    /**
+     * Shows the delete thread (recursive) confirmation dialog.
      * This is called when the user signals an intent to delete a message and all its replies.
+     *
+     * @param message Message the user asked to delete along with all of its replies.
      */
     fun requestDeleteMessageRecursively(message: ChatMessage) {
-        // Do not offer thread deletion while a turn is active; see [requestDeleteMessage].
+        // Deleting a whole subtree mid-generation would corrupt the conversation just as a single deletion would.
         if (isTurnActive) return
-        state.setDialogState(
-            ChatAreaDialogState.DeleteMessageRecursively(
-                message = message,
-                onDeleteConfirm = {
-                    deleteMessageRecursively(message.id)
-                },
-                onDismiss = {
-                    cancelDialog()
-                }
-            ))
+        deleteMessageUC.requestDeleteMessageRecursively(message)
     }
 
     /**
@@ -850,40 +787,13 @@ class ChatViewModel(
     }
 
     /**
-     * Handles the request to insert a message (show dialog with pre-bound actions).
+     * Requests the insertion dialog, which inserts a new message relative to an existing one.
+     *
+     * @param message Message the new message is inserted relative to.
      */
     fun onRequestInsertMessage(message: ChatMessage) {
-        // Do not offer insertion while a turn is active; the UI disables the trigger, but this
-        // also guards against callers bypassing the UI or racing an in-flight generation.
+        // Inserting mid-generation would corrupt the conversation just as a deletion would.
         if (isTurnActive) return
-        state.setDialogState(
-            ChatAreaDialogState.InsertMessage(
-            targetMessage = message,
-            onConfirm = { position, role, content ->
-                confirmInsertMessage(message.id, position, role, content)
-            },
-            onDismiss = { cancelDialog() }
-        ))
-    }
-
-    /**
-     * Confirms the insertion of a new message at a specific position.
-     */
-    private fun confirmInsertMessage(
-        targetMessageId: Long,
-        position: MessageInsertPosition,
-        role: ChatMessage.Role,
-        content: String
-    ) {
-        // Inserting while a generation is streaming could corrupt the active conversation.
-        if (isTurnActive) return
-        cancelDialog()
-        insertMessageUC.execute(
-            scope = normalScope,
-            targetMessageId = targetMessageId,
-            position = position,
-            role = role,
-            content = content
-        )
+        insertMessageUC.requestInsertMessage(message)
     }
 }

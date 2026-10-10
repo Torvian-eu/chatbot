@@ -28,6 +28,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
@@ -175,7 +176,8 @@ class SendMessageUseCaseOperatorApprovalTest {
             operatorToolExecutor = mockk(),
             state = harness.state,
             notificationService = mockk<NotificationService>(),
-            sessionTurnStatusRegistry = mockk<SessionTurnStatusRegistry>(relaxed = true)
+            sessionTurnStatusRegistry = mockk<SessionTurnStatusRegistry>(relaxed = true),
+            scope = mockk<CoroutineScope>(relaxed = true)
         )
         useCase.execute()
     }
@@ -283,7 +285,8 @@ class SendMessageUseCaseOperatorApprovalTest {
         operatorToolExecutor = mockk(),
         state = harness.state,
         notificationService = mockk<NotificationService>(),
-        sessionTurnStatusRegistry = mockk<SessionTurnStatusRegistry>(relaxed = true)
+        sessionTurnStatusRegistry = mockk<SessionTurnStatusRegistry>(relaxed = true),
+        scope = mockk<CoroutineScope>(relaxed = true)
     )
 
     /** Builds the parent message the streaming start event refers to. */

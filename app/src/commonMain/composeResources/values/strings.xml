@@ -96,6 +96,36 @@
     <string name="usage_dialog_close_button">Close</string>
     <string name="usage_dialog_header_description">Show message details and token usage</string>
 
+    <!-- Thread Stats -->
+    <string name="thread_stats_menu_item">Thread Stats</string>
+    <string name="thread_stats_title">Thread statistics</string>
+    <string name="thread_stats_close_button">Close</string>
+    <string name="thread_stats_loading">Loading statistics…</string>
+    <string name="thread_stats_empty">This thread has no messages yet.</string>
+    <string name="thread_stats_not_available">Not available</string>
+    <string name="thread_stats_outliers_none">None</string>
+    <string name="thread_stats_section_messages">Messages</string>
+    <string name="thread_stats_section_tokens">Tokens</string>
+    <string name="thread_stats_section_timings">Timings</string>
+    <string name="thread_stats_section_rates">Rates</string>
+    <string name="thread_stats_total_messages_label">Total messages</string>
+    <string name="thread_stats_user_messages_label">User messages</string>
+    <string name="thread_stats_assistant_messages_label">Assistant messages</string>
+    <string name="thread_stats_tool_calls_label">Tool calls</string>
+    <string name="thread_stats_reasoning_items_label">Reasoning items</string>
+    <string name="thread_stats_total_response_duration_label">Total response duration</string>
+    <string name="thread_stats_average_response_duration_label">Average response duration</string>
+    <string name="thread_stats_response_duration_stddev_label">Response duration standard deviation</string>
+    <string name="thread_stats_response_duration_outliers_label">Slowest responses (message ids)</string>
+    <string name="thread_stats_total_tool_call_duration_label">Total tool call duration</string>
+    <string name="thread_stats_average_tool_call_duration_label">Average tool call duration</string>
+    <string name="thread_stats_tool_call_duration_stddev_label">Tool call duration standard deviation</string>
+    <string name="thread_stats_tool_call_duration_outliers_label">Slowest tool calls (tool call ids)</string>
+    <string name="thread_stats_tool_call_success_rate_label">Tool call success rate</string>
+    <string name="thread_stats_assistant_success_rate_label">Assistant message success rate</string>
+    <string name="thread_stats_output_tokens_per_second_label">Output tokens per second</string>
+    <string name="thread_stats_input_cache_hit_rate_label">Input cache hit rate</string>
+
     <!-- Turn Status Notifications -->
     <string name="turn_notification_title_unknown_session">Chat session</string>
     <string name="turn_notification_body_turn_completed_success">The assistant finished its turn.</string>

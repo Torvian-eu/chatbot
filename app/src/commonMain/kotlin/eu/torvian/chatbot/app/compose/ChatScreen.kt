@@ -179,6 +179,7 @@ fun ChatScreen(
                 isSessionListCollapsed = isSessionListCollapsed,
                 onToggleSessionList = { isSessionListCollapsed = !isSessionListCollapsed },
                 onCopyThread = { chatViewModel.copyThreadToClipboard() },
+                onShowThreadStats = chatViewModel::showThreadStats,
                 isCompactionEnabled = chatTurnExecutionState == TurnExecutionState.IDLE,
                 onCompactConversation = { chatViewModel.compactConversation() },
                 isSearchActive = isSearchActive,

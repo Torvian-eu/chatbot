@@ -1,5 +1,8 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
+import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.common.models.api.core.ThreadStats
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
@@ -129,6 +132,19 @@ sealed class ChatAreaDialogState {
         val onAddFiles: () -> Unit,
         val onRemoveFile: (FileReference) -> Unit,
         val onToggleContent: (FileReference, Boolean) -> Unit,
+        val onDismiss: () -> Unit
+    ) : ChatAreaDialogState()
+
+    /**
+     * State for the Thread Stats dialog.
+     *
+     * @property stats Reactive state of the statistics of the thread the dialog was opened on.
+     * @property onReload Action to fetch the statistics again after a failure.
+     * @property onDismiss Action to close the dialog.
+     */
+    data class ThreadStatsDetails(
+        val stats: StateFlow<DataState<RepositoryError, ThreadStats>>,
+        val onReload: () -> Unit,
         val onDismiss: () -> Unit
     ) : ChatAreaDialogState()
 }

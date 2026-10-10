@@ -17,6 +17,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.usecase.ReplyUseCase
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.SelectAgentRoleUseCase
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.SelectProjectUseCase
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.SendMessageUseCase
+import eu.torvian.chatbot.app.viewmodel.chat.usecase.ShowThreadStatsUseCase
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.SwitchBranchUseCase
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.UpdateInputUseCase
 import eu.torvian.chatbot.common.models.core.UsageStats
@@ -93,6 +94,7 @@ class ChatViewModelMessageUsageDetailsTest {
             updateInputUC = mockk<UpdateInputUseCase>(relaxed = true),
             copyToClipboardUC = mockk<CopyToClipboardUseCase>(relaxed = true),
             fileReferenceUC = mockk<FileReferenceUseCase>(relaxed = true),
+            showThreadStatsUC = mockk<ShowThreadStatsUseCase>(relaxed = true),
             navigationState = mockk<SearchNavigationState>(relaxed = true),
             normalScope = scope,
             backgroundScope = scope
@@ -168,7 +170,8 @@ class ChatViewModelMessageUsageDetailsTest {
         viewModel.showMessageUsageDetails(message)
         assertIs<ChatAreaDialogState.MessageUsageDetails>(dialogs.last()).onDismiss()
 
-        assertIs<ChatAreaDialogState.None>(dialogs.last())
-        verify(exactly = 1) { state.setDialogState(any<ChatAreaDialogState.None>()) }
+        // The dialog is published once and closed through the single close path of the chat state.
+        verify(exactly = 1) { state.setDialogState(any<ChatAreaDialogState.MessageUsageDetails>()) }
+        verify(exactly = 1) { state.cancelDialog() }
     }
 }

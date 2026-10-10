@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.CompactionEvent
+import eu.torvian.chatbot.common.models.api.core.ThreadStats
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -137,6 +138,18 @@ interface SessionRepository {
      * @return Either.Right with the ToolCallsMap on success, or Either.Left with RepositoryError on failure
      */
     suspend fun loadSessionToolCalls(sessionId: Long): Either<RepositoryError, ToolCallsMap>
+
+    /**
+     * Fetches the aggregate statistics of the session's currently displayed thread.
+     *
+     * The call is deliberately uncached and holds no state of its own: the statistics describe the
+     * conversation as it is at the moment of the request, so every reader fetches them anew instead of
+     * being served a stale aggregate.
+     *
+     * @param sessionId The unique identifier of the session whose thread is measured
+     * @return Either.Right with the [ThreadStats] of the current branch, or Either.Left with RepositoryError
+     */
+    suspend fun getThreadStats(sessionId: Long): Either<RepositoryError, ThreadStats>
 
     /**
      * Deletes a chat session and all its associated messages.

@@ -7,6 +7,8 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
+import eu.torvian.chatbot.common.models.api.core.DurationStats
+import eu.torvian.chatbot.common.models.api.core.ThreadStats
 import eu.torvian.chatbot.common.models.api.project.UpdateSessionProjectResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -847,6 +849,80 @@ class KtorSessionApiClientTest {
                 assertEquals(404, error.apiError.statusCode)
                 assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
                 assertEquals("Session not found", error.apiError.message)
+            }
+        }
+    }
+
+    // --- Tests for getThreadStats ---
+
+    @Test
+    fun `getThreadStats - success`() = runTest {
+        val sessionId = 456L
+        val stats = ThreadStats(
+            totalMessages = 4,
+            userMessages = 2,
+            assistantMessages = 2,
+            toolCalls = 3,
+            reasoningItems = 3,
+            inputTokens = 1_200L,
+            outputTokens = 150L,
+            reasoningTokens = 30L,
+            cachedInputTokens = 150L,
+            responseDuration = DurationStats(
+                totalMs = 3_000L,
+                averageMs = 1_500.0,
+                standardDeviationMs = 500.0,
+                outliers = listOf(4L)
+            ),
+            toolCallDuration = DurationStats(
+                totalMs = 1_500L,
+                averageMs = 750.0,
+                standardDeviationMs = 250.0,
+                outliers = emptyList()
+            ),
+            toolCallSuccessRate = 0.75,
+            assistantMessageSuccessRate = 1.0,
+            averageOutputTokensPerSecond = 50.0,
+            inputCacheHitRate = 0.75
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(
+                href(SessionResource.ById.Stats(SessionResource.ById(sessionId = sessionId))),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(stats),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.getThreadStats(sessionId)) {
+            is Either.Right -> assertEquals(stats, result.value)
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `getThreadStats - failure - 500 Internal Server Error`() = runTest {
+        val sessionId = 456L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.INTERNAL, "Database error")),
+                status = HttpStatusCode.InternalServerError,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        when (val result = apiClient.getThreadStats(sessionId)) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(500, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.apiError.code)
+                assertEquals("Database error", error.apiError.message)
             }
         }
     }

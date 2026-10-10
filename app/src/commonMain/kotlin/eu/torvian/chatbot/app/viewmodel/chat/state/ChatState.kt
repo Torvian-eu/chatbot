@@ -195,6 +195,16 @@ interface ChatState {
     val turnExecutionState: StateFlow<TurnExecutionState>
 
     /**
+     * Whether a turn currently owns the session: running, pausing, stopping or compacting rather than idle.
+     *
+     * Actions that mutate the conversation or start a new turn must be refused while this holds. The value is
+     * derived from the turn state on every read, so a check performed after a turn started reflects the
+     * current state instead of a stale snapshot.
+     */
+    val isTurnActive: Boolean
+        get() = turnExecutionState.value != TurnExecutionState.IDLE
+
+    /**
      * Elapsed-time measurement of the active assistant turn, shown next to the composer action button.
      *
      * Held per session in memory only: it starts when a turn enters [TurnExecutionState.RUNNING], counts

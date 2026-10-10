@@ -148,4 +148,13 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiResourceClient(client), 
                 .body<List<ToolCall>>() // Expect a List<ToolCall> on success (HTTP 200)
         }
     }
+
+    override suspend fun getThreadStats(sessionId: Long): Either<ApiResourceError, ThreadStats> {
+        // Use safeApiCall to wrap the Ktor request
+        return safeApiCall {
+            // Use Ktor resources: /api/v1/sessions/{sessionId}/stats
+            client.get(SessionResource.ById.Stats(SessionResource.ById(sessionId = sessionId)))
+                .body<ThreadStats>() // Expect a ThreadStats on success (HTTP 200)
+        }
+    }
 }

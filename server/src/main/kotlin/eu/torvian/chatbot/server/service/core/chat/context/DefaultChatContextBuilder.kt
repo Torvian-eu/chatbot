@@ -1,5 +1,8 @@
 package eu.torvian.chatbot.server.service.core.chat.context
 
+import arrow.core.getOrElse
+import eu.torvian.chatbot.common.misc.thread.ThreadBranchError
+import eu.torvian.chatbot.common.misc.thread.resolveThreadBranch
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.server.service.core.chat.content.FileReferenceContentBuilder
@@ -100,7 +103,8 @@ class DefaultChatContextBuilder(
     }
 
     /**
-     * Walks parent links from the starting message back to the root while rejecting invalid chains.
+     * Collects the messages of the thread ending at [startingMessageId], root first, and rejects
+     * chains that cannot describe one session's history.
      *
      * @param startingMessageId Message ID that anchors the end of the thread to reconstruct.
      * @param messageMap Messages indexed by ID for efficient parent traversal.
@@ -112,41 +116,33 @@ class DefaultChatContextBuilder(
         startingMessageId: Long,
         messageMap: Map<Long, ChatMessage>
     ): List<ChatMessage> {
-        val startingMessage = messageMap[startingMessageId]
-            ?: throw IllegalStateException(
-                "Cannot build context: starting message $startingMessageId does not exist in the session"
+        val branch = resolveThreadBranch(messageMap, startingMessageId).getOrElse { error ->
+            throw IllegalStateException(
+                when (error) {
+                    is ThreadBranchError.LeafNotFound ->
+                        "Cannot build context: starting message ${error.leafId} does not exist in the session"
+
+                    is ThreadBranchError.BrokenChain ->
+                        "Cannot build context: parent ${error.parentId} of message ${error.childId} " +
+                            "does not exist in the session"
+
+                    is ThreadBranchError.CyclicChain ->
+                        "Cannot build context: cyclic parent chain detected at message ${error.messageId}"
+                }
             )
-        val sessionId = startingMessage.sessionId
-
-        val threadMessages = mutableListOf<ChatMessage>()
-        var currentMessage: ChatMessage? = startingMessage
-        val visitedIds = mutableSetOf<Long>()
-
-        while (currentMessage != null) {
-            if (!visitedIds.add(currentMessage.id)) {
-                throw IllegalStateException(
-                    "Cannot build context: cyclic parent chain detected at message ${currentMessage.id}"
-                )
-            }
-            if (currentMessage.sessionId != sessionId) {
-                throw IllegalStateException(
-                    "Cannot build context: message ${currentMessage.id} belongs to session " +
-                        "${currentMessage.sessionId}, expected $sessionId"
-                )
-            }
-            threadMessages.add(currentMessage)
-            val parentId = currentMessage.parentMessageId
-            currentMessage = if (parentId == null) {
-                null
-            } else {
-                messageMap[parentId] ?: throw IllegalStateException(
-                    "Cannot build context: parent $parentId of message ${threadMessages.last().id} " +
-                        "does not exist in the session"
-                )
-            }
         }
 
-        threadMessages.reverse()
-        return threadMessages
+        // The shared walk sees one message set and cannot know which session the context belongs to, so
+        // a chain whose messages disagree on the session is rejected here. A non-null starting message
+        // guarantees at least one message, because the walk either returns a branch or fails above.
+        val sessionId = branch.first().sessionId
+        branch.firstOrNull { it.sessionId != sessionId }?.let { foreignMessage ->
+            throw IllegalStateException(
+                "Cannot build context: message ${foreignMessage.id} belongs to session " +
+                    "${foreignMessage.sessionId}, expected $sessionId"
+            )
+        }
+
+        return branch
     }
 }
