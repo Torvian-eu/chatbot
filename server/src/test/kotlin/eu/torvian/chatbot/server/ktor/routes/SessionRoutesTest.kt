@@ -9,11 +9,14 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.agent.UpdateSessionAgentRoleRequest
 import eu.torvian.chatbot.common.models.api.core.*
+import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.server.data.dao.ConversationCompactionChunkDao
 import eu.torvian.chatbot.server.data.dao.UserPreferenceDao
+import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.auth.authenticateWithWebSocketSubprotocol
@@ -37,6 +40,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -189,7 +193,10 @@ class SessionRoutesTest {
                 Table.LLM_MODEL_OWNERS,
                 Table.MODEL_SETTINGS_OWNERS,
                 Table.AGENT_ROLES,
-                Table.AGENT_ROLE_OWNERS
+                Table.AGENT_ROLE_OWNERS,
+                // The compaction socket persists verified chunks and their coverage rows.
+                Table.CONVERSATION_COMPACTION_CHUNKS,
+                Table.CONVERSATION_COMPACTION_CHUNK_MESSAGES
             )
         )
 
@@ -1082,5 +1089,137 @@ class SessionRoutesTest {
         val errorEvent = receivedEvents.filterIsInstance<ChatEvent.ErrorOccurred>().firstOrNull()
         assertNotNull(errorEvent, "Should receive error event")
         assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, errorEvent.error.code)
+    }
+
+    // --- WS /api/v1/sessions/{sessionId}/compaction Tests ---
+
+    @Test
+    fun `WS session compaction should persist a chunk and emit the outcome then the terminal marker`() =
+        sessionTestApplication {
+            // Arrange
+            seedCompactableSession()
+
+            // Act: connecting is the request, so no frame is sent.
+            val receivedEvents = mutableListOf<CompactionEvent>()
+            client.webSocket(
+                urlString = href(
+                    SessionResource.ById.Compaction(parent = SessionResource.ById(sessionId = testSession.id))
+                ),
+                request = {
+                    authenticate(authToken)
+                    offerWebSocketAuthSubprotocolMarker()
+                }
+            ) {
+                for (frame in incoming) {
+                    val textFrame = frame as? Frame.Text ?: continue
+                    receivedEvents.add(json.decodeFromString(CompactionEvent.serializer(), textFrame.readText()))
+                }
+            }
+
+            // Assert: exactly one terminal outcome followed by the terminal marker, on a closed socket.
+            assertEquals(2, receivedEvents.size, "Expected the outcome frame and the terminal marker")
+            val completed = assertIs<CompactionEvent.Completed>(receivedEvents[0])
+            assertEquals(testSession.id, completed.payload.sessionId)
+            assertEquals(listOf(MESSAGE_1_ID, MESSAGE_2_ID), completed.payload.coveredMessageIds)
+            assertEquals(CompactionEvent.StreamCompleted, receivedEvents[1])
+
+            // The chunk really is in the database, with the cumulative root-to-leaf coverage.
+            val chunks = container.get<ConversationCompactionChunkDao>().getChunksBySessionId(testSession.id)
+            assertEquals(1, chunks.size)
+            assertEquals(listOf(MESSAGE_1_ID, MESSAGE_2_ID), chunks.single().coverage.map { it.messageId })
+        }
+
+    @Test
+    fun `WS session compaction as non-owner should emit a permission-denied frame and persist nothing`() =
+        sessionTestApplication {
+            // Arrange: the session is owned by another user.
+            val otherUser = authHelper.createTestUser(id = 991L, email = "otheruser9@example.com", username = "otheruser9")
+            testDataManager.insertUser(otherUser)
+            testDataManager.insertChatSession(testSession)
+            testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
+
+            // Act
+            val receivedEvents = mutableListOf<CompactionEvent>()
+            client.webSocket(
+                urlString = href(
+                    SessionResource.ById.Compaction(parent = SessionResource.ById(sessionId = testSession.id))
+                ),
+                request = {
+                    authenticate(authToken)
+                    offerWebSocketAuthSubprotocolMarker()
+                }
+            ) {
+                for (frame in incoming) {
+                    val textFrame = frame as? Frame.Text ?: continue
+                    receivedEvents.add(json.decodeFromString(CompactionEvent.serializer(), textFrame.readText()))
+                }
+            }
+
+            // Assert: the denial is the first frame and the operation never ran. (Only the error frame is
+            // sent on this path; whether it must be followed by the terminal marker is a separate, open
+            // consistency question, so this case pins what a client must not see: an outcome.)
+            val denied = assertIs<CompactionEvent.ErrorOccurred>(receivedEvents.firstOrNull())
+            assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, denied.error.code)
+            assertEquals(0, receivedEvents.count { event -> event is CompactionEvent.Completed })
+            assertEquals(0, receivedEvents.count { event -> event is CompactionEvent.Skipped })
+            assertTrue(
+                container.get<ConversationCompactionChunkDao>().getChunksBySessionId(testSession.id).isEmpty(),
+                "A denied compaction must not persist a chunk"
+            )
+        }
+
+    /**
+     * Seeds a compaction-ready session: ownership, the role's preset ownership, a long two-message
+     * thread ending at the session leaf, and the global compaction preference the forced path resolves.
+     *
+     * The messages are deliberately long so the stub summary is smaller than the thread it replaces,
+     * which the shared reduction rule requires before a chunk may be persisted.
+     */
+    private suspend fun seedCompactableSession() {
+        testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
+        // Turn preparation resolves the agent role owner; the role must have an ownership row.
+        testDataManager.insertAgentRoleOwnership(testAgentRole.id, authHelper.defaultTestUser.id)
+        val first = TestDefaults.chatMessage1.copy(
+            id = MESSAGE_1_ID,
+            sessionId = testSession.id,
+            content = "First long message. ".repeat(60),
+            childrenMessageIds = listOf(MESSAGE_2_ID)
+        )
+        val second = TestDefaults.chatMessage2.copy(
+            id = MESSAGE_2_ID,
+            sessionId = testSession.id,
+            parentMessageId = MESSAGE_1_ID,
+            content = "Second long message. ".repeat(60),
+            childrenMessageIds = emptyList()
+        )
+        testDataManager.insertChatMessage(first)
+        testDataManager.insertChatMessage(second)
+        testDataManager.insertSessionCurrentLeaf(
+            SessionCurrentLeafEntity(sessionId = testSession.id, messageId = MESSAGE_2_ID)
+        )
+        userPreferenceDao.upsertPreference(
+            userId = authHelper.defaultTestUser.id,
+            internalDeviceId = null,
+            clientDeviceId = null,
+            key = PreferenceKeys.CONVERSATION_COMPACTION,
+            value = json.encodeToString(
+                ConversationCompactionPreference.serializer(),
+                ConversationCompactionPreference(
+                    modelId = testModel.id,
+                    settingsId = testSettings.id,
+                    instruction = "Summarize faithfully",
+                    thresholdTokens = 50_000L
+                )
+            )
+        )
+    }
+
+    private companion object {
+        /** Thread messages of the compaction fixtures, kept clear of the shared fixture ids. */
+        const val MESSAGE_1_ID = 21L
+
+        /** Leaf message of the compaction fixtures. */
+        const val MESSAGE_2_ID = 22L
     }
 }

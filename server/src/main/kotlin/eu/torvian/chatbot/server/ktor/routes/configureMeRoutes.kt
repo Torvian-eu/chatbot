@@ -16,7 +16,7 @@ import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.ServerBuiltInToolNamePrefixService
 import eu.torvian.chatbot.server.service.core.UserPreferenceService
-import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionConfigurationService
+import eu.torvian.chatbot.server.service.core.chat.compaction.CompactionPreferenceService
 import eu.torvian.chatbot.server.service.core.chat.compaction.toApiError
 import eu.torvian.chatbot.server.service.core.error.preferences.toApiError
 import eu.torvian.chatbot.server.service.core.error.serverbuiltin.toApiError
@@ -40,7 +40,7 @@ import java.util.*
 fun Route.configureMeRoutes(
     userPreferenceService: UserPreferenceService,
     serverBuiltInToolNamePrefixService: ServerBuiltInToolNamePrefixService,
-    conversationCompactionConfigurationService: ConversationCompactionConfigurationService
+    compactionPreferenceService: CompactionPreferenceService
 ) {
     authenticate(AuthSchemes.USER_JWT) {
         // GET /api/v1/me/preferences - Resolve the effective preference map for the current user.
@@ -94,7 +94,7 @@ fun Route.configureMeRoutes(
                                 "The conversation compaction preference must be stored in the GLOBAL scope"
                             )
                         }
-                        conversationCompactionConfigurationService.updateConfiguration(userId, request.value)
+                        compactionPreferenceService.updateConfiguration(userId, request.value)
                             .mapLeft { it.toApiError() }
                             .bind()
                     }
@@ -142,7 +142,7 @@ fun Route.configureMeRoutes(
                     // Compaction is enabled/disabled by the presence of the global row; the scope query
                     // parameter is ignored for this key, exactly like the tool-name prefix key.
                     PreferenceKeys.CONVERSATION_COMPACTION -> {
-                        conversationCompactionConfigurationService.deleteConfiguration(userId)
+                        compactionPreferenceService.deleteConfiguration(userId)
                             .mapLeft { it.toApiError() }
                             .bind()
                     }

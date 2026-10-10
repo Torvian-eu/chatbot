@@ -421,7 +421,7 @@ class MePreferencesRoutesTest {
         // a disabled preference never resolves a compactor, so the value is stored as-is.
         val token = authHelper.createUserAndGetToken(user1)
 
-        val value = """{"modelId":null,"settingsId":null,"instruction":"Summarize","enabled":false}"""
+        val value = """{"modelId":null,"settingsId":null,"instruction":"Summarize","automaticCompactionEnabled":false}"""
         val response =
             client.put(href(MeResource.Preferences.ByKey(key = PreferenceKeys.CONVERSATION_COMPACTION))) {
                 authenticate(token)
@@ -442,7 +442,7 @@ class MePreferencesRoutesTest {
                 modelId = null,
                 settingsId = null,
                 instruction = "Summarize",
-                enabled = false
+                automaticCompactionEnabled = false
             )
         )
         assertEquals(canonical, storedCompactionPreference(user1.id))
