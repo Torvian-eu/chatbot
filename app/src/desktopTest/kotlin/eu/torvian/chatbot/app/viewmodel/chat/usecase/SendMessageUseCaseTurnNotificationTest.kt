@@ -26,6 +26,7 @@ import eu.torvian.chatbot.common.models.tool.*
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -197,7 +198,8 @@ class SendMessageUseCaseTurnNotificationTest {
         operatorToolExecutor = mockk(),
         state = harness.state,
         notificationService = mockk<NotificationService>(relaxed = true),
-        sessionTurnStatusRegistry = harness.registry
+        sessionTurnStatusRegistry = harness.registry,
+        scope = mockk<CoroutineScope>(relaxed = true)
     )
 
     /** Builds the user message a streaming start event refers to. */

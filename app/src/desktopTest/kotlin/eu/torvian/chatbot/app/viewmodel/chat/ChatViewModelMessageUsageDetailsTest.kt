@@ -170,7 +170,8 @@ class ChatViewModelMessageUsageDetailsTest {
         viewModel.showMessageUsageDetails(message)
         assertIs<ChatAreaDialogState.MessageUsageDetails>(dialogs.last()).onDismiss()
 
-        assertIs<ChatAreaDialogState.None>(dialogs.last())
-        verify(exactly = 1) { state.setDialogState(any<ChatAreaDialogState.None>()) }
+        // The dialog is published once and closed through the single close path of the chat state.
+        verify(exactly = 1) { state.setDialogState(any<ChatAreaDialogState.MessageUsageDetails>()) }
+        verify(exactly = 1) { state.cancelDialog() }
     }
 }

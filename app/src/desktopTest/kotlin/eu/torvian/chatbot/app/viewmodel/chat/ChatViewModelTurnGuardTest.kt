@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel.chat
 
+import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.testutils.data.assistantMessage
 import eu.torvian.chatbot.app.testutils.data.userMessage
 import eu.torvian.chatbot.app.viewmodel.SearchNavigationState
@@ -9,6 +10,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
@@ -27,12 +29,13 @@ import kotlin.test.assertEquals
  * Tests for the defense-in-depth turn guards in [ChatViewModel].
  *
  * Conversation-mutating and turn-starting actions must be refused while an assistant turn is
- * active (RUNNING, PAUSING, or STOPPING), even if a caller bypasses the disabled UI controls.
+ * active (RUNNING, PAUSING, STOPPING or COMPACTING), even if a caller bypasses the disabled UI controls.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatViewModelTurnGuardTest {
 
     private lateinit var state: ChatState
+    private lateinit var sessionRepository: SessionRepository
     private lateinit var sendMessageUC: SendMessageUseCase
     private lateinit var deleteMessageUC: DeleteMessageUseCase
     private lateinit var insertMessageUC: InsertMessageUseCase
@@ -67,6 +70,9 @@ class ChatViewModelTurnGuardTest {
         state = mockk(relaxed = true)
         turnState = MutableStateFlow(TurnExecutionState.IDLE)
         every { state.turnExecutionState } returns turnState
+        // The state is a mock, so the turn guard it derives is not computed by the double; mirror the
+        // derivation so the guards under test read the turn state they move.
+        every { state.isTurnActive } answers { turnState.value != TurnExecutionState.IDLE }
         // The send guard reads these to decide whether a turn may start; keep them resolvable so a
         // normal idle send proceeds through the guard and reaches the send use case.
         every { state.inputContent } returns MutableStateFlow("Hello")
@@ -75,12 +81,16 @@ class ChatViewModelTurnGuardTest {
         every { state.currentSettings } returns MutableStateFlow<ModelSettings?>(mockk())
 
         sendMessageUC = mockk(relaxed = true)
-        deleteMessageUC = mockk(relaxed = true)
-        insertMessageUC = mockk(relaxed = true)
         compactConversationUC = mockk(relaxed = true)
 
         normalScope = CoroutineScope(UnconfinedTestDispatcher())
         backgroundScope = CoroutineScope(UnconfinedTestDispatcher())
+
+        // The deletion and insertion use cases own their confirmation dialogs and their turn guards, so
+        // they are real here; only their repository and notification sink are mocked.
+        sessionRepository = mockk(relaxed = true)
+        deleteMessageUC = DeleteMessageUseCase(sessionRepository, state, normalScope, mockk(relaxed = true))
+        insertMessageUC = InsertMessageUseCase(state, sessionRepository, normalScope, mockk(relaxed = true))
 
         viewModel = ChatViewModel(
             state = state,
@@ -108,7 +118,7 @@ class ChatViewModelTurnGuardTest {
 
     @AfterTest
     fun tearDown() {
-        clearMocks(state, sendMessageUC, deleteMessageUC, insertMessageUC, compactConversationUC)
+        clearMocks(state, sendMessageUC, compactConversationUC, sessionRepository)
     }
 
     // --- sendMessage ---
@@ -187,6 +197,8 @@ class ChatViewModelTurnGuardTest {
     fun `confirming delete after turn became active does not delete`() = runTest {
         // Arrange - open the delete dialog while idle
         turnState.value = TurnExecutionState.IDLE
+        // The session is known, so a deletion that got through the guard would reach the repository.
+        every { state.activeSessionId } returns MutableStateFlow(1L)
         val dialogSlot = slot<ChatAreaDialogState>()
         every { state.setDialogState(capture(dialogSlot)) } returns Unit
         viewModel.requestDeleteMessage(assistant)
@@ -197,8 +209,8 @@ class ChatViewModelTurnGuardTest {
         turnState.value = TurnExecutionState.RUNNING
         deleteDialog.onDeleteConfirm()
 
-        // Assert - the delete use case was never invoked
-        coVerify(exactly = 0) { deleteMessageUC.execute(any(), any()) }
+        // Assert - the deletion never reached the repository
+        coVerify(exactly = 0) { sessionRepository.deleteMessage(any(), any()) }
     }
 
     // --- onRequestInsertMessage ---
@@ -227,6 +239,8 @@ class ChatViewModelTurnGuardTest {
     fun `confirming insert after turn became active does not insert`() = runTest {
         // Arrange - open the insert dialog while idle
         turnState.value = TurnExecutionState.IDLE
+        // The session is known, so an insertion that got through the guard would reach the repository.
+        every { state.currentSession } returns MutableStateFlow<ChatSession?>(mockk(relaxed = true))
         val dialogSlot = slot<ChatAreaDialogState>()
         every { state.setDialogState(capture(dialogSlot)) } returns Unit
         viewModel.onRequestInsertMessage(assistant)
@@ -237,8 +251,10 @@ class ChatViewModelTurnGuardTest {
         turnState.value = TurnExecutionState.RUNNING
         insertDialog.onConfirm(MessageInsertPosition.BELOW, ChatMessage.Role.USER, "New message")
 
-        // Assert - the insert use case was never invoked
-        verify(exactly = 0) { insertMessageUC.execute(any(), any(), any(), any(), any()) }
+        // Assert - the insertion never reached the repository
+        coVerify(exactly = 0) {
+            sessionRepository.insertMessage(any(), any(), any(), any(), any(), any(), any())
+        }
     }
 
     // --- compaction ---

@@ -16,6 +16,7 @@ import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionTurnStatusRegistry
 import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import kotlinx.coroutines.CoroutineScope
 import org.koin.core.module.Module
+import org.koin.core.parameter.parametersOf
 import org.koin.dsl.module
 
 /**
@@ -136,7 +137,7 @@ fun appChatModule(): Module = module {
         CompactConversationUseCase(get<SessionRepository>(), chatState, get(), scope)
     }
 
-    factory<SendMessageUseCase> { (chatState: ChatState) ->
+    factory<SendMessageUseCase> { (chatState: ChatState, scope: CoroutineScope) ->
         SendMessageUseCase(
             get<SessionRepository>(),
             get<ToolRepository>(),
@@ -144,7 +145,8 @@ fun appChatModule(): Module = module {
             get(),
             chatState,
             get(),
-            get<SessionTurnStatusRegistry>()
+            get<SessionTurnStatusRegistry>(),
+            scope
         )
     }
 
@@ -152,12 +154,12 @@ fun appChatModule(): Module = module {
         EditMessageUseCase(get<SessionRepository>(), chatState, get())
     }
 
-    factory<DeleteMessageUseCase> { (chatState: ChatState) ->
-        DeleteMessageUseCase(get<SessionRepository>(), chatState, get())
+    factory<DeleteMessageUseCase> { (chatState: ChatState, scope: CoroutineScope) ->
+        DeleteMessageUseCase(get<SessionRepository>(), chatState, scope, get())
     }
 
-    factory { (chatState: ChatState) ->
-        InsertMessageUseCase(chatState, get(), get())
+    factory { (chatState: ChatState, scope: CoroutineScope) ->
+        InsertMessageUseCase(chatState, get(), scope, get())
     }
 
     factory<CopyToClipboardUseCase> { (chatState: ChatState) ->

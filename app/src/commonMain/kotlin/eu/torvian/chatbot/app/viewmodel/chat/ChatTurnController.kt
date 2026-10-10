@@ -36,16 +36,6 @@ class ChatTurnController(
     }
 
     /**
-     * Whether an assistant turn is currently in progress (RUNNING, PAUSING, or STOPPING).
-     *
-     * Conversation-mutating and turn-starting actions must not run while a turn is active.
-     * This is a defense-in-depth guard behind the disabled UI controls: even if a caller
-     * bypasses the UI, no conflicting generation or destructive edit can start mid-turn.
-     */
-    val isTurnActive: Boolean
-        get() = state.turnExecutionState.value != TurnExecutionState.IDLE
-
-    /**
      * Job tracking the currently active message sending operation.
      * Null when no message is being sent.
      */
@@ -69,7 +59,7 @@ class ChatTurnController(
     fun sendMessage(continueFromMessage: ChatMessage? = null): Job? {
         // Refuse to start a new turn while one is already active. This covers regular sends,
         // Branch & Continue, and any caller that bypasses the disabled UI controls.
-        if (isTurnActive) return null
+        if (state.isTurnActive) return null
         // Normal-mode sends need non-blank input; the spawned-turn path always sets the input first.
         if (continueFromMessage == null && state.inputContent.value.isBlank()) return null
         // A session role with a resolvable model/settings profile is required for a turn to run.

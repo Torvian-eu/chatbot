@@ -31,6 +31,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -169,7 +170,8 @@ class SendMessageUseCaseTurnStatusTest {
         operatorToolExecutor = mockk(),
         state = harness.state,
         notificationService = mockk<NotificationService>(relaxed = true),
-        sessionTurnStatusRegistry = harness.registry
+        sessionTurnStatusRegistry = harness.registry,
+        scope = mockk<CoroutineScope>(relaxed = true)
     )
 
     /** Builds the parent message the streaming start event refers to. */

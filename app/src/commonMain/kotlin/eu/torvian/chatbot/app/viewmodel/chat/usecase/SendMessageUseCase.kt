@@ -9,6 +9,7 @@ import eu.torvian.chatbot.app.service.agent.OperatorToolExecutor
 import eu.torvian.chatbot.app.service.security.RequestSigningService
 import eu.torvian.chatbot.app.utils.misc.isStreamingEnabled
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.approval.ToolApprovalEventEmitter
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.turn.NonStreamingTurnCollector
@@ -20,11 +21,13 @@ import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.*
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
  * Use case for sending messages in chat sessions.
@@ -41,6 +44,7 @@ import kotlinx.coroutines.isActive
  * @property notificationService Notification sink for repository, API, and signing errors.
  * @property sessionTurnStatusRegistry Registry that receives the turn lifecycle signals backing the
  *           session list status indicators and the out-of-app turn alerts.
+ * @property scope Scope the tool-call approval decisions of the details dialog run on.
  */
 class SendMessageUseCase(
     private val sessionRepository: SessionRepository,
@@ -49,7 +53,8 @@ class SendMessageUseCase(
     private val operatorToolExecutor: OperatorToolExecutor,
     private val state: ChatState,
     private val notificationService: NotificationService,
-    private val sessionTurnStatusRegistry: SessionTurnStatusRegistry
+    private val sessionTurnStatusRegistry: SessionTurnStatusRegistry,
+    private val scope: CoroutineScope
 ) {
 
     private val logger = kmpLogger<SendMessageUseCase>()
@@ -150,6 +155,33 @@ class SendMessageUseCase(
             lastTerminalMessage?.isComplete == true -> TurnOutcome.SUCCESS
             else -> null
         }
+    }
+
+    /**
+     * Shows the tool call details dialog, offering the approval actions while the call awaits approval.
+     *
+     * The decisions run on this use case's own scope, and on this instance, because the approval event
+     * travels over the client event flow of the turn this instance is running.
+     *
+     * @param toolCall Tool call to display.
+     */
+    fun showToolCallDetails(toolCall: ToolCall) {
+        val isAwaitingApproval = toolCall.status == ToolCallStatus.AWAITING_APPROVAL
+
+        state.setDialogState(
+            ChatAreaDialogState.ToolCallDetails(
+                toolCall = toolCall,
+                onDismiss = {
+                    state.cancelDialog()
+                },
+                onApprove = if (isAwaitingApproval) {
+                    { scope.launch { approveToolCall(toolCall) } }
+                } else null,
+                onDeny = if (isAwaitingApproval) {
+                    { reason -> scope.launch { denyToolCall(toolCall, reason) } }
+                } else null
+            )
+        )
     }
 
     /**

@@ -332,6 +332,6 @@ class FileReferenceUseCase(
      */
     private fun dismissDialog() {
         logger.info("Dismissing file reference dialog")
-        state.setDialogState(ChatAreaDialogState.None)
+        state.cancelDialog()
     }
 }
