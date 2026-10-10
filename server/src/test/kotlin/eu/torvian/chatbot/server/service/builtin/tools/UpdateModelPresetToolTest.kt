@@ -32,7 +32,7 @@ import kotlin.time.Instant
  *
  * Covers the PATCH semantics (ownership-checked load, merge of only the provided fields over the
  * persisted preset, the explicit clear sentinels, full-replacement update with the merged state),
- * the compaction merge matrix (`compaction_enabled` and `compaction_threshold_tokens`), the load
+ * the compaction merge matrix (`automatic_compaction_enabled` and `compaction_threshold_tokens`), the load
  * failure aborting before the update, every update-error mapping, and input validation.
  */
 class UpdateModelPresetToolTest {
@@ -59,7 +59,7 @@ class UpdateModelPresetToolTest {
      * @param description Persisted description.
      * @param modelId Persisted model reference (nullable).
      * @param modelSettingsId Persisted settings reference (nullable).
-     * @param compactionEnabled Persisted compaction enablement flag.
+     * @param automaticCompactionEnabled Persisted compaction enablement flag.
      * @param compactionThresholdTokens Persisted compaction threshold override (nullable).
      * @return The fixture preset.
      */
@@ -69,7 +69,7 @@ class UpdateModelPresetToolTest {
         description: String = "Bundles the smart model with the default settings profile",
         modelId: Long? = 11L,
         modelSettingsId: Long? = 21L,
-        compactionEnabled: Boolean = true,
+        automaticCompactionEnabled: Boolean = true,
         compactionThresholdTokens: Long? = null
     ) = ModelPresetDto(
         id = 3L,
@@ -78,7 +78,7 @@ class UpdateModelPresetToolTest {
         description = description,
         modelId = modelId,
         modelSettingsId = modelSettingsId,
-        compactionEnabled = compactionEnabled,
+        automaticCompactionEnabled = automaticCompactionEnabled,
         compactionThresholdTokens = compactionThresholdTokens,
         createdAt = Instant.parse("2024-01-01T00:00:00Z"),
         updatedAt = Instant.parse("2024-01-02T00:00:00Z")
@@ -164,7 +164,7 @@ class UpdateModelPresetToolTest {
                         request.description == persisted.description &&
                         request.modelId == persisted.modelId &&
                         request.modelSettingsId == persisted.modelSettingsId &&
-                        request.compactionEnabled == persisted.compactionEnabled &&
+                        request.automaticCompactionEnabled == persisted.automaticCompactionEnabled &&
                         request.compactionThresholdTokens == persisted.compactionThresholdTokens
                 }
             )
@@ -178,7 +178,7 @@ class UpdateModelPresetToolTest {
     @Test
     fun `explicit null compaction fields preserve the persisted values`() = runTest {
         val modelPresetService = mockk<ModelPresetService>()
-        val persisted = samplePreset(compactionEnabled = false, compactionThresholdTokens = 50_000L)
+        val persisted = samplePreset(automaticCompactionEnabled = false, compactionThresholdTokens = 50_000L)
         coEvery { modelPresetService.getPresetById(userId, 3L) } returns persisted.right()
         coEvery { modelPresetService.updatePreset(userId, 3L, any()) } returns persisted.right()
         val tool = UpdateModelPresetTool(modelPresetService)
@@ -187,7 +187,7 @@ class UpdateModelPresetToolTest {
             tool.execute(
                 buildJsonObject {
                     put("model_preset_id", 3L)
-                    put("compaction_enabled", JsonNull)
+                    put("automatic_compaction_enabled", JsonNull)
                     put("compaction_threshold_tokens", JsonNull)
                 },
                 context()
@@ -199,7 +199,7 @@ class UpdateModelPresetToolTest {
                 userId,
                 3L,
                 match<UpdateModelPresetRequest> { request ->
-                    !request.compactionEnabled && request.compactionThresholdTokens == 50_000L
+                    !request.automaticCompactionEnabled && request.compactionThresholdTokens == 50_000L
                 }
             )
         }
@@ -207,7 +207,7 @@ class UpdateModelPresetToolTest {
 
     /**
      * Verifies the compaction merge matrix: an omitted value preserves, an explicit boolean sets
-     * `compaction_enabled`, `compaction_threshold_tokens = 0` clears the override, and a positive value
+     * `automatic_compaction_enabled`, `compaction_threshold_tokens = 0` clears the override, and a positive value
      * sets it.
      */
     @Test
@@ -215,25 +215,25 @@ class UpdateModelPresetToolTest {
         // Omitted both: both persisted values are preserved.
         val omitted = capturedUpdateRequest(
             buildJsonObject { put("model_preset_id", 3L) },
-            persisted = samplePreset(compactionEnabled = false, compactionThresholdTokens = 50_000L)
+            persisted = samplePreset(automaticCompactionEnabled = false, compactionThresholdTokens = 50_000L)
         )
-        assertEquals(false, omitted.compactionEnabled)
+        assertEquals(false, omitted.automaticCompactionEnabled)
         assertEquals(50_000L, omitted.compactionThresholdTokens)
 
         // An explicit boolean sets the flag without touching the threshold (even when it is enabled).
         val enabledSwitch = capturedUpdateRequest(
-            buildJsonObject { put("model_preset_id", 3L); put("compaction_enabled", true) },
-            persisted = samplePreset(compactionEnabled = false, compactionThresholdTokens = 50_000L)
+            buildJsonObject { put("model_preset_id", 3L); put("automatic_compaction_enabled", true) },
+            persisted = samplePreset(automaticCompactionEnabled = false, compactionThresholdTokens = 50_000L)
         )
-        assertEquals(true, enabledSwitch.compactionEnabled)
+        assertEquals(true, enabledSwitch.automaticCompactionEnabled)
         assertEquals(50_000L, enabledSwitch.compactionThresholdTokens)
 
         // compaction_threshold_tokens = 0 clears the override back to the user preference threshold.
         val cleared = capturedUpdateRequest(
             buildJsonObject { put("model_preset_id", 3L); put("compaction_threshold_tokens", 0L) },
-            persisted = samplePreset(compactionEnabled = false, compactionThresholdTokens = 50_000L)
+            persisted = samplePreset(automaticCompactionEnabled = false, compactionThresholdTokens = 50_000L)
         )
-        assertEquals(false, cleared.compactionEnabled)
+        assertEquals(false, cleared.automaticCompactionEnabled)
         assertNull(cleared.compactionThresholdTokens)
 
         // A positive value sets the override.
@@ -245,21 +245,21 @@ class UpdateModelPresetToolTest {
     }
 
     /**
-     * Verifies a non-boolean `compaction_enabled` is rejected with the shared invalid-input error and
+     * Verifies a non-boolean `automatic_compaction_enabled` is rejected with the shared invalid-input error and
      * that the preset is neither loaded nor written.
      */
     @Test
-    fun `rejects a non-boolean compaction_enabled without touching the persisted preset`() = runTest {
+    fun `rejects a non-boolean automatic_compaction_enabled without touching the persisted preset`() = runTest {
         val modelPresetService = mockk<ModelPresetService>()
         val tool = UpdateModelPresetTool(modelPresetService)
 
         val result = tool.execute(
-            buildJsonObject { put("model_preset_id", 3L); put("compaction_enabled", "yes") },
+            buildJsonObject { put("model_preset_id", 3L); put("automatic_compaction_enabled", "yes") },
             context()
         )
 
         val error = assertIs<ServerBuiltInToolHandlerError.InvalidInput>(result.leftOrNull())
-        assertTrue(error.message.contains("Argument 'compaction_enabled' must be a boolean"))
+        assertTrue(error.message.contains("Argument 'automatic_compaction_enabled' must be a boolean"))
         coVerify(exactly = 0) { modelPresetService.getPresetById(any(), any()) }
         coVerify(exactly = 0) { modelPresetService.updatePreset(any(), any(), any()) }
     }
@@ -300,7 +300,7 @@ class UpdateModelPresetToolTest {
                         request.description == persisted.description &&
                         request.modelId == persisted.modelId &&
                         request.modelSettingsId == persisted.modelSettingsId &&
-                        request.compactionEnabled == persisted.compactionEnabled &&
+                        request.automaticCompactionEnabled == persisted.automaticCompactionEnabled &&
                         request.compactionThresholdTokens == persisted.compactionThresholdTokens
                 }
             )

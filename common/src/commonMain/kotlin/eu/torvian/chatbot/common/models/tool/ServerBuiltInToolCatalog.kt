@@ -92,11 +92,11 @@ object ServerBuiltInToolCatalog {
     const val DESCRIPTION_PROPERTY = "description"
 
     /**
-     * JSON property holding a model preset's compaction enablement flag (create/update preset). When
-     * `false` the preset's sessions never compact, regardless of the user's `conversation_compaction`
-     * preference.
+     * JSON property holding a model preset's automatic-compaction flag (create/update preset). When
+     * `false` the preset's sessions never compact automatically, regardless of the user's
+     * `conversation_compaction` preference. User-requested compaction is unaffected.
      */
-    const val COMPACTION_ENABLED_PROPERTY = "compaction_enabled"
+    const val AUTOMATIC_COMPACTION_ENABLED_PROPERTY = "automatic_compaction_enabled"
 
     /**
      * JSON property holding a model preset's optional compaction threshold in input tokens
@@ -888,7 +888,7 @@ object ServerBuiltInToolCatalog {
                 "returning each preset's id, name, display name, description, referenced model " +
                 "id, referenced settings profile id (both null when unset), and its creation and " +
                 "update timestamps. Each preset also reports its compaction configuration: the " +
-                "compaction enabled flag and the optional per-preset token threshold (null when " +
+                "automatic compaction flag and the optional per-preset token threshold (null when " +
                 "the preset defers to the user preference threshold). A preset bundles one model " +
                 "with one settings profile and is " +
                 "the sole source of the LLM configuration of every agent role bound to it. Use " +
@@ -899,7 +899,7 @@ object ServerBuiltInToolCatalog {
             name = READ_MODEL_PRESET_NAME,
             description = "Reads one model preset owned by the current user by its id, returning " +
                 "the full preset with its name, display name, description, the referenced model " +
-                "id and settings profile id (null when unset), its compaction enabled flag and " +
+                "id and settings profile id (null when unset), its automatic compaction flag and " +
                 "optional per-preset token threshold (null when the preset defers to the user " +
                 "preference threshold), and its creation and update " +
                 "timestamps.",
@@ -925,11 +925,12 @@ object ServerBuiltInToolCatalog {
                 "longer-than-255-character value. Both references are optional and must be " +
                 "accessible by the current user; when both are given, the settings profile must " +
                 "belong to the given model. The preset layer imposes no model-type restriction, " +
-                "so an embedding model is accepted. Compaction of the preset's sessions is " +
-                "controlled by this preset: it is enabled by default and additionally requires the " +
-                "user's own compaction preference to be present and enabled, while an omitted " +
-                "compaction_threshold_tokens uses the user preference's threshold (a supplied " +
-                "threshold must be at least 1). Returns the created preset's full JSON " +
+                "so an embedding model is accepted. Automatic (threshold-triggered) compaction of " +
+                "the preset's sessions is controlled by this preset: it is enabled by default and " +
+                "additionally requires the user's own compaction preference to be enabled, while an " +
+                "omitted compaction_threshold_tokens uses the user preference's threshold (a supplied " +
+                "threshold must be at least 1). User-requested compaction is always available and is " +
+                "not affected by this flag. Returns the created preset's full JSON " +
                 "including its server-generated id and timestamps.",
             inputSchema = buildJsonObject {
                 put("type", "object")
@@ -957,11 +958,12 @@ object ServerBuiltInToolCatalog {
                         )
                     )
                     put(
-                        COMPACTION_ENABLED_PROPERTY,
+                        AUTOMATIC_COMPACTION_ENABLED_PROPERTY,
                         booleanProperty(
-                            "Whether turns running on this preset may compact their conversation. " +
-                                "Defaults to true; false disables compaction for the preset's " +
-                                "sessions even when the user's compaction preference is enabled."
+                            "Whether automatic (threshold-triggered) compaction is enabled for turns " +
+                                "running on this preset. Defaults to true; false disables it for the " +
+                                "preset's sessions even when the user's compaction preference is " +
+                                "enabled. It never restricts user-requested compaction."
                         )
                     )
                     put(
@@ -990,7 +992,7 @@ object ServerBuiltInToolCatalog {
                 "unique per user). Both references must be accessible by the current user and, " +
                 "when both are set, the settings profile must belong to the model, so re-point " +
                 "both together. Compaction is patched the same way: an omitted or null " +
-                "compaction_enabled keeps the persisted flag, an explicit boolean sets it, an " +
+                "automatic_compaction_enabled keeps the persisted flag, an explicit boolean sets it, an " +
                 "omitted or null compaction_threshold_tokens keeps the persisted threshold, and a " +
                 "compaction_threshold_tokens of 0 " +
                 "clears it back to the user preference's threshold (0 is never a valid stored " +
@@ -1040,12 +1042,13 @@ object ServerBuiltInToolCatalog {
                         )
                     )
                     put(
-                        COMPACTION_ENABLED_PROPERTY,
+                        AUTOMATIC_COMPACTION_ENABLED_PROPERTY,
                         booleanProperty(
-                            "New compaction enablement flag for the preset's turns. Omit or pass " +
-                                "null to keep the persisted flag; true allows compaction (still " +
-                                "subject to the user's compaction preference), false disables it " +
-                                "for the preset's sessions."
+                            "New automatic-compaction flag for the preset's turns. Omit or pass " +
+                                "null to keep the persisted flag; true enables threshold-triggered " +
+                                "compaction (still subject to the user's compaction preference), " +
+                                "false disables it for the preset's sessions. User-requested " +
+                                "compaction is unaffected either way."
                         )
                     )
                     put(

@@ -111,7 +111,7 @@ class ModelPresetServiceImpl(
                 description = request.description,
                 modelId = request.modelId,
                 modelSettingsId = request.modelSettingsId,
-                compactionEnabled = request.compactionEnabled,
+                automaticCompactionEnabled = request.automaticCompactionEnabled,
                 compactionThresholdTokens = request.compactionThresholdTokens
             )
 
@@ -168,7 +168,7 @@ class ModelPresetServiceImpl(
                 description = request.description,
                 modelId = request.modelId,
                 modelSettingsId = request.modelSettingsId,
-                compactionEnabled = request.compactionEnabled,
+                automaticCompactionEnabled = request.automaticCompactionEnabled,
                 compactionThresholdTokens = request.compactionThresholdTokens
             )
 
@@ -330,7 +330,7 @@ class ModelPresetServiceImpl(
         description = description,
         modelId = modelId,
         modelSettingsId = modelSettingsId,
-        compactionEnabled = compactionEnabled,
+        automaticCompactionEnabled = automaticCompactionEnabled,
         compactionThresholdTokens = compactionThresholdTokens,
         createdAt = createdAt,
         updatedAt = updatedAt

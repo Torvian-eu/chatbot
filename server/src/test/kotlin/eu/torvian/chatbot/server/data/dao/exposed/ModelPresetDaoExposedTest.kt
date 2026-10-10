@@ -73,7 +73,7 @@ class ModelPresetDaoExposedTest {
             description = "Bundles the smart model",
             modelId = TestDefaults.llmModel1.id,
             modelSettingsId = TestDefaults.modelSettings1.id,
-            compactionEnabled = true,
+            automaticCompactionEnabled = true,
             compactionThresholdTokens = null
         )
 
@@ -82,7 +82,7 @@ class ModelPresetDaoExposedTest {
         assertEquals("Smart model", created.displayName)
         assertEquals(TestDefaults.llmModel1.id, created.modelId)
         assertEquals(TestDefaults.modelSettings1.id, created.modelSettingsId)
-        assertTrue(created.compactionEnabled, "compaction is enabled by default")
+        assertTrue(created.automaticCompactionEnabled, "compaction is enabled by default")
         assertNull(created.compactionThresholdTokens, "the threshold defaults to the user preference fallback")
         assertEquals(created.createdAt, created.updatedAt, "both timestamps are set on insert")
 
@@ -99,7 +99,7 @@ class ModelPresetDaoExposedTest {
             description = "Bundles the smart model",
             modelId = TestDefaults.llmModel1.id,
             modelSettingsId = TestDefaults.modelSettings1.id,
-            compactionEnabled = false,
+            automaticCompactionEnabled = false,
             compactionThresholdTokens = 1234L
         )
 
@@ -109,7 +109,7 @@ class ModelPresetDaoExposedTest {
                 displayName = null,
                 description = "Re-pointed",
                 modelSettingsId = null,
-                compactionEnabled = true,
+                automaticCompactionEnabled = true,
                 compactionThresholdTokens = null
             )
         )
@@ -120,7 +120,7 @@ class ModelPresetDaoExposedTest {
         assertNull(stored.displayName, "a null display name clears the column")
         assertEquals("Re-pointed", stored.description)
         assertNull(stored.modelSettingsId, "a null reference clears the column")
-        assertTrue(stored.compactionEnabled, "the update writes the compaction enablement flag")
+        assertTrue(stored.automaticCompactionEnabled, "the update writes the compaction enablement flag")
         assertNull(stored.compactionThresholdTokens, "a null threshold clears the override")
         assertEquals(created.createdAt, stored.createdAt, "created_at is never rewritten")
         assertTrue(stored.updatedAt >= created.updatedAt, "updated_at advances on update")
@@ -134,14 +134,14 @@ class ModelPresetDaoExposedTest {
             description = "",
             modelId = null,
             modelSettingsId = null,
-            compactionEnabled = false,
+            automaticCompactionEnabled = false,
             compactionThresholdTokens = 1234L
         )
 
         val stored = assertNotNull(testDataManager.getModelPreset(created.id))
-        assertEquals(false, stored.compactionEnabled)
+        assertEquals(false, stored.automaticCompactionEnabled)
         assertEquals(1234L, stored.compactionThresholdTokens)
-        assertEquals(false, created.compactionEnabled)
+        assertEquals(false, created.automaticCompactionEnabled)
         assertEquals(1234L, created.compactionThresholdTokens)
     }
 

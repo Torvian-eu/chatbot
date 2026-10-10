@@ -98,12 +98,12 @@ class ModelPresetDaoExposed(
         description: String,
         modelId: Long?,
         modelSettingsId: Long?,
-        compactionEnabled: Boolean,
+        automaticCompactionEnabled: Boolean,
         compactionThresholdTokens: Long?
     ): ModelPresetEntity =
         transactionScope.transaction {
             val now = System.currentTimeMillis()
-            // Every column is named explicitly, so the table's `compaction_enabled` default never
+            // Every column is named explicitly, so the table's `automatic_compaction_enabled` default never
             // applies here: the caller's value must be written as-is.
             val insertStatement = ModelPresetTable.insert {
                 it[ModelPresetTable.name] = name
@@ -111,7 +111,7 @@ class ModelPresetDaoExposed(
                 it[ModelPresetTable.description] = description
                 it[ModelPresetTable.modelId] = modelId
                 it[ModelPresetTable.modelSettingsId] = modelSettingsId
-                it[ModelPresetTable.compactionEnabled] = compactionEnabled
+                it[ModelPresetTable.automaticCompactionEnabled] = automaticCompactionEnabled
                 it[ModelPresetTable.compactionThresholdTokens] = compactionThresholdTokens
                 it[ModelPresetTable.createdAt] = now
                 it[ModelPresetTable.updatedAt] = now
@@ -129,7 +129,7 @@ class ModelPresetDaoExposed(
                     it[ModelPresetTable.description] = preset.description
                     it[ModelPresetTable.modelId] = preset.modelId
                     it[ModelPresetTable.modelSettingsId] = preset.modelSettingsId
-                    it[ModelPresetTable.compactionEnabled] = preset.compactionEnabled
+                    it[ModelPresetTable.automaticCompactionEnabled] = preset.automaticCompactionEnabled
                     it[ModelPresetTable.compactionThresholdTokens] = preset.compactionThresholdTokens
                     it[ModelPresetTable.updatedAt] = System.currentTimeMillis()
                 }

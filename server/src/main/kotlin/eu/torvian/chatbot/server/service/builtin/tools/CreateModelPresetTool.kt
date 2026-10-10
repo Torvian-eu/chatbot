@@ -24,9 +24,9 @@ import kotlinx.serialization.json.JsonObject
  * `create_model_preset` server built-in tool.
  *
  * Creates a user-owned preset from the parsed input, reusing [CreateModelPresetRequest]. `name` is
- * required; `display_name`, `description`, `model_id`, `model_settings_id`, `compaction_enabled`, and
+ * required; `display_name`, `description`, `model_id`, `model_settings_id`, `automatic_compaction_enabled`, and
  * `compaction_threshold_tokens` are optional and
- * fall back to the request DTO's defaults (`null`/empty description/`compactionEnabled = true`/no
+ * fall back to the request DTO's defaults (`null`/empty description/`automaticCompactionEnabled = true`/no
  * threshold override), so a preset may be created
  * without any LLM configuration and completed later — the service layer is deliberately permissive
  * and imposes no model-type restriction.
@@ -68,7 +68,7 @@ class CreateModelPresetTool(
                 ServerBuiltInToolCatalog.DESCRIPTION_PROPERTY,
                 ServerBuiltInToolCatalog.MODEL_ID_PROPERTY,
                 ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY,
-                ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY,
+                ServerBuiltInToolCatalog.AUTOMATIC_COMPACTION_ENABLED_PROPERTY,
                 ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY
             ),
             validationErrors
@@ -81,8 +81,8 @@ class CreateModelPresetTool(
         val modelId = parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_ID_PROPERTY, validationErrors)
         val modelSettingsId =
             parseOptionalLong(input, ServerBuiltInToolCatalog.MODEL_SETTINGS_ID_PROPERTY, validationErrors)
-        val compactionEnabled =
-            parseOptionalBoolean(input, ServerBuiltInToolCatalog.COMPACTION_ENABLED_PROPERTY, validationErrors)
+        val automaticCompactionEnabled =
+            parseOptionalBoolean(input, ServerBuiltInToolCatalog.AUTOMATIC_COMPACTION_ENABLED_PROPERTY, validationErrors)
         val compactionThresholdTokens =
             parseOptionalLong(input, ServerBuiltInToolCatalog.COMPACTION_THRESHOLD_TOKENS_PROPERTY, validationErrors)
         if (validationErrors.isNotEmpty()) {
@@ -92,7 +92,7 @@ class CreateModelPresetTool(
         // name is non-null here: a null result always coincides with a recorded validation error,
         // and we bail out above when any error was recorded. Omitted optional fields fall back to
         // the CreateModelPresetRequest defaults (no display name, empty description, no references,
-        // compaction enabled, no threshold override). `compactionEnabled` defaults to true both when
+        // compaction enabled, no threshold override). `automaticCompactionEnabled` defaults to true both when
         // omitted and when it was rejected, but a rejected value raises InvalidInput above before the
         // write.
         val request = CreateModelPresetRequest(
@@ -101,7 +101,7 @@ class CreateModelPresetTool(
             description = description ?: "",
             modelId = modelId,
             modelSettingsId = modelSettingsId,
-            compactionEnabled = compactionEnabled ?: true,
+            automaticCompactionEnabled = automaticCompactionEnabled ?: true,
             compactionThresholdTokens = compactionThresholdTokens
         )
         val preset = modelPresetService.createPreset(context.userId, request)

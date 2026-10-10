@@ -114,10 +114,14 @@ class ChatServiceImplTest {
     )
 
     /**
-     * The resolved compaction configuration every prepared turn carries in these tests: compaction off,
-     * so the delegation assertions stay focused on forwarding rather than on compaction policy.
+     * The resolved compaction configuration every prepared turn carries in these tests: no usable
+     * auxiliary configuration, so the delegation assertions stay focused on forwarding rather than on
+     * compaction policy.
      */
-    private val testResolvedCompaction = ResolvedCompactionConfig.Disabled
+    private val testResolvedCompaction = ResolvedCompactionConfig.Unusable(
+        reason = "no usable auxiliary configuration",
+        automaticCompactionEnabled = false
+    )
 
     private val testPreparedTurn = PreparedConversationTurn(testSession, testLlmConfig, testResolvedCompaction)
 
@@ -198,7 +202,7 @@ class ChatServiceImplTest {
             conversationTurnOrchestrator.processNonStreamingTurn(capture(capturedRequest))
         } returns flowOf(ConversationTurnEvent.TurnCompleted)
 
-        val resolvedCompaction = ResolvedCompactionConfig.Enabled(
+        val resolvedCompaction = ResolvedCompactionConfig.Usable(
             settings = EffectiveCompactionSettings(
                 modelId = 1L,
                 settingsId = 1L,
@@ -206,7 +210,8 @@ class ChatServiceImplTest {
                 systemMessage = null,
                 summaryLabel = "Summary:\n",
                 thresholdTokens = 50_000L
-            )
+            ),
+            automaticCompactionEnabled = true
         )
         chatService.processNewMessage(
             1L,

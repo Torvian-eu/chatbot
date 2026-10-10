@@ -81,7 +81,7 @@ interface ModelPresetService {
      * @param userId The ID of the requesting user.
      * @param presetId The ID of the preset to update.
      * @param request The update payload; because it replaces every writable field, an omitted
-     *            `compactionEnabled`/`compactionThresholdTokens` resets the compaction configuration to
+     *            `automaticCompactionEnabled`/`compactionThresholdTokens` resets the compaction configuration to
      *            its defaults.
      * @return Either an [UpdateModelPresetError] or the updated [ModelPresetDto].
      */

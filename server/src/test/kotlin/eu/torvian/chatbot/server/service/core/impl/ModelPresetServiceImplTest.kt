@@ -67,7 +67,7 @@ class ModelPresetServiceImplTest {
         description = "Bundles the smart model",
         modelId = model.id,
         modelSettingsId = chatSettings.id,
-        compactionEnabled = true,
+        automaticCompactionEnabled = true,
         compactionThresholdTokens = null,
         createdAt = Instant.fromEpochMilliseconds(1_000L),
         updatedAt = Instant.fromEpochMilliseconds(1_000L)
@@ -244,21 +244,21 @@ class ModelPresetServiceImplTest {
 
     @Test
     fun `createPreset persists the compaction configuration and echoes it on the DTO`() = runTest {
-        val createdRow = existingPreset.copy(compactionEnabled = false, compactionThresholdTokens = 50_000L)
+        val createdRow = existingPreset.copy(automaticCompactionEnabled = false, compactionThresholdTokens = 50_000L)
         coEvery { modelPresetDao.insertPreset(any(), any(), any(), any(), any(), any(), any()) } returns createdRow
 
         val result = service.createPreset(
             userId,
             CreateModelPresetRequest(
                 name = "smart_model",
-                compactionEnabled = false,
+                automaticCompactionEnabled = false,
                 compactionThresholdTokens = 50_000L
             )
         )
 
         assertTrue(result.isRight())
         val dto = assertNotNull(result.getOrNull())
-        assertEquals(false, dto.compactionEnabled)
+        assertEquals(false, dto.automaticCompactionEnabled)
         assertEquals(50_000L, dto.compactionThresholdTokens)
         coVerify(exactly = 1) {
             modelPresetDao.insertPreset("smart_model", null, "", null, null, false, 50_000L)
@@ -425,14 +425,14 @@ class ModelPresetServiceImplTest {
             existingPreset.id,
             UpdateModelPresetRequest(
                 name = existingPreset.name,
-                compactionEnabled = false,
+                automaticCompactionEnabled = false,
                 compactionThresholdTokens = null
             )
         )
 
         assertTrue(result.isRight())
         coVerify(exactly = 1) {
-            modelPresetDao.updatePreset(match { !it.compactionEnabled && it.compactionThresholdTokens == null })
+            modelPresetDao.updatePreset(match { !it.automaticCompactionEnabled && it.compactionThresholdTokens == null })
         }
     }
 
