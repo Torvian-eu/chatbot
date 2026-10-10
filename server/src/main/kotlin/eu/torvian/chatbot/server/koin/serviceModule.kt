@@ -32,6 +32,7 @@ fun serviceModule() = module {
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get()) }
     single<SearchService> { SearchServiceImpl(get()) }
+    single<ThreadStatsService> { ThreadStatsServiceImpl(get(), get(), get(), get()) }
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<AgentRoleService> {
