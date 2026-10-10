@@ -18,8 +18,8 @@ import eu.torvian.chatbot.server.service.core.LLMProviderService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
 import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.agent.SystemPromptComposer
-import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionError
 import eu.torvian.chatbot.server.service.core.chat.compaction.EffectiveCompactionConfigResolver
+import eu.torvian.chatbot.server.service.core.chat.compaction.ResolvedCompactionConfig
 import eu.torvian.chatbot.server.service.core.error.agent.AgentRoleError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
@@ -86,12 +86,6 @@ class DefaultConversationTurnPreparationService(
                 )
             }
 
-            val session = withError({ daoError: SessionError.SessionNotFound ->
-                ValidateNewMessageError.SessionNotFound(daoError.id)
-            }) {
-                sessionDao.getSessionById(sessionId).bind()
-            }
-
             if (parentMessageId != null) {
                 withError({ _: MessageError.MessageNotFound ->
                     ValidateNewMessageError.ParentNotInSession(sessionId, parentMessageId)
@@ -100,154 +94,201 @@ class DefaultConversationTurnPreparationService(
                 }
             }
 
-            // A session is configured exclusively through its agent role: without one there is no
-            // model/settings to talk to, so the turn cannot be prepared.
-            val agentRoleId = session.agentRoleId
-                ?: raise(
-                    ValidateNewMessageError.ModelConfigurationError(
-                        "No agent role selected for session $sessionId"
-                    )
-                )
+            resolveSessionRuntime(
+                userId = userId,
+                sessionId = sessionId,
+                requiredStreaming = isStreaming
+            ).bind()
+        }
+    }
 
-            val role = withError({ _: AgentRoleError.NotFound ->
+    override suspend fun prepareSessionRuntime(
+        userId: Long,
+        sessionId: Long
+    ): Either<ValidateNewMessageError, PreparedConversationTurn> = transactionScope.transaction {
+        resolveSessionRuntime(
+            userId = userId,
+            sessionId = sessionId,
+            requiredStreaming = null
+        )
+    }
+
+    /**
+     * Resolves the session's runtime inputs without validating a new-message request shape.
+     *
+     * Runs inside the caller's transaction so the session, its role, its preset and the global
+     * compaction preference describe one consistent snapshot.
+     *
+     * @param userId The authenticated user whose per-user role-disabled state applies.
+     * @param sessionId Session whose runtime inputs are resolved.
+     * @param requiredStreaming When non-null, the resolved settings must declare this delivery mode;
+     *            null skips that check (a caller that is not starting a chat turn pins no mode).
+     * @return Either the validation error surface or the prepared runtime inputs.
+     */
+    private suspend fun resolveSessionRuntime(
+        userId: Long,
+        sessionId: Long,
+        requiredStreaming: Boolean?
+    ): Either<ValidateNewMessageError, PreparedConversationTurn> = either {
+        val session = withError({ daoError: SessionError.SessionNotFound ->
+            ValidateNewMessageError.SessionNotFound(daoError.id)
+        }) {
+            sessionDao.getSessionById(sessionId).bind()
+        }
+
+        // A session is configured exclusively through its agent role: without one there is no
+        // model/settings to talk to, so the turn cannot be prepared.
+        val agentRoleId = session.agentRoleId
+            ?: raise(
                 ValidateNewMessageError.ModelConfigurationError(
-                    "Agent role $agentRoleId selected for session $sessionId no longer exists"
+                    "No agent role selected for session $sessionId"
                 )
-            }) {
-                agentRoleService.getAgentRoleById(userId, agentRoleId).bind()
-            }
+            )
 
-            // Inert semantics: a role disabled for the user sending the message is unusable even if it
-            // is still attached. `disabled` rides the loaded domain role (resolved per requesting user
-            // via getAgentRoleById), so this gate adds no extra database lookup. It is the authoritative
-            // enforcement that also closes the attach/toggle race window.
-            ensure(!role.disabled) {
-                ValidateNewMessageError.ModelConfigurationError(
-                    "Agent role $agentRoleId selected for session $sessionId is disabled for user $userId"
-                )
-            }
+        val role = withError({ _: AgentRoleError.NotFound ->
+            ValidateNewMessageError.ModelConfigurationError(
+                "Agent role $agentRoleId selected for session $sessionId no longer exists"
+            )
+        }) {
+            agentRoleService.getAgentRoleById(userId, agentRoleId).bind()
+        }
 
-            // The role's LLM configuration comes exclusively from its model preset: the preset is the
-            // sole source of truth (there is no role-level fallback pair), so a preset-less role and a
-            // preset whose model/settings reference is null are both non-sendable and fail loudly here.
-            val modelPresetId = role.modelPresetId
-                ?: raise(
-                    ValidateNewMessageError.ModelConfigurationError(
-                        "Agent role $agentRoleId for session $sessionId has no model preset " +
-                            "(attach one to make the role sendable)"
-                    )
-                )
-            // The derived references are nullable because `ON DELETE SET NULL` nulls them when the
-            // referenced model/settings is deleted, and because a preset may legitimately have never had
-            // them set (such a preset is attachable but cannot drive a turn). Re-check at turn time so a
-            // broken configuration fails loudly instead of falling back to anything.
-            val modelId = role.modelId
-                ?: raise(
-                    ValidateNewMessageError.ModelConfigurationError(
-                        "Model preset $modelPresetId of agent role $agentRoleId for session $sessionId " +
-                            "references a deleted model, or has no model configured"
-                    )
-                )
-            val settingsId = role.modelSettingsId
-                ?: raise(
-                    ValidateNewMessageError.ModelConfigurationError(
-                        "Model preset $modelPresetId of agent role $agentRoleId for session $sessionId " +
-                            "references deleted settings, or has no settings profile configured"
-                    )
-                )
-
-            val model = withError({ _: GetModelError ->
-                throw IllegalStateException("Model with ID $modelId not found after validation")
-            }) {
-                llmModelService.getModelById(modelId).bind()
-            }
-
-            val settings = withError({ _: GetSettingsByIdError ->
-                throw IllegalStateException("Settings with ID $settingsId not found after validation")
-            }) {
-                modelSettingsService.getSettingsById(settingsId).bind()
-            }
-
-            ensure(isChatLikeSettings(settings)) {
-                ValidateNewMessageError.ModelConfigurationError(
-                    "Settings type ${settings::class.simpleName} is not compatible with the selected chat model"
-                )
-            }
-            // Defensive re-check of the preset's equality invariant: a settings profile can be
-            // re-pointed to another model after the preset was written, so the stored pair may disagree
-            // at rest. Fail loudly rather than sending the model id and a profile of a different model.
-            ensure(settings.modelId == modelId) {
-                ValidateNewMessageError.ModelConfigurationError(
-                    "Model preset $modelPresetId of agent role $agentRoleId is inconsistent: settings " +
-                        "$settingsId belongs to model ${settings.modelId}, not $modelId"
-                )
-            }
-            ensure(chatStreamFlag(settings) == isStreaming) {
-                ValidateNewMessageError.ModelConfigurationError(
-                    "Settings stream mode does not match requested stream mode $isStreaming"
-                )
-            }
-
-            // The whole effective compaction configuration is resolved here, inside this transaction:
-            // the resolver reads the role's preset and the global preference as one snapshot, and an
-            // unusable preset or preference rejects the turn as a model-configuration error before
-            // anything is persisted — a turn that cannot understand its compaction configuration must
-            // not save the user message.
-            val resolvedCompaction = withError({ error: ConversationCompactionError.InvalidConfiguration ->
-                ValidateNewMessageError.ModelConfigurationError(error.reason)
-            }) {
-                effectiveCompactionConfigResolver
-                    .resolve(userId = userId, presetId = modelPresetId)
-                    .bind()
-            }
-
-            val provider = withError({ _: GetProviderError ->
-                throw IllegalStateException("Provider not found for model ID $modelId (provider ID: ${model.providerId})")
-            }) {
-                llmProviderService.getProviderById(model.providerId).bind()
-            }
-
-            val apiKey = provider.apiKeyId?.let { keyId ->
-                withError({ credentialError: CredentialError ->
-                    when (credentialError) {
-                        is CredentialError.CredentialNotFound -> {
-                            throw IllegalStateException(
-                                "API key not found in secure storage for provider ID ${provider.id} (key alias: $keyId)"
-                            )
-                        }
-
-                        is CredentialError.CredentialDecryptionFailed -> {
-                            throw IllegalStateException(
-                                "API key could not be decrypted for provider ID ${provider.id} (key alias: $keyId)"
-                            )
-                        }
-                    }
-                }) {
-                    credentialManager.getCredential(keyId).bind()
-                }
-            }
-
-            // Tools come from the role's tool-id set (stored in the `agent_role_tools` join table).
-            // Load them with a single batch query rather than one query per id; `ON DELETE CASCADE`
-            // guarantees every id resolves, so the mapNotNull below is unreachable defense-in-depth.
-            // Preserve the null-vs-empty distinction because downstream tool handling relies on it.
-            val tools = if (model.hasCapability(LLMModelCapabilities.TOOL_CALLING)) {
-                val toolsById = toolService.getToolsByIds(role.tools)
-                role.tools.mapNotNull { toolsById[it] }
-            } else {
-                null
-            }
-
-            // The composed system prompt is the single source of truth for the system message. When the
-            // role has no instructions (or all are blank) this is empty, and strategies omit the system
-            // message entirely.
-            val systemMessage = systemPromptComposer.compose(role)
-
-            PreparedConversationTurn(
-                session = session,
-                llmConfig = LLMConfig(provider, model, settings, apiKey, tools, systemMessage),
-                resolvedCompaction = resolvedCompaction
+        // Inert semantics: a role disabled for the user sending the message is unusable even if it
+        // is still attached. `disabled` rides the loaded domain role (resolved per requesting user
+        // via getAgentRoleById), so this gate adds no extra database lookup. It is the authoritative
+        // enforcement that also closes the attach/toggle race window.
+        ensure(!role.disabled) {
+            ValidateNewMessageError.ModelConfigurationError(
+                "Agent role $agentRoleId selected for session $sessionId is disabled for user $userId"
             )
         }
+
+        // The role's LLM configuration comes exclusively from its model preset: the preset is the
+        // sole source of truth (there is no role-level fallback pair), so a preset-less role and a
+        // preset whose model/settings reference is null are both non-sendable and fail loudly here.
+        val modelPresetId = role.modelPresetId
+            ?: raise(
+                ValidateNewMessageError.ModelConfigurationError(
+                    "Agent role $agentRoleId for session $sessionId has no model preset " +
+                        "(attach one to make the role sendable)"
+                )
+            )
+        // The derived references are nullable because `ON DELETE SET NULL` nulls them when the
+        // referenced model/settings is deleted, and because a preset may legitimately have never had
+        // them set (such a preset is attachable but cannot drive a turn). Re-check at turn time so a
+        // broken configuration fails loudly instead of falling back to anything.
+        val modelId = role.modelId
+            ?: raise(
+                ValidateNewMessageError.ModelConfigurationError(
+                    "Model preset $modelPresetId of agent role $agentRoleId for session $sessionId " +
+                        "references a deleted model, or has no model configured"
+                )
+            )
+        val settingsId = role.modelSettingsId
+            ?: raise(
+                ValidateNewMessageError.ModelConfigurationError(
+                    "Model preset $modelPresetId of agent role $agentRoleId for session $sessionId " +
+                        "references deleted settings, or has no settings profile configured"
+                )
+            )
+
+        val model = withError({ _: GetModelError ->
+            throw IllegalStateException("Model with ID $modelId not found after validation")
+        }) {
+            llmModelService.getModelById(modelId).bind()
+        }
+
+        val settings = withError({ _: GetSettingsByIdError ->
+            throw IllegalStateException("Settings with ID $settingsId not found after validation")
+        }) {
+            modelSettingsService.getSettingsById(settingsId).bind()
+        }
+
+        ensure(isChatLikeSettings(settings)) {
+            ValidateNewMessageError.ModelConfigurationError(
+                "Settings type ${settings::class.simpleName} is not compatible with the selected chat model"
+            )
+        }
+        // Defensive re-check of the preset's equality invariant: a settings profile can be
+        // re-pointed to another model after the preset was written, so the stored pair may disagree
+        // at rest. Fail loudly rather than sending the model id and a profile of a different model.
+        ensure(settings.modelId == modelId) {
+            ValidateNewMessageError.ModelConfigurationError(
+                "Model preset $modelPresetId of agent role $agentRoleId is inconsistent: settings " +
+                    "$settingsId belongs to model ${settings.modelId}, not $modelId"
+            )
+        }
+        // Only a chat turn pins a delivery mode; the manual compaction path resolves the same
+        // runtime without one.
+        if (requiredStreaming != null) {
+            ensure(chatStreamFlag(settings) == requiredStreaming) {
+                ValidateNewMessageError.ModelConfigurationError(
+                    "Settings stream mode does not match requested stream mode $requiredStreaming"
+                )
+            }
+        }
+
+        // The whole effective compaction configuration is resolved here, inside this transaction:
+        // the resolver reads the role's preset and the global preference as one snapshot. An unusable
+        // configuration rejects the turn only while automatic compaction is enabled, as a
+        // model-configuration error raised before anything is persisted — a turn that would compact
+        // automatically must not save the user message while it cannot. A turn with automatic compaction
+        // disabled always proceeds: user-requested compaction stays available, and an oversized context
+        // is simply sent as-is.
+        val resolvedCompaction = effectiveCompactionConfigResolver
+            .resolve(userId = userId, presetId = modelPresetId)
+        if (resolvedCompaction is ResolvedCompactionConfig.Unusable &&
+            resolvedCompaction.automaticCompactionEnabled
+        ) {
+            raise(ValidateNewMessageError.ModelConfigurationError(resolvedCompaction.reason))
+        }
+
+        val provider = withError({ _: GetProviderError ->
+            throw IllegalStateException("Provider not found for model ID $modelId (provider ID: ${model.providerId})")
+        }) {
+            llmProviderService.getProviderById(model.providerId).bind()
+        }
+
+        val apiKey = provider.apiKeyId?.let { keyId ->
+            withError({ credentialError: CredentialError ->
+                when (credentialError) {
+                    is CredentialError.CredentialNotFound -> {
+                        throw IllegalStateException(
+                            "API key not found in secure storage for provider ID ${provider.id} (key alias: $keyId)"
+                        )
+                    }
+
+                    is CredentialError.CredentialDecryptionFailed -> {
+                        throw IllegalStateException(
+                            "API key could not be decrypted for provider ID ${provider.id} (key alias: $keyId)"
+                        )
+                    }
+                }
+            }) {
+                credentialManager.getCredential(keyId).bind()
+            }
+        }
+
+        // Tools come from the role's tool-id set (stored in the `agent_role_tools` join table).
+        // Load them with a single batch query rather than one query per id; `ON DELETE CASCADE`
+        // guarantees every id resolves, so the mapNotNull below is unreachable defense-in-depth.
+        // Preserve the null-vs-empty distinction because downstream tool handling relies on it.
+        val tools = if (model.hasCapability(LLMModelCapabilities.TOOL_CALLING)) {
+            val toolsById = toolService.getToolsByIds(role.tools)
+            role.tools.mapNotNull { toolsById[it] }
+        } else {
+            null
+        }
+
+        // The composed system prompt is the single source of truth for the system message. When the
+        // role has no instructions (or all are blank) this is empty, and strategies omit the system
+        // message entirely.
+        val systemMessage = systemPromptComposer.compose(role)
+
+        PreparedConversationTurn(
+            session = session,
+            llmConfig = LLMConfig(provider, model, settings, apiKey, tools, systemMessage),
+            resolvedCompaction = resolvedCompaction
+        )
     }
 }

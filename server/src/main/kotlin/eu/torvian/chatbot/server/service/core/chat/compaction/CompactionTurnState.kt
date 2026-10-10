@@ -13,9 +13,9 @@ import eu.torvian.chatbot.server.service.llm.RawChatMessage
  * messages) and the content-free identity ledger: the service updates them on every preflight and the
  * orchestrator grows the window via [appendUnit] after each tool step.
  *
- * The state is one of two variants: [Disabled] (the resolved configuration disables compaction — never
- * raises) or [Enabled] (an enabled configuration; a configuration whose auxiliary rows vanished after
- * preparation raises `InvalidConfiguration` only when compaction becomes necessary).
+ * The state is one of two variants: [Inactive] (no usable auxiliary configuration — never raises) or
+ * [Active] (a usable configuration, which either compacts automatically when enabled or only injects an
+ * existing eligible summary when disabled).
  */
 sealed interface CompactionTurnState {
 
@@ -41,25 +41,32 @@ sealed interface CompactionTurnState {
     }
 
     /**
-     * The resolved configuration disables compaction for the turn. The original thread is always sent
-     * and no configuration error is ever raised.
+     * No usable auxiliary configuration exists for the turn. The original thread is always sent, no
+     * counting happens, no summary is injected and no configuration error is ever raised.
      *
      * @property sessionId Owning chat session.
-     * @property units Uncompressed window units; with compaction disabled this is the full thread and
-     *            it keeps growing across the loop.
+     * @property units Uncompressed window units; without a usable configuration this is the full thread
+     *            and it keeps growing across the loop.
      */
-    data class Disabled(
+    data class Inactive(
         override val sessionId: Long,
         override var units: MutableList<ConversationContextUnit>
     ) : CompactionTurnState
 
     /**
-     * The resolved configuration enables compaction for the turn.
+     * A usable auxiliary configuration exists for the turn.
+     *
+     * Threshold-triggered compaction runs only when [automaticCompactionEnabled] is true: when it is
+     * false the window is still seeded from an eligible retained chunk and sent as-is, without counting
+     * or an auxiliary call.
      *
      * @property sessionId Owning chat session.
      * @property ownerUserId Owner of the global preference, needed when compaction becomes required.
-     * @property settings The turn's effective settings, carrying the single effective threshold and the
-     *            auxiliary model, settings, instruction, system message and summary label.
+     * @property settings The turn's effective settings, carrying the effective threshold, the auxiliary
+     *            model, settings, instruction, system message and summary label.
+     * @property automaticCompactionEnabled Whether automatic (threshold-triggered) compaction is
+     *            enabled for the whole turn. It gates only that path: summary injection
+     *            and a forced compaction stay available while it is false.
      * @property retainedChunks Chunks loaded once when the turn starts; grows in-memory as new chunks
      *            are persisted during the same turn.
      * @property units Content-bearing uncompressed window units (never compacted content).
@@ -68,19 +75,16 @@ sealed interface CompactionTurnState {
      * @property coveredSnapshots Content-free identity ledger: the ordered `(id, updatedAt)` of every
      *            message compacted so far this turn, seeded from an eligible chunk's coverage at
      *            window init and extended by each compaction. Holds no message content.
-     * @property summaryChunkId Persisted chunk id of the current [summaryMessage] (provenance only).
-     * @property initialized True once the first-preflight window init has run.
      */
-    data class Enabled(
+    data class Active(
         override val sessionId: Long,
         val ownerUserId: Long,
         val settings: EffectiveCompactionSettings,
+        val automaticCompactionEnabled: Boolean,
         val retainedChunks: MutableList<ConversationCompactionChunk>,
         override var units: MutableList<ConversationContextUnit>,
         var summaryMessage: RawChatMessage.User?,
-        var coveredSnapshots: MutableList<SourceMessageSnapshot>,
-        var summaryChunkId: Long?,
-        var initialized: Boolean
+        var coveredSnapshots: MutableList<SourceMessageSnapshot>
     ) : CompactionTurnState
 
 }

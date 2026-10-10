@@ -28,6 +28,22 @@ interface ConversationTurnPreparationService {
         parentMessageId: Long?,
         isStreaming: Boolean
     ): Either<ValidateNewMessageError, PreparedConversationTurn>
+
+    /**
+     * Resolves the runtime inputs of a session without validating a new-message request shape.
+     *
+     * Serves session-scoped operations that reuse a turn's model/settings/provider/tools/system-prompt
+     * resolution and its effective compaction configuration but start no assistant turn.
+     *
+     * @param userId The authenticated user whose per-user role-disabled state applies; the caller
+     *            guarantees session access for this user before invoking preparation.
+     * @param sessionId Session whose runtime inputs are resolved.
+     * @return Either the validation error surface or the prepared runtime inputs.
+     */
+    suspend fun prepareSessionRuntime(
+        userId: Long,
+        sessionId: Long
+    ): Either<ValidateNewMessageError, PreparedConversationTurn>
 }
 
 /**

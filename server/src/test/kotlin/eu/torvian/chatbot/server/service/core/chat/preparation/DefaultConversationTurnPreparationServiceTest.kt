@@ -24,7 +24,6 @@ import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.agent.AgentRole
 import eu.torvian.chatbot.server.service.core.agent.CustomInstruction
 import eu.torvian.chatbot.server.service.core.agent.SystemPromptComposer
-import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionError
 import eu.torvian.chatbot.server.service.core.chat.compaction.EffectiveCompactionConfigResolver
 import eu.torvian.chatbot.server.service.core.chat.compaction.EffectiveCompactionSettings
 import eu.torvian.chatbot.server.service.core.chat.compaction.ResolvedCompactionConfig
@@ -131,18 +130,22 @@ class DefaultConversationTurnPreparationServiceTest {
     private val spawnToolId = 21L
 
     /**
-     * The configuration the mocked resolver returns unless a test stubs its own: a fully resolved
-     * enabled configuration, so preparation hands over a realistic value in the success cases.
+     * The configuration the mocked resolver returns unless a test stubs its own: an enabled, usable
+     * configuration, so preparation hands over a realistic value in the success cases.
      */
-    private val testResolvedCompaction = ResolvedCompactionConfig.Enabled(
-        settings = EffectiveCompactionSettings(
-            modelId = 1L,
-            settingsId = 1L,
-            instruction = "Summarize faithfully",
-            systemMessage = null,
-            summaryLabel = "Summary:\n",
-            thresholdTokens = 1_000L
-        )
+    private val testCompactionSettings = EffectiveCompactionSettings(
+        modelId = 1L,
+        settingsId = 1L,
+        instruction = "Summarize faithfully",
+        systemMessage = null,
+        summaryLabel = "Summary:\n",
+        thresholdTokens = 1_000L
+    )
+
+    /** The enabled, usable resolution built from [testCompactionSettings]. */
+    private val testResolvedCompaction = ResolvedCompactionConfig.Usable(
+        settings = testCompactionSettings,
+        automaticCompactionEnabled = true
     )
 
     /**
@@ -214,7 +217,7 @@ class DefaultConversationTurnPreparationServiceTest {
 
         // The resolver's own matrix (including the preset read) is covered by its dedicated test;
         // preparation only has to hand it the role's preset id and carry its result through.
-        coEvery { effectiveCompactionConfigResolver.resolve(any(), any()) } returns testResolvedCompaction.right()
+        coEvery { effectiveCompactionConfigResolver.resolve(any(), any()) } returns testResolvedCompaction
 
         coEvery { transactionScope.transaction(any<suspend () -> Any?>()) } coAnswers {
             @Suppress("UNCHECKED_CAST")
@@ -536,16 +539,20 @@ class DefaultConversationTurnPreparationServiceTest {
 
     /**
      * Verifies preparation hands the resolver the sender and the role's preset id, and that a resolution
-     * disabling compaction still prepares the turn: the flag only switches compaction off, it never
-     * makes a role unusable.
+     * with automatic compaction disabled still prepares the turn: the flag only switches automatic
+     * compaction off, it never makes a role unusable.
      */
     @Test
     fun `prepareNewMessageTurn should resolve the compaction configuration for the role's preset`() = runTest {
         val sessionId = 1L
+        val disabledConfiguration = ResolvedCompactionConfig.Usable(
+            settings = testCompactionSettings,
+            automaticCompactionEnabled = false
+        )
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns testRole.right()
         coEvery { effectiveCompactionConfigResolver.resolve(userId, testRole.modelPresetId!!) } returns
-            ResolvedCompactionConfig.Disabled.right()
+            disabledConfiguration
         stubPreparedTurn()
 
         val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
@@ -554,7 +561,7 @@ class DefaultConversationTurnPreparationServiceTest {
         // The role's preset id identifies the configuration; the resolver reads the preset itself in this
         // same transaction, so no other component re-reads it.
         coVerify(exactly = 1) { effectiveCompactionConfigResolver.resolve(userId, testRole.modelPresetId!!) }
-        assertEquals(ResolvedCompactionConfig.Disabled, result.getOrNull()?.resolvedCompaction)
+        assertEquals(disabledConfiguration, result.getOrNull()?.resolvedCompaction)
     }
 
     /**
@@ -564,7 +571,7 @@ class DefaultConversationTurnPreparationServiceTest {
     @Test
     fun `prepareNewMessageTurn should carry the resolved compaction configuration unchanged`() = runTest {
         val sessionId = 1L
-        val enabledConfiguration = ResolvedCompactionConfig.Enabled(
+        val enabledConfiguration = ResolvedCompactionConfig.Usable(
             settings = EffectiveCompactionSettings(
                 modelId = 2L,
                 settingsId = 2L,
@@ -572,17 +579,40 @@ class DefaultConversationTurnPreparationServiceTest {
                 systemMessage = null,
                 summaryLabel = "Summary:\n",
                 thresholdTokens = 8_000L
-            )
+            ),
+            automaticCompactionEnabled = true
         )
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns testRole.right()
-        coEvery { effectiveCompactionConfigResolver.resolve(any(), any()) } returns enabledConfiguration.right()
+        coEvery { effectiveCompactionConfigResolver.resolve(any(), any()) } returns enabledConfiguration
         stubPreparedTurn()
 
         val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
 
         assertEquals(enabledConfiguration, result.getOrNull()?.resolvedCompaction)
     }
+
+    /**
+     * Verifies an unusable configuration with automatic compaction disabled does not reject the turn: the
+     * turn proceeds with the raw thread, and only a manual request reports the reason.
+     */
+    @Test
+    fun `prepareNewMessageTurn should prepare the turn when the configuration is missing and automatic is disabled`() =
+        runTest {
+            val sessionId = 1L
+            coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
+            coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns testRole.right()
+            coEvery { effectiveCompactionConfigResolver.resolve(any(), any()) } returns
+                ResolvedCompactionConfig.Unusable(
+                    reason = "No conversation_compaction preference is stored for user 1",
+                    automaticCompactionEnabled = false
+                )
+            stubPreparedTurn()
+
+            val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
+
+            assertTrue(result.isRight(), "expected success but got ${result.leftOrNull()}")
+        }
 
     /**
      * Verifies a preference the resolver cannot decode rejects the turn during validation, as the same
@@ -596,7 +626,10 @@ class DefaultConversationTurnPreparationServiceTest {
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns testRole.right()
         coEvery { effectiveCompactionConfigResolver.resolve(any(), any()) } returns
-            ConversationCompactionError.InvalidConfiguration(reason).left()
+            ResolvedCompactionConfig.Unusable(
+                reason = reason,
+                automaticCompactionEnabled = true
+            )
         stubPreparedTurn()
 
         val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
@@ -621,7 +654,10 @@ class DefaultConversationTurnPreparationServiceTest {
             coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
             coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns testRole.right()
             coEvery { effectiveCompactionConfigResolver.resolve(any(), any()) } returns
-                ConversationCompactionError.InvalidConfiguration(reason).left()
+                ResolvedCompactionConfig.Unusable(
+                    reason = reason,
+                    automaticCompactionEnabled = true
+                )
             stubPreparedTurn()
 
             val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
@@ -643,7 +679,10 @@ class DefaultConversationTurnPreparationServiceTest {
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns testRole.right()
         coEvery { effectiveCompactionConfigResolver.resolve(userId, testRole.modelPresetId!!) } returns
-            ConversationCompactionError.InvalidConfiguration(reason).left()
+            ResolvedCompactionConfig.Unusable(
+                reason = reason,
+                automaticCompactionEnabled = true
+            )
         stubPreparedTurn()
 
         val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
@@ -665,7 +704,10 @@ class DefaultConversationTurnPreparationServiceTest {
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns testRole.right()
         coEvery { effectiveCompactionConfigResolver.resolve(any(), any()) } returns
-            ConversationCompactionError.InvalidConfiguration(reason).left()
+            ResolvedCompactionConfig.Unusable(
+                reason = reason,
+                automaticCompactionEnabled = true
+            )
         stubPreparedTurn()
 
         val result = preparationService.prepareNewMessageTurn(userId, sessionId, "test content", null, false)
@@ -673,5 +715,48 @@ class DefaultConversationTurnPreparationServiceTest {
         val error = assertIs<ValidateNewMessageError.ModelConfigurationError>(result.leftOrNull())
         assertEquals(reason, error.message)
         coVerify(exactly = 0) { llmProviderService.getProviderById(any()) }
+    }
+
+    /**
+     * Verifies the session-runtime path resolves the same inputs as a turn without requiring a request
+     * shape or pinning a delivery mode, so an operation that starts no assistant turn can reuse it.
+     */
+    @Test
+    fun `prepareSessionRuntime resolves the runtime without a request shape or a delivery mode`() = runTest {
+        val sessionId = 1L
+        val streamingSettings = testSettings.copy(stream = true)
+        val role = testRole.copy(modelSettingsId = streamingSettings.id)
+        coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
+        coEvery { agentRoleService.getAgentRoleById(userId, testSession.agentRoleId!!) } returns role.right()
+        coEvery { systemPromptComposer.compose(role) } returns "composed system"
+        coEvery { llmModelService.getModelById(testModel.id) } returns testModel.right()
+        coEvery { modelSettingsService.getSettingsById(streamingSettings.id) } returns streamingSettings.right()
+        coEvery { llmProviderService.getProviderById(testModel.providerId) } returns testProvider.right()
+        coEvery { credentialManager.getCredential(testProvider.apiKeyId!!) } returns "test-api-key".right()
+
+        val result = preparationService.prepareSessionRuntime(userId, sessionId)
+
+        val prepared = assertNotNull(result.getOrNull())
+        // The settings declare streaming while nothing requests a delivery mode, so the turn-only check
+        // must not reject the request.
+        assertTrue(streamingSettings.stream)
+        assertEquals(testSession, prepared.session)
+        assertEquals("composed system", prepared.llmConfig.systemMessage)
+        assertEquals(testResolvedCompaction, prepared.resolvedCompaction)
+        coVerify(exactly = 0) { messageDao.getMessageById(any()) }
+    }
+
+    /**
+     * Verifies the session-runtime path keeps the session-not-found mapping of the turn path.
+     */
+    @Test
+    fun `prepareSessionRuntime maps a missing session to SessionNotFound`() = runTest {
+        coEvery { sessionDao.getSessionById(999L) } returns SessionError.SessionNotFound(999L).left()
+
+        val error = assertIs<ValidateNewMessageError.SessionNotFound>(
+            preparationService.prepareSessionRuntime(userId, 999L).leftOrNull()
+        )
+
+        assertEquals(999L, error.sessionId)
     }
 }
