@@ -6,8 +6,6 @@ import eu.torvian.chatbot.app.chat.search.SearchDirection
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
-import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.app.viewmodel.SearchNavigationIntent
 import eu.torvian.chatbot.app.viewmodel.SearchNavigationState
 import eu.torvian.chatbot.app.viewmodel.chat.state.AssistantResponseTimerState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
@@ -29,8 +27,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Manages the UI state for the main chat area of the currently active session.
@@ -82,21 +78,26 @@ class ChatViewModel(
     private val backgroundScope: CoroutineScope
 ) : ViewModel(normalScope) {
 
-    companion object {
-        private val logger = kmpLogger<ChatViewModel>()
-
-        /** Maximum time allowed for the server to publish cancellation events before a hard cancel. */
-        private const val CANCELLATION_DRAIN_TIMEOUT_MILLIS = 3_000L
-    }
+    /**
+     * Owns the composer's turn/compaction state machine (send, pause/stop, forced cancel).
+     */
+    private val turnController = ChatTurnController(
+        state = state,
+        sendMessageUC = sendMessageUC,
+        compactConversationUC = compactConversationUC,
+        scope = normalScope
+    )
 
     /**
-     * Job tracking the currently active message sending operation.
-     * Null when no message is being sent.
+     * Owns the cross-session search navigation pipeline.
      */
-    private var sendMessageJob: Job? = null
-
-    /** Job that bounds the time spent waiting for the server to acknowledge cancellation. */
-    private var cancellationDrainJob: Job? = null
+    private val searchNavigationObserver = SearchNavigationObserver(
+        navigationState = navigationState,
+        state = state,
+        switchBranchUC = switchBranchUC,
+        backgroundScope = backgroundScope,
+        isCompactionInProgress = { isCompactionInProgress }
+    )
 
     /**
      * Whether an assistant turn is currently in progress (RUNNING, PAUSING, or STOPPING).
@@ -106,7 +107,7 @@ class ChatViewModel(
      * bypasses the UI, no conflicting generation or destructive edit can start mid-turn.
      */
     private val isTurnActive: Boolean
-        get() = state.turnExecutionState.value != TurnExecutionState.IDLE
+        get() = turnController.isTurnActive
 
     /**
      * Whether a user-requested compaction currently owns the session.
@@ -281,60 +282,8 @@ class ChatViewModel(
                 rollbackTarget.value != null
 
     init {
-        // Observe navigation intent and react when this VM is active for the target session
-        // and the session data is loaded. This handles all cases:
-        // - Intent arrives before session load completes
-        // - Session load completes after intent is already present
-        // - Session becomes active later
-        combine(
-            navigationState.intent,
-            activeSessionId,
-            sessionDataState
-        ) { intent, activeId, sessionData ->
-            Triple(intent, activeId, sessionData)
-        }
-            .filter { (intent, activeId, sessionData) ->
-                intent != null && activeId == intent.sessionId && sessionData is DataState.Success
-            }
-            .onEach { (intent, _, _) ->
-                intent?.let { safeIntent ->
-                    processNavigationIntent(safeIntent)
-                }
-            }
-            .launchIn(backgroundScope)
-    }
-
-    /**
-     * Processes a navigation intent sequentially, awaiting branch switch before search activation.
-     *
-     * @param intent The navigation intent to process.
-     */
-    private suspend fun processNavigationIntent(intent: SearchNavigationIntent) {
-        // Get current leaf before any potential branch switch
-        val currentLeafBeforeSwitch = (sessionDataState.value as? DataState.Success)?.data?.currentLeafMessageId
-
-        // Check if target message is already visible in current branch
-        val isMessageVisible = displayedMessages.value.any { it.id == intent.messageId }
-
-        if (isMessageVisible) {
-            // No branch switch needed, no rollback target
-            state.setRollbackTarget(null)
-        } else if (!isCompactionInProgress) {
-            // Branch switch needed - capture current leaf as rollback target
-            state.setRollbackTarget(currentLeafBeforeSwitch)
-            switchBranchUC.execute(intent.messageId)
-        }
-
-        // Set the pending target and query - the search result derivation flow will
-        // consume the pending target and select the index when results are computed
-        state.setPendingSearchMessageTarget(intent.messageId)
-        state.updateSearchQuery(intent.query)
-        state.showSearch()
-
-        // Clear the intent so it's not reprocessed
-        navigationState.clearIntent()
-
-        logger.debug("Processed navigation intent: session ${intent.sessionId}, message ${intent.messageId}")
+        // Start the cross-session navigation observer for this view model's lifetime.
+        searchNavigationObserver.start()
     }
 
     // --- Public Action Functions (Delegated to Use Cases) ---
@@ -399,31 +348,8 @@ class ChatViewModel(
      *         [SendMessageUseCase.execute] so the spawned-turn coordinator can observe a refusal
      *         deterministically instead of awaiting a silently-completed no-op turn.
      */
-    fun sendMessage(continueFromMessage: ChatMessage? = null): Job? {
-        // Refuse to start a new turn while one is already active. This covers regular sends,
-        // Branch & Continue, and any caller that bypasses the disabled UI controls.
-        if (isTurnActive) return null
-        // Normal-mode sends need non-blank input; the spawned-turn path always sets the input first.
-        if (continueFromMessage == null && state.inputContent.value.isBlank()) return null
-        // A session role with a resolvable model/settings profile is required for a turn to run.
-        // Returning null here lets the spawned-turn executor report a deterministic tool error.
-        if (state.currentAgentRole.value == null || state.currentModel.value == null || state.currentSettings.value == null) {
-            return null
-        }
-        val job = normalScope.launch {
-            sendMessageUC.execute(continueFromMessage = continueFromMessage)
-        }
-        sendMessageJob = job
-        state.setTurnExecutionState(TurnExecutionState.RUNNING)
-        job.invokeOnCompletion {
-            sendMessageJob = null
-            // STOPPING owns the final transition until the cancellation drain completes.
-            if (state.turnExecutionState.value != TurnExecutionState.STOPPING) {
-                state.setTurnExecutionState(TurnExecutionState.IDLE)
-            }
-        }
-        return job
-    }
+    fun sendMessage(continueFromMessage: ChatMessage? = null): Job? =
+        turnController.sendMessage(continueFromMessage)
 
     /**
      * Routes the composer action to a soft pause or hard stop according to the active turn state.
@@ -433,45 +359,7 @@ class ChatViewModel(
      * COMPACTING has nothing to drain: the compaction socket is cancelled directly.
      */
     fun handlePauseOrStop() {
-        when (state.turnExecutionState.value) {
-            TurnExecutionState.RUNNING -> {
-                state.setTurnExecutionState(TurnExecutionState.PAUSING)
-                normalScope.launch {
-                    sendMessageUC.requestPause()
-                }
-            }
-
-            TurnExecutionState.PAUSING -> {
-                state.setTurnExecutionState(TurnExecutionState.STOPPING)
-                val activeSendJob = sendMessageJob ?: run {
-                    state.setTurnExecutionState(TurnExecutionState.IDLE)
-                    return
-                }
-                if (cancellationDrainJob?.isActive == true) return
-
-                // Keep collecting the socket so terminal CANCELLED events reach the UI before closure.
-                cancellationDrainJob = normalScope.launch {
-                    sendMessageUC.requestCancellation()
-                    withTimeoutOrNull(CANCELLATION_DRAIN_TIMEOUT_MILLIS.milliseconds) {
-                        activeSendJob.join()
-                    }
-                    if (activeSendJob.isActive) {
-                        // A broken or stuck peer must not leave the send state active forever.
-                        activeSendJob.cancel()
-                    }
-                }.also { drainJob ->
-                    drainJob.invokeOnCompletion {
-                        cancellationDrainJob = null
-                        state.setTurnExecutionState(TurnExecutionState.IDLE)
-                    }
-                }
-            }
-
-            TurnExecutionState.STOPPING,
-            TurnExecutionState.IDLE -> Unit
-
-            TurnExecutionState.COMPACTING -> cancelCompaction()
-        }
+        turnController.handlePauseOrStop()
     }
 
     /**
@@ -515,12 +403,7 @@ class ChatViewModel(
      * [handlePauseOrStop], whose RUNNING branch only sends a soft Pause.
      */
     fun forceCancelSend() {
-        val activeSendJob = sendMessageJob
-        if (activeSendJob == null || !activeSendJob.isActive) return
-        normalScope.launch {
-            sendMessageUC.requestCancellation()
-        }
-        activeSendJob.cancel()
+        turnController.forceCancelSend()
     }
 
     /**
