@@ -14,8 +14,9 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
  * @property compatibleSettings Non-streaming chat-like settings profiles for the selected model.
  * @property selectedSettings The settings profile currently selected in the form, or null.
  * @property storedPreference The stored global preference, or null when no row exists yet.
- * @property enabled Whether automatic compaction is enabled in the current draft (toggle value,
- *            persisted on save; false disables temporarily while preserving the stored configuration).
+ * @property automaticEnabled Whether automatic compaction is enabled in the current draft (switch value,
+ *            persisted on save; false disables it temporarily while preserving the stored
+ *            configuration).
  * @property instruction The compaction-instruction draft text.
  * @property systemMessage The optional system-message draft text (empty means none).
  * @property summaryLabel The summary-label draft text (label prefix of the synthetic summary message;
@@ -30,7 +31,7 @@ data class ConversationCompactionTabState(
     val compatibleSettings: List<ModelSettingsDetails>,
     val selectedSettings: ModelSettingsDetails?,
     val storedPreference: ConversationCompactionPreference?,
-    val enabled: Boolean,
+    val automaticEnabled: Boolean,
     val instruction: String,
     val systemMessage: String,
     val summaryLabel: String,

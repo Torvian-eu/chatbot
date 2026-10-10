@@ -43,7 +43,7 @@ class KtorModelPresetApiClientTest {
         name: String,
         modelId: Long? = 1L,
         modelSettingsId: Long? = 2L,
-        compactionEnabled: Boolean = true,
+        automaticCompactionEnabled: Boolean = true,
         compactionThresholdTokens: Long? = null
     ) = ModelPresetDto(
         id = id,
@@ -52,7 +52,7 @@ class KtorModelPresetApiClientTest {
         description = "",
         modelId = modelId,
         modelSettingsId = modelSettingsId,
-        compactionEnabled = compactionEnabled,
+        automaticCompactionEnabled = automaticCompactionEnabled,
         compactionThresholdTokens = compactionThresholdTokens,
         createdAt = Instant.fromEpochSeconds(id),
         updatedAt = Instant.fromEpochSeconds(id)
@@ -205,16 +205,16 @@ class KtorModelPresetApiClientTest {
             name = "primary",
             modelId = 1L,
             modelSettingsId = 2L,
-            compactionEnabled = false,
+            automaticCompactionEnabled = false,
             compactionThresholdTokens = 50_000L
         )
-        val created = mockPreset(10, "primary", compactionEnabled = false, compactionThresholdTokens = 50_000L)
+        val created = mockPreset(10, "primary", automaticCompactionEnabled = false, compactionThresholdTokens = 50_000L)
         val mockEngine = MockEngine { mockRequest ->
             val body = mockRequest.body.toByteArray().decodeToString()
             // Non-default values are always encoded, so the server receives the user's intent.
             assertTrue(
-                body.contains("\"compactionEnabled\": false"),
-                "Request body should carry compactionEnabled: $body"
+                body.contains("\"automaticCompactionEnabled\": false"),
+                "Request body should carry automaticCompactionEnabled: $body"
             )
             assertTrue(
                 body.contains("\"compactionThresholdTokens\": 50000"),
@@ -229,7 +229,7 @@ class KtorModelPresetApiClientTest {
         val apiClient = createTestClient(mockEngine)
         when (val result = apiClient.createPreset(request)) {
             is Either.Right -> {
-                assertEquals(false, result.value.compactionEnabled)
+                assertEquals(false, result.value.automaticCompactionEnabled)
                 assertEquals(50_000L, result.value.compactionThresholdTokens)
             }
 

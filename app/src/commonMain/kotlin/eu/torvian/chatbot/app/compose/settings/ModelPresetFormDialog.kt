@@ -183,27 +183,29 @@ fun ModelPresetFormDialog(
                             )
                         }
 
-                        // Conversation compaction: the preset may only restrain compaction (its flag is
-                        // ANDed with the user preference) and override the threshold; the auxiliary
-                        // summarization model stays a user preference.
+                        // Automatic compaction: the preset may only restrain it (its flag is ANDed with
+                        // the user preference) and override the threshold; the auxiliary summarization
+                        // model stays a user preference, and user-requested compaction is unaffected.
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Conversation compaction", style = MaterialTheme.typography.titleSmall)
+                                    Text("Automatic compaction", style = MaterialTheme.typography.titleSmall)
                                     Text(
-                                        text = "Disabling compaction here stops this preset's sessions from " +
-                                                "compacting, even when your compaction preference is enabled.",
+                                        text = "Disabling automatic compaction here stops this preset's sessions " +
+                                                "from summarizing at the threshold, even when your compaction " +
+                                                "preference is enabled. Requesting compaction manually from the chat " +
+                                                "top bar always stays possible.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                                 Switch(
-                                    checked = formState.compactionEnabled,
+                                    checked = formState.automaticCompactionEnabled,
                                     onCheckedChange = { checked ->
-                                        onFormUpdate { it.copy(compactionEnabled = checked) }
+                                        onFormUpdate { it.copy(automaticCompactionEnabled = checked) }
                                     }
                                 )
                             }
@@ -215,7 +217,7 @@ fun ModelPresetFormDialog(
                                 label = "Compaction token threshold",
                                 singleLine = true,
                                 keyboardType = KeyboardType.Number,
-                                enabled = formState.compactionEnabled
+                                enabled = formState.automaticCompactionEnabled
                             )
                             Text(
                                 text = "Leave empty to use the user preference threshold (100,000 tokens by " +

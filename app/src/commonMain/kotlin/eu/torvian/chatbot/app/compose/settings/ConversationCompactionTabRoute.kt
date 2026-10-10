@@ -46,7 +46,7 @@ fun ConversationCompactionTabRoute(
     val compatibleSettings by viewModel.compatibleSettings.collectAsState()
     val selectedSettingsId by viewModel.selectedSettingsId.collectAsState()
     val storedPreference by viewModel.storedPreference.collectAsState()
-    val draftEnabled by viewModel.draftEnabled.collectAsState()
+    val draftAutomaticEnabled by viewModel.draftAutomaticEnabled.collectAsState()
     val instruction by viewModel.instruction.collectAsState()
     val systemMessage by viewModel.systemMessage.collectAsState()
     val summaryLabel by viewModel.summaryLabel.collectAsState()
@@ -63,7 +63,7 @@ fun ConversationCompactionTabRoute(
         compatibleSettings = compatibleSettings,
         selectedSettings = selectedSettings,
         storedPreference = storedPreference,
-        enabled = draftEnabled,
+        automaticEnabled = draftAutomaticEnabled,
         instruction = instruction,
         systemMessage = systemMessage,
         summaryLabel = summaryLabel,
@@ -76,7 +76,7 @@ fun ConversationCompactionTabRoute(
         override fun onLoad() = viewModel.load()
         override fun onSelectModel(modelId: Long?) = viewModel.selectModel(modelId)
         override fun onSelectSettings(settingsId: Long?) = viewModel.selectSettings(settingsId)
-        override fun onToggleEnabled(enable: Boolean) = viewModel.setEnabled(enable)
+        override fun onToggleAutomaticEnabled(enable: Boolean) = viewModel.setAutomaticEnabled(enable)
         override fun onUpdateInstruction(text: String) = viewModel.updateInstruction(text)
         override fun onUpdateSystemMessage(text: String) = viewModel.updateSystemMessage(text)
         override fun onUpdateSummaryLabel(text: String) = viewModel.updateSummaryLabel(text)

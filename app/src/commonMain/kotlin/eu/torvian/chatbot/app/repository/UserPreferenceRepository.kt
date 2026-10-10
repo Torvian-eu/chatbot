@@ -122,12 +122,15 @@ interface UserPreferenceRepository {
      * The preference is encoded to its canonical JSON form and sent via
      * `PUT /api/v1/me/preferences/conversation_compaction` with [PreferenceScope.GLOBAL]. The server
      * re-validates and stores its own canonical encoding; the local [compactionPreference] state is
-     * refreshed from the server afterwards. The [ConversationCompactionPreference.enabled] flag is
-     * persisted with the row: writing `enabled = false` disables automatic compaction at runtime while
-     * preserving the configuration for a later re-enable (a temporary disable that does not delete).
+     * refreshed from the server afterwards. The stored
+     * [ConversationCompactionPreference.automaticCompactionEnabled] flag governs **automatic**
+     * (threshold-triggered) compaction only: the server compacts at the threshold only while that flag
+     * AND the session preset's own flag are enabled, and storing the flag as `false` keeps the rest of
+     * the configuration for a later re-enable. Compaction requested from the chat top bar stays
+     * available either way, as long as the stored configuration is complete.
      *
      * @param preference The validated configuration to store (model/settings ids, instruction,
-     *            threshold, enabled flag).
+     *            threshold, automatic-compaction flag).
      * @return [Either.Right] with [Unit] on success, or [Either.Left] with a [RepositoryError] on failure.
      */
     suspend fun setCompactionPreference(
@@ -135,12 +138,13 @@ interface UserPreferenceRepository {
     ): Either<RepositoryError, Unit>
 
     /**
-     * Disables automatic conversation compaction by deleting the global preference row.
+     * Deletes the global conversation-compaction configuration.
      *
      * Sends `DELETE /api/v1/me/preferences/conversation_compaction`; after deletion the [compactionPreference]
-     * state becomes `null`. The stored configuration is not preserved — the
-     * user re-enters it when re-enabling, matching the server contract where an absent row means
-     * compaction is disabled.
+     * state becomes `null`. The stored configuration is not preserved — the user re-enters it when
+     * re-enabling. The server contract treats an absent row as an unusable configuration, so a
+     * compaction requested from the chat top bar fails with a typed error until a new configuration is
+     * stored.
      *
      * @return [Either.Right] with [Unit] on success, or [Either.Left] with a [RepositoryError] on failure.
      */
