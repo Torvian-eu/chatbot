@@ -27,6 +27,10 @@ import kotlinx.serialization.Serializable
  * @property cachedInputTokens Sum of the reported cached input tokens, or `null` when no assistant
  *            message of the branch reports that counter. A message that reports none is skipped instead
  *            of contributing zero.
+ * @property cost Sum of the charges the assistant messages of the branch reported, in the providers' own
+ *            currencies, or `null` when no message of the branch reports a charge. A message that
+ *            reports none is skipped instead of contributing zero, while a reported zero contributes a zero. The
+ *            currencies behind the sum are not recorded, so a sum that mixes them adds unlike amounts.
  * @property responseDuration Distribution of the measured assistant response durations.
  * @property toolCallDuration Distribution of the measured tool call durations.
  * @property toolCallSuccessRate Fraction of the branch's tool calls whose status is `SUCCESS`, or `null`
@@ -50,6 +54,7 @@ data class ThreadStats(
     val outputTokens: Long?,
     val reasoningTokens: Long?,
     val cachedInputTokens: Long?,
+    val cost: Double? = null,
     val responseDuration: DurationStats,
     val toolCallDuration: DurationStats,
     val toolCallSuccessRate: Double?,

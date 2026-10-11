@@ -11,7 +11,7 @@ import kotlin.time.Instant
  * Verifies the wire contract of the persisted usage statistics of an assistant message.
  *
  * The field is additive and nullable, so a payload produced before it existed must still decode as "no usage",
- * and an optional counter the provider omitted must survive a round trip as absent rather than as zero.
+ * and an optional value the provider omitted must survive a round trip as absent rather than as zero.
  */
 class UsageStatsSerializationTest {
 
@@ -62,6 +62,69 @@ class UsageStatsSerializationTest {
         assertNull(usage.reasoningTokens)
         assertNull(usage.cachedTokens)
         assertNull(usage.cacheWriteTokens)
+        assertNull(usage.cost)
+    }
+
+    @Test
+    fun `a reported cost round-trips last in the payload`() {
+        val usage = UsageStats(
+            inputTokens = 120,
+            outputTokens = 30,
+            totalTokens = 150,
+            cost = 0.95
+        )
+
+        val wire = json.encodeToString(UsageStats.serializer(), usage)
+
+        assertTrue(wire.endsWith("\"cost\":0.95}"), "Cost is the trailing key: $wire")
+        assertEquals(usage, json.decodeFromString(UsageStats.serializer(), wire))
+    }
+
+    @Test
+    fun `a sub-cent cost round-trips exactly as the provider stated it`() {
+        val usage = UsageStats(inputTokens = 120, outputTokens = 30, totalTokens = 150, cost = 0.0002466)
+
+        val wire = json.encodeToString(UsageStats.serializer(), usage)
+
+        val decoded = json.decodeFromString(UsageStats.serializer(), wire)
+        assertEquals(
+            0.0002466,
+            decoded.cost,
+            "The charge must survive storage without being rounded or rescaled: $wire"
+        )
+    }
+
+    @Test
+    fun `a stored payload without the cost key decodes as no cost`() {
+        val payload = """
+            {
+              "inputTokens": 120,
+              "outputTokens": 30,
+              "totalTokens": 150,
+              "reasoningTokens": 12
+            }
+        """.trimIndent()
+
+        val decoded = json.decodeFromString(UsageStats.serializer(), payload)
+
+        assertEquals(120, decoded.inputTokens)
+        assertEquals(12, decoded.reasoningTokens)
+        assertNull(decoded.cost, "A payload written before cost existed carries no charge")
+    }
+
+    @Test
+    fun `an assistant payload with a cost round-trips it`() {
+        val usage = UsageStats(
+            inputTokens = 120,
+            outputTokens = 30,
+            totalTokens = 150,
+            cost = 0.0002466
+        )
+        val message = assistantWithoutUsage.copy(usageStats = usage)
+
+        val wire = json.encodeToString(ChatMessage.AssistantMessage.serializer(), message)
+
+        assertEquals(0.0002466, json.decodeFromString(ChatMessage.AssistantMessage.serializer(), wire).usageStats?.cost)
     }
 
     @Test

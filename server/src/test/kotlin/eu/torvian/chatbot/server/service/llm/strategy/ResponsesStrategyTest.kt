@@ -1462,6 +1462,90 @@ class ResponsesStrategyTest {
     }
 
     @Test
+    @DisplayName("processSuccessResponse should store a reported cost exactly as the payload stated it")
+    fun processSuccessResponse_reportedCostIsStoredAsStated() {
+        val responseBody = """
+            {
+              "id": "resp_cost",
+              "status": "completed",
+              "model": "some/model",
+              "output": [ { "type": "message", "content": [ { "type": "output_text", "text": "Hi" } ] } ],
+              "usage": { "input_tokens": 10, "output_tokens": 5, "total_tokens": 15, "cost": 0.0002466 }
+            }
+        """.trimIndent()
+
+        val completion = assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull())
+
+        val usage = assertNotNull(completion.usage)
+        assertEquals(0.0002466, usage.cost, "The charge must be recorded without rounding or rescaling")
+        assertEquals(10, usage.inputTokens, "The counters are unaffected by the charge")
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should report no cost when the payload states none")
+    fun processSuccessResponse_withoutCostReportsNoCost() {
+        val responseBody = """
+            {
+              "id": "resp_no_cost",
+              "status": "completed",
+              "model": "gpt-5.4",
+              "output": [ { "type": "message", "content": [ { "type": "output_text", "text": "Hi" } ] } ],
+              "usage": { "input_tokens": 10, "output_tokens": 5, "total_tokens": 15 }
+            }
+        """.trimIndent()
+
+        val usage = assertNotNull(assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull()).usage)
+
+        assertNull(usage.cost, "A charge the payload never stated must stay absent")
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should keep a usage object that reports only a cost")
+    fun processSuccessResponse_costOnlyUsageIsRetained() {
+        val responseBody = """
+            {
+              "id": "resp_cost_only",
+              "status": "completed",
+              "model": "some/model",
+              "output": [ { "type": "message", "content": [ { "type": "output_text", "text": "Hi" } ] } ],
+              "usage": { "cost": 0.95 }
+            }
+        """.trimIndent()
+
+        val usage = assertNotNull(
+            assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull()).usage,
+            "A reported charge is usage even without a counter"
+        )
+
+        assertEquals(0.95, usage.cost)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should treat an unusable cost as no cost")
+    fun processSuccessResponse_unusableCostReportsNoCost() {
+        // A provider that changes the shape of its extension, and a nonsensical value, must not fail the mapping.
+        val unusableCosts = listOf("{\"amount\": 1}", "[0.5]", "null", "-0.5", "\"not-a-number\"")
+
+        unusableCosts.forEach { rawCost ->
+            val responseBody = """
+                {
+                  "id": "resp_bad_cost",
+                  "status": "completed",
+                  "model": "some/model",
+                  "output": [ { "type": "message", "content": [ { "type": "output_text", "text": "Hi" } ] } ],
+                  "usage": { "input_tokens": 10, "output_tokens": 5, "total_tokens": 15, "cost": $rawCost }
+                }
+            """.trimIndent()
+
+            val completion = assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull())
+
+            val usage = assertNotNull(completion.usage)
+            assertNull(usage.cost, "An unusable cost must read as no cost: $rawCost")
+            assertEquals(15, usage.totalTokens, "The counters still map: $rawCost")
+        }
+    }
+
+    @Test
     @DisplayName("processStreamingResponse should emit no final usage when the payload carries none")
     fun processStreamingResponse_completedWithoutUsage_emitsNoFinalUsage() {
         val events = flowOf(
@@ -1501,5 +1585,24 @@ class ResponsesStrategyTest {
         assertEquals(3, usage.reasoningTokens)
         assertEquals(2, usage.cachedTokens)
         assertEquals(1, usage.cacheWriteTokens)
+        assertNull(usage.cost, "A payload that states no charge must not gain one")
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should carry the reported cost on the final usage")
+    fun processStreamingResponse_reportedCostIsCarriedOnFinalUsage() {
+        val events = flowOf(
+            """data: {"type":"response.output_text.delta","delta":"Hi"}""",
+            """data: {"type":"response.completed","response":{"id":"resp_9","status":"completed","usage":{"input_tokens":5,"output_tokens":7,"total_tokens":12,"cost":0.0002466}}}""",
+            """data: [DONE]"""
+        )
+
+        val chunks = streamingChunks(events)
+        val usage = assertIs<LLMStreamChunk.FinalUsageStats>(
+            chunks.first { it is LLMStreamChunk.FinalUsageStats }
+        ).usage
+
+        assertEquals(0.0002466, usage.cost, "The charge must be recorded without rounding or rescaling")
+        assertEquals(12, usage.totalTokens, "The counters are unaffected by the charge")
     }
 }

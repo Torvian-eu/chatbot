@@ -342,7 +342,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                     index = 0
                 )
             ),
-            usage = UsageStats(1, 1, 2),
+            usage = UsageStats(1, 1, 2, cost = 0.0002466),
             providerFailure = declaredEnding
         )
         coEvery {
@@ -360,8 +360,8 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                 agentRoleId = testRoleId,
                 reasoningItems = null,
                 completion = expectedFailure,
-                // The provider declared the generation uncompleted, so its counters are not recorded even
-                // though the server also had to cut the text at the cap.
+                // The provider declared the generation uncompleted, so neither its counters nor the charge they
+                // carried are recorded, even though the server also had to cut the text at the cap.
                 usageStats = null,
                 responseDurationMs = any()
             )

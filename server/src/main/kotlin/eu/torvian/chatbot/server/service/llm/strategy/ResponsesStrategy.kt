@@ -363,19 +363,21 @@ class ResponsesStrategy(
      * A counter the provider omitted is `0` and a missing total falls back to the sum of input and output, but an
      * object that carries no counter at all — and a missing or JSON-`null` object, which providers send for
      * generations they did not complete — means that no usage was reported, which stays `null` instead of becoming
-     * a zero-filled value. The three optional counters stay `null` when the provider omits them, so "no reasoning
+     * a zero-filled value. A reported charge alone is usage too, so it keeps the object alive even when every
+     * counter is missing. The three optional counters stay `null` when the provider omits them, so "no reasoning
      * tokens reported" is never presented as zero. Cache counters live in `input_tokens_details`, which providers
      * that do not support prompt caching omit entirely.
      *
      * @param usage `usage` object of the payload, or `null` when it carried none.
-     * @return The reported usage, or `null` when no counter was reported.
+     * @return The reported usage, or `null` when neither a counter nor a charge was reported.
      */
     private fun responsesUsageStats(usage: JsonObject?): UsageStats? {
         if (usage == null) return null
         val inputTokens = usage["input_tokens"]?.jsonPrimitive?.intOrNull
         val outputTokens = usage["output_tokens"]?.jsonPrimitive?.intOrNull
         val totalTokens = usage["total_tokens"]?.jsonPrimitive?.intOrNull
-        if (inputTokens == null && outputTokens == null && totalTokens == null) return null
+        val cost = reportedCost(usage["cost"])
+        if (inputTokens == null && outputTokens == null && totalTokens == null && cost == null) return null
         val input = inputTokens ?: 0
         val output = outputTokens ?: 0
         val inputDetails = usage["input_tokens_details"]?.jsonObject
@@ -386,7 +388,8 @@ class ResponsesStrategy(
             reasoningTokens = usage["output_tokens_details"]?.jsonObject
                 ?.get("reasoning_tokens")?.jsonPrimitive?.intOrNull,
             cachedTokens = inputDetails?.get("cached_tokens")?.jsonPrimitive?.intOrNull,
-            cacheWriteTokens = inputDetails?.get("cache_write_tokens")?.jsonPrimitive?.intOrNull
+            cacheWriteTokens = inputDetails?.get("cache_write_tokens")?.jsonPrimitive?.intOrNull,
+            cost = cost
         )
     }
 

@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
@@ -140,6 +141,7 @@ class ThreadStatsCalculatorTest {
         assertNull(stats.outputTokens)
         assertNull(stats.reasoningTokens)
         assertNull(stats.cachedInputTokens)
+        assertNull(stats.cost)
         assertNull(stats.toolCallDuration.totalMs)
         assertTrue(stats.responseDuration.outliers.isEmpty())
         assertTrue(stats.toolCallDuration.outliers.isEmpty())
@@ -286,6 +288,82 @@ class ThreadStatsCalculatorTest {
         assertEquals(70L, stats.outputTokens)
         assertNull(stats.reasoningTokens)
         assertNull(stats.cachedInputTokens)
+    }
+
+    @Test
+    fun `cost total sums the reported charges and skips messages without one`() {
+        val messages = listOf(
+            userMessage(1L, null),
+            assistantMessage(
+                id = 2L,
+                parentId = 1L,
+                usageStats = UsageStats(
+                    inputTokens = 100,
+                    outputTokens = 10,
+                    totalTokens = 110,
+                    cost = 0.0002466
+                )
+            ),
+            // Reports counters but no charge: contributes nothing to the cost total.
+            assistantMessage(
+                id = 3L,
+                parentId = 2L,
+                usageStats = UsageStats(inputTokens = 200, outputTokens = 20, totalTokens = 220)
+            ),
+            assistantMessage(
+                id = 4L,
+                parentId = 3L,
+                usageStats = UsageStats(
+                    inputTokens = 300,
+                    outputTokens = 30,
+                    totalTokens = 330,
+                    cost = 0.95
+                )
+            )
+        )
+
+        val stats = ThreadStatsCalculator.compute(messages, currentLeafMessageId = 4L, sessionToolCalls = emptyList())
+
+        assertEquals(0.9502466, assertNotNull(stats.cost), 1e-12)
+    }
+
+    @Test
+    fun `cost total is null when no message reports a charge`() {
+        val messages = listOf(
+            userMessage(1L, null),
+            assistantMessage(
+                id = 2L,
+                parentId = 1L,
+                usageStats = UsageStats(inputTokens = 100, outputTokens = 10, totalTokens = 110)
+            ),
+            assistantMessage(id = 3L, parentId = 2L)
+        )
+
+        val stats = ThreadStatsCalculator.compute(messages, currentLeafMessageId = 3L, sessionToolCalls = emptyList())
+
+        assertNull(stats.cost, "A branch that reports no charge has no total, not a zero total")
+        assertEquals(100L, stats.inputTokens, "The token totals are unaffected")
+    }
+
+    @Test
+    fun `a charge reported as zero sums to zero`() {
+        val messages = listOf(
+            userMessage(1L, null),
+            assistantMessage(
+                id = 2L,
+                parentId = 1L,
+                usageStats = UsageStats(
+                    inputTokens = 100,
+                    outputTokens = 10,
+                    totalTokens = 110,
+                    cost = 0.0
+                )
+            )
+        )
+
+        val stats = ThreadStatsCalculator.compute(messages, currentLeafMessageId = 2L, sessionToolCalls = emptyList())
+
+        assertEquals(0.0, stats.cost, "A reported zero is measured data, not an absent charge")
     }
 
     @Test

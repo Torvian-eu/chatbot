@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.llm.strategy
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -71,12 +72,17 @@ object OpenAiApiModels {
          *            counter
          * @property total_tokens Total tokens used (prompt + completion), or `null` when the provider omitted the
          *            counter
+         * @property cost Total amount the provider charged for this request, in the provider's own currency, or
+         *            `null` when it reports no charge. This is a provider extension that the Chat Completions
+         *            dialect itself does not define, so it stays an untyped element: a value of an unexpected type
+         *            reads as "no cost reported" instead of failing the decode of the whole response.
          */
         @Serializable
         data class Usage(
             val prompt_tokens: Int? = null,
             val completion_tokens: Int? = null,
-            val total_tokens: Int? = null
+            val total_tokens: Int? = null,
+            val cost: JsonElement? = null
         )
     }
 
@@ -223,12 +229,17 @@ object OpenAiApiModels {
          *            counter
          * @property total_tokens Total tokens used (prompt + completion), or `null` when the provider omitted the
          *            counter
+         * @property cost Total amount the provider charged for this request, in the provider's own currency, or
+         *            `null` when it reports no charge. This is a provider extension that the Chat Completions
+         *            dialect itself does not define, so it stays an untyped element: a value of an unexpected type
+         *            reads as "no cost reported" instead of failing the decode of the whole chunk.
          */
         @Serializable
         data class StreamUsage(
             val completion_tokens: Int? = null,
             val prompt_tokens: Int? = null,
-            val total_tokens: Int? = null
+            val total_tokens: Int? = null,
+            val cost: JsonElement? = null
         )
 
         /**

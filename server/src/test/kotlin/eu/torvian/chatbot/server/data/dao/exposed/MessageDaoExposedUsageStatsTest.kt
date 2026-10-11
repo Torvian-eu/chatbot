@@ -51,7 +51,8 @@ class MessageDaoExposedUsageStatsTest {
         totalTokens = 150,
         reasoningTokens = 12,
         cachedTokens = 8,
-        cacheWriteTokens = 4
+        cacheWriteTokens = 4,
+        cost = 0.0002466
     )
 
     @BeforeEach
@@ -153,6 +154,21 @@ class MessageDaoExposedUsageStatsTest {
         storeRawUsageJson(inserted.id, "{\"inputTokens\":\"not-a-number\"}")
 
         assertNull(readBack(inserted.id).usageStats, "A corrupt value must degrade to \"no usage\"")
+    }
+
+    @Test
+    fun `usage written before cost existed keeps its counters and reports no cost`() = runTest {
+        val inserted = insertAssistantMessageWithUsage(fullUsage)
+        storeRawUsageJson(
+            inserted.id,
+            "{\"inputTokens\":120,\"outputTokens\":30,\"totalTokens\":150,\"cachedTokens\":8}"
+        )
+
+        val stored = assertNotNull(readBack(inserted.id).usageStats)
+
+        assertEquals(150, stored.totalTokens, "The counters of the older payload must still read")
+        assertEquals(8, stored.cachedTokens)
+        assertNull(stored.cost, "A payload without the charge key carries no charge")
     }
 
     @Test

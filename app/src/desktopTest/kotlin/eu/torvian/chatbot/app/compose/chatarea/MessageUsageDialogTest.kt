@@ -8,6 +8,8 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_cache_write_tokens_label
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_cached_tokens_label
+import eu.torvian.chatbot.app.generated.resources.usage_dialog_cost_label
+import eu.torvian.chatbot.app.generated.resources.usage_dialog_cost_unavailable
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_input_tokens_label
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_model_label
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_output_tokens_label
@@ -30,8 +32,8 @@ import kotlin.time.Instant
  * Verifies what the message usage dialog shows for a message with reported usage, without usage, and with
  * unresolvable model/settings names.
  *
- * The counters are asserted through their localized labels and the exact reported values, so a zero-filled value
- * or a counter the provider never reported would fail these tests.
+ * The counters and the charge are asserted through their localized labels and the exact reported values, so a
+ * zero-filled value or a value the provider never reported would fail these tests.
  */
 @OptIn(ExperimentalTestApi::class)
 class MessageUsageDialogTest {
@@ -44,6 +46,8 @@ class MessageUsageDialogTest {
     private val title: String = runBlocking { getString(Res.string.usage_dialog_title) }
     private val usageSectionTitle: String = runBlocking { getString(Res.string.usage_dialog_usage_section_title) }
     private val usageUnavailable: String = runBlocking { getString(Res.string.usage_dialog_usage_unavailable) }
+    private val costLabel: String = runBlocking { getString(Res.string.usage_dialog_cost_label) }
+    private val costUnavailable: String = runBlocking { getString(Res.string.usage_dialog_cost_unavailable) }
 
     /**
      * Builds an assistant message fixture carrying the given usage.
@@ -157,6 +161,67 @@ class MessageUsageDialogTest {
         onNodeWithText(usageUnavailable).assertIsDisplayed()
         onNodeWithText("${getString(Res.string.usage_dialog_input_tokens_label)}:").assertDoesNotExist()
         onNodeWithText("${getString(Res.string.usage_dialog_total_tokens_label)}:").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a message with a reported charge shows it as the formatted dollar amount`() = runComposeUiTest {
+        renderDialog(
+            message = assistantMessage(
+                UsageStats(
+                    inputTokens = 111,
+                    outputTokens = 222,
+                    totalTokens = 333,
+                    cost = 0.95
+                )
+            ),
+            modelDisplayName = "Test Model",
+            settingsDisplayName = "Default profile"
+        )
+
+        onNodeWithText("$costLabel:").assertIsDisplayed()
+        onNodeWithText(formatUsdCost(0.95)).assertIsDisplayed()
+        onNodeWithText(costUnavailable).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a charge the provider reported as zero is shown as a zero amount`() = runComposeUiTest {
+        renderDialog(
+            message = assistantMessage(
+                UsageStats(inputTokens = 111, outputTokens = 222, totalTokens = 333, cost = 0.0)
+            ),
+            modelDisplayName = "Test Model",
+            settingsDisplayName = "Default profile"
+        )
+
+        onNodeWithText("$costLabel:").assertIsDisplayed()
+        onNodeWithText("$0.00").assertIsDisplayed()
+        onNodeWithText(costUnavailable).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a message without a reported charge shows the explicit cost statement and no amount`() = runComposeUiTest {
+        renderDialog(
+            message = assistantMessage(UsageStats(inputTokens = 111, outputTokens = 222, totalTokens = 333)),
+            modelDisplayName = "Test Model",
+            settingsDisplayName = "Default profile"
+        )
+
+        onNodeWithText("$costLabel:").assertDoesNotExist()
+        onNodeWithText(costUnavailable).assertIsDisplayed()
+        onNodeWithText("$0.00").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a message without usage shows the cost statement next to the usage one`() = runComposeUiTest {
+        renderDialog(
+            message = assistantMessage(usageStats = null),
+            modelDisplayName = "Test Model",
+            settingsDisplayName = "Default profile"
+        )
+
+        onNodeWithText(usageUnavailable).assertIsDisplayed()
+        onNodeWithText(costUnavailable).assertIsDisplayed()
+        onNodeWithText("$costLabel:").assertDoesNotExist()
     }
 
     @Test

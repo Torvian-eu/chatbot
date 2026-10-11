@@ -12,6 +12,8 @@ import kotlin.test.assertTrue
  */
 class ThreadStatsSerializationTest {
 
+    // Default encoder settings: a property that equals its default is omitted, so a cost-free payload carries no
+    // "cost" key at all instead of an explicit null.
     private val json = Json
 
     private val populated = ThreadStats(
@@ -181,5 +183,53 @@ class ThreadStatsSerializationTest {
             listOf(9L, 4L, 2L),
             json.decodeFromString(ThreadStats.serializer(), wire).responseDuration.outliers
         )
+    }
+
+    @Test
+    fun `a reported cost total round-trips`() {
+        val costed = populated.copy(cost = 0.95)
+
+        val wire = json.encodeToString(ThreadStats.serializer(), costed)
+
+        assertTrue(wire.contains("\"cost\":0.95"))
+        assertEquals(0.95, json.decodeFromString(ThreadStats.serializer(), wire).cost)
+    }
+
+    @Test
+    fun `an unreported cost total stays absent from the payload`() {
+        val wire = json.encodeToString(ThreadStats.serializer(), populated)
+
+        assertTrue(
+            !wire.contains("\"cost\""),
+            "An unreported charge must leave the payload of a cost-free thread unchanged: $wire"
+        )
+    }
+
+    @Test
+    fun `a payload written before cost existed decodes as no cost total`() {
+        val payload = """
+            {
+              "totalMessages": 1,
+              "userMessages": 1,
+              "assistantMessages": 0,
+              "toolCalls": 0,
+              "reasoningItems": 0,
+              "inputTokens": 100,
+              "outputTokens": 10,
+              "reasoningTokens": null,
+              "cachedInputTokens": null,
+              "responseDuration": {"totalMs": 0, "averageMs": null, "standardDeviationMs": null, "outliers": []},
+              "toolCallDuration": {"totalMs": null, "averageMs": null, "standardDeviationMs": null, "outliers": []},
+              "toolCallSuccessRate": null,
+              "assistantMessageSuccessRate": null,
+              "averageOutputTokensPerSecond": null,
+              "inputCacheHitRate": null
+            }
+        """.trimIndent()
+
+        val decoded = json.decodeFromString(ThreadStats.serializer(), payload)
+
+        assertEquals(100L, decoded.inputTokens, "The totals of the older payload must still read")
+        assertNull(decoded.cost, "A payload without the charge key carries no charge")
     }
 }
