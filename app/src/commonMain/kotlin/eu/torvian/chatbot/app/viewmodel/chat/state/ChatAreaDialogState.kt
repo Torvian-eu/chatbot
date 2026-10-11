@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.api.core.ThreadStats
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
@@ -145,6 +146,22 @@ sealed class ChatAreaDialogState {
     data class ThreadStatsDetails(
         val stats: StateFlow<DataState<RepositoryError, ThreadStats>>,
         val onReload: () -> Unit,
+        val onDismiss: () -> Unit
+    ) : ChatAreaDialogState()
+
+    /**
+     * State for the raw LLM request viewer dialog.
+     *
+     * The flow is held by reference, not copied, so the dialog renders the latest capture of the active
+     * session even when a new one arrives while it stays open. A null value means no request was captured yet.
+     *
+     * @property requestFlow Reactive state of the latest captured provider request.
+     * @property onCopy Action to copy the displayed request to the clipboard.
+     * @property onDismiss Action to close the dialog.
+     */
+    data class RawLlmRequest(
+        val requestFlow: StateFlow<RawLlmRequestPayload?>,
+        val onCopy: () -> Unit,
         val onDismiss: () -> Unit
     ) : ChatAreaDialogState()
 }

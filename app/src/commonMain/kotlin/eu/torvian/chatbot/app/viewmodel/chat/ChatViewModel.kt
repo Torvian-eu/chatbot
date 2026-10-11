@@ -13,6 +13,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
@@ -241,6 +242,11 @@ class ChatViewModel(
      * The current dialog state for the chat area (e.g., delete confirmation).
      */
     val dialogState: StateFlow<ChatAreaDialogState> = state.dialogState
+
+    /**
+     * Latest provider request captured for the active session, or `null` when no assistant step has run yet.
+     */
+    val rawLlmRequest: StateFlow<RawLlmRequestPayload?> = state.rawLlmRequest
 
     /**
      * File references attached to the current message being composed.
@@ -744,6 +750,31 @@ class ChatViewModel(
      */
     fun showThreadStats() {
         showThreadStatsUC.show()
+    }
+
+    /**
+     * Opens the read-only viewer of the latest provider request captured for the active session.
+     *
+     * The dialog binds the state's flow by reference, so it keeps showing the newest capture while it stays
+     * open, and the copy action reads the same value at click time.
+     */
+    fun showRawLlmRequest() {
+        state.setDialogState(
+            ChatAreaDialogState.RawLlmRequest(
+                requestFlow = state.rawLlmRequest,
+                onCopy = { copyRawLlmRequestToClipboard() },
+                onDismiss = { state.cancelDialog() }
+            )
+        )
+    }
+
+    /**
+     * Copies the currently displayed raw provider request to the system clipboard.
+     */
+    fun copyRawLlmRequestToClipboard() {
+        normalScope.launch {
+            copyToClipboardUC.copyRawLlmRequest()
+        }
     }
 
     /**

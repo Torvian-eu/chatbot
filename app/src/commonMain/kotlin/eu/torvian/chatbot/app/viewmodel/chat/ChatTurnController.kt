@@ -67,6 +67,9 @@ class ChatTurnController(
         if (state.currentAgentRole.value == null || state.currentModel.value == null || state.currentSettings.value == null) {
             return null
         }
+        // The accepted send starts a new turn, so a capture of an earlier turn must not stay visible.
+        // The clear sits after the guards so a refused send keeps the previous capture.
+        state.setRawLlmRequest(null)
         val job = scope.launch {
             sendMessageUC.execute(continueFromMessage = continueFromMessage)
         }

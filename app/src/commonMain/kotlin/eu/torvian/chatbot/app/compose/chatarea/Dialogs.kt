@@ -85,6 +85,14 @@ fun Dialogs(dialogState: ChatAreaDialogState) {
             )
         }
 
+        is ChatAreaDialogState.RawLlmRequest -> {
+            RawLlmRequestDialog(
+                requestFlow = dialogState.requestFlow,
+                onCopy = dialogState.onCopy,
+                onDismiss = dialogState.onDismiss
+            )
+        }
+
         ChatAreaDialogState.None -> {
             // No dialog
         }
