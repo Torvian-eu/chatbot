@@ -107,6 +107,22 @@ internal class StreamingTurnCollector(
                                     // Terminal state delivered live, so there is nothing left to settle.
                                     unfinalizedAssistantMessageId = null
                                     turnTracking.lastTerminalMessage = chatUpdate.assistantMessage
+                                    // A finished message can no longer be writing a call.
+                                    state.forgetToolCallDeltas(setOf(chatUpdate.assistantMessage.id))
+                                }
+
+                                is ChatStreamEvent.ToolCallDelta -> {
+                                    // The model is still writing one of this message's calls. The delta index is
+                                    // ignored: a message shows a single indicator, not one per call.
+                                    state.noteToolCallDelta(chatUpdate.messageId)
+                                }
+
+                                is ChatStreamEvent.ToolCallsReceived -> {
+                                    // The calls are complete and displayable as badges now, so their construction
+                                    // label must not outlive them.
+                                    state.forgetToolCallDeltas(
+                                        chatUpdate.toolCalls.mapTo(mutableSetOf()) { it.messageId }
+                                    )
                                 }
 
                                 is ChatStreamEvent.UserMessageSaved -> {
@@ -135,6 +151,9 @@ internal class StreamingTurnCollector(
 
                                 is ChatStreamEvent.ErrorOccurred -> {
                                     turnTracking.turnEndedInError = true
+                                    // The stream may continue after a non-fatal error, so the label must not rely
+                                    // on the turn ending to disappear.
+                                    state.forgetAllToolCallDeltas()
                                     notificationService.apiError(
                                         error = chatUpdate.error,
                                         shortMessageRes = Res.string.error_sending_message_short

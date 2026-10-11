@@ -119,6 +119,7 @@ fun ChatScreen(
     val chatAssistantResponseTimer by chatViewModel.assistantResponseTimer.collectAsState()
     val chatDialogState by chatViewModel.dialogState.collectAsState()
     val toolCallsForCurrentSession by chatViewModel.toolCallsForCurrentSession.collectAsState()
+    val lastToolCallDeltaAt by chatViewModel.lastToolCallDeltaAt.collectAsState()
     val pendingFileReferences by chatViewModel.pendingFileReferences.collectAsState()
 
     // --- Agent-role quick management (add/edit dialogs hosted on the chat screen) ---
@@ -269,7 +270,8 @@ fun ChatScreen(
         chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
         chatEditingFileReferences, chatEditingBasePathOverride, chatDisplayedMessages, chatCollapsedMessageIds,
         chatExpandedReasoningMessageIds,
-        chatTurnExecutionState, chatAssistantResponseTimer, chatDialogState, toolCallsMap, pendingFileReferences,
+        chatTurnExecutionState, chatAssistantResponseTimer, chatDialogState, toolCallsMap, lastToolCallDeltaAt,
+        pendingFileReferences,
         isSearchActive, searchQuery, searchResults, currentSearchIndex,
     ) {
         ChatAreaState(
@@ -293,6 +295,7 @@ fun ChatScreen(
             assistantResponseTimer = chatAssistantResponseTimer,
             dialogState = chatDialogState,
             toolCallsMap = toolCallsMap,
+            lastToolCallDeltaAt = lastToolCallDeltaAt,
             pendingFileReferences = pendingFileReferences,
             searchQuery = searchQuery,
             searchResults = searchResults,

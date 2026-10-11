@@ -163,6 +163,11 @@ class SendMessageUseCaseTurnNotificationTest {
         every { state.inputContent } returns MutableStateFlow("hello")
         every { state.replyTargetMessage } returns MutableStateFlow(null)
         every { state.pendingFileReferences } returns MutableStateFlow(emptyList())
+        // The turn collector maintains the tool-call construction record on every delta and ending; this
+        // harness asserts the turn notifications, so those writes only need to be accepted.
+        every { state.noteToolCallDelta(any()) } returns Unit
+        every { state.forgetToolCallDeltas(any()) } returns Unit
+        every { state.forgetAllToolCallDeltas() } returns Unit
 
         every { toolRepository.tools } returns MutableStateFlow(DataState.Success(listOf(operatorTool())))
         every { toolRepository.toolApprovalPreferences } returns MutableStateFlow(

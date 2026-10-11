@@ -39,6 +39,7 @@ import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Instant
 
 /**
  * Displays one message item and adapts search occurrence geometry from content coordinates to item coordinates.
@@ -53,6 +54,8 @@ import org.jetbrains.compose.resources.stringResource
  * @param editingBasePathOverride The base path override for editing file references.
  * @param modelsById Map of model IDs to LLMModel objects for displaying model names with graceful degradation.
  * @param toolCallsForMessage List of tool calls associated with this message.
+ * @param lastToolCallDeltaAt Instant of this message's most recent tool-call delta, used to decide whether the
+ *        message is still writing a call.
  * @param isCollapsed Whether this message is currently collapsed. A collapsed item hides the reasoning section
  *        along with the answer.
  * @param isCollapsible Whether this message can be collapsed. Decided by the answer length alone: reasoning length
@@ -79,6 +82,7 @@ fun MessageItem(
     modifier: Modifier = Modifier,
     modelsById: Map<Long, LLMModel> = emptyMap(),
     toolCallsForMessage: List<ToolCall> = emptyList(),
+    lastToolCallDeltaAt: Instant? = null,
     isCollapsed: Boolean = false,
     isCollapsible: Boolean = false,
     isReasoningExpanded: Boolean = false,
@@ -240,11 +244,12 @@ fun MessageItem(
             AssistantMessageCompletionNotice(message = message, contentColor = contentColor)
         }
 
-        // Tool Call Badges (for assistant messages)
-        if (message.role == ChatMessage.Role.ASSISTANT && toolCallsForMessage.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            ToolCallBadges(
+        // Tool-call slot (for assistant messages): the construction indicator while the model is still writing a
+        // call, and the badges of the calls already received once it is done.
+        if (message.role == ChatMessage.Role.ASSISTANT) {
+            ToolCallSection(
                 toolCalls = toolCallsForMessage,
+                lastDeltaAt = lastToolCallDeltaAt,
                 onToolCallClick = actions.onShowToolCallDetails
             )
         }

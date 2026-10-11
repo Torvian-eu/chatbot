@@ -697,8 +697,9 @@ class DefaultSessionRepository(
 
             is ChatStreamEvent.ToolCallDelta -> {
                 logger.trace("Tool call delta: ${event.name}")
-                // Optional: Could accumulate for real-time display
-                // For now, can be ignored - wait for ToolCallsReceived
+                // Deliberately not applied to the tool-call cache: only the complete call set is displayable,
+                // and the partial chunks are already fed to the chat state by the turn collector, which uses
+                // their arrival instant for the construction indicator.
             }
 
             is ChatStreamEvent.ToolCallsReceived -> {

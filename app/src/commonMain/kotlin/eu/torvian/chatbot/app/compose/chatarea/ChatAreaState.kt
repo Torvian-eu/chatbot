@@ -13,6 +13,7 @@ import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolCall
+import kotlin.time.Instant
 
 
 /**
@@ -40,6 +41,8 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @property assistantResponseTimer Elapsed-time measurement of the active turn, shown beside the composer action button.
  * @property dialogState The current dialog state for the chat area (e.g., delete confirmation).
  * @property toolCallsMap Tool calls for the current session, organized by message ID.
+ * @property lastToolCallDeltaAt Tool-call-delta arrival instants for the current session, organized by message ID;
+ *            the UI derives the tool-call construction indicator's freshness from them.
  * @property pendingFileReferences File references attached to the current message being composed.
  * @property searchQuery Current in-session search query.
  * @property searchResults Ordered occurrence-level matches for the current search query.
@@ -67,6 +70,7 @@ data class ChatAreaState(
     val assistantResponseTimer: AssistantResponseTimerState = AssistantResponseTimerState.Hidden,
     val dialogState: ChatAreaDialogState = ChatAreaDialogState.None,
     val toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),
+    val lastToolCallDeltaAt: Map<Long, Instant> = emptyMap(),
     val pendingFileReferences: List<FileReference> = emptyList(),
     val searchQuery: String = "",
     val searchResults: List<MessageSearchMatch> = emptyList(),

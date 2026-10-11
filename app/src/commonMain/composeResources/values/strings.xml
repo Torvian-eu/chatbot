@@ -77,6 +77,9 @@
     <string name="reasoning_encrypted_notice">The model's reasoning is encrypted and cannot be displayed.</string>
     <string name="reasoning_display_truncated">Reasoning truncated for display.</string>
 
+    <!-- Tool Call Construction Indicator -->
+    <string name="tool_call_construction_indicator">Writing tool calls…</string>
+
     <!-- Message Usage Details Dialog -->
     <string name="usage_dialog_title">Message details</string>
     <string name="usage_dialog_model_label">Model</string>

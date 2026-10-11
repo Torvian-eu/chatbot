@@ -31,6 +31,7 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Instant
 
 
 /**
@@ -90,6 +91,7 @@ fun ChatArea(
                 dialogState = state.dialogState,
                 modelsById = state.modelsById,
                 toolCallsMap = state.toolCallsMap,
+                lastToolCallDeltaAt = state.lastToolCallDeltaAt,
                 pendingFileReferences = state.pendingFileReferences,
                 searchQuery = state.searchQuery,
                 searchResults = state.searchResults,
@@ -151,6 +153,7 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param dialogState The current dialog state from the ViewModel.
  * @param modelsById Map of model IDs to LLMModel objects for quick lookups.
  * @param toolCallsMap Tool calls for the current session, organized by message ID.
+ * @param lastToolCallDeltaAt Tool-call-delta arrival instants for the current session, organized by message ID.
  * @param pendingFileReferences File references attached to the current message being composed.
  * @param searchQuery Current in-session search query.
  * @param searchResults Ordered occurrence-level matches for the current query.
@@ -175,6 +178,7 @@ private fun SuccessStateDisplay(
     dialogState: ChatAreaDialogState,
     modelsById: Map<Long, LLMModel>,
     toolCallsMap: Map<Long, List<ToolCall>>,
+    lastToolCallDeltaAt: Map<Long, Instant>,
     pendingFileReferences: List<FileReference>,
     searchQuery: String,
     searchResults: List<MessageSearchMatch>,
@@ -329,6 +333,7 @@ private fun SuccessStateDisplay(
                 editingBasePathOverride = editingBasePathOverride,
                 modelsById = modelsById, // Pass map for graceful degradation
                 toolCallsMap = toolCallsMap,
+                lastToolCallDeltaAt = lastToolCallDeltaAt,
                 isInputExpanded = isInputExpanded,
                 scrollToInputTrigger = scrollToInputTrigger,
                 inputContent = inputContent,

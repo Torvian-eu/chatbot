@@ -36,6 +36,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
+import kotlin.time.Instant
 
 
 /**
@@ -53,6 +54,8 @@ import kotlinx.coroutines.yield
  * @param editingBasePathOverride Optional editing base path override.
  * @param modelsById Optional model lookup used for assistant label rendering.
  * @param toolCallsMap Tool calls grouped by message ID.
+ * @param lastToolCallDeltaAt Tool-call-delta arrival instants grouped by message ID, used to show the tool-call
+ *        construction indicator while the model is still writing a call.
  * @param isInputExpanded Whether the input is rendered inline within the message list.
  * @param scrollToInputTrigger Incrementing trigger used to request scrolling to inline input.
  * @param inputContent Current input content.
@@ -85,6 +88,7 @@ fun MessageList(
     modifier: Modifier = Modifier,
     modelsById: Map<Long, LLMModel> = emptyMap(),
     toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),
+    lastToolCallDeltaAt: Map<Long, Instant> = emptyMap(),
     isInputExpanded: Boolean = false,
     scrollToInputTrigger: Int = 0,
     inputContent: String = "",
@@ -278,6 +282,7 @@ fun MessageList(
                             editingBasePathOverride = editingBasePathOverride,
                             modelsById = modelsById, // Pass map for graceful degradation
                             toolCallsForMessage = toolCallsMap[message.id] ?: emptyList(),
+                            lastToolCallDeltaAt = lastToolCallDeltaAt[message.id],
                             isCollapsed = message.id in collapsedMessageIds,
                             isCollapsible = message.content.length > collapseThreshold,
                             isReasoningExpanded = message.id in expandedReasoningMessageIds,
