@@ -72,6 +72,7 @@ object ThreadStatsCalculator {
                 assistantMessages.mapNotNull { it.usageStats?.reasoningTokens?.toLong() }
             ),
             cachedInputTokens = sumReported(assistantMessages.mapNotNull { it.usageStats?.cachedTokens?.toLong() }),
+            cost = sumReported(assistantMessages.mapNotNull { it.usageStats?.cost }),
             responseDuration = responseDuration,
             toolCallDuration = toolCallDuration,
             toolCallSuccessRate = rate(
@@ -168,6 +169,17 @@ object ThreadStatsCalculator {
      *         zeros is a measured `0`.
      */
     private fun sumReported(reported: List<Long>): Long? =
+        if (reported.isEmpty()) null else reported.sum()
+
+    /**
+     * Sums the charges a branch actually reported.
+     *
+     * @param reported Charges of the messages that report one; messages that report none contribute
+     *            nothing.
+     * @return The sum of [reported], or `null` when no message reported a charge. A sum of reported
+     *         zeros is a measured `0`.
+     */
+    private fun sumReported(reported: List<Double>): Double? =
         if (reported.isEmpty()) null else reported.sum()
 
     /**
