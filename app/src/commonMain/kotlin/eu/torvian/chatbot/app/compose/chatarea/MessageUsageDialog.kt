@@ -21,6 +21,8 @@ import eu.torvian.chatbot.app.generated.resources.usage_dialog_cache_write_token
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_cached_tokens_label
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_close_button
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_created_label
+import eu.torvian.chatbot.app.generated.resources.usage_dialog_cost_label
+import eu.torvian.chatbot.app.generated.resources.usage_dialog_cost_unavailable
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_input_tokens_label
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_model_label
 import eu.torvian.chatbot.app.generated.resources.usage_dialog_output_tokens_label
@@ -38,11 +40,13 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * Dialog showing which model and settings profile produced one assistant message, when it was created and last
- * updated, how long its provider call took, and the token usage the provider reported for it.
+ * updated, how long its provider call took, and what the provider reported for it: its token usage and the charge
+ * it billed.
  *
- * The usage block is omitted and replaced by an explicit statement when the message carries none, so "no usage"
- * is never presented as a set of zero counters. The response-duration row is omitted entirely when no duration was
- * recorded, so a legacy or unmeasured message shows no fake value. Cost information is deliberately not shown.
+ * The usage and cost blocks are each omitted and replaced by an explicit statement when the message carries no
+ * such data, so "not reported" is never presented as a set of zero counters or as a zero amount. The
+ * response-duration row is omitted entirely when no duration was recorded, so a legacy or unmeasured message shows
+ * no fake value.
  *
  * @param message Finalized assistant message whose details are displayed.
  * @param modelDisplayName Name of the producing model, or `null` when it cannot be resolved.
@@ -95,6 +99,10 @@ fun MessageUsageDialog(
                 HorizontalDivider()
 
                 MessageUsageSection(usageStats = message.usageStats)
+
+                HorizontalDivider()
+
+                MessageCostBlock(cost = message.usageStats?.cost)
             }
         },
         confirmButton = {
@@ -134,7 +142,8 @@ private fun MessageUsageDetailRow(label: String, value: String) {
  * Renders the token-usage block of the message usage dialog.
  *
  * The three optional counters get a line of their own only when the provider reported them, so an omitted counter
- * is absent rather than shown as zero.
+ * is absent rather than shown as zero. The three required counters always get a line, and their `0` is what the
+ * recorded usage holds, which is a measured zero only when the provider sent the counter at all.
  *
  * @param usageStats Usage reported for the message, or `null` when there is none to show.
  */
@@ -186,5 +195,32 @@ private fun MessageUsageSection(usageStats: UsageStats?) {
                 value = cacheWriteTokens.toString()
             )
         }
+    }
+}
+
+/**
+ * Renders the cost block of the message usage dialog.
+ *
+ * A charge the provider reported gets a labelled row showing it as USD, including a reported zero, which is real
+ * data. Only a message with no reported charge shows the explicit statement, and it never shows an amount.
+ *
+ * @param cost Charge the provider reported for the message, or `null` when it reported none.
+ */
+@Composable
+private fun MessageCostBlock(cost: Double?) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (cost == null) {
+            Text(
+                text = stringResource(Res.string.usage_dialog_cost_unavailable),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@Column
+        }
+
+        MessageUsageDetailRow(
+            label = stringResource(Res.string.usage_dialog_cost_label),
+            value = formatUsdCost(cost)
+        )
     }
 }

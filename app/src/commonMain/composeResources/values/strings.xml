@@ -93,6 +93,8 @@
     <string name="usage_dialog_cached_tokens_label">Cached input tokens</string>
     <string name="usage_dialog_cache_write_tokens_label">Cache write tokens</string>
     <string name="usage_dialog_usage_unavailable">Token usage is not available for this message.</string>
+    <string name="usage_dialog_cost_label">Cost</string>
+    <string name="usage_dialog_cost_unavailable">Cost is not available for this message.</string>
     <string name="usage_dialog_close_button">Close</string>
     <string name="usage_dialog_header_description">Show message details and token usage</string>
 

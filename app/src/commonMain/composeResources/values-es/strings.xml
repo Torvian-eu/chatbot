@@ -44,6 +44,8 @@
     <string name="usage_dialog_cached_tokens_label">Tokens de entrada en caché</string>
     <string name="usage_dialog_cache_write_tokens_label">Tokens de escritura en caché</string>
     <string name="usage_dialog_usage_unavailable">El uso de tokens no está disponible para este mensaje.</string>
+    <string name="usage_dialog_cost_label">Coste</string>
+    <string name="usage_dialog_cost_unavailable">El coste no está disponible para este mensaje.</string>
     <string name="usage_dialog_close_button">Cerrar</string>
     <string name="usage_dialog_header_description">Mostrar detalles del mensaje y uso de tokens</string>
 
