@@ -25,6 +25,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 import eu.torvian.chatbot.app.chat.search.MIN_QUERY_LENGTH
 
@@ -66,6 +67,7 @@ class ChatStateImpl(
     private val _turnExecutionState = MutableStateFlow(TurnExecutionState.IDLE)
     private val _assistantResponseTimer = MutableStateFlow<AssistantResponseTimerState>(AssistantResponseTimerState.Hidden)
     private val _rawLlmRequest = MutableStateFlow<RawLlmRequestPayload?>(null)
+    private val _lastToolCallDeltaAt = MutableStateFlow<Map<Long, Instant>>(emptyMap())
     private val _dialogState = MutableStateFlow<ChatAreaDialogState>(ChatAreaDialogState.None)
     private val _pendingFileReferences = MutableStateFlow<List<FileReference>>(emptyList())
     private val _basePathOverride = MutableStateFlow<String?>(null)
@@ -96,6 +98,7 @@ class ChatStateImpl(
     override val turnExecutionState: StateFlow<TurnExecutionState> = _turnExecutionState.asStateFlow()
     override val assistantResponseTimer: StateFlow<AssistantResponseTimerState> = _assistantResponseTimer.asStateFlow()
     override val rawLlmRequest: StateFlow<RawLlmRequestPayload?> = _rawLlmRequest.asStateFlow()
+    override val lastToolCallDeltaAt: StateFlow<Map<Long, Instant>> = _lastToolCallDeltaAt.asStateFlow()
     override val dialogState: StateFlow<ChatAreaDialogState> = _dialogState.asStateFlow()
     override val pendingFileReferences: StateFlow<List<FileReference>> = _pendingFileReferences.asStateFlow()
     override val basePathOverride: StateFlow<String?> = _basePathOverride.asStateFlow()
@@ -448,12 +451,18 @@ class ChatStateImpl(
      * Updates the turn lifecycle state and advances [assistantResponseTimer] with it.
      *
      * Deriving the timer here rather than from the caller keeps the measurement consistent with the turn
-     * state machine even when a turn starts and ends between two observations of the flows.
+     * state machine even when a turn starts and ends between two observations of the flows. A state other
+     * than [TurnExecutionState.RUNNING] also discards [lastToolCallDeltaAt]: those records describe the
+     * streaming construction of the step the running turn owns, and outliving it could leave a label on a
+     * message whose turn is over.
      */
     override fun setTurnExecutionState(executionState: TurnExecutionState) {
         _turnExecutionState.value = executionState
         _assistantResponseTimer.value =
             _assistantResponseTimer.value.advanceFor(executionState, Clock.System.now())
+        if (executionState != TurnExecutionState.RUNNING) {
+            _lastToolCallDeltaAt.value = emptyMap()
+        }
     }
 
     override fun setDialogState(dialogState: ChatAreaDialogState) {
@@ -472,6 +481,20 @@ class ChatStateImpl(
         _rawLlmRequest.value = request
     }
 
+    override fun noteToolCallDelta(messageId: Long) {
+        _lastToolCallDeltaAt.value += (messageId to Clock.System.now())
+    }
+
+    override fun forgetToolCallDeltas(messageIds: Set<Long>) {
+        _lastToolCallDeltaAt.value -= messageIds
+    }
+
+    override fun forgetAllToolCallDeltas() {
+        // The emptied map is equal to the previous value when nothing was recorded, and StateFlow conflates
+        // equal values, so this cannot produce a spurious emission.
+        _lastToolCallDeltaAt.value = emptyMap()
+    }
+
     override fun setBasePathOverride(path: String?) {
         _basePathOverride.value = path
     }
@@ -488,6 +511,7 @@ class ChatStateImpl(
         // Cleared together with the turn state so a reused slot cannot display another session's value.
         _assistantResponseTimer.value = AssistantResponseTimerState.Hidden
         _rawLlmRequest.value = null
+        _lastToolCallDeltaAt.value = emptyMap()
         _dialogState.value = ChatAreaDialogState.None
         _pendingFileReferences.value = emptyList()
         _basePathOverride.value = null

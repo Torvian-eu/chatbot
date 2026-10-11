@@ -16,6 +16,7 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.project.ProjectDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.StateFlow
+import kotlin.time.Instant
 
 /**
  * Interface for reactive chat state operations.
@@ -224,6 +225,16 @@ interface ChatState {
     val rawLlmRequest: StateFlow<RawLlmRequestPayload?>
 
     /**
+     * When the most recent tool-call delta of each assistant message arrived, keyed by message ID.
+     *
+     * The record is in memory only and holds exactly one instant per message, overwritten by every later
+     * delta, from which the UI derives whether the model is still writing that call. It never outlives the
+     * turn it describes: any [setTurnExecutionState] write other than [TurnExecutionState.RUNNING] and a
+     * [resetState] discard it, so a reused session slot cannot display another session's record.
+     */
+    val lastToolCallDeltaAt: StateFlow<Map<Long, Instant>>
+
+    /**
      * The current dialog state for the chat area (e.g., delete confirmation).
      */
     val dialogState: StateFlow<ChatAreaDialogState>
@@ -334,7 +345,8 @@ interface ChatState {
      * Updates the lifecycle state of the active turn.
      *
      * This is the single entry point that also advances [assistantResponseTimer], so the measurement can
-     * never disagree with the turn state machine.
+     * never disagree with the turn state machine. Leaving [TurnExecutionState.RUNNING] additionally discards
+     * [lastToolCallDeltaAt], because that record describes a construction the running turn was streaming.
      *
      * @param executionState New state to expose to observers.
      */
@@ -370,6 +382,27 @@ interface ChatState {
      * @param request The request to display, or `null` to forget the current capture.
      */
     fun setRawLlmRequest(request: RawLlmRequestPayload?)
+
+    /**
+     * Records that the model streamed another tool-call delta for [messageId], replacing that message's
+     * previous instant so the freshness window keeps rolling from the latest delta.
+     *
+     * @param messageId Assistant message the delta belongs to.
+     */
+    fun noteToolCallDelta(messageId: Long)
+
+    /**
+     * Discards the tool-call-delta records of the given messages, used when their calls arrive complete or
+     * the message ends.
+     *
+     * @param messageIds Messages whose records are no longer relevant; unknown IDs are tolerated.
+     */
+    fun forgetToolCallDeltas(messageIds: Set<Long>)
+
+    /**
+     * Discards every tool-call-delta record, used when no individual message can be blamed for the ending.
+     */
+    fun forgetAllToolCallDeltas()
 
     /**
      * Resets the entire chat state to its initial state.

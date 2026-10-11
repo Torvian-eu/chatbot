@@ -26,6 +26,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlin.time.Instant
 
 /**
  * Manages the UI state for the main chat area of the currently active session.
@@ -247,6 +248,12 @@ class ChatViewModel(
      * Latest provider request captured for the active session, or `null` when no assistant step has run yet.
      */
     val rawLlmRequest: StateFlow<RawLlmRequestPayload?> = state.rawLlmRequest
+
+    /**
+     * When each assistant message last received a tool-call delta, keyed by message ID, used to show the
+     * tool-call construction indicator while the model is still writing a call.
+     */
+    val lastToolCallDeltaAt: StateFlow<Map<Long, Instant>> = state.lastToolCallDeltaAt
 
     /**
      * File references attached to the current message being composed.
