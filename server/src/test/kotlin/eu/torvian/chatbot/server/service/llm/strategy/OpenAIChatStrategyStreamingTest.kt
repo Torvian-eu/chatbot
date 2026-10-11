@@ -453,4 +453,44 @@ class OpenAIChatStrategyStreamingTest : OpenAIChatStrategyTestBase() {
         val finalChunk = result[2].getOrNull()
         assertTrue(finalChunk is LLMStreamChunk.Done)
     }
+
+    @Test
+    @DisplayName("processStreamingResponse should carry the reported cost on the final usage chunk")
+    fun processStreamingResponse_reportedCost_isCarriedOnFinalUsage() = runTest {
+        // Given - the shape OpenRouter sends: the last chunk before [DONE] carries counters and the charge.
+        val streamLines = listOf(
+            "data: {\"id\":\"gen-1\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"some/model\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}",
+            "data: {\"id\":\"gen-1\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"some/model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}",
+            "data: {\"id\":\"gen-1\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"some/model\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15,\"cost\":0.0002466}}",
+            "data: [DONE]"
+        )
+        val responseStream = flowOf(*streamLines.toTypedArray())
+
+        // When
+        val emitted = strategy.processStreamingResponse(responseStream).toList().mapNotNull { it.getOrNull() }
+
+        // Then - the charge travels on the authoritative usage, which stays the last value before Done.
+        val usageChunk = assertIs<LLMStreamChunk.FinalUsageStats>(emitted.last { it is LLMStreamChunk.FinalUsageStats })
+        assertEquals(0.0002466, usageChunk.usage.cost, "The charge must be recorded without rounding or rescaling")
+        assertEquals(15, usageChunk.usage.totalTokens, "The counters are unaffected by the charge")
+        assertTrue(emitted.last() is LLMStreamChunk.Done)
+    }
+
+    @Test
+    @DisplayName("processStreamingResponse should report no cost when the final usage chunk states none")
+    fun processStreamingResponse_usageWithoutCost_reportsNoCost() = runTest {
+        val streamLines = listOf(
+            "data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}",
+            "data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1677652288,\"model\":\"gpt-4o\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}",
+            "data: [DONE]"
+        )
+        val responseStream = flowOf(*streamLines.toTypedArray())
+
+        // When
+        val emitted = strategy.processStreamingResponse(responseStream).toList().mapNotNull { it.getOrNull() }
+
+        // Then
+        val usageChunk = assertIs<LLMStreamChunk.FinalUsageStats>(emitted.last { it is LLMStreamChunk.FinalUsageStats })
+        assertNull(usageChunk.usage.cost, "A provider that states no charge must not gain one")
+    }
 }

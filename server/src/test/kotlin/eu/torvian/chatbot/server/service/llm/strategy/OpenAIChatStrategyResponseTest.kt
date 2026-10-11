@@ -151,6 +151,272 @@ class OpenAIChatStrategyResponseTest : OpenAIChatStrategyTestBase() {
     }
 
     @Test
+    @DisplayName("processSuccessResponse should store a reported cost exactly as the provider stated it")
+    fun processSuccessResponse_reportedCost_isStoredAsStated() {
+        val responseBody = """
+            {
+              "id": "chatcmpl-cost",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "some/model",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Answer" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+                "cost": 0.0002466
+              }
+            }
+        """.trimIndent()
+
+        val usage = assertNotNull(assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull()).usage)
+
+        assertEquals(0.0002466, usage.cost, "The charge must be recorded without rounding or rescaling")
+        assertEquals(10, usage.inputTokens, "The counters are unaffected by the charge")
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should report no cost when the provider states none")
+    fun processSuccessResponse_withoutCost_reportsNoCost() {
+        val responseBody = """
+            {
+              "id": "chatcmpl-no-cost",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "gpt-4o",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Answer" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15 }
+            }
+        """.trimIndent()
+
+        val usage = assertNotNull(assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull()).usage)
+
+        assertNull(usage.cost, "A charge the provider never stated must stay absent")
+        assertEquals(15, usage.totalTokens)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should keep a usage object that reports only a cost")
+    fun processSuccessResponse_costOnlyUsage_isRetained() {
+        val responseBody = """
+            {
+              "id": "chatcmpl-cost-only",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "some/model",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Answer" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "cost": 0.95 }
+            }
+        """.trimIndent()
+
+        val usage = assertNotNull(
+            assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull()).usage,
+            "A reported charge is usage even without a counter"
+        )
+
+        assertEquals(0.95, usage.cost)
+        assertEquals(0, usage.totalTokens)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should keep a reported zero cost")
+    fun processSuccessResponse_zeroCost_isReportedData() {
+        val responseBody = """
+            {
+              "id": "chatcmpl-free",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "some/free-model",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Answer" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": 0 }
+            }
+        """.trimIndent()
+
+        val usage = assertNotNull(assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull()).usage)
+
+        assertEquals(0.0, usage.cost, "A reported zero is real data, not an absent value")
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should accept a numeric-string cost")
+    fun processSuccessResponse_numericStringCost_isAccepted() {
+        val responseBody = """
+            {
+              "id": "chatcmpl-string-cost",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "some/model",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Answer" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": "0.000095" }
+            }
+        """.trimIndent()
+
+        val usage = assertNotNull(assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull()).usage)
+
+        assertEquals(0.000095, usage.cost)
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should treat an unusable cost as no cost")
+    fun processSuccessResponse_unusableCost_reportsNoCost() {
+        // A provider that changes the shape of its extension, and a nonsensical value, must not fail the response.
+        val unusableCosts = listOf("{\"amount\": 1}", "[0.5]", "null", "-0.5", "\"not-a-number\"")
+
+        unusableCosts.forEach { rawCost ->
+            val responseBody = """
+                {
+                  "id": "chatcmpl-bad-cost",
+                  "object": "chat.completion",
+                  "created": 1677652288,
+                  "model": "some/model",
+                  "choices": [
+                    {
+                      "index": 0,
+                      "message": { "role": "assistant", "content": "Answer" },
+                      "finish_reason": "stop"
+                    }
+                  ],
+                  "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": $rawCost }
+                }
+            """.trimIndent()
+
+            val result = strategy.processSuccessResponse(responseBody)
+
+            assertTrue(result.isRight(), "An unusable cost must not fail the response: $rawCost")
+            val usage = assertNotNull(assertNotNull(result.getOrNull()).usage)
+            assertNull(usage.cost, "An unusable cost must read as no cost: $rawCost")
+            assertEquals(15, usage.totalTokens, "The counters still decode: $rawCost")
+        }
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should reject an implausibly large cost")
+    fun processSuccessResponse_implausibleCost_reportsNoCost() {
+        val responseBody = """
+            {
+              "id": "chatcmpl-huge-cost",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "some/model",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Answer" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": 1.0E12 }
+            }
+        """.trimIndent()
+
+        val usage = assertNotNull(assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull()).usage)
+
+        assertNull(usage.cost, "A value no single generation can cost is not a charge to record")
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should reject a cost at the accepted ceiling and keep the one below it")
+    fun processSuccessResponse_costAtCeiling_reportsNoCost() {
+        // The ceiling is the first rejected amount, so the largest recordable charge sits just below it.
+        val ceiling = 1_000_000.0
+        val belowCeiling = 999_999.99
+
+        assertNull(
+            costOfResponseReporting(ceiling),
+            "The ceiling itself is not a charge to record"
+        )
+        assertEquals(
+            belowCeiling,
+            costOfResponseReporting(belowCeiling),
+            "The last amount below the ceiling is still a charge"
+        )
+    }
+
+    /**
+     * Maps a response that reports exactly the given charge.
+     *
+     * @param cost Charge to place in the `usage` object of the response.
+     * @return The charge the strategy recorded, or `null` when it recorded none.
+     */
+    private fun costOfResponseReporting(cost: Double): Double? {
+        val responseBody = """
+            {
+              "id": "chatcmpl-ceiling-cost",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "some/model",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Answer" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": $cost }
+            }
+        """.trimIndent()
+
+        val completion = assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull())
+        return assertNotNull(completion.usage).cost
+    }
+
+    @Test
+    @DisplayName("processSuccessResponse should keep a tiny positive cost exactly as stated")
+    fun processSuccessResponse_tinyCost_isNotRescaled() {
+        // A positive charge far below a cent must be stored as-is, so the reader can still tell a charged request from a free one.
+        val responseBody = """
+            {
+              "id": "chatcmpl-tiny-cost",
+              "object": "chat.completion",
+              "created": 1677652288,
+              "model": "some/model",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "Answer" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": 1.0E-10 }
+            }
+        """.trimIndent()
+
+        val usage = assertNotNull(assertNotNull(strategy.processSuccessResponse(responseBody).getOrNull()).usage)
+
+        assertEquals(1.0E-10, usage.cost)
+    }
+
+    @Test
     @DisplayName("processSuccessResponse should report a length finish reason as a failure that keeps the content")
     fun processSuccessResponse_lengthFinishReason_carriesProviderFailure() {
         // Given - a generation the provider cut at the model's output limit, with the partial answer still present.

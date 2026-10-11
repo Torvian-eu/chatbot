@@ -208,7 +208,8 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                 usage = toUsageStats(
                     inputTokens = successResponse.usage?.prompt_tokens,
                     outputTokens = successResponse.usage?.completion_tokens,
-                    totalTokens = successResponse.usage?.total_tokens
+                    totalTokens = successResponse.usage?.total_tokens,
+                    cost = reportedCost(successResponse.usage?.cost)
                 ),
                 metadata = mapOf(
                     "api_object" to successResponse.`object`,
@@ -276,7 +277,8 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
 
         // Usage is reported in one of the chunks (usually the last one before the marker) and only the last
         // reported object describes the whole generation, so it is kept until the stream is drained and emitted
-        // as the authoritative value right before the terminal chunk.
+        // as the authoritative value right before the terminal chunk. The object carries the reported charge as
+        // well as the counters, and both travel on that single final path.
         var reportedUsage: OpenAiApiModels.ChatCompletionStreamChunk.StreamUsage? = null
 
         responseStream.collect { rawChunk ->
@@ -409,7 +411,8 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
         toUsageStats(
             inputTokens = reportedUsage?.prompt_tokens,
             outputTokens = reportedUsage?.completion_tokens,
-            totalTokens = reportedUsage?.total_tokens
+            totalTokens = reportedUsage?.total_tokens,
+            cost = reportedCost(reportedUsage?.cost)
         )?.let { usage ->
             emit(LLMStreamChunk.FinalUsageStats(usage).right())
         }
@@ -421,25 +424,29 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
      *
      * A counter the provider omitted is `0` and a missing total falls back to the sum, but an object that carries
      * no counter at all — and a missing object — means that no usage was reported, which must stay `null` rather
-     * than become a zero-filled value.
+     * than become a zero-filled value. A reported charge alone is usage too, so it keeps the object alive even
+     * when every counter is missing.
      *
      * @param inputTokens Tokens the provider counted for the input, or `null` when it omitted the counter.
      * @param outputTokens Tokens the provider counted for the output, or `null` when it omitted the counter.
      * @param totalTokens Total the provider reported, or `null` when it omitted the counter.
-     * @return The reported usage, or `null` when no counter was reported.
+     * @param cost Charge the provider reported for this generation, or `null` when it reported none.
+     * @return The reported usage, or `null` when neither a counter nor a charge was reported.
      */
     private fun toUsageStats(
         inputTokens: Int?,
         outputTokens: Int?,
-        totalTokens: Int?
+        totalTokens: Int?,
+        cost: Double?
     ): UsageStats? {
-        if (inputTokens == null && outputTokens == null && totalTokens == null) return null
+        if (inputTokens == null && outputTokens == null && totalTokens == null && cost == null) return null
         val input = inputTokens ?: 0
         val output = outputTokens ?: 0
         return UsageStats(
             inputTokens = input,
             outputTokens = output,
-            totalTokens = totalTokens ?: (input + output)
+            totalTokens = totalTokens ?: (input + output),
+            cost = cost
         )
     }
 
