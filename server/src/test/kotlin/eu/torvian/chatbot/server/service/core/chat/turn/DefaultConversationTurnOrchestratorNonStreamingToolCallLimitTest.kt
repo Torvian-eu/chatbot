@@ -73,7 +73,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
             conversationTurnPersistence.saveUserMessage(testSession.id, "Many calls", null, any())
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns completion.right()
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns completion.right()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id,
@@ -103,7 +103,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
             toolCallOrchestrator.executeAndUpdateToolCalls(any(), any(), any(), any(), any(), any())
         }
         // The turn ends there, without a follow-up LLM call, and with a single terminal frame.
-        coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) }
         assertEquals(ConversationTurnEvent.TurnCompleted, events.last())
         assertEquals(1, events.count { it == ConversationTurnEvent.TurnCompleted })
     }
@@ -166,7 +166,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
             conversationTurnPersistence.saveUserMessage(testSession.id, "Huge file", null, any())
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns completion.right()
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns completion.right()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id,
@@ -227,7 +227,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
         assertIs<ConversationTurnEvent.ToolExecutionCompleted>(events[events.size - 2])
         assertEquals(ConversationTurnEvent.TurnCompleted, events.last())
         assertEquals(1, events.count { it == ConversationTurnEvent.TurnCompleted })
-        coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     /**
@@ -263,7 +263,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
             conversationTurnPersistence.saveUserMessage(testSession.id, "Huge file only", null, any())
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns completion.right()
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns completion.right()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id,
@@ -291,7 +291,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
         verify(exactly = 0) {
             toolCallOrchestrator.executeAndUpdateToolCalls(any(), any(), any(), any(), any(), any())
         }
-        coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) }
         assertEquals(ConversationTurnEvent.TurnCompleted, events.last())
         assertEquals(1, events.count { it == ConversationTurnEvent.TurnCompleted })
     }
@@ -323,7 +323,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         // Every iteration answers with the same tool-calling response, so the loop only stops on its bound.
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns completion.right()
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns completion.right()
         // The completion state the step writes is captured by parameter position, so the failure state of the final
         // iteration is asserted by the message the step hands to the loop (a call that relies on Kotlin default
         // arguments appends a mask and marker to the recorded invocation, so the state cannot be read positionally
@@ -501,7 +501,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolCallLimitTest : Default
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returnsMany
             listOf(emptyList(), completedToolCalls)
         coEvery {
-            llmApiClient.completeChat(capture(capturedContexts), any(), any(), any(), any(), any())
+            llmApiClient.completeChat(capture(capturedContexts), any(), any(), any(), any(), any(), any(), any())
         } returnsMany listOf(
             completionWithClip.right(),
             completion(content = "Here you go.", toolCalls = emptyList(), finishReason = "stop").right()

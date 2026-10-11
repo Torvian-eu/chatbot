@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
@@ -64,6 +65,7 @@ class ChatStateImpl(
     private val _editingBasePathOverride = MutableStateFlow<String?>(null)
     private val _turnExecutionState = MutableStateFlow(TurnExecutionState.IDLE)
     private val _assistantResponseTimer = MutableStateFlow<AssistantResponseTimerState>(AssistantResponseTimerState.Hidden)
+    private val _rawLlmRequest = MutableStateFlow<RawLlmRequestPayload?>(null)
     private val _dialogState = MutableStateFlow<ChatAreaDialogState>(ChatAreaDialogState.None)
     private val _pendingFileReferences = MutableStateFlow<List<FileReference>>(emptyList())
     private val _basePathOverride = MutableStateFlow<String?>(null)
@@ -93,6 +95,7 @@ class ChatStateImpl(
     override val editingBasePathOverride: StateFlow<String?> = _editingBasePathOverride.asStateFlow()
     override val turnExecutionState: StateFlow<TurnExecutionState> = _turnExecutionState.asStateFlow()
     override val assistantResponseTimer: StateFlow<AssistantResponseTimerState> = _assistantResponseTimer.asStateFlow()
+    override val rawLlmRequest: StateFlow<RawLlmRequestPayload?> = _rawLlmRequest.asStateFlow()
     override val dialogState: StateFlow<ChatAreaDialogState> = _dialogState.asStateFlow()
     override val pendingFileReferences: StateFlow<List<FileReference>> = _pendingFileReferences.asStateFlow()
     override val basePathOverride: StateFlow<String?> = _basePathOverride.asStateFlow()
@@ -465,6 +468,9 @@ class ChatStateImpl(
         _pendingFileReferences.value = transform(_pendingFileReferences.value)
     }
 
+    override fun setRawLlmRequest(request: RawLlmRequestPayload?) {
+        _rawLlmRequest.value = request
+    }
 
     override fun setBasePathOverride(path: String?) {
         _basePathOverride.value = path
@@ -481,6 +487,7 @@ class ChatStateImpl(
         _turnExecutionState.value = TurnExecutionState.IDLE
         // Cleared together with the turn state so a reused slot cannot display another session's value.
         _assistantResponseTimer.value = AssistantResponseTimerState.Hidden
+        _rawLlmRequest.value = null
         _dialogState.value = ChatAreaDialogState.None
         _pendingFileReferences.value = emptyList()
         _basePathOverride.value = null

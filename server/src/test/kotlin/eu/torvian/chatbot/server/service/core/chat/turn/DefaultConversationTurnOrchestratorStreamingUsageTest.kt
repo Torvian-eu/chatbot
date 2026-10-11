@@ -39,7 +39,7 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
             cachedTokens = 8,
             cacheWriteTokens = 4
         )
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Answer").right(),
             LLMStreamChunk.FinalUsageStats(reportedUsage).right(),
             LLMStreamChunk.Done.right()
@@ -79,7 +79,7 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
         val userMessage = streamingUserMessage(611L, "Fail after usage")
         val placeholder = streamingPlaceholder(612L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Partial answer").right(),
             LLMStreamChunk.FinalUsageStats(UsageStats(10, 5, 15, cost = 0.0002466)).right(),
             LLMStreamChunk.Error(LLMCompletionError.AuthenticationError("invalid api key")).right()
@@ -119,7 +119,7 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
         val userMessage = streamingUserMessage(621L, "No usage")
         val placeholder = streamingPlaceholder(622L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Answer").right(),
             LLMStreamChunk.Done.right()
         )
@@ -159,7 +159,7 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
         val userMessage = streamingUserMessage(631L, "Observed")
         val placeholder = streamingPlaceholder(632L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.UsageChunk(UsageStats(3, 1, 4)).right(),
             LLMStreamChunk.ContentChunk("Answer").right(),
             LLMStreamChunk.Done.right()
@@ -191,7 +191,7 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
         val userMessage = streamingUserMessage(641L, "Only observation")
         val placeholder = streamingPlaceholder(642L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.UsageChunk(UsageStats(3, 1, 4)).right(),
             LLMStreamChunk.ContentChunk("Answer").right(),
             LLMStreamChunk.Done.right()

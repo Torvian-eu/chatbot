@@ -130,6 +130,12 @@ internal class NonStreamingTurnCollector(
                                 )
                             }
 
+                            is ChatEvent.RawLlmRequest -> {
+                                // Overwrite semantics: the latest prepared request of the turn is the one
+                                // the request viewer shows.
+                                state.setRawLlmRequest(event.payload)
+                            }
+
                             else -> {
                                 // Other events (e.g., StreamCompleted) are handled
                                 // by the repository, which updates the UI state reactively.

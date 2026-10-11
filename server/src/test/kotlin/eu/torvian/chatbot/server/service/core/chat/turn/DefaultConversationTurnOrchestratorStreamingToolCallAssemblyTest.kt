@@ -128,7 +128,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallAssemblyTest : Default
         } returns PersistedAssistantMessage(assistantFinal, assistantStarted)
         // First iteration: a malformed delta is streamed for live UI, then the authoritative ToolCallDone
         // overrides it. Second iteration: plain content ends the loop.
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returnsMany listOf(
             flowOf(
                 LLMStreamChunk.ToolCallChunk(
                     index = 0, id = "call_weather", name = "getWeather", argumentsDelta = malformedDeltaJson

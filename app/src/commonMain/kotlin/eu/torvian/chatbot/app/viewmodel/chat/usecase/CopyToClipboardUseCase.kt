@@ -60,5 +60,27 @@ class CopyToClipboardUseCase(
             notificationService.genericError("Failed to copy thread to clipboard")
         }
     }
+
+    /**
+     * Copies the captured provider request of the active session to the system clipboard as JSON.
+     *
+     * The value is read at click time, so the copied text is always the same one the request viewer
+     * currently displays.
+     */
+    suspend fun copyRawLlmRequest() {
+        val request = state.rawLlmRequest.value
+        if (request == null) {
+            notificationService.genericWarning("No request to copy")
+            return
+        }
+
+        try {
+            clipboardService.copyToClipboard(request.requestJson())
+            notificationService.genericSuccess("Request copied to clipboard")
+        } catch (e: Exception) {
+            logger.error("Failed to copy LLM request to clipboard", e)
+            notificationService.genericError("Failed to copy request to clipboard")
+        }
+    }
 }
 

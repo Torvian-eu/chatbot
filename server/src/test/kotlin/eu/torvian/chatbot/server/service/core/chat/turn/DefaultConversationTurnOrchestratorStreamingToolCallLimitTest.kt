@@ -50,7 +50,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
         stubStreamingTurnStart(userMessage, placeholder)
         // One call more than the cap allows: a batch that size means something went wrong with the response.
         val refusedIndex = ConversationTurnLimits.MAX_TOOL_CALLS_PER_STEP
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             *toolCallChunks(indices = 0..refusedIndex).toTypedArray()
         )
 
@@ -79,7 +79,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
         verify(exactly = 0) {
             toolCallOrchestrator.executeAndUpdateToolCalls(any(), any(), any(), any(), any(), any())
         }
-        coVerify(exactly = 1) { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) }
         // The turn ends there, with a single terminal frame.
         assertEquals(ConversationTurnEvent.TurnCompleted, events.last())
         assertEquals(1, events.count { it == ConversationTurnEvent.TurnCompleted })
@@ -99,7 +99,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
         val oversizedArguments = "x".repeat(ConversationTurnLimits.MAX_TOOL_CALL_ARGUMENT_CHARS + 1)
         // The first call is complete, the second one exceeds the argument cap and the third one is complete again:
         // only the second call is refused, so the calls around it must still reach the tool layer.
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ToolCallChunk(
                 index = 0,
                 id = "call_search",
@@ -195,7 +195,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
         assertIs<ConversationTurnEvent.ToolExecutionCompleted>(events[events.size - 2])
         assertEquals(ConversationTurnEvent.TurnCompleted, events.last())
         assertEquals(1, events.count { it == ConversationTurnEvent.TurnCompleted })
-        coVerify(exactly = 1) { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     /**
@@ -209,7 +209,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
         val placeholder = streamingPlaceholder(772L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
         val oversizedArguments = "x".repeat(ConversationTurnLimits.MAX_TOOL_CALL_ARGUMENT_CHARS + 1)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ToolCallChunk(
                 index = 0,
                 id = "call_write",
@@ -246,7 +246,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
         verify(exactly = 0) {
             toolCallOrchestrator.executeAndUpdateToolCalls(any(), any(), any(), any(), any(), any())
         }
-        coVerify(exactly = 1) { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) }
         assertEquals(ConversationTurnEvent.TurnCompleted, events.last())
         assertEquals(1, events.count { it == ConversationTurnEvent.TurnCompleted })
     }
@@ -280,7 +280,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
             PersistedAssistantMessage(streamingPlaceholder(nextMessageId++, thirdArg()), userMessage)
         }
         // Every iteration answers with the same tool-calling response, so the loop only stops on its bound.
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ToolCallChunk(
                 index = 0,
                 id = "call_search",
@@ -364,7 +364,7 @@ class DefaultConversationTurnOrchestratorStreamingToolCallLimitTest :
         } returns PersistedAssistantMessage(secondPlaceholder, firstPlaceholder)
         val oversizedDelta = "x".repeat(ConversationTurnLimits.MAX_TOOL_CALL_ARGUMENT_CHARS + 100)
         val authoritativeArguments = "{\"path\":\"notes.txt\",\"content\":\"hi\"}"
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returnsMany listOf(
             // The deltas alone exceed the cap, but the provider then corrects the payload for this call.
             flowOf(
                 LLMStreamChunk.ToolCallChunk(

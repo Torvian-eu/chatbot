@@ -39,7 +39,7 @@ class DefaultConversationTurnOrchestratorStreamingStopTest : DefaultConversation
             stubStreamingTurnStart(userMessage, placeholder)
             // The stop is observed between two chunks, so every later chunk (including the terminal one) is
             // skipped and the collect returns without a provider completion.
-            coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flow {
+            coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flow {
                 emit(LLMStreamChunk.ContentChunk("Partial answer").right())
                 turnControlSignal.cancel()
                 emit(LLMStreamChunk.ContentChunk(" never delivered").right())
@@ -77,7 +77,7 @@ class DefaultConversationTurnOrchestratorStreamingStopTest : DefaultConversation
         val userMessage = streamingUserMessage(503L, "Stop immediately")
         val placeholder = streamingPlaceholder(504L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flow {
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flow {
             turnControlSignal.cancel()
             emit(LLMStreamChunk.ContentChunk("never shown").right())
             emit(LLMStreamChunk.Done.right())
@@ -109,7 +109,7 @@ class DefaultConversationTurnOrchestratorStreamingStopTest : DefaultConversation
         val userMessage = streamingUserMessage(507L, "Stop with failure")
         val placeholder = streamingPlaceholder(508L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flow {
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flow {
             emit(LLMStreamChunk.ContentChunk("Partial answer").right())
             emit(
                 LLMStreamChunk.Error(
@@ -149,7 +149,7 @@ class DefaultConversationTurnOrchestratorStreamingStopTest : DefaultConversation
         val userMessage = streamingUserMessage(505L, "Tear down")
         val placeholder = streamingPlaceholder(506L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flow {
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flow {
             emit(LLMStreamChunk.ContentChunk("Partial answer").right())
             // The provider stream stays open until the socket is torn down.
             streamGate.await()

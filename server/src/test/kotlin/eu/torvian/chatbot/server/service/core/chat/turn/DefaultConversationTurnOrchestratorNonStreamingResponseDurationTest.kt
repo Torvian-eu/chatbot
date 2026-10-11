@@ -91,7 +91,7 @@ class DefaultConversationTurnOrchestratorNonStreamingResponseDurationTest : Defa
         stubUserMessage(userMessage)
         stubAssistantInsertCapturingDuration(failedMessage, userMessage)
         val failure = LLMCompletionError.NetworkError("connect timed out", RuntimeException("connect timed out"))
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns failure.left()
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns failure.left()
 
         orchestrator.processNonStreamingTurn(nonStreamingRequest("Answer me")).toList()
 
@@ -121,7 +121,7 @@ class DefaultConversationTurnOrchestratorNonStreamingResponseDurationTest : Defa
         val failedMessage = assistantMessage(id = 804L, parentMessageId = userMessage.id, content = "")
         stubUserMessage(userMessage)
         stubAssistantInsertCapturingDuration(failedMessage, userMessage)
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 LLMCompletionResult(choices = emptyList(), usage = null).right()
 
         orchestrator.processNonStreamingTurn(nonStreamingRequest("Answer me")).toList()
@@ -156,7 +156,7 @@ class DefaultConversationTurnOrchestratorNonStreamingResponseDurationTest : Defa
         val assistant = assistantMessage(id = 806L, parentMessageId = userMessage.id, content = "Answer")
         stubUserMessage(userMessage)
         stubAssistantInsertCapturingDuration(assistant, userMessage)
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 completionResult(content = "Answer", usage = reportedUsage).right()
 
         orchestrator.processNonStreamingTurn(nonStreamingRequest("Count my tokens")).toList()
@@ -193,7 +193,7 @@ class DefaultConversationTurnOrchestratorNonStreamingResponseDurationTest : Defa
         val assistant = assistantMessage(id = 808L, parentMessageId = userMessage.id, content = "Cut off")
         stubUserMessage(userMessage)
         stubAssistantInsertCapturingDuration(assistant, userMessage)
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 completionResult(content = "Cut off", usage = UsageStats(10, 5, 15), providerFailure = providerFailure).right()
 
         orchestrator.processNonStreamingTurn(nonStreamingRequest("Cut me off")).toList()
@@ -226,7 +226,7 @@ class DefaultConversationTurnOrchestratorNonStreamingResponseDurationTest : Defa
         val assistant = assistantMessage(id = 810L, parentMessageId = userMessage.id, content = "Slow answer")
         stubUserMessage(userMessage)
         stubAssistantInsertCapturingDuration(assistant, userMessage)
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } coAnswers {
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } coAnswers {
             // A blocking pause, deliberately not a `delay` (virtual time would skip it).
             Thread.sleep(BLOCKING_CALL_MILLIS)
             completionResult(content = "Slow answer", usage = null).right()

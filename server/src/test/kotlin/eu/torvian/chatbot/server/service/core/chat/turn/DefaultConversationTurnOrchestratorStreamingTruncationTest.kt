@@ -53,7 +53,7 @@ class DefaultConversationTurnOrchestratorStreamingTruncationTest : DefaultConver
         val placeholder = streamingPlaceholder(532L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
         val oversizedContent = "a".repeat(ConversationTurnLimits.MAX_ASSISTANT_MESSAGE_CHARS + 1)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk(oversizedContent).right(),
             LLMStreamChunk.ToolCallChunk(
                 index = 0,
@@ -146,7 +146,7 @@ class DefaultConversationTurnOrchestratorStreamingTruncationTest : DefaultConver
             executedAt = baseInstant
         )
         val oversizedContent = "b".repeat(ConversationTurnLimits.MAX_ASSISTANT_MESSAGE_CHARS + 5)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returnsMany listOf(
             // Iteration 1: a completed tool-calling response.
             flowOf(
                 LLMStreamChunk.ToolCallChunk(
@@ -241,7 +241,7 @@ class DefaultConversationTurnOrchestratorStreamingTruncationTest : DefaultConver
                     "\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true," +
                     "\"done_reason\":\"length\",\"prompt_eval_count\":26,\"eval_count\":15}"
             )
-            coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns
+            coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns
                     OllamaChatStrategy(Json { ignoreUnknownKeys = true; isLenient = true })
                         .processStreamingResponse(flowOf(*ollamaStream.toTypedArray()))
 
@@ -293,7 +293,7 @@ class DefaultConversationTurnOrchestratorStreamingTruncationTest : DefaultConver
             providerCode = "length",
             message = "The provider ended the response without completing it."
         )
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk(oversizedContent).right(),
             LLMStreamChunk.Error(declaredEnding).right()
         )
@@ -330,7 +330,7 @@ class DefaultConversationTurnOrchestratorStreamingTruncationTest : DefaultConver
             "{\"model\":\"llama3.2\",\"created_at\":\"2023-12-07T09:32:18Z\"," +
                 "\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true,\"done_reason\":\"stop\"}"
         )
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 OllamaChatStrategy(Json { ignoreUnknownKeys = true; isLenient = true })
                     .processStreamingResponse(flowOf(*ollamaStream.toTypedArray()))
 

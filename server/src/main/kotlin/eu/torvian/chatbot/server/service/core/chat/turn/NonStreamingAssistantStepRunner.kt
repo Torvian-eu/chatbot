@@ -73,7 +73,8 @@ internal class NonStreamingAssistantStepRunner(
                 settings = request.llmConfig.settings,
                 apiKey = request.llmConfig.apiKey,
                 tools = request.llmConfig.tools,
-                systemMessage = request.llmConfig.systemMessage.takeIf { it.isNotBlank() }
+                systemMessage = request.llmConfig.systemMessage.takeIf { it.isNotBlank() },
+                onRequestPrepared = { payload -> emit(ConversationTurnEvent.RawLlmRequest(payload)) }
             )
         }.getOrElse { error ->
             logger.error("LLM API call failed for session ${request.session.id}: $error")

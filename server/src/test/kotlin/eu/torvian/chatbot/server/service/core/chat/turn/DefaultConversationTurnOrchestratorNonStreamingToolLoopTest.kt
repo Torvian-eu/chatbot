@@ -134,7 +134,7 @@ class DefaultConversationTurnOrchestratorNonStreamingToolLoopTest : DefaultConve
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
-            llmApiClient.completeChat(capture(capturedContexts), any(), any(), any(), any(), any())
+            llmApiClient.completeChat(capture(capturedContexts), any(), any(), any(), any(), any(), any(), any())
         } returnsMany listOf(firstCompletion.right(), secondCompletion.right())
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(

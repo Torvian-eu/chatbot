@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.core
 
 import eu.torvian.chatbot.common.models.api.core.CompactionCompletedPayload
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
@@ -129,6 +130,19 @@ sealed class MessageEvent {
      */
     data class CompactionCompleted(
         val payload: CompactionCompletedPayload
+    ) : MessageEvent()
+
+    /**
+     * Informational event carrying the provider request of an assistant-response step (non-streaming
+     * surface), emitted after the request was prepared and before it was dispatched.
+     *
+     * Clients must treat it as a non-transcript diagnostic and must not create or replace transcript
+     * messages. The payload's credential is already masked (see [RawLlmRequestPayload]).
+     *
+     * @property payload The prepared provider request, with any credential already masked.
+     */
+    data class RawLlmRequest(
+        val payload: RawLlmRequestPayload
     ) : MessageEvent()
 
     /**

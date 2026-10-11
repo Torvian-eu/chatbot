@@ -147,7 +147,7 @@ class DefaultConversationTurnOrchestratorStreamingToolLoopReasoningTest : Defaul
         // First iteration streams reasoning + a tool call; second iteration ends the loop.
         val capturedContexts = mutableListOf<List<RawChatMessage>>()
         coEvery {
-            llmApiClient.completeChatStreaming(capture(capturedContexts), any(), any(), any(), any(), any())
+            llmApiClient.completeChatStreaming(capture(capturedContexts), any(), any(), any(), any(), any(), any(), any())
         } returnsMany listOf(
             flowOf(
                 LLMStreamChunk.ReasoningDone(reasoningItem = reasoningItems[0]).right(),
@@ -354,7 +354,7 @@ class DefaultConversationTurnOrchestratorStreamingToolLoopReasoningTest : Defaul
         } returns PersistedAssistantMessage(assistantFinal, assistantToolStarted)
         val capturedContexts = mutableListOf<List<RawChatMessage>>()
         coEvery {
-            llmApiClient.completeChatStreaming(capture(capturedContexts), any(), any(), any(), any(), any())
+            llmApiClient.completeChatStreaming(capture(capturedContexts), any(), any(), any(), any(), any(), any(), any())
         } returnsMany listOf(
             flowOf(
                 LLMStreamChunk.ReasoningTextChunk(outputIndex = 0, contentIndex = 0, delta = "live thought").right(),

@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.llm
 
 import arrow.core.Either
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -23,7 +24,8 @@ class LLMApiClientStub : LLMApiClient {
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
-        systemMessage: String?
+        systemMessage: String?,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)?
     ): Either<LLMCompletionError, LLMCompletionResult> {
         return LLMCompletionResult(
             id = "test-completion-id",
@@ -48,14 +50,15 @@ class LLMApiClientStub : LLMApiClient {
         ).right()
     }
 
-    override fun completeChatStreaming(
+    override suspend fun completeChatStreaming(
         messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
-        systemMessage: String?
+        systemMessage: String?,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)?
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> {
         TODO("Not yet implemented")
     }

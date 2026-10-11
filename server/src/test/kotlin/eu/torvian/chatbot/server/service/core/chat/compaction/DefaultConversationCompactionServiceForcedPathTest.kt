@@ -50,8 +50,7 @@ class DefaultConversationCompactionServiceForcedPathTest : DefaultConversationCo
                     any(),
                     any(),
                     captureNullable(capturedTools),
-                    captureNullable(capturedSystem)
-                )
+                    captureNullable(capturedSystem))
             } returns completionWith("Summary.").right()
             coEvery { chunkDao.insertVerifiedChunk(any(), any()) } returns persistedChunk(id = 55L).right()
 

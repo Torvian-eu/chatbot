@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.llm
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.ModelSettings
@@ -24,6 +25,9 @@ interface LLMApiClient {
      * @param apiKey The decrypted API key for authentication (nullable if not required by the provider).
      * @param tools Optional list of tool definitions that the model can call
      * @param systemMessage Optional composed system prompt (single source of truth; see the strategies).
+     * @param onRequestPrepared Observer called in the caller's coroutine once the request has been
+     *        prepared and before it is dispatched, receiving the already-masked request. A retrying
+     *        decorator may call it once per attempt. A failure inside it never fails the completion.
      * @return Either an [LLMCompletionError] if the process fails at any stage (configuration, network, API error, parsing),
      *         or the generic [LLMCompletionResult] on success.
      */
@@ -34,7 +38,8 @@ interface LLMApiClient {
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>? = null,
-        systemMessage: String? = null
+        systemMessage: String? = null,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)? = null
     ): Either<LLMCompletionError, LLMCompletionResult>
 
     /**
@@ -48,18 +53,22 @@ interface LLMApiClient {
      * @param apiKey The decrypted API key for authentication (nullable if not required by the provider).
      * @param tools Optional list of tool definitions that the model can call
      * @param systemMessage Optional composed system prompt (single source of truth; see the strategies).
+     * @param onRequestPrepared Observer called in the caller's coroutine once the request has been
+     *        prepared and before it is dispatched, receiving the already-masked request. A retrying
+     *        decorator may call it once per attempt. A failure inside it never fails the completion.
      * @return A Flow of Either<LLMCompletionError, LLMStreamChunk> representing the stream.
      *         An error emitted in the Flow indicates a problem during the stream.
      *         The flow terminates with `LLMStreamChunk.Done` on success or an error.
      */
-    fun completeChatStreaming(
+    suspend fun completeChatStreaming(
         messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>? = null,
-        systemMessage: String? = null
+        systemMessage: String? = null,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)? = null
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>>
 
     /**

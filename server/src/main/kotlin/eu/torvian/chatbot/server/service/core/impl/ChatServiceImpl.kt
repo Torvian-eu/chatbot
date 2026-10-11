@@ -158,6 +158,7 @@ class ChatServiceImpl(
             is ConversationTurnEvent.CompactionCompleted -> MessageEvent.CompactionCompleted(
                 payload = chunk.toCompactionCompletedPayload()
             ).right()
+            is ConversationTurnEvent.RawLlmRequest -> MessageEvent.RawLlmRequest(payload).right()
             is ConversationTurnEvent.ExternalServiceError -> ProcessNewMessageError.ExternalServiceError(llmError).left()
             is ConversationTurnEvent.CompactionFailed -> ProcessNewMessageError.ConversationCompactionFailed(error).left()
             ConversationTurnEvent.TurnCompleted -> MessageEvent.StreamCompleted.right()
@@ -211,6 +212,7 @@ class ChatServiceImpl(
             is ConversationTurnEvent.CompactionCompleted -> MessageStreamEvent.CompactionCompleted(
                 payload = chunk.toCompactionCompletedPayload()
             ).right()
+            is ConversationTurnEvent.RawLlmRequest -> MessageStreamEvent.RawLlmRequest(payload).right()
             is ConversationTurnEvent.ExternalServiceError -> ProcessNewMessageError.ExternalServiceError(llmError).left()
             is ConversationTurnEvent.CompactionFailed -> ProcessNewMessageError.ConversationCompactionFailed(error).left()
             ConversationTurnEvent.TurnCompleted -> MessageStreamEvent.StreamCompleted.right()

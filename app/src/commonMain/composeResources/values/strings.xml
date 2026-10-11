@@ -98,6 +98,17 @@
     <string name="usage_dialog_close_button">Close</string>
     <string name="usage_dialog_header_description">Show message details and token usage</string>
 
+    <!-- Raw LLM Request Viewer -->
+    <string name="raw_llm_request_menu_item">View Raw Request</string>
+    <string name="raw_llm_request_title">Raw LLM request</string>
+    <string name="raw_llm_request_method_label">Method</string>
+    <string name="raw_llm_request_url_label">URL</string>
+    <string name="raw_llm_request_headers_label">Headers</string>
+    <string name="raw_llm_request_body_label">Body</string>
+    <string name="raw_llm_request_empty">No request yet. The next assistant step will capture one.</string>
+    <string name="raw_llm_request_copy_button">Copy</string>
+    <string name="raw_llm_request_close_button">Close</string>
+
     <!-- Thread Stats -->
     <string name="thread_stats_menu_item">Thread Stats</string>
     <string name="thread_stats_title">Thread statistics</string>

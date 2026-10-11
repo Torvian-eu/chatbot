@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -609,9 +610,12 @@ private class CountingLLMApiClient(
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
-        systemMessage: String?
+        systemMessage: String?,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)?
     ): Either<LLMCompletionError, LLMCompletionResult> {
         completeChatCalls++
-        return delegate.completeChat(messages, modelConfig, provider, settings, apiKey, tools, systemMessage)
+        return delegate.completeChat(
+            messages, modelConfig, provider, settings, apiKey, tools, systemMessage, onRequestPrepared
+        )
     }
 }

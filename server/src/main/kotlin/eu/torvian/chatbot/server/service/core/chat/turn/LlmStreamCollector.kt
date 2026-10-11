@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -59,6 +60,8 @@ internal class LlmStreamCollector(
      * @param apiKey Optional provider API key.
      * @param tools Enabled tools available for the request.
      * @param systemMessage Composed system prompt (single source of truth), or null when absent.
+     * @param onRequestPrepared Observer invoked once per dispatch attempt, right after the provider
+     *        request was prepared and before it is sent, receiving the already-masked request.
      * @param controlSignal Cooperative control signal observed before every chunk.
      * @param accumulatedContent Accumulator owned by the caller and filled with the accepted streamed text
      *        (bounded by [ConversationTurnLimits.MAX_ASSISTANT_MESSAGE_CHARS]); the caller persists it
@@ -88,6 +91,7 @@ internal class LlmStreamCollector(
         apiKey: String?,
         tools: List<ToolDefinition>?,
         systemMessage: String?,
+        onRequestPrepared: suspend (RawLlmRequestPayload) -> Unit,
         controlSignal: TurnControlSignal,
         accumulatedContent: StringBuilder,
         accumulatedReasoningText: StringBuilder,
@@ -115,7 +119,9 @@ internal class LlmStreamCollector(
         val callStartedAt = Clock.System.now()
 
         try {
-            llmApiClient.completeChatStreaming(context, model, provider, settings, apiKey, tools, systemMessage)
+            llmApiClient.completeChatStreaming(
+                context, model, provider, settings, apiKey, tools, systemMessage, onRequestPrepared
+            )
                 .collect { llmStreamChunkEither ->
                     if (controlSignal.isCancelled) return@collect
                     llmStreamChunkEither.fold(

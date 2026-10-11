@@ -8,6 +8,7 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.core.CompactionSkipReason
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.api.me.ConversationCompactionPreference
 import eu.torvian.chatbot.common.models.api.me.PreferenceKeys
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -456,11 +457,14 @@ private class CountingCompactionClient(
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
-        systemMessage: String?
+        systemMessage: String?,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)?
     ): Either<LLMCompletionError, LLMCompletionResult> {
         completeChatCalls++
         inputs.add(messages)
-        return delegate.completeChat(messages, modelConfig, provider, settings, apiKey, tools, systemMessage)
+        return delegate.completeChat(
+            messages, modelConfig, provider, settings, apiKey, tools, systemMessage, onRequestPrepared
+        )
     }
 }
 
@@ -481,7 +485,8 @@ private class VerboseSummaryClient(
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
-        systemMessage: String?
+        systemMessage: String?,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)?
     ): Either<LLMCompletionError, LLMCompletionResult> = LLMCompletionResult(
         id = "verbose-completion",
         choices = listOf(

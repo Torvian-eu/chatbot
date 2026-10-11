@@ -15,6 +15,7 @@ import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.raw_llm_request_menu_item
 import eu.torvian.chatbot.app.generated.resources.thread_stats_menu_item
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
@@ -44,6 +45,8 @@ import org.jetbrains.compose.resources.stringResource
  * @param onToggleSessionList toggles the session list panel.
  * @param onCopyThread copies the current displayed thread to the clipboard.
  * @param onShowThreadStats opens the statistics dialog of the current displayed thread.
+ * @param onShowRawLlmRequest opens the raw provider request viewer of the current session.
+ * @param isRawLlmRequestAvailable whether the raw request viewer can be activated right now.
  * @param isCompactionEnabled whether the manual compaction entry point can be activated right now.
  * @param onCompactConversation requests a forced compaction of the current displayed thread.
  * @param isSearchActive whether top-bar search mode is currently enabled.
@@ -76,6 +79,8 @@ fun RowScope.ChatTopBarContent(
     onToggleSessionList: () -> Unit,
     onCopyThread: () -> Unit,
     onShowThreadStats: () -> Unit,
+    onShowRawLlmRequest: () -> Unit,
+    isRawLlmRequestAvailable: Boolean,
     isCompactionEnabled: Boolean,
     onCompactConversation: () -> Unit,
     isSearchActive: Boolean,
@@ -169,6 +174,8 @@ fun RowScope.ChatTopBarContent(
             MoreActionsMenu(
                 onCopyThread = onCopyThread,
                 onShowThreadStats = onShowThreadStats,
+                onShowRawLlmRequest = onShowRawLlmRequest,
+                isRawLlmRequestAvailable = isRawLlmRequestAvailable,
                 onShowSearch = onShowSearch,
                 isCompactionEnabled = isCompactionEnabled,
                 onCompactConversation = onCompactConversation,
@@ -367,6 +374,9 @@ private fun CompactProjectSelector(
  *
  * @param onCopyThread copies the currently displayed thread.
  * @param onShowThreadStats opens the statistics dialog of the currently displayed thread.
+ * @param onShowRawLlmRequest opens the raw provider request viewer of the current session.
+ * @param isRawLlmRequestAvailable whether the raw request viewer item can be activated: false without
+ *            an active session, because no request belongs to no session.
  * @param onShowSearch enables in-session search mode.
  * @param isCompactionEnabled whether the item can be activated: false while the session is busy
  *            with a turn or another compaction. The item itself is always rendered, because the server
@@ -377,6 +387,8 @@ private fun CompactProjectSelector(
 private fun MoreActionsMenu(
     onCopyThread: () -> Unit,
     onShowThreadStats: () -> Unit,
+    onShowRawLlmRequest: () -> Unit,
+    isRawLlmRequestAvailable: Boolean,
     onShowSearch: () -> Unit,
     isCompactionEnabled: Boolean,
     onCompactConversation: () -> Unit,
@@ -434,6 +446,20 @@ private fun MoreActionsMenu(
                     },
                     onClick = {
                         onShowThreadStats()
+                        expanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(Res.string.raw_llm_request_menu_item)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.DataObject,
+                            contentDescription = null
+                        )
+                    },
+                    enabled = isRawLlmRequestAvailable,
+                    onClick = {
+                        onShowRawLlmRequest()
                         expanded = false
                     }
                 )

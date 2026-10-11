@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.server.service.core.*
@@ -282,6 +283,61 @@ class ChatServiceImplTest {
         assertIs<MessageStreamEvent.AssistantMessageFinished>(events[4].getOrNull())
         assertIs<MessageStreamEvent.StreamCompleted>(events[5].getOrNull())
     }
+
+    @Test
+    fun `processNewMessage should map the captured provider request on the non-streaming surface`() = runTest {
+        val payload = rawLlmRequestPayload()
+        every {
+            conversationTurnOrchestrator.processNonStreamingTurn(any())
+        } returns flowOf(
+            ConversationTurnEvent.RawLlmRequest(payload),
+            ConversationTurnEvent.TurnCompleted
+        )
+
+        val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
+        chatService.processNewMessage(1L, testPreparedTurn, "Hello", null, emptyList(), emptyFlow(), emptyFlow(), TurnControlSignal())
+            .collect { event -> events.add(event) }
+
+        val captured = assertIs<MessageEvent.RawLlmRequest>(events[0].getOrNull())
+        assertEquals(payload, captured.payload)
+        assertIs<MessageEvent.StreamCompleted>(events[1].getOrNull())
+    }
+
+    @Test
+    fun `processNewMessageStreaming should map the captured provider request on the streaming surface`() = runTest {
+        val payload = rawLlmRequestPayload()
+        every {
+            conversationTurnOrchestrator.processStreamingTurn(any())
+        } returns flowOf(
+            ConversationTurnEvent.RawLlmRequest(payload),
+            ConversationTurnEvent.TurnCompleted
+        )
+
+        val events = mutableListOf<Either<ProcessNewMessageError, MessageStreamEvent>>()
+        chatService.processNewMessageStreaming(
+            1L,
+            testPreparedTurn.copy(llmConfig = testLlmConfig.copy(settings = testSettings.copy(stream = true))),
+            "Hello",
+            null,
+            emptyList(),
+            emptyFlow(),
+            emptyFlow(),
+            TurnControlSignal()
+        )
+            .collect { event -> events.add(event) }
+
+        val captured = assertIs<MessageStreamEvent.RawLlmRequest>(events[0].getOrNull())
+        assertEquals(payload, captured.payload)
+        assertIs<MessageStreamEvent.StreamCompleted>(events[1].getOrNull())
+    }
+
+    /** Builds a captured-request payload for the mapping assertions. */
+    private fun rawLlmRequestPayload() = RawLlmRequestPayload(
+        method = "POST",
+        url = "https://api.example.com/v1/chat/completions",
+        headers = mapOf("Authorization" to "Bearer sk-abcde..."),
+        body = """{"model":"gpt-4"}"""
+    )
 
     @Test
     fun `processNewMessage should preserve unexpected error mapping`() = runTest {

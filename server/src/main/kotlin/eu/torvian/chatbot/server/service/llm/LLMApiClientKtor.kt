@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
@@ -18,10 +19,7 @@ import io.ktor.http.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -81,7 +79,8 @@ class LLMApiClientKtor(
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
-        systemMessage: String?
+        systemMessage: String?,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)?
     ): Either<LLMCompletionError, LLMCompletionResult> {
 
         logger.info("LLMApiClientKtor: Received request for model ${modelConfig.name} (Provider: ${provider.name}, Type: ${provider.type})")
@@ -111,6 +110,15 @@ class LLMApiClientKtor(
             logger.error("Strategy {} failed to prepare request: {}", strategy::class.simpleName, error.message)
             return error.left() // Propagate the specific error returned by the strategy
         }
+
+        // Publish the prepared request before dispatching it; the observer runs in this coroutine
+        // so callers may emit turn events from it.
+        notifyRequestPrepared(
+            config = apiRequestConfig,
+            provider = provider,
+            apiKey = apiKey,
+            observer = onRequestPrepared
+        )
 
         // 3. Execute the HTTP call using the HttpClient based on the generic config.
         // This is where generic types are mapped to Ktor types.
@@ -206,23 +214,23 @@ class LLMApiClientKtor(
         }
     }
 
-    override fun completeChatStreaming(
+    override suspend fun completeChatStreaming(
         messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
-        systemMessage: String?
-    ): Flow<Either<LLMCompletionError, LLMStreamChunk>> = channelFlow {
+        systemMessage: String?,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)?
+    ): Flow<Either<LLMCompletionError, LLMStreamChunk>> {
         logger.info("LLMApiClientKtor: Received streaming request for model ${modelConfig.name} (Provider: ${provider.name}, Type: ${provider.type})")
 
         val strategy = resolveStrategy(settings, provider)
             ?: run {
                 val errorMsg = "No ChatCompletionStrategy found for provider type: ${provider.type}"
                 logger.error(errorMsg)
-                send(LLMCompletionError.ConfigurationError(errorMsg).left())
-                return@channelFlow
+                return flowOf(LLMCompletionError.ConfigurationError(errorMsg).left())
             }
 
         val apiRequestConfig = strategy.prepareRequest(
@@ -235,80 +243,118 @@ class LLMApiClientKtor(
             systemMessage = systemMessage
         ).getOrElse { error ->
             logger.error("Strategy ${strategy::class.simpleName} failed to prepare streaming request: ${error.message}")
-            send(error.left())
-            return@channelFlow
+            return flowOf(error.left())
         }
+
+        // Preparing eagerly (rather than inside the producer) keeps the observer in the caller's
+        // coroutine: emitting turn events from the lazily started producer is not allowed.
+        notifyRequestPrepared(
+            config = apiRequestConfig,
+            provider = provider,
+            apiKey = apiKey,
+            observer = onRequestPrepared
+        )
+
+        return channelFlow {
+            try {
+                logger.debug(
+                    "Executing HTTP streaming request: {} {}{}",
+                    apiRequestConfig.method,
+                    provider.baseUrl,
+                    apiRequestConfig.path
+                )
+
+                // Use preparePost and execute to get a streaming response
+                httpClient.prepareRequest("${provider.baseUrl}${apiRequestConfig.path}") {
+                    method = apiRequestConfig.method.toKtorHttpMethod()
+                    contentType(apiRequestConfig.contentType.toKtorContentType())
+                    headers {
+                        apiRequestConfig.customHeaders.forEach { (key, value) ->
+                            append(key, value)
+                        }
+                    }
+                    setBody(apiRequestConfig.body)
+                    timeout {
+                        requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS // Allow indefinite stream
+                    }
+                }.execute { httpResponse -> // Use execute block for streaming
+                    if (httpResponse.status.isSuccess()) {
+                        logger.debug("Received HTTP streaming response: {}", httpResponse.status)
+
+                        // Get the ByteReadChannel for raw content.
+                        val byteReadChannel: ByteReadChannel = httpResponse.body()
+
+                        val responseStream = readUtf8LinesLimited(
+                            channel = byteReadChannel,
+                            maximumBytes = MAX_LLM_STREAMING_RESPONSE_BYTES,
+                            logger = logger
+                        )
+
+                        // Process the stream using the strategy
+                        strategy.processStreamingResponse(responseStream).collect { chunkEither ->
+                            send(chunkEither) // Forward each processed chunk to the downstream flow
+                        }
+                    } else {
+                        val errorBody = readUtf8BodyLimited(
+                            channel = httpResponse.body(),
+                            maximumBytes = MAX_LLM_STREAMING_RESPONSE_BYTES
+                        )
+                        logger.debug("Processing error response (streaming) with strategy ${strategy::class.simpleName}")
+                        val apiError = strategy.processErrorResponse(httpResponse.status.value, errorBody)
+                        logger.error("LLM API ${provider.name} returned error (Streaming Status: ${httpResponse.status.value}): $apiError")
+                        send(apiError.left())
+                    }
+                }
+            } catch (e: ResponseBodyLimitExceededException) {
+                val errorMessage =
+                    "Streaming response from ${provider.name} exceeded the configured transport limit of " +
+                            "$MAX_LLM_STREAMING_RESPONSE_BYTES bytes"
+                logger.error(errorMessage, e)
+                send(LLMCompletionError.OtherError(errorMessage).left())
+            } catch (e: CharacterCodingException) {
+                val errorMessage = "Streaming response from ${provider.name} was not valid UTF-8"
+                logger.error(errorMessage, e)
+                send(LLMCompletionError.InvalidResponseError(errorMessage, e).left())
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                logger.error("LLMApiClientKtor: HTTP streaming request failed for provider ${provider.name}", e)
+                send(
+                    LLMCompletionError.NetworkError(
+                        "Network or communication error with ${provider.name}: ${e.message}",
+                        e
+                    ).left()
+                )
+            }
+        }.flowOn(Dispatchers.IO)
+    }
+
+    /**
+     * Builds the masked description of a prepared request and hands it to [observer], if any.
+     *
+     * A capture must never break the completion it describes: any non-cancellation failure is logged
+     * and swallowed, while cancellation is rethrown so turn cancellation keeps its semantics.
+     *
+     * @param config The request configuration the strategy prepared.
+     * @param provider Provider the request targets, providing the base URL.
+     * @param apiKey Raw API key in use for this request, or null when none is needed.
+     * @param observer Per-invocation observer supplied by the caller, or null to skip the capture.
+     */
+    private suspend fun notifyRequestPrepared(
+        config: ApiRequestConfig,
+        provider: LLMProvider,
+        apiKey: String?,
+        observer: (suspend (RawLlmRequestPayload) -> Unit)?
+    ) {
+        if (observer == null) return
 
         try {
-            logger.debug(
-                "Executing HTTP streaming request: {} {}{}",
-                apiRequestConfig.method,
-                provider.baseUrl,
-                apiRequestConfig.path
-            )
-
-            // Use preparePost and execute to get a streaming response
-            httpClient.prepareRequest("${provider.baseUrl}${apiRequestConfig.path}") {
-                method = apiRequestConfig.method.toKtorHttpMethod()
-                contentType(apiRequestConfig.contentType.toKtorContentType())
-                headers {
-                    apiRequestConfig.customHeaders.forEach { (key, value) ->
-                        append(key, value)
-                    }
-                }
-                setBody(apiRequestConfig.body)
-                timeout {
-                    requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS // Allow indefinite stream
-                }
-            }.execute { httpResponse -> // Use execute block for streaming
-                if (httpResponse.status.isSuccess()) {
-                    logger.debug("Received HTTP streaming response: {}", httpResponse.status)
-
-                    // Get the ByteReadChannel for raw content.
-                    val byteReadChannel: ByteReadChannel = httpResponse.body()
-
-                    val responseStream = readUtf8LinesLimited(
-                        channel = byteReadChannel,
-                        maximumBytes = MAX_LLM_STREAMING_RESPONSE_BYTES,
-                        logger = logger
-                    )
-
-                    // Process the stream using the strategy
-                    strategy.processStreamingResponse(responseStream).collect { chunkEither ->
-                        send(chunkEither) // Forward each processed chunk to the downstream flow
-                    }
-                } else {
-                    val errorBody = readUtf8BodyLimited(
-                        channel = httpResponse.body(),
-                        maximumBytes = MAX_LLM_STREAMING_RESPONSE_BYTES
-                    )
-                    logger.debug("Processing error response (streaming) with strategy ${strategy::class.simpleName}")
-                    val apiError = strategy.processErrorResponse(httpResponse.status.value, errorBody)
-                    logger.error("LLM API ${provider.name} returned error (Streaming Status: ${httpResponse.status.value}): $apiError")
-                    send(apiError.left())
-                }
-            }
-        } catch (e: ResponseBodyLimitExceededException) {
-            val errorMessage =
-                "Streaming response from ${provider.name} exceeded the configured transport limit of " +
-                        "$MAX_LLM_STREAMING_RESPONSE_BYTES bytes"
-            logger.error(errorMessage, e)
-            send(LLMCompletionError.OtherError(errorMessage).left())
-        } catch (e: CharacterCodingException) {
-            val errorMessage = "Streaming response from ${provider.name} was not valid UTF-8"
-            logger.error(errorMessage, e)
-            send(LLMCompletionError.InvalidResponseError(errorMessage, e).left())
+            observer(config.toRawLlmRequestPayload(provider.baseUrl, apiKey))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            logger.error("LLMApiClientKtor: HTTP streaming request failed for provider ${provider.name}", e)
-            send(
-                LLMCompletionError.NetworkError(
-                    "Network or communication error with ${provider.name}: ${e.message}",
-                    e
-                ).left()
-            )
+            logger.warn("Failed to publish the prepared LLM request for provider ${provider.name}", e)
         }
-    }.flowOn(Dispatchers.IO)
+    }
 
     override suspend fun discoverModels(
         provider: LLMProvider,

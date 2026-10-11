@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -214,6 +215,15 @@ interface ChatState {
     val assistantResponseTimer: StateFlow<AssistantResponseTimerState>
 
     /**
+     * The provider request the latest assistant step of the active session prepared, or `null` when
+     * none was captured yet.
+     *
+     * The value is in memory only, is replaced by every later capture of the same turn (overwrite
+     * semantics), and is cleared by [resetState] and by a send that is accepted.
+     */
+    val rawLlmRequest: StateFlow<RawLlmRequestPayload?>
+
+    /**
      * The current dialog state for the chat area (e.g., delete confirmation).
      */
     val dialogState: StateFlow<ChatAreaDialogState>
@@ -353,6 +363,13 @@ interface ChatState {
      * Sets the base path override for file references.
      */
     fun setBasePathOverride(path: String?)
+
+    /**
+     * Replaces the captured provider request of the active session.
+     *
+     * @param request The request to display, or `null` to forget the current capture.
+     */
+    fun setRawLlmRequest(request: RawLlmRequestPayload?)
 
     /**
      * Resets the entire chat state to its initial state.

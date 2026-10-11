@@ -69,7 +69,7 @@ class DefaultConversationTurnOrchestratorStreamingLifecycleTest : DefaultConvers
                 completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantStartedMessage, userMessage)
         coEvery {
-            llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         } returns flowOf(
             LLMStreamChunk.ContentChunk("Hello ").right(),
             LLMStreamChunk.ContentChunk("there", finishReason = "stop").right(),
@@ -185,7 +185,7 @@ class DefaultConversationTurnOrchestratorStreamingLifecycleTest : DefaultConvers
                 reasoningItems = null,
                 completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantStarted, userMessage)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ReasoningDone(reasoningItem = reasoningItems[0]).right(),
             // Plaintext reasoning deltas are rendered live and their accumulated text is persisted.
             LLMStreamChunk.ReasoningTextChunk(outputIndex = 0, contentIndex = 0, delta = "The").right(),

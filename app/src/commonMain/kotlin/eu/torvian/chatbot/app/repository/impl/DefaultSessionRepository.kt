@@ -581,6 +581,15 @@ class DefaultSessionRepository(
                         "covers ${event.payload.coveredMessageIds.size} messages"
                 )
             }
+
+            is ChatEvent.RawLlmRequest -> {
+                // The captured provider request is a diagnostic: it must never create, replace, or
+                // mutate transcript messages, so the session cache is intentionally left untouched.
+                // The chat state holds it for the request viewer.
+                logger.debug(
+                    "Raw LLM request for session $sessionId: ${event.payload.method} ${event.payload.url}"
+                )
+            }
         }
     }
 
@@ -735,6 +744,15 @@ class DefaultSessionRepository(
                 logger.debug(
                     "Compaction notification for session $sessionId: chunk ${event.payload.chunkId} " +
                         "covers ${event.payload.coveredMessageIds.size} messages"
+                )
+            }
+
+            is ChatStreamEvent.RawLlmRequest -> {
+                // The captured provider request is a diagnostic: it must never create, replace, or
+                // mutate transcript messages, so the session cache is intentionally left untouched.
+                // The chat state holds it for the request viewer.
+                logger.debug(
+                    "Raw LLM request for session $sessionId: ${event.payload.method} ${event.payload.url}"
                 )
             }
         }
