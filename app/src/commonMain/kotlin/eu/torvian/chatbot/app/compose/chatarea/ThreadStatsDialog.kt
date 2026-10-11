@@ -34,6 +34,7 @@ import eu.torvian.chatbot.app.generated.resources.thread_stats_output_tokens_per
 import eu.torvian.chatbot.app.generated.resources.thread_stats_reasoning_items_label
 import eu.torvian.chatbot.app.generated.resources.thread_stats_response_duration_outliers_label
 import eu.torvian.chatbot.app.generated.resources.thread_stats_response_duration_stddev_label
+import eu.torvian.chatbot.app.generated.resources.thread_stats_section_cost
 import eu.torvian.chatbot.app.generated.resources.thread_stats_section_messages
 import eu.torvian.chatbot.app.generated.resources.thread_stats_section_rates
 import eu.torvian.chatbot.app.generated.resources.thread_stats_section_timings
@@ -43,6 +44,7 @@ import eu.torvian.chatbot.app.generated.resources.thread_stats_tool_call_duratio
 import eu.torvian.chatbot.app.generated.resources.thread_stats_tool_call_duration_stddev_label
 import eu.torvian.chatbot.app.generated.resources.thread_stats_tool_call_success_rate_label
 import eu.torvian.chatbot.app.generated.resources.thread_stats_tool_calls_label
+import eu.torvian.chatbot.app.generated.resources.thread_stats_total_cost_label
 import eu.torvian.chatbot.app.generated.resources.thread_stats_total_messages_label
 import eu.torvian.chatbot.app.generated.resources.thread_stats_total_response_duration_label
 import eu.torvian.chatbot.app.generated.resources.thread_stats_total_tool_call_duration_label
@@ -105,7 +107,7 @@ fun ThreadStatsDialog(
 }
 
 /**
- * Renders the statistics of a non-empty thread, grouped into counts, tokens, timings and rates.
+ * Renders the statistics of a non-empty thread, grouped into counts, tokens, cost, timings and rates.
  *
  * @param stats Statistics to display.
  */
@@ -160,6 +162,14 @@ private fun ThreadStatsContent(stats: ThreadStats) {
         ThreadStatsRow(
             stringResource(Res.string.usage_dialog_cached_tokens_label),
             formatTokenTotal(stats.cachedInputTokens, notAvailable)
+        )
+
+        HorizontalDivider()
+
+        ThreadStatsSection(stringResource(Res.string.thread_stats_section_cost))
+        ThreadStatsRow(
+            stringResource(Res.string.thread_stats_total_cost_label),
+            formatUsdCostOrNull(stats.cost, notAvailable)
         )
 
         HorizontalDivider()
@@ -267,6 +277,17 @@ private fun ThreadStatsSection(title: String) {
  */
 private fun formatTokenTotal(tokens: Long?, notAvailable: String): String =
     tokens?.toString() ?: notAvailable
+
+/**
+ * Formats the summed charge reported by the branch.
+ *
+ * @param cost Sum of the reported charges, or `null` when no message of the branch reported one. A total that is
+ *            not a finite non-negative amount is treated as not available.
+ * @param notAvailable Label used for an unreported total.
+ * @return The charge as USD; a sum of reported zeros is rendered as a zero amount.
+ */
+private fun formatUsdCostOrNull(cost: Double?, notAvailable: String): String =
+    cost?.takeIf { it.isFinite() && it >= 0.0 }?.let { formatUsdCost(it) } ?: notAvailable
 
 /**
  * Formats a total duration in milliseconds.

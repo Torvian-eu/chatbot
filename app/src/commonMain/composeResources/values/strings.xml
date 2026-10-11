@@ -108,6 +108,7 @@
     <string name="thread_stats_outliers_none">None</string>
     <string name="thread_stats_section_messages">Messages</string>
     <string name="thread_stats_section_tokens">Tokens</string>
+    <string name="thread_stats_section_cost">Cost</string>
     <string name="thread_stats_section_timings">Timings</string>
     <string name="thread_stats_section_rates">Rates</string>
     <string name="thread_stats_total_messages_label">Total messages</string>
@@ -115,6 +116,7 @@
     <string name="thread_stats_assistant_messages_label">Assistant messages</string>
     <string name="thread_stats_tool_calls_label">Tool calls</string>
     <string name="thread_stats_reasoning_items_label">Reasoning items</string>
+    <string name="thread_stats_total_cost_label">Total cost</string>
     <string name="thread_stats_total_response_duration_label">Total response duration</string>
     <string name="thread_stats_average_response_duration_label">Average response duration</string>
     <string name="thread_stats_response_duration_stddev_label">Response duration standard deviation</string>
