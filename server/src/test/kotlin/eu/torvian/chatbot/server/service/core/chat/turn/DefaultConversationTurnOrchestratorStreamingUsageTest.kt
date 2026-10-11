@@ -17,7 +17,8 @@ import kotlin.test.assertNull
 
 /**
  * Covers which token usage a streaming assistant step persists: the authoritative value of the provider's
- * terminal usage chunk, and nothing when the stream ended without one.
+ * terminal usage chunk, and nothing when the stream ended without one. The fixture usage carries a charge, so
+ * the same assertions also prove that a reported charge follows the fate of the usage that carried it.
  */
 class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversationTurnOrchestratorStreamingTestBase() {
 
@@ -80,7 +81,7 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
         stubStreamingTurnStart(userMessage, placeholder)
         coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Partial answer").right(),
-            LLMStreamChunk.FinalUsageStats(UsageStats(10, 5, 15)).right(),
+            LLMStreamChunk.FinalUsageStats(UsageStats(10, 5, 15, cost = 0.0002466)).right(),
             LLMStreamChunk.Error(LLMCompletionError.AuthenticationError("invalid api key")).right()
         )
         coEvery {
@@ -104,8 +105,10 @@ class DefaultConversationTurnOrchestratorStreamingUsageTest : DefaultConversatio
                 responseDurationMs = any()
             )
         }
+        // The assertion of record is the verification above: the finished message of the event is the object the
+        // stubbed write returned, so only the write itself proves the usage and its charge were dropped.
         val finished = events.filterIsInstance<ConversationTurnEvent.AssistantMessageFinished>().single()
-        assertNull(finished.assistantMessage.usageStats, "An abnormal ending records no usage")
+        assertNull(finished.assistantMessage.usageStats, "An abnormal ending records no usage, and with it no charge")
     }
 
     /**
