@@ -70,7 +70,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
-            llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any())
+            llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returns LLMCompletionResult(
             id = "c",
             choices = listOf(
@@ -170,7 +170,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
         assertIs<ConversationTurnEvent.CompactionFailed>(events[1])
         assertEquals(ConversationTurnEvent.TurnCompleted, events[2])
         // No primary call may be issued after a compaction failure.
-        coVerify(exactly = 0) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     /**
@@ -279,7 +279,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
-            llmApiClient.completeChat(any(), any(), any(), any(), any(), any())
+            llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returnsMany listOf(firstCompletion.right(), secondCompletion.right())
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -401,7 +401,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionPreflightTest : D
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
-            llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any())
+            llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returns LLMCompletionResult(
             id = "c",
             choices = listOf(

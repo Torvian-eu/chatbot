@@ -63,7 +63,7 @@ class DefaultConversationTurnOrchestratorNonStreamingLifecycleTest : DefaultConv
             conversationTurnPersistence.saveUserMessage(testSession.id, "Hello", null, any())
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns completion.right()
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns completion.right()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id,
@@ -135,6 +135,6 @@ class DefaultConversationTurnOrchestratorNonStreamingLifecycleTest : DefaultConv
         assertEquals(2, events.size)
         assertIs<ConversationTurnEvent.UserMessageSaved>(events[0])
         assertEquals(ConversationTurnEvent.TurnCompleted, events[1])
-        coVerify(exactly = 0) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 }

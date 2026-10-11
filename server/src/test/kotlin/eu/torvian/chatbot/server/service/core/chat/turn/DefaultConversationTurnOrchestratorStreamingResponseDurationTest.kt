@@ -90,7 +90,7 @@ class DefaultConversationTurnOrchestratorStreamingResponseDurationTest :
         stubStreamingTurnStart(userMessage, placeholder)
         stubFinalizedWriteCapturingDuration()
         val reportedUsage = UsageStats(inputTokens = 10, outputTokens = 5, totalTokens = 15)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Hello there").right(),
             LLMStreamChunk.FinalUsageStats(reportedUsage).right(),
             LLMStreamChunk.Done.right()
@@ -120,7 +120,7 @@ class DefaultConversationTurnOrchestratorStreamingResponseDurationTest :
         val placeholder = streamingPlaceholder(704L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
         stubFinalizedWriteCapturingDuration()
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Partial answer").right(),
             LLMStreamChunk.Error(LLMCompletionError.AuthenticationError("invalid api key")).right()
         )
@@ -153,7 +153,7 @@ class DefaultConversationTurnOrchestratorStreamingResponseDurationTest :
         val placeholder = streamingPlaceholder(706L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
         stubFinalizedWriteCapturingDuration()
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flow {
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flow {
             emit(LLMStreamChunk.ContentChunk("Partial answer").right())
             // The stop is observed between two chunks, so neither the later content nor the terminal chunk lands.
             turnControlSignal.cancel()
@@ -188,7 +188,7 @@ class DefaultConversationTurnOrchestratorStreamingResponseDurationTest :
         val placeholder = streamingPlaceholder(708L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
         stubFinalizedWriteCapturingDuration()
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns emptyFlow()
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns emptyFlow()
 
         orchestrator.processStreamingTurn(streamingTurnRequest("Nothing arrives")).toList()
 
@@ -287,7 +287,7 @@ class DefaultConversationTurnOrchestratorStreamingResponseDurationTest :
         } returns PersistedAssistantMessage(assistantFinal, assistantToolStarted)
         stubFinalizedWriteCapturingDuration()
         // The first iteration requests a tool call, the second answers with plain content and ends the loop.
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returnsMany listOf(
             flowOf(
                 LLMStreamChunk.ToolCallChunk(
                     index = 0,
@@ -370,7 +370,7 @@ class DefaultConversationTurnOrchestratorStreamingResponseDurationTest :
         val placeholder = streamingPlaceholder(714L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
         stubFinalizedWriteCapturingDuration()
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flow {
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flow {
             // A blocking pause, deliberately not a `delay` (virtual time would skip it).
             Thread.sleep(BLOCKING_CALL_MILLIS)
             emit(LLMStreamChunk.ContentChunk("Slow answer").right())

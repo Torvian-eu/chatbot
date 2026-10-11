@@ -107,7 +107,7 @@ class DefaultConversationCompactionServiceAutomaticPathTest : DefaultConversatio
         assertEquals(context.flatten(), preflight.primaryMessages)
         assertNull(preflight.persistedChunkIfAny)
         coVerify(exactly = 0) { auxiliaryConfigResolver.resolveAuxiliaryConfig(any(), any()) }
-        coVerify(exactly = 0) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -399,8 +399,7 @@ class DefaultConversationCompactionServiceAutomaticPathTest : DefaultConversatio
                 any(),
                 any(),
                 any(),
-                any()
-            )
+                any())
         } returns completionWith("Rolled up.").right()
         coEvery { auxiliaryConfigResolver.resolveAuxiliaryConfig(1L, effectiveSettings) } returns primaryConfig.right()
         val candidates = mutableListOf<ConversationCompactionChunkCandidate>()

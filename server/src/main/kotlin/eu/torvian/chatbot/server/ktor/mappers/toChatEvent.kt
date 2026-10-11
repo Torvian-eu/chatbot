@@ -42,5 +42,9 @@ fun MessageEvent.toChatEvent(): ChatEvent {
         is MessageEvent.CompactionCompleted -> ChatEvent.CompactionCompleted(
             payload = payload
         )
+
+        is MessageEvent.RawLlmRequest -> ChatEvent.RawLlmRequest(
+            payload = payload
+        )
     }
 }

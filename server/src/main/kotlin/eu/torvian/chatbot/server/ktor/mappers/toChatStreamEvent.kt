@@ -67,6 +67,10 @@ fun MessageStreamEvent.toChatStreamEvent(): ChatStreamEvent {
             payload = payload
         )
 
+        is MessageStreamEvent.RawLlmRequest -> RawLlmRequest(
+            payload = payload
+        )
+
         is MessageStreamEvent.StreamCompleted -> StreamCompleted
     }
 }

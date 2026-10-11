@@ -79,7 +79,7 @@ class DefaultConversationTurnOrchestratorStreamingReasoningTest : DefaultConvers
         coEvery {
             conversationTurnPersistence.updateAssistantMessageReasoning(any(), any())
         } returns placeholder
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ReasoningTextChunk(outputIndex = 0, contentIndex = 0, delta = "thinking ").right(),
             LLMStreamChunk.ReasoningTextChunk(outputIndex = 0, contentIndex = 0, delta = "hard").right(),
             LLMStreamChunk.ReasoningDone(reasoningItem = completedReasoningItem).right(),
@@ -147,7 +147,7 @@ class DefaultConversationTurnOrchestratorStreamingReasoningTest : DefaultConvers
         coEvery {
             conversationTurnPersistence.updateAssistantMessageReasoning(any(), any())
         } returns placeholder
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ReasoningTextChunk(outputIndex = 0, contentIndex = 0, delta = "the whole ").right(),
             LLMStreamChunk.ReasoningTextChunk(outputIndex = 0, contentIndex = 0, delta = "chain of thought").right(),
             LLMStreamChunk.ReasoningDone(reasoningItem = itemWithContent).right(),
@@ -177,7 +177,7 @@ class DefaultConversationTurnOrchestratorStreamingReasoningTest : DefaultConvers
         coEvery {
             conversationTurnPersistence.updateAssistantMessageReasoning(any(), any())
         } returns placeholder
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ReasoningDone(reasoningItem = completedReasoningItem).right(),
             LLMStreamChunk.ContentChunk("Answer", finishReason = "stop").right(),
             LLMStreamChunk.Done.right()
@@ -201,7 +201,7 @@ class DefaultConversationTurnOrchestratorStreamingReasoningTest : DefaultConvers
         val userMessage = streamingUserMessage(631L, "Plain answer")
         val placeholder = streamingPlaceholder(632L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Answer", finishReason = "stop").right(),
             LLMStreamChunk.Done.right()
         )
@@ -238,7 +238,7 @@ class DefaultConversationTurnOrchestratorStreamingReasoningTest : DefaultConvers
         } returns placeholder
         // Derived from the constant rather than a literal, so tuning the cap keeps the test meaningful.
         val oversizedReasoning = "r".repeat(ConversationTurnLimits.MAX_REASONING_TEXT_CHARS + 1)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ReasoningTextChunk(outputIndex = 0, contentIndex = 0, delta = oversizedReasoning).right(),
             LLMStreamChunk.ToolCallChunk(
                 index = 0,
@@ -297,7 +297,7 @@ class DefaultConversationTurnOrchestratorStreamingReasoningTest : DefaultConvers
             conversationTurnPersistence.updateAssistantMessageReasoning(any(), any())
         } returns placeholder
         val failure = LLMCompletionError.NetworkError(message = "socket closed", cause = null)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ReasoningTextChunk(outputIndex = 0, contentIndex = 0, delta = "half a thought").right(),
             LLMStreamChunk.Error(failure).right()
         )

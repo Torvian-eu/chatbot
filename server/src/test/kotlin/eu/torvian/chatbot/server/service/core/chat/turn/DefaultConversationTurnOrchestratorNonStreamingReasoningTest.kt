@@ -94,7 +94,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
             )
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns completion.right()
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns completion.right()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id,
@@ -259,7 +259,7 @@ class DefaultConversationTurnOrchestratorNonStreamingReasoningTest : DefaultConv
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
-            llmApiClient.completeChat(capture(capturedContexts), any(), any(), any(), any(), any())
+            llmApiClient.completeChat(capture(capturedContexts), any(), any(), any(), any(), any(), any(), any())
         } returnsMany listOf(firstCompletion.right(), secondCompletion.right())
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(

@@ -42,7 +42,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
         val placeholder = streamingPlaceholder(512L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
         val authenticationError = LLMCompletionError.AuthenticationError("invalid api key")
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Partial answer").right(),
             LLMStreamChunk.Error(authenticationError).right()
         )
@@ -84,7 +84,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
         val placeholder = streamingPlaceholder(522L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
         // No `Done`, no error chunk and no cancellation: the stream simply ends early.
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Half an answer").right()
         )
 
@@ -118,7 +118,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
             providerCode = "server_error",
             message = "The provider ended the response without completing it."
         )
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Partial answer").right(),
             LLMStreamChunk.Error(providerFailure).right()
         )
@@ -169,7 +169,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
             providerCode = "content_filter",
             message = "The provider ended the response without completing it."
         )
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Partially written answer").right(),
             LLMStreamChunk.Error(contentPolicyStop).right()
         )
@@ -202,7 +202,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
         val userMessage = streamingUserMessage(551L, "Boom")
         val placeholder = streamingPlaceholder(552L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flow {
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flow {
             emit(LLMStreamChunk.ContentChunk("Partial answer").right())
             throw IllegalStateException("provider flow exploded")
         }
@@ -236,7 +236,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
         val userMessage = streamingUserMessage(561L, "Late boom")
         val placeholder = streamingPlaceholder(562L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flow {
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flow {
             emit(LLMStreamChunk.ContentChunk("Complete answer", finishReason = "stop").right())
             emit(LLMStreamChunk.Done.right())
             // The provider flow fails only after the terminal chunk was already delivered and persisted.
@@ -268,7 +268,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
         val userMessage = streamingUserMessage(571L, "Error then done")
         val placeholder = streamingPlaceholder(572L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Partial answer").right(),
             LLMStreamChunk.Error(LLMCompletionError.ApiError(502, "upstream error", null)).right(),
             // A completion after the error is a provider/proxy anomaly and must change nothing.
@@ -308,7 +308,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
         val userMessage = streamingUserMessage(581L, "Done then anomalies")
         val placeholder = streamingPlaceholder(582L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Complete answer", finishReason = "stop").right(),
             LLMStreamChunk.Done.right(),
             LLMStreamChunk.ContentChunk(" Late").right(),
@@ -342,7 +342,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
         val placeholder = streamingPlaceholder(592L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
         val parseFailure = LLMCompletionError.InvalidResponseError("Failed to parse Responses streaming JSON chunk")
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flow {
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flow {
             emit(parseFailure.left())
             emit(LLMStreamChunk.ContentChunk("Late content").right())
             emit(LLMStreamChunk.Done.right())
@@ -379,7 +379,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
         val placeholder = streamingPlaceholder(596L, userMessage.id)
         stubStreamingTurnStart(userMessage, placeholder)
         val parseFailure = LLMCompletionError.InvalidResponseError("Failed to parse Responses streaming JSON chunk")
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flow {
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flow {
             emit(parseFailure.left())
             emit(LLMStreamChunk.Error(LLMCompletionError.AuthenticationError("invalid api key")).right())
         }
@@ -427,7 +427,7 @@ class DefaultConversationTurnOrchestratorStreamingFailureEndingTest : DefaultCon
             providerCode = "length",
             message = "The provider ended the response without completing it."
         )
-        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) } returns flowOf(
+        coEvery { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) } returns flowOf(
             LLMStreamChunk.ContentChunk("Partial answer").right(),
             LLMStreamChunk.ToolCallChunk(
                 index = 0,

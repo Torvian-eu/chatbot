@@ -174,6 +174,24 @@ sealed interface ChatStreamEvent {
     }
 
     /**
+     * Informational event carrying the provider request of an assistant-response step, emitted right
+     * after the request was prepared and before it was dispatched (streaming surface).
+     *
+     * Clients must treat it as a non-transcript diagnostic: it must not create or replace transcript
+     * messages and must not be stored into the conversation. A step may issue several requests (tool
+     * loop, retries), in which case each later payload replaces the previous one. See
+     * [RawLlmRequestPayload] for the wire contract, including the masking of the credential.
+     *
+     * @property payload The prepared provider request, with any credential already masked.
+     */
+    @Serializable
+    data class RawLlmRequest(
+        val payload: RawLlmRequestPayload
+    ) : ChatStreamEvent {
+        override val eventType: String = "raw_llm_request"
+    }
+
+    /**
      * Sent by the server to relay one operator tool execution to the operator.
      *
      * This is a generic envelope: [payload] is the JSON-serialized, tool-specific execution request

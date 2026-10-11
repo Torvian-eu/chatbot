@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.testutils.llm
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.ModelSettings
@@ -39,7 +40,8 @@ class BlockingLLMApiClient(
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
-        systemMessage: String?
+        systemMessage: String?,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)?
     ): Either<LLMCompletionError, LLMCompletionResult> {
         started.complete(Unit)
         try {

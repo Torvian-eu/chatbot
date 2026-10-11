@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.llm
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.core.UsageStats
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
@@ -11,7 +12,6 @@ import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -80,7 +80,7 @@ class RetryLLMApiClientTest {
         val expectedResult = createTestResult()
 
         coEvery {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returns expectedResult.right()
 
         val client = RetryLLMApiClient(mockInner, maxRetries = 3)
@@ -92,7 +92,7 @@ class RetryLLMApiClientTest {
         assertEquals(expectedResult, result.value)
 
         coVerify(exactly = 1) {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -101,7 +101,7 @@ class RetryLLMApiClientTest {
         val expectedResult = createTestResult()
 
         coEvery {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returnsMany listOf(
             LLMCompletionError.ApiError(429, "Rate limited", null).left(),
             expectedResult.right()
@@ -116,7 +116,7 @@ class RetryLLMApiClientTest {
         assertEquals(expectedResult, result.value)
 
         coVerify(exactly = 2) {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -125,7 +125,7 @@ class RetryLLMApiClientTest {
         val expectedResult = createTestResult()
 
         coEvery {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returnsMany listOf(
             LLMCompletionError.ApiError(503, "Service unavailable", null).left(),
             LLMCompletionError.ApiError(503, "Service unavailable", null).left(),
@@ -141,7 +141,7 @@ class RetryLLMApiClientTest {
         assertEquals(expectedResult, result.value)
 
         coVerify(exactly = 3) {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -150,7 +150,7 @@ class RetryLLMApiClientTest {
         val retryableError = LLMCompletionError.ApiError(429, "Rate limited", null)
 
         coEvery {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returns retryableError.left()
 
         val client = RetryLLMApiClient(mockInner, maxRetries = 2, baseDelayMs = 1)
@@ -163,7 +163,7 @@ class RetryLLMApiClientTest {
 
         // Initial attempt + 2 retries = 3 total attempts
         coVerify(exactly = 3) {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -172,7 +172,7 @@ class RetryLLMApiClientTest {
         val nonRetryableError = LLMCompletionError.ApiError(401, "Unauthorized", null)
 
         coEvery {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returns nonRetryableError.left()
 
         val client = RetryLLMApiClient(mockInner, maxRetries = 3, baseDelayMs = 1)
@@ -185,7 +185,7 @@ class RetryLLMApiClientTest {
 
         // Only one attempt — no retries for non-retryable errors
         coVerify(exactly = 1) {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -194,7 +194,7 @@ class RetryLLMApiClientTest {
         val authError = LLMCompletionError.AuthenticationError("Invalid API key")
 
         coEvery {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returns authError.left()
 
         val client = RetryLLMApiClient(mockInner, maxRetries = 3, baseDelayMs = 1)
@@ -206,7 +206,7 @@ class RetryLLMApiClientTest {
         assertEquals(authError, result.value)
 
         coVerify(exactly = 1) {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -215,7 +215,7 @@ class RetryLLMApiClientTest {
         val configError = LLMCompletionError.ConfigurationError("Unsupported provider")
 
         coEvery {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returns configError.left()
 
         val client = RetryLLMApiClient(mockInner, maxRetries = 3, baseDelayMs = 1)
@@ -227,7 +227,7 @@ class RetryLLMApiClientTest {
         assertEquals(configError, result.value)
 
         coVerify(exactly = 1) {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -236,7 +236,7 @@ class RetryLLMApiClientTest {
         val networkError = LLMCompletionError.NetworkError("Connection failed", null)
 
         coEvery {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returns networkError.left()
 
         val client = RetryLLMApiClient(mockInner, maxRetries = 3, baseDelayMs = 1)
@@ -248,7 +248,7 @@ class RetryLLMApiClientTest {
         assertEquals(networkError, result.value)
 
         coVerify(exactly = 1) {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -260,7 +260,7 @@ class RetryLLMApiClientTest {
         )
 
         coEvery {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         } returns flow {
             expectedChunks.forEach { emit(it) }
         }
@@ -273,8 +273,8 @@ class RetryLLMApiClientTest {
         assertEquals(expectedChunks, result)
 
         @Suppress("UnusedFlow")
-        verify(exactly = 1) {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+        coVerify(exactly = 1) {
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -287,7 +287,7 @@ class RetryLLMApiClientTest {
 
         var callCount = 0
         coEvery {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
             callCount++
             if (callCount == 1) {
@@ -313,7 +313,7 @@ class RetryLLMApiClientTest {
 
         @Suppress("UnusedFlow")
         coVerify(exactly = 2) {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -325,7 +325,7 @@ class RetryLLMApiClientTest {
         )
 
         coEvery {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         } returns flow {
             chunksWithError.forEach { emit(it) }
         }
@@ -341,7 +341,7 @@ class RetryLLMApiClientTest {
         // Only one attempt — retry not triggered because content was already emitted
         @Suppress("UnusedFlow")
         coVerify(exactly = 1) {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -350,7 +350,7 @@ class RetryLLMApiClientTest {
         val retryableError = LLMCompletionError.ApiError(429, "Rate limited", null).left()
 
         coEvery {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         } returns flow {
             emit(retryableError)
         }
@@ -366,7 +366,7 @@ class RetryLLMApiClientTest {
         // Initial attempt + 2 retries = 3 total attempts
         @Suppress("UnusedFlow")
         coVerify(exactly = 3) {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -379,7 +379,7 @@ class RetryLLMApiClientTest {
 
         var callCount = 0
         coEvery {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
             callCount++
             if (callCount == 1) {
@@ -415,7 +415,7 @@ class RetryLLMApiClientTest {
 
         @Suppress("UnusedFlow")
         coVerify(exactly = 2) {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -426,7 +426,7 @@ class RetryLLMApiClientTest {
         ).right()
 
         coEvery {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         } returns flow {
             emit(nonRetryableErrorChunk)
         }
@@ -441,7 +441,7 @@ class RetryLLMApiClientTest {
 
         @Suppress("UnusedFlow")
         coVerify(exactly = 1) {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -450,7 +450,7 @@ class RetryLLMApiClientTest {
         val nonRetryableError = LLMCompletionError.ApiError(401, "Unauthorized", null).left()
 
         coEvery {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         } returns flow {
             emit(nonRetryableError)
         }
@@ -465,7 +465,7 @@ class RetryLLMApiClientTest {
         // Only one attempt — no retries for non-retryable errors
         @Suppress("UnusedFlow")
         coVerify(exactly = 1) {
-            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -495,7 +495,7 @@ class RetryLLMApiClientTest {
         val expectedResult = createTestResult("Success")
 
         coEvery {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returnsMany listOf(
             customRetryableError.left(),
             expectedResult.right()
@@ -516,7 +516,7 @@ class RetryLLMApiClientTest {
         assertEquals(expectedResult, result.value)
 
         coVerify(exactly = 2) {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -525,7 +525,7 @@ class RetryLLMApiClientTest {
         val retryableError = LLMCompletionError.ApiError(429, "Rate limited", null)
 
         coEvery {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returns retryableError.left()
 
         val client = RetryLLMApiClient(mockInner, maxRetries = 0, baseDelayMs = 1)
@@ -538,8 +538,69 @@ class RetryLLMApiClientTest {
 
         // maxRetries = 0 means only the initial attempt is executed.
         coVerify(exactly = 1) {
-            mockInner.completeChat(any(), any(), any(), any(), any(), any())
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
+
+    @Test
+    fun `non-streaming forwards the observer and publishes once per attempt`() = runTest {
+        val retryableError = LLMCompletionError.ApiError(429, "Rate limited", null)
+        val expectedResult = createTestResult("Success")
+        val observed = mutableListOf<RawLlmRequestPayload>()
+        var attempts = 0
+
+        coEvery {
+            mockInner.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            attempts++
+            arg<suspend (RawLlmRequestPayload) -> Unit>(7).invoke(payload("attempt-$attempts"))
+            if (attempts == 1) retryableError.left() else expectedResult.right()
+        }
+
+        val client = RetryLLMApiClient(mockInner, maxRetries = 3, baseDelayMs = 1)
+        val result = client.completeChat(
+            testMessages, testModelConfig, testProvider, testSettings, "test-key", null, null,
+            onRequestPrepared = { observed.add(it) }
+        )
+
+        assertTrue(result is Either.Right)
+        assertEquals(listOf("attempt-1", "attempt-2"), observed.map { it.body })
+    }
+
+    @Test
+    fun `streaming forwards the observer and publishes once per attempt`() = runTest {
+        val retryableError = LLMCompletionError.ApiError(429, "Rate limited", null)
+        val observed = mutableListOf<RawLlmRequestPayload>()
+        var attempts = 0
+
+        coEvery {
+            mockInner.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            attempts++
+            arg<suspend (RawLlmRequestPayload) -> Unit>(7).invoke(payload("attempt-$attempts"))
+            if (attempts == 1) {
+                flow { emit(retryableError.left()) }
+            } else {
+                flow { emit(LLMStreamChunk.Done.right()) }
+            }
+        }
+
+        val client = RetryLLMApiClient(mockInner, maxRetries = 3, baseDelayMs = 1)
+        val result = client.completeChatStreaming(
+            testMessages, testModelConfig, testProvider, testSettings, "test-key", null, null,
+            onRequestPrepared = { observed.add(it) }
+        ).toList()
+
+        assertEquals(listOf(LLMStreamChunk.Done.right()), result)
+        assertEquals(listOf("attempt-1", "attempt-2"), observed.map { it.body })
+    }
+
+    /** Builds a minimal payload whose body identifies the attempt that published it. */
+    private fun payload(body: String) = RawLlmRequestPayload(
+        method = "POST",
+        url = "https://api.test.com/chat/completions",
+        headers = emptyMap(),
+        body = body
+    )
 }
 

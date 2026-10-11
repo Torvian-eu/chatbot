@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.llm
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.ModelSettings
@@ -53,6 +54,9 @@ class RetryLLMApiClient(
      * Retries on 429/503 errors with exponential backoff.
      *
      * [maxRetries] counts retries after the initial attempt, so total attempts are [maxRetries] + 1.
+     *
+     * An `onRequestPrepared` observer is forwarded to every attempt, so a retried call publishes the
+     * last prepared request even when it also ends in a failure.
      */
     override suspend fun completeChat(
         messages: List<RawChatMessage>,
@@ -61,11 +65,12 @@ class RetryLLMApiClient(
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
-        systemMessage: String?
+        systemMessage: String?,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)?
     ): Either<LLMCompletionError, LLMCompletionResult> {
         for (attempt in 0..maxRetries) {
             currentCoroutineContext().ensureActive()
-            when (val result = inner.completeChat(messages, modelConfig, provider, settings, apiKey, tools, systemMessage)) {
+            when (val result = inner.completeChat(messages, modelConfig, provider, settings, apiKey, tools, systemMessage, onRequestPrepared)) {
                 is Either.Right -> return result
                 is Either.Left -> {
                     val error = result.value
@@ -96,15 +101,19 @@ class RetryLLMApiClient(
      * to avoid duplicate content.
      *
      * [maxRetries] counts retries after the initial attempt, so total attempts are [maxRetries] + 1.
+     *
+     * An `onRequestPrepared` observer is forwarded to every attempt, so a retried call publishes the
+     * last prepared request even when it also ends in a failure.
      */
-    override fun completeChatStreaming(
+    override suspend fun completeChatStreaming(
         messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
         settings: ModelSettings,
         apiKey: String?,
         tools: List<ToolDefinition>?,
-        systemMessage: String?
+        systemMessage: String?,
+        onRequestPrepared: (suspend (RawLlmRequestPayload) -> Unit)?
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> = flow {
         for (attempt in 0..maxRetries) {
             currentCoroutineContext().ensureActive()
@@ -112,7 +121,9 @@ class RetryLLMApiClient(
             var contentEmitted = false
             var retryableErrorEncountered: LLMCompletionError.ApiError? = null
 
-            inner.completeChatStreaming(messages, modelConfig, provider, settings, apiKey, tools, systemMessage)
+            inner.completeChatStreaming(
+                messages, modelConfig, provider, settings, apiKey, tools, systemMessage, onRequestPrepared
+            )
                 .collect { chunkEither ->
                     if (retryableErrorEncountered != null) {
                         // Once a retry decision is made, ignore remaining chunks from this attempt.

@@ -79,8 +79,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
             val capturedStreamContexts = mutableListOf<List<RawChatMessage>>()
             coEvery {
                 llmApiClient.completeChatStreaming(
-                    capture(capturedStreamContexts), any(), any(), any(), any(), any()
-                )
+                    capture(capturedStreamContexts), any(), any(), any(), any(), any(), any(), any())
             } returns flowOf(
                 LLMStreamChunk.ContentChunk("Summarized answer", finishReason = "stop").right(),
                 LLMStreamChunk.Done.right()
@@ -157,7 +156,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
         coVerify(exactly = 0) {
             conversationTurnPersistence.saveAssistantMessage(any(), any(), any(), any(), any(), any(), any(), usageStats = any(), responseDurationMs = any())
         }
-        coVerify(exactly = 0) { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     /**
@@ -213,7 +212,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                     completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
             } returns PersistedAssistantMessage(assistantStarted, userMessage)
             coEvery {
-                llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any())
+                llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
             } returns flowOf(
                 LLMStreamChunk.ContentChunk("Streamed from summary", finishReason = "stop").right(),
                 LLMStreamChunk.Done.right()
@@ -292,7 +291,7 @@ class DefaultConversationTurnOrchestratorStreamingCompactionTest : DefaultConver
                 completion = AssistantMessageCompletionState.InFlight, usageStats = any(), responseDurationMs = any())
         } returns PersistedAssistantMessage(assistantStarted, userMessage)
         coEvery {
-            llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any())
+            llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any(), any(), any())
         } returns flowOf(
             LLMStreamChunk.ContentChunk("Direct answer", finishReason = "stop").right(),
             LLMStreamChunk.Done.right()

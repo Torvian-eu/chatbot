@@ -67,7 +67,7 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
             conversationTurnPersistence.saveUserMessage(testSession.id, "Fail me", null, any())
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 authenticationError.left()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
@@ -153,7 +153,7 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
                 conversationTurnPersistence.saveUserMessage(testSession.id, "Empty response", null, any())
             } returns PersistedUserMessage(userMessage, null)
             coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-            coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns emptyCompletion.right()
+            coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns emptyCompletion.right()
             coEvery {
                 conversationTurnPersistence.saveAssistantMessage(
                     testSession.id,
@@ -264,7 +264,7 @@ class DefaultConversationTurnOrchestratorNonStreamingFailureTest : DefaultConver
                 conversationTurnPersistence.saveUserMessage(testSession.id, "Long question", null, any())
             } returns PersistedUserMessage(userMessage, null)
             coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-            coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns
+            coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns
                     cutOffCompletion.right()
             coEvery {
                 conversationTurnPersistence.saveAssistantMessage(

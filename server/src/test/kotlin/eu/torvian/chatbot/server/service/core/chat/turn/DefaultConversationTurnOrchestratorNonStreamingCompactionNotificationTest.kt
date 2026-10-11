@@ -70,7 +70,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionNotificationTest 
                     persistedChunkIfAny = persistedChunk
                 ).right()
             coEvery {
-                llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any())
+                llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
             } returns LLMCompletionResult(
                 id = "c",
                 choices = listOf(
@@ -109,7 +109,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionNotificationTest 
             assertIs<ConversationTurnEvent.AssistantMessageSaved>(events[2])
             assertEquals(ConversationTurnEvent.TurnCompleted, events[3])
             // The primary call received the summary window the chunk backs.
-            coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) }
         }
 
     /**
@@ -143,7 +143,7 @@ class DefaultConversationTurnOrchestratorNonStreamingCompactionNotificationTest 
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
-            llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any())
+            llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any())
         } returns LLMCompletionResult(
             id = "c",
             choices = listOf(

@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
+import eu.torvian.chatbot.common.models.api.core.RawLlmRequestPayload
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.server.service.core.chat.compaction.ConversationCompactionChunk
@@ -184,6 +185,19 @@ sealed interface ConversationTurnEvent {
      */
     data class CompactionCompleted(
         val chunk: ConversationCompactionChunk
+    ) : ConversationTurnEvent
+
+    /**
+     * Reports the provider request an assistant step is about to dispatch.
+     *
+     * Emitted after the request was prepared and before it was dispatched; the payload already has
+     * its credential masked. It describes the transport call only and never affects the transcript,
+     * and a step that issues several requests (tool loop, retries) emits one event per request.
+     *
+     * @property payload The prepared provider request, with any credential already masked.
+     */
+    data class RawLlmRequest(
+        val payload: RawLlmRequestPayload
     ) : ConversationTurnEvent
 
     /**

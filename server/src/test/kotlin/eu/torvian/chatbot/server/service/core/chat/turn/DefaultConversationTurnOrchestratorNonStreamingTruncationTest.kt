@@ -104,7 +104,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
             conversationTurnPersistence.saveUserMessage(testSession.id, "Too long", null, any())
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns truncatedCompletion.right()
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns truncatedCompletion.right()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id,
@@ -228,7 +228,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
                 conversationTurnPersistence.saveUserMessage(testSession.id, "Ollama truncated", null, any())
             } returns PersistedUserMessage(userMessage, null)
             coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-            coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns
+            coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns
                     declaredEnding.right()
             coEvery {
                 conversationTurnPersistence.saveAssistantMessage(
@@ -349,7 +349,7 @@ class DefaultConversationTurnOrchestratorNonStreamingTruncationTest : DefaultCon
             conversationTurnPersistence.saveUserMessage(testSession.id, "Long and truncated", null, any())
         } returns PersistedUserMessage(userMessage, null)
         coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
-        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns completion.right()
+        coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any(), any(), any()) } returns completion.right()
         coEvery {
             conversationTurnPersistence.saveAssistantMessage(
                 testSession.id,

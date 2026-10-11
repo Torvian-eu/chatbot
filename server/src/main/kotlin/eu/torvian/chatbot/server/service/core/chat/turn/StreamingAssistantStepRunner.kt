@@ -115,6 +115,7 @@ internal class StreamingAssistantStepRunner(
             apiKey = request.llmConfig.apiKey,
             tools = request.llmConfig.tools,
             systemMessage = request.llmConfig.systemMessage.takeIf { it.isNotBlank() },
+            onRequestPrepared = { payload -> emit(ConversationTurnEvent.RawLlmRequest(payload)) },
             controlSignal = request.turnControlSignal,
             accumulatedContent = accumulatedContent,
             accumulatedReasoningText = accumulatedReasoningText,
