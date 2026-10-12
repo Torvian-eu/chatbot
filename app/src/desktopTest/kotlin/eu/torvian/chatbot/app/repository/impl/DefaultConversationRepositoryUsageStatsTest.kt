@@ -2,6 +2,10 @@ package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
 import arrow.core.right
+import eu.torvian.chatbot.app.repository.impl.session.SessionDetailsStore
+import eu.torvian.chatbot.app.repository.impl.session.SessionEventApplier
+import eu.torvian.chatbot.app.repository.impl.session.SessionSummaryStore
+import eu.torvian.chatbot.app.repository.impl.session.ToolCallStore
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
@@ -31,7 +35,7 @@ import kotlin.time.Instant
  * The client has no usage event of its own: the value travels inside the assistant message of both the streaming
  * end and the non-streaming saved event, and the cached message must carry it afterwards.
  */
-class DefaultSessionRepositoryUsageStatsTest {
+class DefaultConversationRepositoryUsageStatsTest {
 
     private val sessionId = 100L
     private val parentId = 7L
@@ -40,7 +44,8 @@ class DefaultSessionRepositoryUsageStatsTest {
 
     private lateinit var sessionApi: SessionApi
     private lateinit var chatApi: ChatApi
-    private lateinit var repository: DefaultSessionRepository
+    /** The conversation half under test. */
+    private lateinit var repository: DefaultConversationRepository
 
     /** Usage reported for the generation under test. */
     private val usage = UsageStats(
@@ -52,11 +57,26 @@ class DefaultSessionRepositoryUsageStatsTest {
         cacheWriteTokens = 4
     )
 
+    /** Builds the repository under test over its own collaborators. */
+    private fun conversationRepository(): DefaultConversationRepository {
+        val details = SessionDetailsStore()
+        val toolCalls = ToolCallStore()
+        val summaryStore = SessionSummaryStore()
+        return DefaultConversationRepository(
+            sessionApi = sessionApi,
+            chatApi = chatApi,
+            details = details,
+            toolCalls = toolCalls,
+            eventApplier = SessionEventApplier(details = details, toolCalls = toolCalls),
+            summaryStore = summaryStore
+        )
+    }
+
     @BeforeTest
     fun setup() {
         sessionApi = mockk()
         chatApi = mockk()
-        repository = DefaultSessionRepository(sessionApi, chatApi)
+        repository = conversationRepository()
     }
 
     /** Builds a session with one finalized parent and one streaming placeholder. */

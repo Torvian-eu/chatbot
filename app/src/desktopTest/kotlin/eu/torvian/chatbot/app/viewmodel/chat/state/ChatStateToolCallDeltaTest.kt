@@ -151,8 +151,8 @@ class ChatStateToolCallDeltaTest {
             projectId = null
         )
 
-        val sessionRepository = mockk<SessionRepository>()
-        coEvery { sessionRepository.getSessionDetailsFlow(any()) } returns
+        val conversationRepository = mockk<ConversationRepository>()
+        coEvery { conversationRepository.getSessionDetailsFlow(any()) } returns
                 MutableStateFlow(DataState.Success(session))
 
         val settingsRepository = mockk<ModelSettingsRepository>()
@@ -174,7 +174,7 @@ class ChatStateToolCallDeltaTest {
         every { projectRepository.projects } returns MutableStateFlow(DataState.Success(emptyList()))
 
         return ChatStateImpl(
-            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
             modelSettingsRepository = settingsRepository,
             modelRepository = modelRepository,
             toolRepository = toolRepository,

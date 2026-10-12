@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.service.agent
 
 import eu.torvian.chatbot.app.repository.AuthRepository
 import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
@@ -50,14 +51,16 @@ import kotlinx.coroutines.CancellationException
  *
  * Pre-session failures (decode, missing prompt, create failure) are reported without any id.
  *
- * @property sessionRepository Repository used to create the spawned session, scope its project when
- *            the spawned role is project-associated, and attach the role.
+ * @property sessionRepository Repository used to create the spawned session.
+ * @property conversationRepository Repository used to scope the spawned session's project when the
+ *            spawned role is project-associated, and to attach the role.
  * @property authRepository Source of the authentication state that gates the tool call.
  * @property spawnedViewModelResolver Resolves the spawned session's [ChatViewModel], reusing the same
  *            instance the UI resolves for that session.
  */
 class AgentSpawnTool(
     private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     private val authRepository: AuthRepository,
     private val spawnedViewModelResolver: SpawnedChatViewModelResolver
 ) : OperatorTool {
@@ -137,7 +140,7 @@ class AgentSpawnTool(
             // An unassociated target needs no scoping: the freshly created session is already
             // project-less, which is the only legal pairing for such a role.
             if (targetProjectId != null && session.projectId != targetProjectId) {
-                sessionRepository.updateSessionProject(session.id, targetProjectId).fold(
+                conversationRepository.updateSessionProject(session.id, targetProjectId).fold(
                     ifLeft = { error ->
                         logger.error(
                             "Failed to scope spawned session ${session.id} to project $targetProjectId: $error"
@@ -155,7 +158,7 @@ class AgentSpawnTool(
                 )
             }
 
-            sessionRepository.updateSessionAgentRole(session.id, role.id).fold(
+            conversationRepository.updateSessionAgentRole(session.id, role.id).fold(
                 ifLeft = { error ->
                     logger.error("Failed to attach role to spawned session ${session.id}: $error")
                     clientEvents(

@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
@@ -16,13 +16,13 @@ import kotlinx.coroutines.launch
  * together. The turn is checked again when the user confirms, because a generation can start while the
  * dialog is open.
  *
- * @property sessionRepository Repository the deletion is sent to.
+ * @property conversationRepository Repository the deletion is sent to.
  * @property state Shared chat state the dialogs are published into and the turn guard is read from.
  * @property scope Scope the confirmed deletion runs on.
  * @property notificationService Notification sink for repository errors.
  */
 class DeleteMessageUseCase(
-    private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     private val state: ChatState,
     private val scope: CoroutineScope,
     private val notificationService: NotificationService
@@ -83,9 +83,9 @@ class DeleteMessageUseCase(
             logger.info("Deleting $action $messageId")
 
             val result = if (recursive) {
-                sessionRepository.deleteMessageRecursively(messageId, sessionId)
+                conversationRepository.deleteMessageRecursively(messageId, sessionId)
             } else {
-                sessionRepository.deleteMessage(messageId, sessionId)
+                conversationRepository.deleteMessage(messageId, sessionId)
             }
 
             result.fold(

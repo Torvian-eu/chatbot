@@ -2,8 +2,8 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase.turn
 
 import arrow.core.Either
 import arrow.core.right
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
-import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.service.agent.OperatorToolExecutor
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.SendMessageUseCase
@@ -35,7 +35,7 @@ class TurnCollectorToolCallDeltaTest {
     private val messageId = 42L
     private val now = Instant.fromEpochSeconds(1_000L)
 
-    private val sessionRepository = mockk<SessionRepository>()
+    private val conversationRepository = mockk<ConversationRepository>()
     private val notificationService = mockk<NotificationService>(relaxed = true)
     private val operatorToolExecutor = mockk<OperatorToolExecutor>(relaxed = true)
     private val state = mockk<ChatState>(relaxed = true)
@@ -99,10 +99,10 @@ class TurnCollectorToolCallDeltaTest {
      * @param events Events the repository stub is expected to emit.
      */
     private suspend fun collect(events: Flow<Either<RepositoryError, ChatStreamEvent>>) {
-        every { sessionRepository.processNewMessageStreaming(sessionId, any()) } returns events
+        every { conversationRepository.processNewMessageStreaming(sessionId, any()) } returns events
 
         StreamingTurnCollector(
-            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
             notificationService = notificationService,
             operatorToolExecutor = operatorToolExecutor,
             state = state,

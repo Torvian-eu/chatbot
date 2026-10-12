@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_updating_session_project
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
@@ -17,7 +17,7 @@ import eu.torvian.chatbot.app.viewmodel.common.NotificationService
  * in one round-trip.
  */
 class SelectProjectUseCase(
-    private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     private val state: ChatState,
     private val notificationService: NotificationService
 ) {
@@ -33,7 +33,7 @@ class SelectProjectUseCase(
         val sessionId = state.activeSessionId.value ?: return
         logger.info("Selecting project $projectId for session $sessionId")
 
-        sessionRepository.updateSessionProject(
+        conversationRepository.updateSessionProject(
             sessionId = sessionId,
             projectId = projectId
         ).fold(

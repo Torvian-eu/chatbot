@@ -78,8 +78,8 @@ class ChatStateAgentRoleTest {
         sessionFlow: MutableStateFlow<DataState<RepositoryError, ChatSession>>,
         projectsFlow: StateFlow<DataState<RepositoryError, List<ProjectDto>>> = MutableStateFlow(DataState.Success(emptyList()))
     ): ChatStateImpl {
-        val sessionRepository = mockk<SessionRepository>()
-        coEvery { sessionRepository.getSessionDetailsFlow(any()) } returns sessionFlow
+        val conversationRepository = mockk<ConversationRepository>()
+        coEvery { conversationRepository.getSessionDetailsFlow(any()) } returns sessionFlow
 
         val settingsRepository = mockk<ModelSettingsRepository>()
         every { settingsRepository.allSettings } returns MutableStateFlow(
@@ -106,7 +106,7 @@ class ChatStateAgentRoleTest {
         every { projectRepository.projects } returns projectsFlow
 
         return ChatStateImpl(
-            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
             modelSettingsRepository = settingsRepository,
             modelRepository = modelRepository,
             toolRepository = toolRepository,

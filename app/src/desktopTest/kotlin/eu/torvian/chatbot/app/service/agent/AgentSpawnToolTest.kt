@@ -5,6 +5,7 @@ import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.AuthRepository
 import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
@@ -145,12 +146,18 @@ class AgentSpawnToolTest {
     /**
      * Builds an executor with the given collaborators; mocks the auth state for the user unless told
      * otherwise, so tests only stub what they exercise.
+     *
+     * @param sessionRepository Supplies session creation.
+     * @param conversationRepository Supplies project scoping and role attach.
+     * @param authRepository Source of the authentication state.
+     * @param resolver Resolver of the spawned session's ViewModel.
      */
     private fun newExecutor(
         sessionRepository: SessionRepository = mockk(),
+        conversationRepository: ConversationRepository = mockk(),
         authRepository: AuthRepository = authenticatedAuthRepository(),
         resolver: SpawnedChatViewModelResolver = mockk(),
-    ) = AgentSpawnTool(sessionRepository, authRepository, resolver)
+    ) = AgentSpawnTool(sessionRepository, conversationRepository, authRepository, resolver)
 
     private fun authenticatedAuthRepository(): AuthRepository {
         val authRepository = mockk<AuthRepository>()
@@ -253,11 +260,16 @@ class AgentSpawnToolTest {
     @Test
     fun `execute drives the spawned session viewmodel and aggregates its summary`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession("Spawned: Implementation task") } returns session.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
         val (resolver, viewModel) = successfulViewModel(summary = "FINAL SUMMARY")
-        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
+            resolver = resolver
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
 
         executor.execute(
@@ -273,7 +285,7 @@ class AgentSpawnToolTest {
         )
         assertEquals(false, result?.isError)
         coVerify { sessionRepository.createSession("Spawned: Implementation task") }
-        coVerify { sessionRepository.updateSessionAgentRole(session.id, role.id) }
+        coVerify { conversationRepository.updateSessionAgentRole(session.id, role.id) }
         // The spawned conversation is driven through the session's own ViewModel with user-facing
         // methods: load → input → send, and the turn's final state is read back from the VM.
         verify { viewModel.loadSession(session.id) }
@@ -291,12 +303,17 @@ class AgentSpawnToolTest {
     @Test
     fun `execute keeps a multi-line summary flush-left instead of indenting the labels`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession("Spawned: Implementation task") } returns session.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
         val multiLineSummary = "I've retrieved the local time.\n\nHere is the report:\n## New York City Time"
         val (resolver, _) = successfulViewModel(summary = multiLineSummary)
-        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
+            resolver = resolver
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
 
         executor.execute(
@@ -323,13 +340,18 @@ class AgentSpawnToolTest {
     @Test
     fun `execute in fire and forget spawn mode returns the session id without awaiting the send`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession("Spawned: Implementation task") } returns session.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
         // A send job that never completes proves the executor returned without joining it.
         val pendingSend = CompletableDeferred<Unit>()
         val (resolver, viewModel) = successfulViewModel(sendJob = pendingSend)
-        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
+            resolver = resolver
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
 
         executor.execute(
@@ -359,10 +381,14 @@ class AgentSpawnToolTest {
     @Test
     fun `execute reports a session creation failure as an error result`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns
                 RepositoryError.OtherError("cannot create").left()
 
-        val executor = newExecutor(sessionRepository = sessionRepository)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
@@ -383,11 +409,15 @@ class AgentSpawnToolTest {
     @Test
     fun `execute reports a role attach failure as an error result with the session id`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns
                 RepositoryError.OtherError("cannot attach").left()
 
-        val executor = newExecutor(sessionRepository = sessionRepository)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
@@ -410,12 +440,17 @@ class AgentSpawnToolTest {
     @Test
     fun `execute scopes the spawned session to the spawned role's project before attaching the role`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
-        coEvery { sessionRepository.updateSessionProject(session.id, 3L) } returns Unit.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionProject(session.id, 3L) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
         val (resolver, _) = successfulViewModel(summary = "FINAL SUMMARY")
-        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
+            resolver = resolver
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
 
         executor.execute(
@@ -426,8 +461,8 @@ class AgentSpawnToolTest {
 
         assertEquals(false, result?.isError)
         coVerifyOrder {
-            sessionRepository.updateSessionProject(session.id, 3L)
-            sessionRepository.updateSessionAgentRole(session.id, role.id)
+            conversationRepository.updateSessionProject(session.id, 3L)
+            conversationRepository.updateSessionAgentRole(session.id, role.id)
         }
     }
 
@@ -440,9 +475,13 @@ class AgentSpawnToolTest {
     fun `execute refuses a payload whose project does not match the spawned role's project`() = runTest {
         val foreignRole = role.copy(projectId = 5L)
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
 
-        val executor = newExecutor(sessionRepository = sessionRepository)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
 
         executor.execute(
@@ -457,8 +496,8 @@ class AgentSpawnToolTest {
             result?.errorMessage?.contains("spawn request project does not match the spawned role's project")
         )
         assertEquals("**Spawned chat session id:** 99", result?.output)
-        coVerify(exactly = 0) { sessionRepository.updateSessionProject(any(), any()) }
-        coVerify(exactly = 0) { sessionRepository.updateSessionAgentRole(any(), any()) }
+        coVerify(exactly = 0) { conversationRepository.updateSessionProject(any(), any()) }
+        coVerify(exactly = 0) { conversationRepository.updateSessionAgentRole(any(), any()) }
     }
 
     /**
@@ -469,11 +508,16 @@ class AgentSpawnToolTest {
     @Test
     fun `execute attaches an unassociated role without project scoping`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
         val (resolver, _) = successfulViewModel()
-        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
+            resolver = resolver
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
 
         executor.execute(
@@ -483,8 +527,8 @@ class AgentSpawnToolTest {
         )
 
         assertEquals(false, result?.isError)
-        coVerify(exactly = 0) { sessionRepository.updateSessionProject(any(), any()) }
-        coVerify { sessionRepository.updateSessionAgentRole(session.id, role.id) }
+        coVerify(exactly = 0) { conversationRepository.updateSessionProject(any(), any()) }
+        coVerify { conversationRepository.updateSessionAgentRole(session.id, role.id) }
     }
 
     /**
@@ -495,11 +539,15 @@ class AgentSpawnToolTest {
     @Test
     fun `execute reports a project scoping failure as an error result with the session id`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
-        coEvery { sessionRepository.updateSessionProject(session.id, 7L) } returns
+        coEvery { conversationRepository.updateSessionProject(session.id, 7L) } returns
                 RepositoryError.OtherError("cannot scope").left()
 
-        val executor = newExecutor(sessionRepository = sessionRepository)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
@@ -510,7 +558,7 @@ class AgentSpawnToolTest {
         assertEquals(true, result?.isError)
         assertEquals(true, result?.errorMessage?.contains("scope"))
         assertEquals("**Spawned chat session id:** 99", result?.output)
-        coVerify(exactly = 0) { sessionRepository.updateSessionAgentRole(any(), any()) }
+        coVerify(exactly = 0) { conversationRepository.updateSessionAgentRole(any(), any()) }
     }
 
     /**
@@ -525,10 +573,15 @@ class AgentSpawnToolTest {
         // Session creation and role attach run before the auth check in the executor; stub them so
         // the test reaches the authentication guard.
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
-        val executor = newExecutor(sessionRepository = sessionRepository, authRepository = authRepository)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
+            authRepository = authRepository
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
@@ -544,8 +597,9 @@ class AgentSpawnToolTest {
     @Test
     fun `execute reports when the spawned session cannot resolve role, model or settings`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
         val viewModel = mockk<ChatViewModel>()
         every { viewModel.sessionDataState } returns MutableStateFlow(DataState.Success(session))
@@ -559,7 +613,11 @@ class AgentSpawnToolTest {
         val resolver = mockk<SpawnedChatViewModelResolver>()
         coEvery { resolver.forSession(session.id) } returns viewModel
 
-        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
+            resolver = resolver
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
@@ -575,11 +633,16 @@ class AgentSpawnToolTest {
     @Test
     fun `execute reports a refused send as an error result with the session id`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
         val (resolver, _) = successfulViewModel(sendJob = null)
-        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
+            resolver = resolver
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
@@ -599,11 +662,16 @@ class AgentSpawnToolTest {
     @Test
     fun `execute reports an empty summary as an error result with the session id`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
         val (resolver, _) = successfulViewModel(summary = null)
-        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
+            resolver = resolver
+        )
         var result: ChatClientEvent.ToolExecutionResult? = null
         executor.execute(
             toolCallId = 42L,
@@ -619,14 +687,19 @@ class AgentSpawnToolTest {
     @Test
     fun `execute cancels the spawned send when the primary turn is cancelled mid-spawn`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
         // A send job that never completes keeps the spawned turn in flight until the primary scope
         // (and therefore the executor coroutine) is cancelled.
         val pendingSend = CompletableDeferred<Unit>()
         val (resolver, viewModel) = successfulViewModel(sendJob = pendingSend)
-        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
+            resolver = resolver
+        )
 
         val executorJob = launch {
             executor.execute(
@@ -652,15 +725,20 @@ class AgentSpawnToolTest {
     @Test
     fun `execute in fire and forget mode never force-cancels the spawned turn on executor cancellation`() = runTest {
         val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         coEvery { sessionRepository.createSession(any()) } returns session.right()
-        coEvery { sessionRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
+        coEvery { conversationRepository.updateSessionAgentRole(session.id, role.id) } returns Unit.right()
 
         val (resolver, viewModel) = successfulViewModel()
         // A load that never completes keeps the executor coroutine suspended until it is cancelled,
         // giving the test a deterministic mid-execution cancellation point.
         val neverCompletingLoad = CompletableDeferred<Unit>()
         every { viewModel.loadSession(session.id) } returns neverCompletingLoad
-        val executor = newExecutor(sessionRepository = sessionRepository, resolver = resolver)
+        val executor = newExecutor(
+            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
+            resolver = resolver
+        )
 
         val executorJob = launch {
             executor.execute(

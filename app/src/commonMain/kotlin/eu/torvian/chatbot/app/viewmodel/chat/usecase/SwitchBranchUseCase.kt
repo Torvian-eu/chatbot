@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_switching_branch
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
@@ -10,10 +10,10 @@ import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 
 /**
  * Use case for switching the currently displayed chat branch.
- * Finds the leaf message of the target branch and persists the change via SessionRepository.
+ * Finds the leaf message of the target branch and persists the change via ConversationRepository.
  */
 class SwitchBranchUseCase(
-    private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     private val threadBuilder: ThreadBuilder,
     private val state: ChatState,
     private val notificationService: NotificationService
@@ -47,7 +47,7 @@ class SwitchBranchUseCase(
         if (currentSession.currentLeafMessageId == finalLeafId) return // Already on this exact branch
 
         logger.info("Switching branch to message $targetMessageId (leaf: $finalLeafId) for session ${currentSession.id}")
-        sessionRepository.updateSessionLeafMessage(
+        conversationRepository.updateSessionLeafMessage(
             sessionId = currentSession.id,
             leafMessageId = finalLeafId
         ).fold(

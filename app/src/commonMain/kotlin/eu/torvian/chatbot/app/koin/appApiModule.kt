@@ -3,6 +3,10 @@ package eu.torvian.chatbot.app.koin
 import eu.torvian.chatbot.app.config.AppConfiguration
 import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
+import eu.torvian.chatbot.app.repository.impl.session.SessionDetailsStore
+import eu.torvian.chatbot.app.repository.impl.session.SessionEventApplier
+import eu.torvian.chatbot.app.repository.impl.session.SessionSummaryStore
+import eu.torvian.chatbot.app.repository.impl.session.ToolCallStore
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
 import org.koin.core.module.Module
@@ -113,8 +117,29 @@ fun appApiModule(config: AppConfiguration): Module = module {
     single<ModelSettingsRepository> {
         DefaultModelSettingsRepository(get())
     }
+    // The session API is split into the list half and the conversation half, which share four collaborators. Each
+    // collaborator is created once here, so the cached rows, the cached transcripts and the cached tool calls have a
+    // single owner for the whole application.
+    single { SessionDetailsStore() }
+    single { ToolCallStore() }
+    single { SessionSummaryStore() }
+    single { SessionEventApplier(details = get(), toolCalls = get()) }
     single<SessionRepository> {
-        DefaultSessionRepository(get(), get())
+        DefaultSessionListRepository(
+            sessionApi = get(),
+            summaryStore = get(),
+            details = get()
+        )
+    }
+    single<ConversationRepository> {
+        DefaultConversationRepository(
+            sessionApi = get(),
+            chatApi = get(),
+            details = get(),
+            toolCalls = get(),
+            eventApplier = get(),
+            summaryStore = get()
+        )
     }
     single<GroupRepository> {
         DefaultGroupRepository(get())

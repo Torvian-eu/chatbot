@@ -7,7 +7,7 @@ import eu.torvian.chatbot.app.service.agent.OperatorToolExecutor
 import eu.torvian.chatbot.app.service.agent.SendMessageTool
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManagerImpl
-import eu.torvian.chatbot.app.viewmodel.*
+import eu.torvian.chatbot.app.viewmodel.SearchNavigationCoordinator
 import eu.torvian.chatbot.app.viewmodel.chat.*
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatStateImpl
@@ -16,7 +16,6 @@ import eu.torvian.chatbot.app.viewmodel.sessionstatus.SessionTurnStatusRegistry
 import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import kotlinx.coroutines.CoroutineScope
 import org.koin.core.module.Module
-import org.koin.core.parameter.parametersOf
 import org.koin.dsl.module
 
 /**
@@ -53,6 +52,7 @@ fun appChatModule(): Module = module {
             mapOf(
                 OperatorToolCatalog.SPAWN_AGENT_NAME to AgentSpawnTool(
                     sessionRepository = get<SessionRepository>(),
+                    conversationRepository = get<ConversationRepository>(),
                     authRepository = get<AuthRepository>(),
                     spawnedViewModelResolver = get<SpawnedChatViewModelResolver>()
                 ),
@@ -76,7 +76,7 @@ fun appChatModule(): Module = module {
     // Provide shared chat state with background scope for computed state flows
     factory<ChatState> { (backgroundScope: CoroutineScope) ->
         ChatStateImpl(
-            sessionRepository = get(),
+            conversationRepository = get(),
             modelSettingsRepository = get(),
             modelRepository = get(),
             toolRepository = get(),
@@ -91,7 +91,7 @@ fun appChatModule(): Module = module {
     // Provide use cases with updated dependencies (now using repositories)
     factory<LoadSessionUseCase> { (chatState: ChatState, backgroundScope: CoroutineScope) ->
         LoadSessionUseCase(
-            get<SessionRepository>(),
+            get<ConversationRepository>(),
             get<ModelSettingsRepository>(),
             get<ModelRepository>(),
             get<ToolRepository>(),
@@ -114,7 +114,7 @@ fun appChatModule(): Module = module {
     }
 
     factory<SelectAgentRoleUseCase> { (chatState: ChatState) ->
-        SelectAgentRoleUseCase(get<SessionRepository>(), chatState, get())
+        SelectAgentRoleUseCase(get<ConversationRepository>(), chatState, get())
     }
 
     factory<LoadAgentRolesUseCase> { (_: ChatState) ->
@@ -122,7 +122,7 @@ fun appChatModule(): Module = module {
     }
 
     factory<SelectProjectUseCase> { (chatState: ChatState) ->
-        SelectProjectUseCase(get<SessionRepository>(), chatState, get())
+        SelectProjectUseCase(get<ConversationRepository>(), chatState, get())
     }
 
     factory<LoadProjectsUseCase> { (_: ChatState) ->
@@ -130,16 +130,16 @@ fun appChatModule(): Module = module {
     }
 
     factory<SwitchBranchUseCase> { (chatState: ChatState) ->
-        SwitchBranchUseCase(get<SessionRepository>(), get(), chatState, get())
+        SwitchBranchUseCase(get<ConversationRepository>(), get(), chatState, get())
     }
 
     factory<CompactConversationUseCase> { (chatState: ChatState, scope: CoroutineScope) ->
-        CompactConversationUseCase(get<SessionRepository>(), chatState, get(), scope)
+        CompactConversationUseCase(get<ConversationRepository>(), chatState, get(), scope)
     }
 
     factory<SendMessageUseCase> { (chatState: ChatState, scope: CoroutineScope) ->
         SendMessageUseCase(
-            get<SessionRepository>(),
+            get<ConversationRepository>(),
             get<ToolRepository>(),
             get(),
             get(),
@@ -151,11 +151,11 @@ fun appChatModule(): Module = module {
     }
 
     factory<EditMessageUseCase> { (chatState: ChatState) ->
-        EditMessageUseCase(get<SessionRepository>(), chatState, get())
+        EditMessageUseCase(get<ConversationRepository>(), chatState, get())
     }
 
     factory<DeleteMessageUseCase> { (chatState: ChatState, scope: CoroutineScope) ->
-        DeleteMessageUseCase(get<SessionRepository>(), chatState, scope, get())
+        DeleteMessageUseCase(get<ConversationRepository>(), chatState, scope, get())
     }
 
     factory { (chatState: ChatState, scope: CoroutineScope) ->

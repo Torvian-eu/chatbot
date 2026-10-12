@@ -2,8 +2,8 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase.turn
 
 import arrow.core.Either
 import arrow.core.right
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
-import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.service.agent.OperatorToolExecutor
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.SendMessageUseCase
@@ -37,7 +37,7 @@ class TurnCollectorRawLlmRequestTest {
         body = """{"model":"gpt-4"}"""
     )
 
-    private val sessionRepository = mockk<SessionRepository>()
+    private val conversationRepository = mockk<ConversationRepository>()
     private val notificationService = mockk<NotificationService>(relaxed = true)
     private val operatorToolExecutor = mockk<OperatorToolExecutor>(relaxed = true)
     private val state = mockk<ChatState>(relaxed = true)
@@ -48,10 +48,10 @@ class TurnCollectorRawLlmRequestTest {
     fun `the streaming capture is written into chat state`() = runTest {
         val events: Flow<Either<RepositoryError, ChatStreamEvent>> =
             flowOf(ChatStreamEvent.RawLlmRequest(payload).right())
-        every { sessionRepository.processNewMessageStreaming(sessionId, any()) } returns events
+        every { conversationRepository.processNewMessageStreaming(sessionId, any()) } returns events
 
         StreamingTurnCollector(
-            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
             notificationService = notificationService,
             operatorToolExecutor = operatorToolExecutor,
             state = state,
@@ -66,10 +66,10 @@ class TurnCollectorRawLlmRequestTest {
     @Test
     fun `the non-streaming capture is written into chat state`() = runTest {
         val events: Flow<Either<RepositoryError, ChatEvent>> = flowOf(ChatEvent.RawLlmRequest(payload).right())
-        every { sessionRepository.processNewMessage(sessionId, any()) } returns events
+        every { conversationRepository.processNewMessage(sessionId, any()) } returns events
 
         NonStreamingTurnCollector(
-            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
             notificationService = notificationService,
             operatorToolExecutor = operatorToolExecutor,
             state = state,
@@ -84,10 +84,10 @@ class TurnCollectorRawLlmRequestTest {
     @Test
     fun `an unrelated event leaves the capture untouched`() = runTest {
         val events: Flow<Either<RepositoryError, ChatEvent>> = flowOf(ChatEvent.StreamCompleted.right())
-        every { sessionRepository.processNewMessage(sessionId, any()) } returns events
+        every { conversationRepository.processNewMessage(sessionId, any()) } returns events
 
         NonStreamingTurnCollector(
-            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
             notificationService = notificationService,
             operatorToolExecutor = operatorToolExecutor,
             state = state,

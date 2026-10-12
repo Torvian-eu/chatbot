@@ -2,6 +2,10 @@ package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.impl.session.SessionDetailsStore
+import eu.torvian.chatbot.app.repository.impl.session.SessionEventApplier
+import eu.torvian.chatbot.app.repository.impl.session.SessionSummaryStore
+import eu.torvian.chatbot.app.repository.impl.session.ToolCallStore
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.common.models.core.AssistantMessageIncompleteCause
@@ -29,7 +33,7 @@ import kotlin.time.Instant
  * session exactly as it was, and issue no request at all — the cache is the client's own copy of the session and
  * the next session load reads the persisted truth.
  */
-class DefaultSessionRepositoryAssistantMessageInterruptionTest {
+class DefaultConversationRepositoryAssistantMessageInterruptionTest {
 
     private val sessionId = 100L
     private val now = Instant.fromEpochMilliseconds(1_700_000_000_000L)
@@ -38,13 +42,29 @@ class DefaultSessionRepositoryAssistantMessageInterruptionTest {
 
     private lateinit var sessionApi: SessionApi
     private lateinit var chatApi: ChatApi
-    private lateinit var repository: DefaultSessionRepository
+    /** The conversation half under test. */
+    private lateinit var repository: DefaultConversationRepository
+
+    /** Builds the repository under test over its own collaborators. */
+    private fun conversationRepository(): DefaultConversationRepository {
+        val details = SessionDetailsStore()
+        val toolCalls = ToolCallStore()
+        val summaryStore = SessionSummaryStore()
+        return DefaultConversationRepository(
+            sessionApi = sessionApi,
+            chatApi = chatApi,
+            details = details,
+            toolCalls = toolCalls,
+            eventApplier = SessionEventApplier(details = details, toolCalls = toolCalls),
+            summaryStore = summaryStore
+        )
+    }
 
     @BeforeTest
     fun setup() {
         sessionApi = mockk()
         chatApi = mockk()
-        repository = DefaultSessionRepository(sessionApi, chatApi)
+        repository = conversationRepository()
     }
 
     /**

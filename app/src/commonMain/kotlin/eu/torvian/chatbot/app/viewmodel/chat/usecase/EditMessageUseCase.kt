@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.utils.platform.FilePathUtils
 import eu.torvian.chatbot.app.utils.platform.FilePickerResult
@@ -18,7 +18,7 @@ import eu.torvian.chatbot.common.models.core.MessageInsertPosition
  * Handles the editing workflow including validation, repository calls, and state updates.
  */
 class EditMessageUseCase(
-    private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     private val state: ChatState,
     private val notificationService: NotificationService
 ) {
@@ -58,7 +58,7 @@ class EditMessageUseCase(
 
         logger.info("Saving edited message ${messageToEdit.id}")
 
-        sessionRepository.updateMessageContent(
+        conversationRepository.updateMessageContent(
             messageToEdit.id,
             messageToEdit.sessionId,
             newContent,
@@ -96,7 +96,7 @@ class EditMessageUseCase(
 
         logger.info("Saving edited message ${messageToEdit.id} as copy (sibling)")
 
-        sessionRepository.insertMessage(
+        conversationRepository.insertMessage(
             sessionId = session.id,
             targetMessageId = parentId,
             position = MessageInsertPosition.APPEND,

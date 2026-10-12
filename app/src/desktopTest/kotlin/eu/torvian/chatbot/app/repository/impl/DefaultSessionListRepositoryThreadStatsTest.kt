@@ -2,8 +2,9 @@ package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.impl.session.SessionDetailsStore
+import eu.torvian.chatbot.app.repository.impl.session.SessionSummaryStore
 import eu.torvian.chatbot.app.service.api.ApiResourceError
-import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
@@ -19,15 +20,15 @@ import kotlin.test.assertIs
 import kotlin.test.fail
 
 /**
- * Verifies that the thread statistics pass through the session repository unchanged and that a failing
+ * Verifies that the thread statistics pass through the session list repository unchanged and that a failing
  * fetch is wrapped with the operation's context.
  */
-class DefaultSessionRepositoryThreadStatsTest {
+class DefaultSessionListRepositoryThreadStatsTest {
 
     private val sessionId = 42L
 
     private lateinit var sessionApi: SessionApi
-    private lateinit var repository: DefaultSessionRepository
+    private lateinit var repository: DefaultSessionListRepository
 
     private val stats = ThreadStats(
         totalMessages = 4,
@@ -60,7 +61,11 @@ class DefaultSessionRepositoryThreadStatsTest {
     @BeforeTest
     fun setup() {
         sessionApi = mockk()
-        repository = DefaultSessionRepository(sessionApi, mockk<ChatApi>(relaxed = true))
+        repository = DefaultSessionListRepository(
+            sessionApi = sessionApi,
+            summaryStore = SessionSummaryStore(),
+            details = SessionDetailsStore()
+        )
     }
 
     @Test

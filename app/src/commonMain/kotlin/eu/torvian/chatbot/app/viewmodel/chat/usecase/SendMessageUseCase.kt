@@ -3,7 +3,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 import eu.torvian.chatbot.app.domain.TurnOutcome
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.warning_no_agent_role_selected
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.service.agent.OperatorToolExecutor
 import eu.torvian.chatbot.app.service.security.RequestSigningService
@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
  * Use case for sending messages in chat sessions.
  * Handles both streaming and non-streaming message sending based on settings.
  *
- * @property sessionRepository Repository responsible for chat message transport and session updates.
+ * @property conversationRepository Repository responsible for chat message transport and session updates.
  * @property toolRepository Repository used to resolve tool definitions and cached approval preferences.
  * @property requestSigningService Service that signs Local MCP authorization payloads on-device.
  * @property operatorToolExecutor General operator-tool executor that runs `spawn_agent` /
@@ -47,7 +47,7 @@ import kotlinx.coroutines.launch
  * @property scope Scope the tool-call approval decisions of the details dialog run on.
  */
 class SendMessageUseCase(
-    private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     private val toolRepository: ToolRepository,
     private val requestSigningService: RequestSigningService,
     private val operatorToolExecutor: OperatorToolExecutor,
@@ -92,7 +92,7 @@ class SendMessageUseCase(
 
     /** Collector that consumes a streaming turn's server event stream and updates chat state. */
     private val streamingTurnCollector = StreamingTurnCollector(
-        sessionRepository = sessionRepository,
+        conversationRepository = conversationRepository,
         notificationService = notificationService,
         operatorToolExecutor = operatorToolExecutor,
         state = state,
@@ -103,7 +103,7 @@ class SendMessageUseCase(
 
     /** Collector that consumes a non-streaming turn's server event stream and updates chat state. */
     private val nonStreamingTurnCollector = NonStreamingTurnCollector(
-        sessionRepository = sessionRepository,
+        conversationRepository = conversationRepository,
         notificationService = notificationService,
         operatorToolExecutor = operatorToolExecutor,
         state = state,

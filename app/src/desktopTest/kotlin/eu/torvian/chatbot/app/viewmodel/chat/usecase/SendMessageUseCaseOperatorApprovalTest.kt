@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.service.security.RequestSigningService
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
@@ -53,7 +53,7 @@ import kotlin.time.Instant
  * `ChatClientEvent.OperatorToolCallApproval`.
  *
  * The stop tests verify that a streaming turn this client cancelled settles the assistant message it left
- * unfinalized locally (`SessionRepository.markAssistantMessageInterrupted`) without issuing any session request,
+ * unfinalized locally (`ConversationRepository.markAssistantMessageInterrupted`) without issuing any session request,
  * that a stop the server ended while the socket was alive is left to the delivered event, and that a turn which
  * ended normally — streaming or not — leaves the cached session alone.
  */
@@ -120,7 +120,7 @@ class SendMessageUseCaseOperatorApprovalTest {
     private fun buildHarness(
         preference: UserToolApprovalPreference?
     ): Quad {
-        val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         val toolRepository = mockk<ToolRepository>()
         val state = mockk<ChatState>()
 
@@ -150,7 +150,7 @@ class SendMessageUseCaseOperatorApprovalTest {
 
         val outbound = CompletableDeferred<Flow<ChatClientEvent>>()
         every {
-            sessionRepository.processNewMessageStreaming(session.id, any())
+            conversationRepository.processNewMessageStreaming(session.id, any())
         } answers {
             outbound.complete(secondArg<Flow<ChatClientEvent>>())
             flow {
@@ -159,7 +159,7 @@ class SendMessageUseCaseOperatorApprovalTest {
             }
         }
 
-        return Quad(sessionRepository, toolRepository, state, outbound)
+        return Quad(conversationRepository, toolRepository, state, outbound)
     }
 
     /**
@@ -167,7 +167,7 @@ class SendMessageUseCaseOperatorApprovalTest {
      * handle.
      */
     private data class Quad(
-        val sessionRepository: SessionRepository,
+        val conversationRepository: ConversationRepository,
         val toolRepository: ToolRepository,
         val state: ChatState,
         val outbound: CompletableDeferred<Flow<ChatClientEvent>>
@@ -175,7 +175,7 @@ class SendMessageUseCaseOperatorApprovalTest {
 
     private suspend fun runSend(harness: Quad) {
         val useCase = SendMessageUseCase(
-            sessionRepository = harness.sessionRepository,
+            conversationRepository = harness.conversationRepository,
             toolRepository = harness.toolRepository,
             requestSigningService = mockk<RequestSigningService>(),
             operatorToolExecutor = mockk(),
@@ -244,12 +244,12 @@ class SendMessageUseCaseOperatorApprovalTest {
     /**
      * Mocked collaborators of the send path whose only moving part is the message-processing flow.
      *
-     * @property sessionRepository Strict mock whose local-settling calls are asserted and whose other
+     * @property conversationRepository Strict mock whose local-settling calls are asserted and whose other
      *           session operations would fail the test if the send path ever invoked them.
      * @property state Chat state the send path reads; the flow used by the test never mutates it.
      */
     private data class SendHarness(
-        val sessionRepository: SessionRepository,
+        val conversationRepository: ConversationRepository,
         val state: ChatState
     )
 
@@ -261,7 +261,7 @@ class SendMessageUseCaseOperatorApprovalTest {
      * @return Harness with the repository mock and the chat state.
      */
     private fun buildSendHarness(isStreaming: Boolean): SendHarness {
-        val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         val state = mockk<ChatState>()
 
         every { state.currentSession } returns MutableStateFlow<ChatSession?>(session)
@@ -279,7 +279,7 @@ class SendMessageUseCaseOperatorApprovalTest {
         every { state.forgetToolCallDeltas(any()) } returns Unit
         every { state.forgetAllToolCallDeltas() } returns Unit
 
-        return SendHarness(sessionRepository, state)
+        return SendHarness(conversationRepository, state)
     }
 
     /**
@@ -289,7 +289,7 @@ class SendMessageUseCaseOperatorApprovalTest {
      * @return Use case ready to receive [SendMessageUseCase.execute].
      */
     private fun sendUseCase(harness: SendHarness) = SendMessageUseCase(
-        sessionRepository = harness.sessionRepository,
+        conversationRepository = harness.conversationRepository,
         toolRepository = mockk<ToolRepository>(),
         requestSigningService = mockk<RequestSigningService>(),
         operatorToolExecutor = mockk(),
@@ -326,13 +326,13 @@ class SendMessageUseCaseOperatorApprovalTest {
     fun `stopped streaming turn marks its placeholder interrupted locally without a session request`() = runTest {
         val harness = buildSendHarness(isStreaming = true)
         val placeholder = assistantPlaceholder()
-        every { harness.sessionRepository.processNewMessageStreaming(session.id, any()) } returns flow {
+        every { harness.conversationRepository.processNewMessageStreaming(session.id, any()) } returns flow {
             emit(ChatStreamEvent.AssistantMessageStart(placeholder, parentMessage()).right())
             // The turn is torn down by this client before any finalizing event can arrive.
             awaitCancellation()
         }
         coEvery {
-            harness.sessionRepository.markAssistantMessageInterrupted(session.id, placeholder.id)
+            harness.conversationRepository.markAssistantMessageInterrupted(session.id, placeholder.id)
         } returns Unit
 
         val sendJob = launch { sendUseCase(harness).execute() }
@@ -343,18 +343,18 @@ class SendMessageUseCaseOperatorApprovalTest {
 
         // Exactly one local settlement of the placeholder this client cancelled.
         coVerify(exactly = 1) {
-            harness.sessionRepository.markAssistantMessageInterrupted(session.id, placeholder.id)
+            harness.conversationRepository.markAssistantMessageInterrupted(session.id, placeholder.id)
         }
         // The cached session is never fetched or replaced by the send path, which is what makes the
         // MEDIUM-1 race unrepresentable (a strict mock fails on any unstubbed repository call).
-        coVerify(exactly = 0) { harness.sessionRepository.loadSessionDetails(any()) }
+        coVerify(exactly = 0) { harness.conversationRepository.loadSessionDetails(any()) }
     }
 
     @Test
     fun `completed streaming turn does not touch the cached session`() = runTest {
         val harness = buildSendHarness(isStreaming = true)
         val placeholder = assistantPlaceholder()
-        every { harness.sessionRepository.processNewMessageStreaming(session.id, any()) } returns flow {
+        every { harness.conversationRepository.processNewMessageStreaming(session.id, any()) } returns flow {
             emit(ChatStreamEvent.AssistantMessageStart(placeholder, parentMessage()).right())
             emit(ChatStreamEvent.AssistantMessageEnd(placeholder.copy(isComplete = true)).right())
             emit(ChatStreamEvent.StreamCompleted.right())
@@ -363,7 +363,7 @@ class SendMessageUseCaseOperatorApprovalTest {
         sendUseCase(harness).execute()
 
         // The delivered terminal event is the only writer: nothing is settled locally afterwards.
-        coVerify(exactly = 0) { harness.sessionRepository.markAssistantMessageInterrupted(any(), any()) }
+        coVerify(exactly = 0) { harness.conversationRepository.markAssistantMessageInterrupted(any(), any()) }
     }
 
     @Test
@@ -372,7 +372,7 @@ class SendMessageUseCaseOperatorApprovalTest {
         val placeholder = assistantPlaceholder()
         // Drain-completed stop: the server classified the ending itself and delivered its terminal frame over
         // the still-open socket, so the client already holds the authoritative state and must add nothing.
-        every { harness.sessionRepository.processNewMessageStreaming(session.id, any()) } returns flow {
+        every { harness.conversationRepository.processNewMessageStreaming(session.id, any()) } returns flow {
             emit(ChatStreamEvent.AssistantMessageStart(placeholder, parentMessage()).right())
             emit(
                 ChatStreamEvent.AssistantMessageEnd(
@@ -388,23 +388,23 @@ class SendMessageUseCaseOperatorApprovalTest {
         sendUseCase(harness).execute()
 
         // The delivered event wins: the local marking must never fight the server's own terminal state.
-        coVerify(exactly = 0) { harness.sessionRepository.markAssistantMessageInterrupted(any(), any()) }
-        coVerify(exactly = 0) { harness.sessionRepository.loadSessionDetails(any()) }
+        coVerify(exactly = 0) { harness.conversationRepository.markAssistantMessageInterrupted(any(), any()) }
+        coVerify(exactly = 0) { harness.conversationRepository.loadSessionDetails(any()) }
     }
 
     @Test
     fun `non-streaming turn does not touch the cached session`() = runTest {
         val completedHarness = buildSendHarness(isStreaming = false)
-        every { completedHarness.sessionRepository.processNewMessage(session.id, any()) } returns flow {
+        every { completedHarness.conversationRepository.processNewMessage(session.id, any()) } returns flow {
             emit(ChatEvent.StreamCompleted.right())
         }
 
         sendUseCase(completedHarness).execute()
 
-        coVerify(exactly = 0) { completedHarness.sessionRepository.markAssistantMessageInterrupted(any(), any()) }
+        coVerify(exactly = 0) { completedHarness.conversationRepository.markAssistantMessageInterrupted(any(), any()) }
 
         val cancelledHarness = buildSendHarness(isStreaming = false)
-        every { cancelledHarness.sessionRepository.processNewMessage(session.id, any()) } returns flow {
+        every { cancelledHarness.conversationRepository.processNewMessage(session.id, any()) } returns flow {
             awaitCancellation()
         }
 
@@ -416,6 +416,6 @@ class SendMessageUseCaseOperatorApprovalTest {
 
         // Nothing may be settled here: a non-streaming call has no placeholder, and the server creates no
         // assistant row for one that was abandoned before returning.
-        coVerify(exactly = 0) { cancelledHarness.sessionRepository.markAssistantMessageInterrupted(any(), any()) }
+        coVerify(exactly = 0) { cancelledHarness.conversationRepository.markAssistantMessageInterrupted(any(), any()) }
     }
 }

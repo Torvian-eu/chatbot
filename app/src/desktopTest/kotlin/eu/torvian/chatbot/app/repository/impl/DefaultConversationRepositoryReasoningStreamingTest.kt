@@ -3,6 +3,10 @@ package eu.torvian.chatbot.app.repository.impl
 import arrow.core.Either
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.impl.session.SessionDetailsStore
+import eu.torvian.chatbot.app.repository.impl.session.SessionEventApplier
+import eu.torvian.chatbot.app.repository.impl.session.SessionSummaryStore
+import eu.torvian.chatbot.app.repository.impl.session.ToolCallStore
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
@@ -38,7 +42,7 @@ import kotlin.time.Instant
  * while streaming and after the completing event replaces the message; the delta must not disturb the rest of the
  * message or its neighbours.
  */
-class DefaultSessionRepositoryReasoningStreamingTest {
+class DefaultConversationRepositoryReasoningStreamingTest {
 
     private val sessionId = 100L
     private val neighbourId = 7L
@@ -47,13 +51,29 @@ class DefaultSessionRepositoryReasoningStreamingTest {
 
     private lateinit var sessionApi: SessionApi
     private lateinit var chatApi: ChatApi
-    private lateinit var repository: DefaultSessionRepository
+    /** The conversation half under test. */
+    private lateinit var repository: DefaultConversationRepository
+
+    /** Builds the repository under test over its own collaborators. */
+    private fun conversationRepository(): DefaultConversationRepository {
+        val details = SessionDetailsStore()
+        val toolCalls = ToolCallStore()
+        val summaryStore = SessionSummaryStore()
+        return DefaultConversationRepository(
+            sessionApi = sessionApi,
+            chatApi = chatApi,
+            details = details,
+            toolCalls = toolCalls,
+            eventApplier = SessionEventApplier(details = details, toolCalls = toolCalls),
+            summaryStore = summaryStore
+        )
+    }
 
     @BeforeTest
     fun setup() {
         sessionApi = mockk()
         chatApi = mockk()
-        repository = DefaultSessionRepository(sessionApi, chatApi)
+        repository = conversationRepository()
     }
 
     /** Builds a session with one finalized neighbour and one in-flight reasoning placeholder. */
@@ -117,7 +137,7 @@ class DefaultSessionRepositoryReasoningStreamingTest {
     /**
      * Returns the plaintext of the reasoning items of a cached assistant message.
      *
-     * @param message Cached message to read the reasoning of.
+     * @receiver message Cached message to read the reasoning of.
      * @return Joined `content[].text` of the message's reasoning items.
      */
     private fun ChatMessage.reasoningText(): String =

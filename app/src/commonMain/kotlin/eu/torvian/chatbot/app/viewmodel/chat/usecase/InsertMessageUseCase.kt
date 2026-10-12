@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
@@ -17,13 +17,13 @@ import kotlinx.coroutines.launch
  * checked again when the user confirms, because a generation can start while the dialog is open.
  *
  * @property state Shared chat state the dialog is published into and the turn guard is read from.
- * @property sessionRepository Repository the insertion is sent to.
+ * @property conversationRepository Repository the insertion is sent to.
  * @property scope Scope the confirmed insertion runs on.
  * @property notificationService Notification sink for repository errors.
  */
 class InsertMessageUseCase(
     private val state: ChatState,
-    private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     private val scope: CoroutineScope,
     private val notificationService: NotificationService
 ) {
@@ -64,7 +64,7 @@ class InsertMessageUseCase(
         val settingsId = state.currentSettings.value?.id
 
         scope.launch {
-            sessionRepository.insertMessage(
+            conversationRepository.insertMessage(
                 sessionId = session.id,
                 targetMessageId = targetMessageId,
                 position = position,
