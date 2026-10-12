@@ -49,6 +49,9 @@ class DefaultSessionRepositoryRawLlmRequestTest {
         sessionApi = mockk()
         chatApi = mockk()
         repository = DefaultSessionRepository(sessionApi, chatApi)
+        // A completing turn reconciles the session list in the background; the strict mock needs the fetch stubbed
+        // even though these cases are about the cached session details.
+        coEvery { sessionApi.getAllSessions() } returns Either.Right(emptyList())
     }
 
     /** Builds a session with one message whose cached state the capture must not touch. */

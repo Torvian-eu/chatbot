@@ -24,10 +24,16 @@ import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.tool.ToolCall
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * Default implementation of [SessionRepository] that manages chat sessions.
@@ -41,10 +47,17 @@ import kotlin.time.Clock
  *
  * @property sessionApi The API client for session-related operations
  * @property chatApi The API client for chat message operations
+ * @property refreshScope Scope hosting the post-turn reconciliation, so a slow refresh never delays the turn it
+ *   follows. Injectable for tests that need a deterministic dispatcher.
  */
 class DefaultSessionRepository(
     private val sessionApi: SessionApi,
-    private val chatApi: ChatApi
+    private val chatApi: ChatApi,
+    private val refreshScope: CoroutineScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error ->
+            logger.warn("Session list reconciliation failed unexpectedly", error)
+        }
+    )
 ) : SessionRepository {
 
     companion object {
@@ -60,6 +73,10 @@ class DefaultSessionRepository(
     private val _sessionDetailsFlowsMutex = Mutex()
     private val _sessionDetailsFlows =
         LruCache<Long, MutableStateFlow<DataState<RepositoryError, ChatSession>>>(SESSION_DETAILS_CACHE_SIZE)
+
+    // Serializes the post-turn reconciliations: two turn endings must not apply their server snapshots in an
+    // order other than the one the snapshots were taken in.
+    private val _sessionListRefreshMutex = Mutex()
 
     // Cache for individual session tool call flows, guarded by a Mutex for thread safety
     private val _toolCallsFlowsMutex = Mutex()
@@ -380,6 +397,58 @@ class DefaultSessionRepository(
         }
     }
 
+    /**
+     * Raises the cached summary of [sessionId] to [at], so the session list re-derives its order from the same
+     * list every other consumer reads.
+     *
+     * The ordering instant never moves backwards: a late event carrying an older or equal timestamp leaves the
+     * summary as it is, which keeps the relative order of sessions updated in the same instant.
+     *
+     * @param sessionId The session the activity belongs to.
+     * @param at Server-assigned instant of the persisted message that carried the activity.
+     */
+    private fun noteSessionActivity(sessionId: Long, at: Instant) {
+        updateSessionInList(sessionId) { summary ->
+            if (at > summary.updatedAt) summary.copy(updatedAt = at) else summary
+        }
+    }
+
+    /**
+     * Replaces the cached summaries with the server's authoritative entries.
+     *
+     * The refresh never leaves [sessions] in a non-[DataState.Success] state, so the session list panel keeps its
+     * composition, its scroll position, its collapsed sections and its open dialogs while it runs. Only ids the
+     * client already holds are replaced, which keeps the row set the product of this client's own create and
+     * delete operations. A failed refresh keeps the existing values and is reported at debug level, because
+     * ordering is cosmetic.
+     */
+    private suspend fun refreshSessionList() {
+        _sessionListRefreshMutex.withLock {
+            sessionApi.getAllSessions()
+                .map { serverSessions ->
+                    val serverById = serverSessions.associateBy { it.id }
+                    _sessions.update { currentState ->
+                        if (currentState is DataState.Success) {
+                            DataState.Success(currentState.data.map { local -> serverById[local.id] ?: local })
+                        } else {
+                            currentState
+                        }
+                    }
+                }
+                .mapLeft { error ->
+                    logger.debug("Session list reconciliation failed, keeping the current order: $error")
+                }
+        }
+    }
+
+    /**
+     * Runs [refreshSessionList] outside the caller's coroutine, so a slow or hanging request can never delay the
+     * turn whose completion triggered it.
+     */
+    private fun scheduleSessionListRefresh() {
+        refreshScope.launch { refreshSessionList() }
+    }
+
     // --- Chat Message Operations ---
 
     override fun processNewMessage(
@@ -395,6 +464,12 @@ class DefaultSessionRepository(
             .map {
                 it.mapLeft { err -> err.toRepositoryError("Failed to process new message") }
             }
+            .onCompletion { cause ->
+                // The server persists a turn's final message before it closes the socket, so the end of this flow is
+                // where the optimistic order can be aligned with the authoritative one. A cancelled collection is a
+                // turn this client stopped itself and keeps its optimistic value for the next refresh or load.
+                if (cause == null) scheduleSessionListRefresh()
+            }
     }
 
     override fun processNewMessageStreaming(
@@ -409,6 +484,12 @@ class DefaultSessionRepository(
             }
             .map {
                 it.mapLeft { err -> err.toRepositoryError("Failed to process new message") }
+            }
+            .onCompletion { cause ->
+                // The server persists a turn's final message before it closes the socket, so the end of this flow is
+                // where the optimistic order can be aligned with the authoritative one. A cancelled collection is a
+                // turn this client stopped itself and keeps its optimistic value for the next refresh or load.
+                if (cause == null) scheduleSessionListRefresh()
             }
     }
 
@@ -491,10 +572,38 @@ class DefaultSessionRepository(
     }
 
     /**
+     * Returns the transcript message this event persisted, or `null` when the event persisted none.
+     *
+     * It is the single definition of what counts as session activity, so the five event arms that carry a
+     * persisted message are not repeated in the two event appliers.
+     */
+    private fun ChatStreamEvent.persistedMessageOrNull(): ChatMessage? = when (this) {
+        is ChatStreamEvent.UserMessageSaved -> userMessage
+        is ChatStreamEvent.AssistantMessageStart -> assistantMessage
+        is ChatStreamEvent.AssistantMessageEnd -> assistantMessage
+        else -> null
+    }
+
+    /**
+     * Returns the transcript message this event persisted, or `null` when the event persisted none.
+     *
+     * It is the single definition of what counts as session activity, so the two event arms that carry a
+     * persisted message are not repeated in the event applier.
+     */
+    private fun ChatEvent.persistedMessageOrNull(): ChatMessage? = when (this) {
+        is ChatEvent.UserMessageSaved -> userMessage
+        is ChatEvent.AssistantMessageSaved -> assistantMessage
+        else -> null
+    }
+
+    /**
      * Applies a non-streaming ChatEvent to update the cached session.
      * Handles events from the non-streaming message processing endpoint.
      */
     private suspend fun applyEvent(sessionId: Long, event: ChatEvent) {
+        // A persisted message is activity for its session, and the persisted message's own server timestamp is the
+        // ordering instant: no client clock and no extra request are involved.
+        event.persistedMessageOrNull()?.let { persisted -> noteSessionActivity(sessionId, persisted.updatedAt) }
         when (event) {
             is ChatEvent.UserMessageSaved -> {
                 logger.debug("User message saved: ${event.userMessage.id}")
@@ -597,6 +706,9 @@ class DefaultSessionRepository(
      * Applies a streaming event to update the cached session.
      */
     private suspend fun applyStreamEvent(sessionId: Long, event: ChatStreamEvent) {
+        // A persisted message is activity for its session, and the persisted message's own server timestamp is the
+        // ordering instant: no client clock and no extra request are involved.
+        event.persistedMessageOrNull()?.let { persisted -> noteSessionActivity(sessionId, persisted.updatedAt) }
         when (event) {
             is ChatStreamEvent.UserMessageSaved -> {
                 logger.debug("User message saved: ${event.userMessage.id}")
