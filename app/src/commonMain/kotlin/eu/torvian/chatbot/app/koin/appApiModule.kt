@@ -5,12 +5,10 @@ import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.repository.impl.session.SessionDetailsStore
 import eu.torvian.chatbot.app.repository.impl.session.SessionEventApplier
-import eu.torvian.chatbot.app.repository.impl.session.SessionListReconciler
 import eu.torvian.chatbot.app.repository.impl.session.SessionSummaryStore
 import eu.torvian.chatbot.app.repository.impl.session.ToolCallStore
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
-import eu.torvian.chatbot.app.viewmodel.common.CoroutineScopeProvider
 import org.koin.core.module.Module
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -119,21 +117,12 @@ fun appApiModule(config: AppConfiguration): Module = module {
     single<ModelSettingsRepository> {
         DefaultModelSettingsRepository(get())
     }
-    // The session API is split into the list half and the conversation half, which share five collaborators. Each
-    // collaborator is created once here, so the cached rows, the cached transcripts, the cached tool calls and the
-    // post-turn alignment have a single owner for the whole application.
+    // The session API is split into the list half and the conversation half, which share four collaborators. Each
+    // collaborator is created once here, so the cached rows, the cached transcripts and the cached tool calls have a
+    // single owner for the whole application.
     single { SessionDetailsStore() }
     single { ToolCallStore() }
     single { SessionSummaryStore() }
-    single {
-        SessionListReconciler(
-            sessionApi = get(),
-            store = get(),
-            // The re-read outlives every turn and is never cancelled by whoever schedules it, so its scope comes
-            // from the composition root instead of being defaulted inside a repository.
-            scope = get<CoroutineScopeProvider>().createBackgroundScope()
-        )
-    }
     single { SessionEventApplier(details = get(), toolCalls = get()) }
     single<SessionRepository> {
         DefaultSessionListRepository(
@@ -149,8 +138,7 @@ fun appApiModule(config: AppConfiguration): Module = module {
             details = get(),
             toolCalls = get(),
             eventApplier = get(),
-            summaryStore = get(),
-            reconciler = get()
+            summaryStore = get()
         )
     }
     single<GroupRepository> {

@@ -4,7 +4,6 @@ import arrow.core.Either
 import arrow.core.right
 import eu.torvian.chatbot.app.repository.impl.session.SessionDetailsStore
 import eu.torvian.chatbot.app.repository.impl.session.SessionEventApplier
-import eu.torvian.chatbot.app.repository.impl.session.SessionListReconciler
 import eu.torvian.chatbot.app.repository.impl.session.SessionSummaryStore
 import eu.torvian.chatbot.app.repository.impl.session.ToolCallStore
 import eu.torvian.chatbot.app.service.api.ApiResourceError
@@ -18,12 +17,9 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -36,7 +32,6 @@ import kotlin.time.Instant
  * caller unchanged and never mutates the cached session, because the viewer renders it from chat state rather
  * than from a transcript row.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 class DefaultConversationRepositoryRawLlmRequestTest {
 
     private val sessionId = 100L
@@ -54,8 +49,8 @@ class DefaultConversationRepositoryRawLlmRequestTest {
         body = """{"model":"gpt-4"}"""
     )
 
-    /** Builds the repository under test over its own collaborators, with [scope] hosting the post-turn alignment. */
-    private fun conversationRepository(scope: CoroutineScope): DefaultConversationRepository {
+    /** Builds the repository under test over its own collaborators. */
+    private fun conversationRepository(): DefaultConversationRepository {
         val details = SessionDetailsStore()
         val toolCalls = ToolCallStore()
         val summaryStore = SessionSummaryStore()
@@ -65,8 +60,7 @@ class DefaultConversationRepositoryRawLlmRequestTest {
             details = details,
             toolCalls = toolCalls,
             eventApplier = SessionEventApplier(details = details, toolCalls = toolCalls),
-            summaryStore = summaryStore,
-            reconciler = SessionListReconciler(sessionApi, summaryStore, scope)
+            summaryStore = summaryStore
         )
     }
 
@@ -74,11 +68,7 @@ class DefaultConversationRepositoryRawLlmRequestTest {
     fun setup() {
         sessionApi = mockk()
         chatApi = mockk()
-        // The post-turn alignment runs on a scope below the test, so a turn never waits for it.
-        repository = conversationRepository(CoroutineScope(UnconfinedTestDispatcher()))
-        // A completing turn reconciles the session list in the background; the strict mock needs the fetch stubbed
-        // even though these cases are about the cached session details.
-        coEvery { sessionApi.getAllSessions() } returns Either.Right(emptyList())
+        repository = conversationRepository()
     }
 
     /** Builds a session with one message whose cached state the capture must not touch. */

@@ -12,7 +12,7 @@ import kotlin.time.Instant
 
 /**
  * Pins the two rules the session list depends on: a row write never leaves the loaded state, and the ordering
- * instant of a row never moves backwards, not even against a snapshot taken before a local turn.
+ * instant of a row never moves backwards.
  */
 class SessionSummaryStoreTest {
 
@@ -54,36 +54,6 @@ class SessionSummaryStoreTest {
         store.raiseActivity(1L, at(1_000))
 
         assertEquals(at(5_000), rowsOf(store).single().updatedAt)
-    }
-
-    @Test
-    fun `merge adopts the server fields and keeps the newer instant`() = runTest {
-        val store = storeWith(summary(1L, at(9_000)))
-
-        store.mergeAuthoritative(listOf(summary(1L, at(1_000), name = "Renamed")))
-
-        val row = rowsOf(store).single()
-        assertEquals("Renamed", row.name)
-        assertEquals(at(9_000), row.updatedAt)
-    }
-
-    @Test
-    fun `merge adopts the server instant when it is the newer one`() = runTest {
-        val store = storeWith(summary(1L, at(1_000)))
-
-        store.mergeAuthoritative(listOf(summary(1L, at(9_000))))
-
-        assertEquals(at(9_000), rowsOf(store).single().updatedAt)
-    }
-
-    @Test
-    fun `merge leaves rows the server does not carry and ignores rows the store does not hold`() = runTest {
-        val store = storeWith(summary(1L, at(1_000)), summary(2L, at(2_000)))
-
-        store.mergeAuthoritative(listOf(summary(1L, at(3_000)), summary(3L, at(4_000))))
-
-        assertEquals(listOf(1L, 2L), rowsOf(store).map { it.id })
-        assertEquals(at(2_000), rowsOf(store).single { it.id == 2L }.updatedAt)
     }
 
     @Test

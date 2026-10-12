@@ -1,14 +1,10 @@
 package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
-import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
-import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.impl.session.SessionDetailsStore
 import eu.torvian.chatbot.app.repository.impl.session.SessionEventApplier
-import eu.torvian.chatbot.app.repository.impl.session.SessionListReconciler
 import eu.torvian.chatbot.app.repository.impl.session.SessionSummaryStore
 import eu.torvian.chatbot.app.repository.impl.session.ToolCallStore
 import eu.torvian.chatbot.app.service.api.ApiResourceError
@@ -27,36 +23,23 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestCoroutineScheduler
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 /**
- * Covers the two halves of the live session ordering: the optimistic `updatedAt` bump a persisted turn message
- * produces, and the post-turn reconciliation with the server's authoritative list.
+ * Covers the live session ordering: the optimistic `updatedAt` bump a persisted turn message produces, and the fact
+ * that a turn raises that order from its own events instead of re-reading the session list.
  *
  * Assertions are expressed through `SessionListData.groupedSessions`, i.e. the order the panel actually renders,
  * rather than through the raw cached list.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 class SessionListOrderingSyncTest {
 
     private val sessionId = 100L
@@ -87,13 +70,8 @@ class SessionListOrderingSyncTest {
         chatApi = mockk()
     }
 
-    /**
-     * Builds both halves over one shared set of collaborators, with [refreshScope] hosting the post-turn
-     * reconciliation.
-     *
-     * @param refreshScope The scope the scheduled reconciliation runs in.
-     */
-    private fun repositories(refreshScope: CoroutineScope) {
+    /** Builds both halves over one shared set of collaborators. */
+    private fun repositories() {
         val details = SessionDetailsStore()
         val toolCalls = ToolCallStore()
         val summaryStore = SessionSummaryStore()
@@ -108,20 +86,9 @@ class SessionListOrderingSyncTest {
             details = details,
             toolCalls = toolCalls,
             eventApplier = SessionEventApplier(details = details, toolCalls = toolCalls),
-            summaryStore = summaryStore,
-            reconciler = SessionListReconciler(sessionApi, summaryStore, refreshScope)
+            summaryStore = summaryStore
         )
     }
-
-    /**
-     * Builds a pair whose scheduled reconciliation is queued on a scheduler the case never advances, so the
-     * case observes the order the optimistic bump alone produces.
-     */
-    private fun bumpOnlyRepositories() = repositories(CoroutineScope(StandardTestDispatcher()))
-
-    /** Builds a pair whose scheduled reconciliation runs to completion within the surrounding test. */
-    private fun reconcilingRepositories(testScheduler: TestCoroutineScheduler) =
-        repositories(CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
 
     /** An instant [offsetMillis] after the fixed base instant of the case. */
     private fun at(offsetMillis: Long) = Instant.fromEpochMilliseconds(base.toEpochMilliseconds() + offsetMillis)
@@ -218,7 +185,7 @@ class SessionListOrderingSyncTest {
 
     @Test
     fun `a persisted user message moves its session to the top of the ungrouped section`() = runTest {
-        bumpOnlyRepositories()
+        repositories()
         seed(summary(otherSessionId, at(2_000)), summary(sessionId, at(0)))
         assertEquals(listOf(otherSessionId, sessionId), orderIn(null))
         stubStream(ChatStreamEvent.UserMessageSaved(userMessage(updatedAt = at(5_000)), null))
@@ -231,7 +198,7 @@ class SessionListOrderingSyncTest {
 
     @Test
     fun `a persisted user message moves its session to the top of its group section`() = runTest {
-        bumpOnlyRepositories()
+        repositories()
         seed(
             summary(otherSessionId, at(2_000), groupId = groupId),
             summary(sessionId, at(0), groupId = groupId),
@@ -248,7 +215,7 @@ class SessionListOrderingSyncTest {
 
     @Test
     fun `an assistant message start moves its session to the top`() = runTest {
-        bumpOnlyRepositories()
+        repositories()
         seed(summary(otherSessionId, at(2_000)), summary(sessionId, at(0)))
         stubStream(
             ChatStreamEvent.AssistantMessageStart(
@@ -265,7 +232,7 @@ class SessionListOrderingSyncTest {
 
     @Test
     fun `an assistant message end moves its session to the top`() = runTest {
-        bumpOnlyRepositories()
+        repositories()
         seed(summary(otherSessionId, at(2_000)), summary(sessionId, at(0)))
         stubStream(ChatStreamEvent.AssistantMessageEnd(assistantMessage(updatedAt = at(4_000))))
 
@@ -277,7 +244,7 @@ class SessionListOrderingSyncTest {
 
     @Test
     fun `the non-streaming events move their session to the top`() = runTest {
-        bumpOnlyRepositories()
+        repositories()
         seed(summary(otherSessionId, at(2_000)), summary(sessionId, at(0)))
         stubNonStreaming(
             ChatEvent.UserMessageSaved(userMessage(updatedAt = at(3_000)), null),
@@ -295,7 +262,7 @@ class SessionListOrderingSyncTest {
 
     @Test
     fun `an older persisted timestamp never lowers the cached summary`() = runTest {
-        bumpOnlyRepositories()
+        repositories()
         val seeded = listOf(summary(sessionId, at(5_000)), summary(otherSessionId, at(0)))
         seed(*seeded.toTypedArray())
         stubStream(ChatStreamEvent.UserMessageSaved(userMessage(updatedAt = at(1_000)), null))
@@ -308,7 +275,7 @@ class SessionListOrderingSyncTest {
 
     @Test
     fun `events without a persisted message leave the summary list untouched`() = runTest {
-        bumpOnlyRepositories()
+        repositories()
         val seeded = listOf(summary(otherSessionId, at(2_000)), summary(sessionId, at(0)))
         seed(*seeded.toTypedArray())
         stubStream(
@@ -344,135 +311,17 @@ class SessionListOrderingSyncTest {
     }
 
     @Test
-    fun `a completing turn reconciles the list with the server snapshot`() = runTest {
-        reconcilingRepositories(testScheduler)
-        val seeded = listOf(summary(otherSessionId, at(2_000)), summary(sessionId, at(0)))
-        val authoritative = listOf(summary(sessionId, at(7_000)), summary(otherSessionId, at(6_000)))
-        coEvery { sessionApi.getAllSessions() } returnsMany
-            listOf<Either<ApiResourceError, List<ChatSessionSummary>>>(Either.Right(seeded), Either.Right(authoritative))
-        sessionRepository.loadSessions()
-        stubStream(ChatStreamEvent.StreamCompleted)
+    fun `a completed turn issues no session list request`() = runTest {
+        repositories()
+        seed(summary(otherSessionId, at(2_000)), summary(sessionId, at(0)))
+        stubStream(ChatStreamEvent.UserMessageSaved(userMessage(updatedAt = at(5_000)), null))
+        stubNonStreaming(ChatEvent.UserMessageSaved(userMessage(updatedAt = at(5_000)), null))
 
         conversationRepository.processNewMessageStreaming(sessionId, emptyFlow()).toList()
+        conversationRepository.processNewMessage(sessionId, emptyFlow()).toList()
 
-        // The reconciliation adopts the server values, so the rendered order follows the snapshot.
-        assertEquals(
-            authoritative.associateBy { it.id },
-            cachedSummaries().associateBy { it.id }
-        )
-        assertEquals(listOf(sessionId, otherSessionId), orderIn(null))
-        // One call seeds the list through the load path, the other is the reconciliation of this turn.
-        coVerify(exactly = 2) { sessionApi.getAllSessions() }
-    }
-
-    @Test
-    fun `a cancelled turn keeps its optimistic value and does not reconcile`() = runTest {
-        reconcilingRepositories(testScheduler)
-        val serverSnapshot = listOf(summary(otherSessionId, at(2_000)), summary(sessionId, at(0)))
-        coEvery { sessionApi.getAllSessions() } returns Either.Right(serverSnapshot)
-        sessionRepository.loadSessions()
-        val released = CompletableDeferred<Unit>()
-        var delivered = false
-        val stream: Flow<Either<ApiResourceError, ChatStreamEvent>> = flow {
-            emit(ChatStreamEvent.UserMessageSaved(userMessage(updatedAt = at(5_000)), null).right())
-            delivered = true
-            released.await()
-        }
-        every { chatApi.processNewMessageStreaming(sessionId, any()) } returns stream
-
-        val collecting = launch { conversationRepository.processNewMessageStreaming(sessionId, emptyFlow()).collect() }
-        advanceUntilIdle()
-        collecting.cancelAndJoin()
-
-        assertTrue(delivered, "The turn was expected to deliver its persisted message before being cancelled")
         assertEquals(at(5_000), summaryOf(sessionId).updatedAt)
-        // Only the seed load: a stopped turn leaves the reconciliation to the next load.
+        // Only the seed load above reads the list: a turn raises the order from the events it applies itself.
         coVerify(exactly = 1) { sessionApi.getAllSessions() }
-    }
-
-    @Test
-    fun `a failed reconciliation keeps the optimistic values and the success state`() = runTest {
-        reconcilingRepositories(testScheduler)
-        val seeded = listOf(summary(otherSessionId, at(2_000)), summary(sessionId, at(0)))
-        val failure: Either<ApiResourceError, List<ChatSessionSummary>> =
-            ApiResourceError.UnknownError("offline", null).left()
-        coEvery { sessionApi.getAllSessions() } returnsMany
-            listOf(Either.Right(seeded), failure)
-        sessionRepository.loadSessions()
-        stubStream(ChatStreamEvent.UserMessageSaved(userMessage(updatedAt = at(5_000)), null))
-
-        conversationRepository.processNewMessageStreaming(sessionId, emptyFlow()).toList()
-
-        assertEquals(at(5_000), summaryOf(sessionId).updatedAt)
-        assertEquals(listOf(sessionId, otherSessionId), orderIn(null))
-        assertTrue(sessionRepository.sessions.value.isSuccess)
-    }
-
-    @Test
-    fun `a reconciliation never emits a loading state`() = runTest {
-        reconcilingRepositories(testScheduler)
-        val seeded = listOf(summary(otherSessionId, at(2_000)), summary(sessionId, at(0)))
-        val authoritative = listOf(summary(sessionId, at(5_000)), summary(otherSessionId, at(2_000)))
-        coEvery { sessionApi.getAllSessions() } returnsMany
-            listOf<Either<ApiResourceError, List<ChatSessionSummary>>>(Either.Right(seeded), Either.Right(authoritative))
-        sessionRepository.loadSessions()
-        val observed = mutableListOf<DataState<RepositoryError, List<ChatSessionSummary>>>()
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            sessionRepository.sessions.collect { state -> observed += state }
-        }
-        stubStream(ChatStreamEvent.UserMessageSaved(userMessage(updatedAt = at(5_000)), null))
-
-        conversationRepository.processNewMessageStreaming(sessionId, emptyFlow()).toList()
-
-        // A loading state would replace the panel and drop the collapse state and the scroll position with it.
-        assertTrue(observed.none { it.isLoading }, "the list must stay in a success state while it is reconciled")
-        assertEquals(listOf(sessionId, otherSessionId), orderIn(null))
-    }
-
-    @Test
-    fun `a stale snapshot keeps the newer instant while adopting the server fields`() = runTest {
-        reconcilingRepositories(testScheduler)
-        val seeded = listOf(summary(sessionId, at(0)), summary(otherSessionId, at(0)))
-        // The snapshot was taken before this turn, so the row it carries is renamed but older than the raised value.
-        val stale = listOf(
-            summary(sessionId, at(1_000)).copy(name = "Renamed on the server"),
-            summary(otherSessionId, at(4_000))
-        )
-        coEvery { sessionApi.getAllSessions() } returnsMany
-            listOf<Either<ApiResourceError, List<ChatSessionSummary>>>(Either.Right(seeded), Either.Right(stale))
-        sessionRepository.loadSessions()
-        stubStream(ChatStreamEvent.UserMessageSaved(userMessage(updatedAt = at(9_000)), null))
-
-        conversationRepository.processNewMessageStreaming(sessionId, emptyFlow()).toList()
-
-        // The row takes the server's name, but its ordering instant cannot drop back below the older session.
-        assertEquals("Renamed on the server", summaryOf(sessionId).name)
-        assertEquals(at(9_000), summaryOf(sessionId).updatedAt)
-        assertEquals(listOf(sessionId, otherSessionId), orderIn(null))
-    }
-
-    @Test
-    fun `a locally created row is kept while known rows take the server values`() = runTest {
-        reconcilingRepositories(testScheduler)
-        val seeded = listOf(
-            summary(otherSessionId, at(0)),
-            summary(sessionId, at(1_000)),
-            summary(thirdSessionId, at(9_000))
-        )
-        val authoritative = listOf(summary(sessionId, at(5_000)), summary(otherSessionId, at(4_000)))
-        coEvery { sessionApi.getAllSessions() } returnsMany
-            listOf<Either<ApiResourceError, List<ChatSessionSummary>>>(Either.Right(seeded), Either.Right(authoritative))
-        sessionRepository.loadSessions()
-        stubStream(ChatStreamEvent.UserMessageSaved(userMessage(updatedAt = at(5_000)), null))
-
-        conversationRepository.processNewMessageStreaming(sessionId, emptyFlow()).toList()
-
-        // The snapshot is not allowed to add or drop rows: it only refreshes the timestamps of the rows the client
-        // holds, while the row the snapshot does not carry keeps the value this client last saw.
-        assertEquals(
-            mapOf(sessionId to at(5_000), otherSessionId to at(4_000), thirdSessionId to at(9_000)),
-            cachedSummaries().associate { it.id to it.updatedAt }
-        )
-        assertEquals(listOf(thirdSessionId, sessionId, otherSessionId), orderIn(null))
     }
 }

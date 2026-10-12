@@ -7,7 +7,6 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.app.repository.impl.session.SessionDetailsStore
 import eu.torvian.chatbot.app.repository.impl.session.SessionEventApplier
-import eu.torvian.chatbot.app.repository.impl.session.SessionListReconciler
 import eu.torvian.chatbot.app.repository.impl.session.SessionSummaryStore
 import eu.torvian.chatbot.app.repository.impl.session.ToolCallStore
 import eu.torvian.chatbot.app.repository.toRepositoryError
@@ -26,16 +25,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onCompletion
 
 /**
  * Default implementation of [ConversationRepository]: a session's transcript and its turn.
  *
  * The implementation owns no state of its own. The transcript lives in the injected [SessionDetailsStore], the tool
  * calls in the injected [ToolCallStore], the turn events are applied by the injected [SessionEventApplier], and a turn
- * that ends raises the session's ordering instant in the injected [SessionSummaryStore] before the injected
- * [SessionListReconciler] aligns the panel order with the server. Every failure is translated into a
- * [RepositoryError].
+ * that ends raises the session's ordering instant in the injected [SessionSummaryStore]. Every failure is translated
+ * into a [RepositoryError].
  *
  * @property sessionApi The API client for session-related operations.
  * @property chatApi The API client for chat message operations.
@@ -43,7 +40,6 @@ import kotlinx.coroutines.flow.onCompletion
  * @property toolCalls The cached tool calls the reads and event applications are served from.
  * @property eventApplier Applies the events of this client's sockets to [details] and [toolCalls].
  * @property summaryStore The cached rows a finished turn raises the ordering instant in.
- * @property reconciler Schedules the post-turn alignment of the panel order with the server.
  */
 internal class DefaultConversationRepository(
     private val sessionApi: SessionApi,
@@ -51,8 +47,7 @@ internal class DefaultConversationRepository(
     private val details: SessionDetailsStore,
     private val toolCalls: ToolCallStore,
     private val eventApplier: SessionEventApplier,
-    private val summaryStore: SessionSummaryStore,
-    private val reconciler: SessionListReconciler
+    private val summaryStore: SessionSummaryStore
 ) : ConversationRepository {
 
     override suspend fun getSessionDetailsFlow(sessionId: Long): StateFlow<DataState<RepositoryError, ChatSession>> =
@@ -173,13 +168,6 @@ internal class DefaultConversationRepository(
             .map {
                 it.mapLeft { err -> err.toRepositoryError("Failed to process new message") }
             }
-            .onCompletion { cause ->
-                // The server persists a turn's final message before it closes the socket, so the end of this flow is
-                // where the optimistic order can be aligned with the authoritative one. Only a collection this
-                // client cancelled itself skips that: a stop that drains the socket still completes normally and
-                // does align the order.
-                if (cause == null) reconciler.schedule()
-            }
     }
 
     override fun processNewMessageStreaming(
@@ -194,13 +182,6 @@ internal class DefaultConversationRepository(
             }
             .map {
                 it.mapLeft { err -> err.toRepositoryError("Failed to process new message") }
-            }
-            .onCompletion { cause ->
-                // The server persists a turn's final message before it closes the socket, so the end of this flow is
-                // where the optimistic order can be aligned with the authoritative one. Only a collection this
-                // client cancelled itself skips that: a stop that drains the socket still completes normally and
-                // does align the order.
-                if (cause == null) reconciler.schedule()
             }
     }
 

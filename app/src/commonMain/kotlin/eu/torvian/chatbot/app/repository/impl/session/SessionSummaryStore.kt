@@ -16,9 +16,8 @@ import kotlin.time.Instant
  * replaces the list, a local create or delete inserts or removes a row, a metadata mutation copies one field, and
  * turn activity raises a row's ordering instant. Two rules protect that order. A write that is not a load or a
  * failure never leaves [DataState.Success], so the panel keeps its composition, its scroll position, its collapsed
- * sections and its open dialogs. The ordering instant never moves backwards, neither on the activity path nor when
- * a server snapshot is applied, so a freshly active session stays at the top of its section and a snapshot taken
- * before a local turn cannot revert the optimistic order.
+ * sections and its open dialogs. The ordering instant never moves backwards on the activity path, so a freshly
+ * active session stays at the top of its section whatever order the events arrive in.
  */
 internal class SessionSummaryStore {
 
@@ -95,27 +94,6 @@ internal class SessionSummaryStore {
      */
     fun raiseActivity(sessionId: Long, at: Instant) {
         mutate(sessionId) { row -> if (at > row.updatedAt) row.copy(updatedAt = at) else row }
-    }
-
-    /**
-     * Adopts the server's fields for the rows the client already holds, keeping each row's ordering instant at
-     * least the locally known one.
-     *
-     * Only ids the client holds are replaced, which keeps the row set the product of the client's own create and
-     * delete operations, and a row the server does not know is left as it is. A snapshot entry the client does not
-     * hold is ignored for the same reason.
-     *
-     * @param serverSummaries The entries read from the server.
-     */
-    fun mergeAuthoritative(serverSummaries: List<ChatSessionSummary>) {
-        val serverById = serverSummaries.associateBy { it.id }
-        updateRows { rows ->
-            rows.map { localRow ->
-                val serverRow = serverById[localRow.id]
-                // Keeping the newer instant makes a snapshot taken before a locally applied turn harmless.
-                serverRow?.copy(updatedAt = maxOf(serverRow.updatedAt, localRow.updatedAt)) ?: localRow
-            }
-        }
     }
 
     /**
