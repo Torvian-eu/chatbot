@@ -4,7 +4,7 @@ import arrow.core.right
 import eu.torvian.chatbot.app.domain.TurnOutcome
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.events.TurnLifecycleTrigger
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.RequestSigningService
@@ -115,7 +115,7 @@ class SendMessageUseCaseTurnNotificationTest {
     /**
      * Collaborators of the send path plus the event bus whose triggers are asserted.
      *
-     * @property sessionRepository Strict mock whose message-processing flow is supplied per test.
+     * @property conversationRepository Strict mock whose message-processing flow is supplied per test.
      * @property toolRepository Tool cache and approval preferences used by the approval path.
      * @property state Chat state the send path reads.
      * @property registry Real registry the send path reports its lifecycle to; it publishes the
@@ -123,7 +123,7 @@ class SendMessageUseCaseTurnNotificationTest {
      * @property eventBus Shared event bus capturing the published turn triggers.
      */
     private data class Harness(
-        val sessionRepository: SessionRepository,
+        val conversationRepository: ConversationRepository,
         val toolRepository: ToolRepository,
         val state: ChatState,
         val registry: InMemorySessionTurnStatusRegistry,
@@ -143,7 +143,7 @@ class SendMessageUseCaseTurnNotificationTest {
         preference: UserToolApprovalPreference? = null,
         role: AgentRoleDto? = this@SendMessageUseCaseTurnNotificationTest.role
     ): Harness {
-        val sessionRepository = mockk<SessionRepository>()
+        val conversationRepository = mockk<ConversationRepository>()
         val toolRepository = mockk<ToolRepository>()
         val state = mockk<ChatState>()
 
@@ -176,7 +176,7 @@ class SendMessageUseCaseTurnNotificationTest {
 
         val eventBus = EventBus()
         return Harness(
-            sessionRepository = sessionRepository,
+            conversationRepository = conversationRepository,
             toolRepository = toolRepository,
             state = state,
             // The registry observes session selection, so it shares the test scope and cannot
@@ -197,7 +197,7 @@ class SendMessageUseCaseTurnNotificationTest {
      * @return Use case ready to receive [SendMessageUseCase.execute].
      */
     private fun useCase(harness: Harness) = SendMessageUseCase(
-        sessionRepository = harness.sessionRepository,
+        conversationRepository = harness.conversationRepository,
         toolRepository = harness.toolRepository,
         requestSigningService = mockk<RequestSigningService>(),
         operatorToolExecutor = mockk(),
@@ -277,7 +277,7 @@ class SendMessageUseCaseTurnNotificationTest {
     @Test
     fun `streaming success publishes exactly one success trigger`() = runTest {
         val harness = buildHarness(isStreaming = true)
-        every { harness.sessionRepository.processNewMessageStreaming(session.id, any()) } returns flow {
+        every { harness.conversationRepository.processNewMessageStreaming(session.id, any()) } returns flow {
             emit(ChatStreamEvent.AssistantMessageStart(assistantMessage(isComplete = false), parentMessage()).right())
             emit(ChatStreamEvent.AssistantMessageEnd(assistantMessage(isComplete = true)).right())
             emit(ChatStreamEvent.StreamCompleted.right())
@@ -291,7 +291,7 @@ class SendMessageUseCaseTurnNotificationTest {
     @Test
     fun `streaming failure publishes exactly one failure trigger`() = runTest {
         val harness = buildHarness(isStreaming = true)
-        every { harness.sessionRepository.processNewMessageStreaming(session.id, any()) } returns flow {
+        every { harness.conversationRepository.processNewMessageStreaming(session.id, any()) } returns flow {
             emit(
                 ChatStreamEvent.AssistantMessageEnd(
                     assistantMessage(isComplete = false, incompleteCause = AssistantMessageIncompleteCause.FAILED)
@@ -308,7 +308,7 @@ class SendMessageUseCaseTurnNotificationTest {
     @Test
     fun `non-streaming success publishes exactly one success trigger`() = runTest {
         val harness = buildHarness(isStreaming = false)
-        every { harness.sessionRepository.processNewMessage(session.id, any()) } returns flow {
+        every { harness.conversationRepository.processNewMessage(session.id, any()) } returns flow {
             emit(ChatEvent.AssistantMessageSaved(assistantMessage(isComplete = true), parentMessage()).right())
             emit(ChatEvent.StreamCompleted.right())
         }
@@ -321,7 +321,7 @@ class SendMessageUseCaseTurnNotificationTest {
     @Test
     fun `interrupted turn publishes no trigger`() = runTest {
         val harness = buildHarness(isStreaming = true)
-        every { harness.sessionRepository.processNewMessageStreaming(session.id, any()) } returns flow {
+        every { harness.conversationRepository.processNewMessageStreaming(session.id, any()) } returns flow {
             emit(
                 ChatStreamEvent.AssistantMessageEnd(
                     assistantMessage(
@@ -341,7 +341,7 @@ class SendMessageUseCaseTurnNotificationTest {
     @Test
     fun `cancelled turn publishes no trigger`() = runTest {
         val harness = buildHarness(isStreaming = true)
-        every { harness.sessionRepository.processNewMessageStreaming(session.id, any()) } returns flow {
+        every { harness.conversationRepository.processNewMessageStreaming(session.id, any()) } returns flow {
             emit(ChatStreamEvent.AssistantMessageStart(assistantMessage(isComplete = false), parentMessage()).right())
             emit(ChatStreamEvent.AssistantMessageEnd(assistantMessage(isComplete = true)).right())
             awaitCancellation()
@@ -374,7 +374,7 @@ class SendMessageUseCaseTurnNotificationTest {
     fun `deferred approval publishes exactly one awaiting trigger`() = runTest {
         val harness = buildHarness(isStreaming = true)
         val turnGate = CompletableDeferred<Unit>()
-        every { harness.sessionRepository.processNewMessageStreaming(session.id, any()) } returns flow {
+        every { harness.conversationRepository.processNewMessageStreaming(session.id, any()) } returns flow {
             emit(ChatStreamEvent.ToolCallApprovalRequested(pendingToolCall()).right())
             turnGate.await()
             emit(ChatStreamEvent.StreamCompleted.right())
@@ -398,7 +398,7 @@ class SendMessageUseCaseTurnNotificationTest {
         val firstCall = pendingToolCall(id = 42L)
         val secondCall = pendingToolCall(id = 43L)
         val turnGate = CompletableDeferred<Unit>()
-        every { harness.sessionRepository.processNewMessageStreaming(session.id, any()) } returns flow {
+        every { harness.conversationRepository.processNewMessageStreaming(session.id, any()) } returns flow {
             emit(ChatStreamEvent.ToolCallApprovalRequested(firstCall).right())
             emit(ChatStreamEvent.ToolCallApprovalRequested(secondCall).right())
             turnGate.await()
@@ -426,7 +426,7 @@ class SendMessageUseCaseTurnNotificationTest {
                 denialReason = null
             )
         )
-        every { harness.sessionRepository.processNewMessageStreaming(session.id, any()) } returns flow {
+        every { harness.conversationRepository.processNewMessageStreaming(session.id, any()) } returns flow {
             emit(ChatStreamEvent.ToolCallApprovalRequested(pendingToolCall()).right())
             emit(ChatStreamEvent.StreamCompleted.right())
         }

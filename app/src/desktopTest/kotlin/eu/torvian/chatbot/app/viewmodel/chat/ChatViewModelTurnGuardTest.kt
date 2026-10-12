@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel.chat
 
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.testutils.data.assistantMessage
 import eu.torvian.chatbot.app.testutils.data.userMessage
 import eu.torvian.chatbot.app.viewmodel.SearchNavigationState
@@ -35,7 +35,7 @@ import kotlin.test.assertEquals
 class ChatViewModelTurnGuardTest {
 
     private lateinit var state: ChatState
-    private lateinit var sessionRepository: SessionRepository
+    private lateinit var conversationRepository: ConversationRepository
     private lateinit var sendMessageUC: SendMessageUseCase
     private lateinit var deleteMessageUC: DeleteMessageUseCase
     private lateinit var insertMessageUC: InsertMessageUseCase
@@ -88,9 +88,9 @@ class ChatViewModelTurnGuardTest {
 
         // The deletion and insertion use cases own their confirmation dialogs and their turn guards, so
         // they are real here; only their repository and notification sink are mocked.
-        sessionRepository = mockk(relaxed = true)
-        deleteMessageUC = DeleteMessageUseCase(sessionRepository, state, normalScope, mockk(relaxed = true))
-        insertMessageUC = InsertMessageUseCase(state, sessionRepository, normalScope, mockk(relaxed = true))
+        conversationRepository = mockk(relaxed = true)
+        deleteMessageUC = DeleteMessageUseCase(conversationRepository, state, normalScope, mockk(relaxed = true))
+        insertMessageUC = InsertMessageUseCase(state, conversationRepository, normalScope, mockk(relaxed = true))
 
         viewModel = ChatViewModel(
             state = state,
@@ -118,7 +118,7 @@ class ChatViewModelTurnGuardTest {
 
     @AfterTest
     fun tearDown() {
-        clearMocks(state, sendMessageUC, compactConversationUC, sessionRepository)
+        clearMocks(state, sendMessageUC, compactConversationUC, conversationRepository)
     }
 
     // --- sendMessage ---
@@ -210,7 +210,7 @@ class ChatViewModelTurnGuardTest {
         deleteDialog.onDeleteConfirm()
 
         // Assert - the deletion never reached the repository
-        coVerify(exactly = 0) { sessionRepository.deleteMessage(any(), any()) }
+        coVerify(exactly = 0) { conversationRepository.deleteMessage(any(), any()) }
     }
 
     // --- onRequestInsertMessage ---
@@ -253,7 +253,7 @@ class ChatViewModelTurnGuardTest {
 
         // Assert - the insertion never reached the repository
         coVerify(exactly = 0) {
-            sessionRepository.insertMessage(any(), any(), any(), any(), any(), any(), any())
+            conversationRepository.insertMessage(any(), any(), any(), any(), any(), any(), any())
         }
     }
 

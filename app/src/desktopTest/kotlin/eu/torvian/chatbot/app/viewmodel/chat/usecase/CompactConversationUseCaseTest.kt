@@ -2,8 +2,8 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
-import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
@@ -33,7 +33,7 @@ import kotlin.test.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class CompactConversationUseCaseTest {
 
-    private val sessionRepository = mockk<SessionRepository>()
+    private val conversationRepository = mockk<ConversationRepository>()
     private val state = mockk<ChatState>(relaxed = true)
     private val notificationService = mockk<NotificationService>(relaxed = true)
 
@@ -62,7 +62,7 @@ class CompactConversationUseCaseTest {
      * @return The use case under test.
      */
     private fun useCase(scope: CoroutineScope) = CompactConversationUseCase(
-        sessionRepository = sessionRepository,
+        conversationRepository = conversationRepository,
         state = state,
         notificationService = notificationService,
         scope = scope
@@ -70,7 +70,7 @@ class CompactConversationUseCaseTest {
 
     @Test
     fun `a completed outcome shows the success notification and clears the indicator`() = runTest {
-        every { sessionRepository.compactConversation(sessionId) } returns
+        every { conversationRepository.compactConversation(sessionId) } returns
             flowOf(CompactionEvent.Completed(payload).right())
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
 
@@ -87,7 +87,7 @@ class CompactConversationUseCaseTest {
 
     @Test
     fun `a skipped outcome shows the reason-specific notification`() = runTest {
-        every { sessionRepository.compactConversation(sessionId) } returns
+        every { conversationRepository.compactConversation(sessionId) } returns
             flowOf(CompactionEvent.Skipped(CompactionSkipReason.ALREADY_COMPACTED).right())
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
 
@@ -99,7 +99,7 @@ class CompactConversationUseCaseTest {
 
     @Test
     fun `a summary that is not smaller is reported as an informational warning`() = runTest {
-        every { sessionRepository.compactConversation(sessionId) } returns
+        every { conversationRepository.compactConversation(sessionId) } returns
             flowOf(CompactionEvent.Skipped(CompactionSkipReason.SUMMARY_NOT_SMALLER).right())
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
 
@@ -118,7 +118,7 @@ class CompactConversationUseCaseTest {
     @Test
     fun `an error event is reported through the api error surface`() = runTest {
         val error = apiError(ChatbotApiErrorCodes.CONVERSATION_COMPACTION_FAILED, "Compaction failed")
-        every { sessionRepository.compactConversation(sessionId) } returns
+        every { conversationRepository.compactConversation(sessionId) } returns
             flowOf(CompactionEvent.ErrorOccurred(error).right())
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
 
@@ -131,7 +131,7 @@ class CompactConversationUseCaseTest {
     @Test
     fun `a transport failure is reported through the repository error surface`() = runTest {
         val error = RepositoryError.OtherError("socket down")
-        every { sessionRepository.compactConversation(sessionId) } returns
+        every { conversationRepository.compactConversation(sessionId) } returns
             flowOf<arrow.core.Either<RepositoryError, CompactionEvent>>(error.left())
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
 
@@ -143,7 +143,7 @@ class CompactConversationUseCaseTest {
 
     @Test
     fun `the terminal marker alone leaves the outcome notifications untouched`() = runTest {
-        every { sessionRepository.compactConversation(sessionId) } returns
+        every { conversationRepository.compactConversation(sessionId) } returns
             flowOf(CompactionEvent.StreamCompleted.right())
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
 
@@ -158,7 +158,7 @@ class CompactConversationUseCaseTest {
 
     @Test
     fun `a start while a compaction is running is ignored`() = runTest {
-        every { sessionRepository.compactConversation(sessionId) } returns flow {
+        every { conversationRepository.compactConversation(sessionId) } returns flow {
             emit(CompactionEvent.Completed(payload).right())
             awaitCancellation()
         }
@@ -168,14 +168,14 @@ class CompactConversationUseCaseTest {
         useCase.start(sessionId)
         useCase.start(sessionId)
 
-        verify(exactly = 1) { sessionRepository.compactConversation(sessionId) }
+        verify(exactly = 1) { conversationRepository.compactConversation(sessionId) }
         useCase.cancel()
         advanceUntilIdle()
     }
 
     @Test
     fun `cancelling the operation notifies the user and clears the indicator`() = runTest {
-        every { sessionRepository.compactConversation(sessionId) } returns flow {
+        every { conversationRepository.compactConversation(sessionId) } returns flow {
             emit(CompactionEvent.StreamCompleted.right())
             awaitCancellation()
         }

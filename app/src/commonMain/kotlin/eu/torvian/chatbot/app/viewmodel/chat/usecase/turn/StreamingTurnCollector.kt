@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase.turn
 
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_sending_message_short
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.service.agent.OperatorToolExecutor
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
@@ -27,7 +27,7 @@ import kotlinx.coroutines.withContext
 /**
  * Collects one streaming turn and settles the assistant message this client stopped itself.
  *
- * @property sessionRepository Repository responsible for chat message transport and session updates.
+ * @property conversationRepository Repository responsible for chat message transport and session updates.
  * @property notificationService Notification sink for transport and API errors.
  * @property operatorToolExecutor Executor that runs operator tool calls on a second socket.
  * @property state Shared chat UI state updated while the turn streams.
@@ -37,7 +37,7 @@ import kotlinx.coroutines.withContext
  * @property noteApprovalDeferred Reports a tool call left for a manual user decision.
  */
 internal class StreamingTurnCollector(
-    private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     private val notificationService: NotificationService,
     private val operatorToolExecutor: OperatorToolExecutor,
     private val state: ChatState,
@@ -50,7 +50,7 @@ internal class StreamingTurnCollector(
     private val logger = kmpLogger<StreamingTurnCollector>()
 
     /**
-     * Handles streaming message processing using SessionRepository.
+     * Handles streaming message processing using ConversationRepository.
      * This function orchestrates the bidirectional flow of events for the WebSocket connection.
      *
      * @param sessionId Session the turn belongs to.
@@ -81,7 +81,7 @@ internal class StreamingTurnCollector(
         // WebSocket for operator tools) is cancelled when the primary socket closes or the turn ends.
         coroutineScope {
             try {
-                sessionRepository.processNewMessageStreaming(sessionId, clientEvents).collect { eitherUpdate ->
+                conversationRepository.processNewMessageStreaming(sessionId, clientEvents).collect { eitherUpdate ->
                     eitherUpdate.fold(
                         ifLeft = { repositoryError ->
                             // A failed transport prevents the terminal frame from arriving, so the
@@ -214,7 +214,7 @@ internal class StreamingTurnCollector(
         // coroutine would abort at that suspension point, which is exactly the case this settlement exists for.
         // No I/O happens inside the block.
         withContext(NonCancellable) {
-            sessionRepository.markAssistantMessageInterrupted(sessionId = sessionId, messageId = messageId)
+            conversationRepository.markAssistantMessageInterrupted(sessionId = sessionId, messageId = messageId)
         }
     }
 }

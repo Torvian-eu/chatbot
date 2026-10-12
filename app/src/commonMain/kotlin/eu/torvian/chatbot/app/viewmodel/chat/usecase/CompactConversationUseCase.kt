@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.TurnExecutionState
@@ -22,13 +22,13 @@ import kotlinx.coroutines.withContext
  * reaches the global notification surface. Only cancelling the job — the composer's stop action — or
  * the app going away closes the socket.
  *
- * @property sessionRepository Repository exposing the compaction socket of a session.
+ * @property conversationRepository Repository exposing the compaction socket of a session.
  * @property state Chat state whose [ChatState.setTurnExecutionState] carries the progress indicator.
  * @property notificationService Notification sink for the operation's outcome.
  * @property scope Scope owning the running compaction; cancelling it aborts the operation.
  */
 class CompactConversationUseCase(
-    private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     private val state: ChatState,
     private val notificationService: NotificationService,
     private val scope: CoroutineScope
@@ -53,7 +53,7 @@ class CompactConversationUseCase(
         state.setTurnExecutionState(TurnExecutionState.COMPACTING)
         job = scope.launch {
             try {
-                sessionRepository.compactConversation(sessionId).collect { outcome ->
+                conversationRepository.compactConversation(sessionId).collect { outcome ->
                     outcome.fold(
                         ifLeft = { error ->
                             notificationService.repositoryError(

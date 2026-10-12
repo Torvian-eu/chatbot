@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
  * 5. Manages retry state internally (not in ChatState)
  */
 class LoadSessionUseCase(
-    private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     private val modelSettingsRepository: ModelSettingsRepository,
     private val modelRepository: ModelRepository,
     private val toolRepository: ToolRepository,
@@ -77,8 +77,8 @@ class LoadSessionUseCase(
         // Load all dependencies in parallel. Agent roles, projects, models, settings and tools feed
         // the top-bar role/project selectors and the role-derived current model/settings derivations.
         parZip(
-            { sessionRepository.loadSessionDetails(sessionId) },
-            { sessionRepository.loadSessionToolCalls(sessionId) },
+            { conversationRepository.loadSessionDetails(sessionId) },
+            { conversationRepository.loadSessionToolCalls(sessionId) },
             { modelRepository.loadModels() },
             { modelSettingsRepository.loadAllSettings() },
             { toolRepository.loadTools() },

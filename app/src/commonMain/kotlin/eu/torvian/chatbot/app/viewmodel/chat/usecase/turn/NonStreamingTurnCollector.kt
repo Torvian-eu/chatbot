@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase.turn
 
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_sending_message_short
-import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ConversationRepository
 import eu.torvian.chatbot.app.service.agent.OperatorToolExecutor
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
 /**
  * Collects one non-streaming turn.
  *
- * @property sessionRepository Repository responsible for chat message transport and session updates.
+ * @property conversationRepository Repository responsible for chat message transport and session updates.
  * @property notificationService Notification sink for transport and API errors.
  * @property operatorToolExecutor Executor that runs operator tool calls on a second socket.
  * @property state Shared chat UI state updated while the turn runs.
@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
  * @property noteApprovalDeferred Reports a tool call left for a manual user decision.
  */
 internal class NonStreamingTurnCollector(
-    private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     private val notificationService: NotificationService,
     private val operatorToolExecutor: OperatorToolExecutor,
     private val state: ChatState,
@@ -46,7 +46,7 @@ internal class NonStreamingTurnCollector(
     private val logger = kmpLogger<NonStreamingTurnCollector>()
 
     /**
-     * Handles non-streaming message processing using SessionRepository.
+     * Handles non-streaming message processing using ConversationRepository.
      * This function orchestrates the bidirectional flow of events for the WebSocket connection.
      *
      * @param sessionId Session the turn belongs to.
@@ -70,7 +70,7 @@ internal class NonStreamingTurnCollector(
         // runs inside a coroutine scope so the spawned executor coroutine (which owns the second
         // WebSocket for operator tools) is cancelled when the primary socket closes or the turn ends.
         coroutineScope {
-            sessionRepository.processNewMessage(sessionId, clientEvents).collect { eitherEvent ->
+            conversationRepository.processNewMessage(sessionId, clientEvents).collect { eitherEvent ->
                 eitherEvent.fold(
                     ifLeft = { repositoryError ->
                         // A failed transport prevents the terminal frame from arriving, so the

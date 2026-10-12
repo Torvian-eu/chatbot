@@ -2,6 +2,11 @@ package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
 import arrow.core.right
+import eu.torvian.chatbot.app.repository.impl.session.SessionDetailsStore
+import eu.torvian.chatbot.app.repository.impl.session.SessionEventApplier
+import eu.torvian.chatbot.app.repository.impl.session.SessionListReconciler
+import eu.torvian.chatbot.app.repository.impl.session.SessionSummaryStore
+import eu.torvian.chatbot.app.repository.impl.session.ToolCallStore
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
@@ -13,9 +18,12 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -28,14 +36,16 @@ import kotlin.time.Instant
  * caller unchanged and never mutates the cached session, because the viewer renders it from chat state rather
  * than from a transcript row.
  */
-class DefaultSessionRepositoryRawLlmRequestTest {
+@OptIn(ExperimentalCoroutinesApi::class)
+class DefaultConversationRepositoryRawLlmRequestTest {
 
     private val sessionId = 100L
     private val now = Instant.fromEpochMilliseconds(1_700_000_000_000L)
 
     private lateinit var sessionApi: SessionApi
     private lateinit var chatApi: ChatApi
-    private lateinit var repository: DefaultSessionRepository
+    /** The conversation half under test. */
+    private lateinit var repository: DefaultConversationRepository
 
     private val payload = RawLlmRequestPayload(
         method = "POST",
@@ -44,11 +54,28 @@ class DefaultSessionRepositoryRawLlmRequestTest {
         body = """{"model":"gpt-4"}"""
     )
 
+    /** Builds the repository under test over its own collaborators, with [scope] hosting the post-turn alignment. */
+    private fun conversationRepository(scope: CoroutineScope): DefaultConversationRepository {
+        val details = SessionDetailsStore()
+        val toolCalls = ToolCallStore()
+        val summaryStore = SessionSummaryStore()
+        return DefaultConversationRepository(
+            sessionApi = sessionApi,
+            chatApi = chatApi,
+            details = details,
+            toolCalls = toolCalls,
+            eventApplier = SessionEventApplier(details = details, toolCalls = toolCalls),
+            summaryStore = summaryStore,
+            reconciler = SessionListReconciler(sessionApi, summaryStore, scope)
+        )
+    }
+
     @BeforeTest
     fun setup() {
         sessionApi = mockk()
         chatApi = mockk()
-        repository = DefaultSessionRepository(sessionApi, chatApi)
+        // The post-turn alignment runs on a scope below the test, so a turn never waits for it.
+        repository = conversationRepository(CoroutineScope(UnconfinedTestDispatcher()))
         // A completing turn reconciles the session list in the background; the strict mock needs the fetch stubbed
         // even though these cases are about the cached session details.
         coEvery { sessionApi.getAllSessions() } returns Either.Right(emptyList())

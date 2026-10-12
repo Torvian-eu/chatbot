@@ -40,7 +40,7 @@ import eu.torvian.chatbot.app.chat.search.MIN_QUERY_LENGTH
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatStateImpl(
-    private val sessionRepository: SessionRepository,
+    private val conversationRepository: ConversationRepository,
     modelSettingsRepository: ModelSettingsRepository,
     modelRepository: ModelRepository,
     private val toolRepository: ToolRepository,
@@ -119,7 +119,7 @@ class ChatStateImpl(
     override val sessionDataState: StateFlow<DataState<RepositoryError, ChatSession>> =
         _activeSessionId.flatMapLatest { id ->
             if (id == null) flowOf(DataState.Idle)
-            else sessionRepository.getSessionDetailsFlow(id)
+            else conversationRepository.getSessionDetailsFlow(id)
         }.stateIn(
             scope = backgroundScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -315,7 +315,7 @@ class ChatStateImpl(
     override val toolCallsForCurrentSession: StateFlow<DataState<RepositoryError, ToolCallsMap>> =
         _activeSessionId.flatMapLatest { sessionId ->
             if (sessionId == null) flowOf(DataState.Success(emptyMap()))
-            else sessionRepository.getToolCallsFlow(sessionId)
+            else conversationRepository.getToolCallsFlow(sessionId)
         }.stateIn(
             scope = backgroundScope,
             started = SharingStarted.WhileSubscribed(5000),
