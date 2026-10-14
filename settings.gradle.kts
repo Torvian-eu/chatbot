@@ -5,7 +5,7 @@ import java.util.Properties
 // Global Project Metadata
 // ==========================================================
 
-val projectVersion = "0.11.0-SNAPSHOT"
+val projectVersion = "0.11.0"
 val projectName = "chatbot"
 val projectGroup = "eu.torvian"
 
