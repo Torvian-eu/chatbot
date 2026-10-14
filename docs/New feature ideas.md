@@ -2,112 +2,20 @@
 
 ## Basic features
 
-### (done, partially) Allow message streaming process to stop gracefully
-  - (not done yet) Add Boolean field to AssistantMessage to indicate if the message is complete.
-  - Add error message String field to AssistantMessage (which can be shown in the UI, together with the partial content).
-  - Store partial message content in AssistantMessage table, in case the stream was interrupted. (either due to an error, or because the user stopped the streaming)
-  - In the UI, the "send" button should transform into a "stop" button while the message is streaming. 
- 
-### Allow user to pause an agentic response
-  - When a message starts streaming, show a "Pause" icon instead of a "Stop" icon. When user clicks the "Pause" button, the icon starts blinking slowly, indicating that the streaming process is being paused. When streaming process is actually paused, the icon changes to default mode again (with "Play" icon). While the icon is slowly blinking on Pause state, the user can click on it again, which will force a hard stop. (Websocket connection will be closed immediately)
-  - Pausing should stop the (web socket) streaming process, but only after the current assistant message is fully processed. This means that the message loop (used for tool calling) will be interrupted prematurely.
-  - This feature is particularly useful for agentic LLM usage, where the user might want to interrupt an undesirable response and provide feedback.
-
-### (done) Allow recursive deletion of messages. (in addition to single message deletion)
-  - The server module is already capable of this, but the ktor route needs to be examined. In `configureMessageRoutes.kt` we have a route `delete<MessageResource.ById>`, where we use a query parameter "mode=single" to perform a non-recursive delete and "mode=recursive" to perform a recursive delete. However, we use the Ktor Resources plugin, and we should examine if a query parameter can be configured for the route declaritively instead, so that it can be validated at compile time.
-  - Add a "Delete Thread" button to the message actions menu. (see MessageActionRow.kt)
-    (or hide it under a "More" actions button, to show a popup menu with extra actions, less commonly used)
-
-### (done) Insert message above/below
-- Add an "Insert" button to the more actions menu. (See MessageActionRow.kt)
-- This should insert a user or assistant message above/below the target message.
-- After clicking the "Insert" button, a dialog should be shown with the following options: above/below (default: below), user/assistant (default: user), message content (optional, may be empty)
-
-### (done) Make message content selectable
-
-### (done) Make messages collapsible (useful for long messages)
-
-### (done) Make message content copyable to clipboard
-
-### (done) Make currently displayed message thread copyable to clipboard
-
 ### Make chat session copyable to file/clipboard as JSON (for importing into other apps)
 
 ### Make chat session importable from file/clipboard (for ChatGPT export format)
-
-### Make messages searchable
-
-#### (done) Make chat messages searchable (within a single chat session)
-- add an option to the "more" menu in the top app bar, which allows the user to search for messages within the current chat session. (As an alternative it should be possible to open the search bar by pressing Ctrl+F / Cmd+F)
-- The search bar should temporarily replace the center items in the top app bar: model & model settings selector, tools selector, and more menu.
-- The search bar should have:
-  - a text input field
-  - a back and forward button to cycle through search results
-  - a label showing the current search result index and total number of results (e.g., "2/5"). Clicking the label should allow the user to manually enter a search result index to jump to.
-  - a close button to exit the search mode and restore the original top app bar items.
-- After the search is performed, it should highlight all instances of the search text found.
-- The scroll position should move to the closest instance (in relation to current scroll position).
-- The user should be able to cycle thru instances (with back/forward navigation, and manual number entry)
-
-#### (done) Make chat messages searchable (across all chat sessions)
-- Add a search icon button to the left panel on the chat screen (next to the "Add Session" button). This opens a new dialog with a search text input field and a list of search results.
-- Each search result should show:
-  - The partial message content with the search text highlighted. The search text should be surrounded by a few lines of message content, so that it appears right in the middle.
-  - Session name
-  - A link to the message in the session. Clicking the link should open the session and scroll to the search text within the message content. (We can use the local search feature to achieve this, by pre-filling the search text and selecting the correct search result index)
-- The search dialog should contain:
-  - A text input field for the search text
-  - A list of search results
-  - A search action button to perform the search
-  - A close button to close the dialog and return to the chat screen
-- Closing the dialog should not reset the search results. Reoping the dialog should show the previous search results, until a new search is performed.
-- The search should be done server-side, and should search across all chat sessions for the current user. The server should return a list of search results, which are then displayed in the dialog.
-
-### (done) Add Save as Copy button to message edit area (in addition to Save/Cancel)
-This action saves the edited message as a new message, and creates a new branch in the conversation (also for leaf messages).
-
-### (done) Add option to continue conversation from (any) message
-- Add a "Branch & Continue" button to the message actions menu. (see MessageActionRow.kt)
-- This action creates a new branch in the conversation, with the selected message as the parent.
-- This feature is more versatile than "Regenerate" because it can be used on any message, not just assistant messages.
-
-### (done) Add Regenerate button for assistant messages
-- This is functionally equivalent to "Branch & Continue" from the target's parent message, but it is more intuitive for assistant messages.
-- The regenerate button is already present in the code, but is currently deactivated in the UI. (see MessageActionRow.kt)
-- In case the assistant message is the root of the conversation (very unlikely), the regenerate button should not be shown. (simpler alternative: do null operation in viewmodel instead, or do both)
 
 ### Allow certain features to be enabled/disabled on a per-user basis (*Requires user preference feature)
 The user should be able to configure this in their profile.
 
 ### Allow user to see LLM metadata for assistant responses
 
-### (done) Allow user to quickly scroll to the bottom of the messages list
-
-### (done) Allow user to switch accounts without logging out
-
 ### Allow admin to create new accounts for other users.
 Users will be forced to change their password on first login.
 
-### (done) Only allow connections to the server over HTTPS.
-For security, the server should only be accessible over HTTPS, and not HTTP. This applies to connections over the internet, as well as local network connections.
-
-### (done) Make session list panel collapsible
-Add an icon button to expand/collapse panel in the top app bar, on the left side.
-In the future we could add a vertical sidebar with icons on the left side of the screen. Clicking the session list icon would expand the panel, clicking it again would collapse it. This would only make sense when we have multiple panels to switch between. Currently we only have the session list panel, so a top app bar button is the best option.
-
 ### Allow user to specify chat group when adding a new session
 Currently, the user can only add a new session to the "Ungrouped" group. In the future, we should allow the user to specify a group when adding a new session.
-
-### (done) Allow user to clone a chat session
-- Add a "Clone" button to the session actions menu. (see SessionItemActionsDropdown)
-- Cloning a session should create a new session with the same name, but a new ID.
-- The new session should have the same messages and tool calls, but with new IDs.
-- The new session should have the same owner, current leaf message, configured tools, LLM model, settings, etc.
-
-### (done) Popout message input area for entering long messages
-- Currently the maximum number of visible lines is only 5. This makes it difficult to enter long messages.
-- If possible, we should allow the user to pop out the message input area into a separate window.
-- Alternative: make the input area part of the message list flow, which is already scrollable. (when user requests)
 
 ### Add model provider test button
 - Add a "Test" button to the add/update model provider configuration form.
@@ -126,28 +34,15 @@ Normally, only the assistant can call tools. However, it sometimes is useful for
 - A dialog should be presented with all the arguments for the tool, which can be filled in manually.
 - The dialog should allow the user to select a tool from the list of available tools for the current session.
 
-### (deprecated in favor of agent roles) Add system message composer
-The system message is what the LLM uses to understand the context of the conversation. It's always the first message in the conversation, and carries the heaviest weighting. We want to let the user compose the system message within the UI:
-- There should be several snippets of text (components) that the user can choose from to compose the system message:
-  - The system message property from the current chat model settings (ChatModelSettings.systemMessage)
-  - A predefined role-based message, stored in the database. For example: "You are a helpful assistant.".
-  - File contents from one or more `AGENTS.md` files. (Every worker instance should have an AGENTS.md file, located in the workspace root. This file can contain specific project instructions for the LLM.)
-  - A custom message that the user can edit.
-- The user should be able to add new role-based message objects to the database. Each object should have at least the following properties: id, name (unique), display name, and system message content.
-- The system message composition object is stored per-session. It should have at least the following properties: id, chat session id, role-based message id (nullable), custom message content (String, nullable), list of worker ids (to include AGENTS.md files from), whether the ChatModelSettings.systemMessage should be included or not (Boolean, default: true), ordering of components (List<String>)
-- The system message composer should be accessible from the top bar in the chatscreen, in the "More" menu.
-- In the composer dialog, the user should be able to select which components to include, and change the ordering. Each component should be presented as a card in the UI.
-
-Technical notes:
-- The database should hold a cached version of the system message for performance reasons, so that the composed system message doesn't have to be rebuilt on every request. It should be stored in the database as an object with at least the following properties: chat session id, system message (String). The client app is responsible for keeping the system message updated (by calling an endpoint on the server)
-- The client app can get the contents of an AGENTS.md file by calling the built-in worker tool `read_text_file`.
-- The client app should have Repository class for managing the cached (per-session) system message and other related data.
-
-### Display reasoning/thinking tokens in UI
-- for use with Responses API only
-- only show if tokens are not encrypted; in case of encrypted tokens, most LLM's provide a reasoning summary, which we could use instead.
-
-
+### (done) Display reasoning/thinking tokens in UI
+- reasoning tokens are currently only produced by the Responses API
+- a new subtype in `ChatStreamEvent` for streaming reasoning tokens should be added
+- reasoning tokens are persisted in `AssistantMessage.reasoningItems`, which could be used in the UI
+- ChatScreen: Each assistant message item should get a separate section for reasoning output, when available. It should be hidden (collapsed) by default, and expanded when clicked on.
+- ChatScreen: reasoning text should be added incrementally, while streaming (similar to the way its done for regular assistant message streaming content)
+- ChatScreen: While streaming, a "thinking" indicater should be shown, or something similar (non-animated)
+- ChatScreen: In case of encrypted tokens, displaying the content would not be useful. Instead, some information text should be displayed that the tokens are encrypted. 
+- ChatScreen: display the reasoning summary, if available.
 
 ---
 
@@ -155,9 +50,6 @@ Technical notes:
 
 
 ## Intermediate features
-
-### (done) User accounts
-Each user has their own set of credentials, models, settings, and chat history. Some things could be shared between users, such as public providers, models and settings. Certain users could be assigned special privileges, such as the ability to manage other users, or add public providers, models and settings. There must be at least one admin user, who has all privileges (or has at least the capability to assign privileges to theirself and other users)
 
 ### User profile customization (name, avatar, etc.)
 
@@ -167,218 +59,19 @@ Each user has their own set of credentials, models, settings, and chat history. 
 
 ### Select available models for adding by querying LLM provider API
 
-### (done, partial) Allow user to select predefined (built-in) LLM Tools for a specific prompt
-Predefined tools could include: Web search, calculator, current weather, etc.
-note: Web search not working yet.
-
-### (done, partial) Allow user to add file references when sending a message
-- The UI should include a button to add file references, which opens a file picker. (below the message input area)
-- By default, the actual file content should not be sent to the LLM, only a reference to the file.
-- The user should be able to select which files to send, and the base path for the file references. The base path is not included in the file references sent to the LLM. Only the relative path from the base path is included in the file reference. By default, the base path is the same as where the file itself is located, or when multiple files are selected, the common (longest) parent path of all selected files. Selecting a custom base path is useful when alligning with Local MCP Tools, which should be using the same base path. That way the LLM can use the file references in the Tools.
-- The user should be able to place a file reference within the message content (inline). Optionally, this could also include the actual file content (usually text-based only).
-- The LLM context should include the file references appended to the message content (For instance: "Referenced files: [file1.txt, file2.txt]"). And, if available, the LLM context should also include the inline file references with or without the file content. 
-- (optional) The user should be able select file references from previous messages in the conversation, for inline placement in the current message.
-- The file references should be visible as badges in the message content (similar to tool call badges). Clicking the badge shows metadata about the file, such as the file name, size, and modification date. The badges should be visible for all messages in the conversation, as well as in the message input area.
-- Inline references should be clickable to show the file's metadata, and optionally the file content if it was included.
-technical notes:
-- Add FileReference data class with base path, relative path, optional content, insert position (for inline placement).
-- Add ChatMessageTable.fileReferences with type TEXT (JSON array of file references)
-- Add ChatMessage.fileReferences property with type List<FileReference>
-Not completed:
-- UI for inline placement of file references
-- Drag & drop files from OS into message input area
-
-### Add "Agent Skills" feature
-- Agent Skills are folders of instructions, scripts, and resources that agents can discover and use to do things more accurately and efficiently. See: https://agentskills.io/home
-- Skills should be installed in the following way:
-  - User downloads a skill from places like https://skills.sh/ and saves it to the "skills" directory in the user's data directory of the AIChat app.
-  - The user triggers the app to scan the "skills" directory for new skills. And the skill is added to the app's local database.
-  - (optional) The user configures the skill in the app's GUI.
-- A skill should be activated in the following way:
-  - The user mentions the skill in a chat message. For instance: "Could you please help me with the 'git-branch' skill?".
-  - The LLM should be able to understand the user's intent to use the skill, and ask the user to confirm. (For instance: "Do you want to use the 'git-branch' skill to list all local branches?")
-  - Alternatively, the user can manually load the skill into the current chat session, using the GUI.
-- In order for the LLM to know under which conditions a skill should be used, the user should create an AGENTS.md file, which is loaded into the LLM context (as the system message). This file could also contain general project information, with links to other files. A user could have many different AGENTS.md files for different projects, or agent roles. See: https://github.com/agentsmd/agents.md
-- Requirements for using skills:
-  - A built-in agent tool for listing available skills.
-  - A built-in agent tool for loading skills into the LLM context of the current chat session.
-  - An agent tool for running commands on the local machine. (It could be a third-party MCP tool, or a tool built into the app.) This is necessary for the agent to run scripts from the skill.
-  - An agent tool for fetching information from the web. This is necessary for the agent to visit links mentioned in the SKILL.md or AGENTS.md files.
-  - An agent tool for reading files from the local file system. This is necessary for the agent to read the content of files mentioned in the SKILL.md or AGENTS.md files.
-  - A convenient way for users to load the content of an AGENTS.md file into the LLM context for the current chat session. (For instance: a button in the GUI to select an AGENTS.md file, which is then loaded into the LLM context)
-
-### (done) Add support for OpenAI's Responses API
-The main benefit over the Chat Completions API is support for reasoning tokens. It allows replaying of reasoning tokens from previous requests.
-- Add new model type `RESPONSES` in enum class `LLMModelType`.
-- Docs:
-  - [Responses Overview](https://developers.openai.com/api/reference/responses/overview)
-  - [Migrate to the Responses API](https://developers.openai.com/api/docs/guides/migrate-to-responses)
-  - [Create a model response](https://developers.openai.com/api/reference/resources/responses/methods/create)
-  - [Streaming API responses](https://developers.openai.com/api/docs/guides/streaming-responses)
-  - [Streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events)
-  - [Function calling](https://developers.openai.com/api/docs/guides/function-calling)
-  - [Reasoning models](https://developers.openai.com/api/docs/guides/reasoning)
-
 ### Add support for MCP's resources and prompts
 - The user should be able to retrieve a resource or prompt, if currently active for the chat session. (The MCP server will be contacted to retrieve the resource or prompt)
 - When at least one resource or prompt is active, the UI should indicate this by showing an icon button with badge (indicating the total number of active resources and prompts) underneath the chat input area. Clicking the icon should open a popup with a list of all active resources and prompts (with name, description and type). Clicking an item in the list should copy it's content to the chat input area, or, if the item requires arguments it should open a dialog to enter the arguments, and then copy the formatted resource or prompt to the chat input area.
-
-### (done) Allow user to seamlessly switch between chat sessions while requests are in progress
-- The streaming process should continue running, allowing for parallel processing of multiple requests.
 
 ### Allow user to queue multiple messages while a request is in progress
 - The user should be able to queue multiple messages while a request is in progress. The queue should be processed in the order they were received.
 - A queue message button should appear in the input area when a request is in progress. Clicking the button should add the current message to the queue. The button should be visible for the duration of the request.
 
-### Memory spaces
-Allow users to create multiple memory spaces, which are separate knowledge bases that can be loaded into the LLM context. This allows users to organize their knowledge base into different topics or projects, and only load the relevant information for each chat session. For instance, a user could have a "Work" memory space with information about their job, and a "Personal" memory space with information about their personal life. When starting a new chat session, the user can choose which memory space(s) to load into the LLM context.
-- Each memory space has an AGENTS.md file, which is loaded into the LLM context when the memory space is loaded. This file contains instructions for the LLM on how to use the information in the memory space, as well as general information about the topic of the memory space.
-- A memory space can contain both structured and unstructured information. Structured data may be stored as entities and relationships in a graph database or in a relational SQL database (depending on access and query patterns). Unstructured information is stored as text documents. The LLM can query the structured store for relevant entities/relations and consult the text documents for detailed context.
-- The agent can add/remove items to/from the memory space, and update the AGENTS.md file as needed. This allows the memory space to evolve over time, and for the LLM to learn from its interactions with the user and the environment.
-
-### Skill spaces
-Allow users to create multiple skill spaces, which are separate collections of SKILL folders. This allows users to organize their skills into different topics or projects, and only load the relevant skills for each chat session. For instance, a user could have a "Programming" skill space with skills related to programming tasks, and a "Cooking" skill space with skills related to cooking tasks. When starting a new chat session, the user can choose which skill space(s) to load into the LLM context.
-- Each skill space has an AGENTS.md file, which is loaded into the LLM context when the skill space is loaded. This file contains instructions for the LLM on when and how to use the skills in the skill space, as well as general information about the topic of the skill space.
-- The agent can add/remove skills to/from the skill space, and update the AGENTS.md file as needed. This allows the skill space to evolve over time, and for the LLM to learn from its interactions with the user and the environment.
-
-### Workspaces
-Combine memory spaces and skill spaces into workspaces. A workspace is a collection of memory spaces and skill spaces that are relevant for a specific topic or project. When starting a new chat session, the user can choose which workspace to load into the LLM context, which will load all the memory spaces and skill spaces associated with that workspace.
-
-### (done) Built-in worker tools
-Add built-in tools for the worker to use.
-- All tools can be prefixed with a unique identifier to indicate that they are built-in tools for a specific worker instance. This prefix is configurable, so that the user can change it to something more meaningful for their specific use case. For instance: "project1.read_text_file", "project1.write_file", "project1.edit_file", etc.
-- Each worker as a special `workspace` directory, which is used to store files that the worker can access. All file paths are relative to this workspace directory. The worker can read/write files in this directory, but cannot access files outside of it. This is a security measure to prevent the worker from accessing sensitive files on the host machine.
-
-#### File Operation Tools
-- **read_text_file**: Read contents of a file as text.
-  - Inputs: `path`, `head`/`tail` (optional, first/last N lines)
-  - Outputs: file content as text
-  - Always treats the file as UTF-8 text regardless of extension.
-  - Cannot specify both head and tail simultaneously.
-- **write_file**: Create new file or overwrite existing (exercise caution with this)
-  - Inputs: `path`, `content`.
-- **edit_file**: Make selective edits using advanced pattern matching and formatting
-  - Features:
-    - Line-based and multi-line content matching
-    - Whitespace normalization with indentation preservation
-    - Multiple simultaneous edits with correct positioning
-    - Indentation style detection and preservation
-    - Git-style diff output with context
-    - Preview changes with dry run mode
-  - Inputs:
-    - `path` (string): File to edit
-    - `edits` (array): List of edit operations
-      - `oldText` (string): Text to search for (plain text or regex)
-      - `newText` (string): Text to replace with
-    - `dryRun` (boolean): Preview changes without applying (default: false)
-  - Returns detailed diff and match information for dry runs, otherwise applies changes
-  - Best Practice: Always use dryRun first to preview changes before applying them
-- **create_directory**: Create new directory or ensure it exists
-  - Input: `path` (string)
-  - Creates parent directories if needed
-  - Succeeds silently if directory exists
-- **list_directory**: List directory contents with [FILE] or [DIR] prefixes
-  - Inputs: 
-    - `path` (string)
-    - `sortBy` (string, optional): Sort entries by "name" or "size" (default: "name")
-    - `includeSizes` (boolean, optional): Include file sizes in output (default: false)
-    - `recursive` (boolean, optional): List contents recursively (default: false)
-  - Returns a simple listing of files and directories, optionally including sizes
-  - If `recursive` is true, the listing will include all subdirectories and their contents, formatted with indentation to indicate directory depth.
-  - Shows total files, directories, and combined size if `includeSizes` is true
-- **move_file**: Move or rename files and directories
-  - Inputs:
-    - `source` (string)
-    - `destination` (string)
-  - Fails if destination exists
-- **search_files**: Recursively search for files/directories that match or do not match patterns
-  - Inputs:
-    - `path` (string): Starting directory
-    - `pattern` (string): Search pattern (glob-style)
-    - `excludePatterns` (string[]): Exclude any patterns.
-  - Returns paths to matches
-
-#### CLI Tools
-- **run_command**: Execute a command-line command
-  - Inputs:
-    - `command` (string): Command to execute
-    - `args` (string[]): Optional arguments for the command
-    - `timeout` (number): Optional timeout in seconds (default: 600)
-  - Returns:
-    - `stdout` (string): Standard output of the command
-    - `stderr` (string): Standard error output of the command
-    - `exitCode` (number): Exit code of the command
-  - The current working directory is the worker's `workspace` directory. The command must be available in the system PATH or specified with an absolute path.
-  - The worker should run within a docker container or sandboxed environment to prevent malicious commands from affecting the host system.
 
 
-### (done) Retry LLM request on 429 or 503
-- Implement retry logic for LLM requests that receive a 429 Too Many Requests or 503 Service Unavailable error, with exponential backoff.
+### Add skills to agent roles
 
-### (done) Show hints to LLM when built-in tool fails (or returns empty result)
-
-### (done) Add search capability for `fetch_web_content` tool
-Allow LLM to search for text in a web page directly, similarly to `search_text` tool.
-- add parameters:
-  - `searchQuery` : string (optional); cannot be mixed with `range` parameter
-  - `searchMode` : `regex` or `plain` (default: `regex`)
-  - `contextBefore` : number (optional, default: 0); only used when `searchQuery` is specified
-  - `contextAfter` : number (optional, default: 0); only used when `searchQuery` is specified
-  - `maxResults` : number (optional, default: 10); only used when `searchQuery` is specified
-  - `caseSensitive` : boolean (optional, default: false); only used when `searchQuery` is specified
-  - `wholeWord` : boolean (optional, default: false); only used when `searchQuery` is specified and `searchMode` is `plain`
-- updated parameters:
-  - `range` : cannot be mixed with `searchQuery` parameter
-
-Notes:
-- if `range` and `searchQuery` are both specified, the tool should return an error message indicating that only one of them can be used at a time.
-- If any of the `searchQuery` related parameters (`searchMode`, `contextBefore`, `contextAfter`, `maxResults`, `caseSensitive`, `wholeWord`) are specified, the tool should return an error message indicating that they can only be used when `searchQuery` is specified.
-- Spefifying both `maxLines` and `searchQuery` is allowed. The number of lines is counted as the total number of lines returned (including context), regardless of how many matches are found. If `maxLines` is reached, the tool should return a message indicating that the maximum number of lines has been reached.
-
-### (done) Add strip HTML capability for `fetch_web_content` and `download_file` tools
-Add an option to these tools to strip a HTML page to a bare minimum, so that only the core HTML tags, core attributes, and text content remain. A boolean parameter should be added as an on/off switch (default: on). 
-
-### (done, partially) User-defined agent roles
-
-#### UI
-- User can select an agent role for the current chat session. Replaces the model, model settings, and tools selection form elements in the top app bar.
-
-#### Data structure for `AgentRole`
-An agent role consists of the following items:
-- `id`: type: long, unique, cannot be modified after creation, created by db
-- `name`: type: String, unique, modifiable, short name
-- `display name`: type: String?
-- `description`: type: String
-- `model id`: type: Long, references `LLMModel` object
-- `model settings id`: type: Long, references `ModelSettings` object (`LLMModelType` must be `CHAT` or `RESPONSES`)
-- `tools`: type: List<ToolDefinition>, list of tools available to the agent
-- `instructions`: type: List<`AgentInstruction`>, an ordered list of instructions that the agent must always follow. This list is used to compose the system message for the LLM. (All of the message strings from `AgentInstruction.message` are concatened together, with markdown separator "---".)
-- (future extension) `project id`: type: Long?, references the project that this agent role belongs to. Useful for grouping several agent roles together.
-- (done) `spawnable agent roles`: type: List<Long>, a list of agent roles that this agent is allowed to spawn. An agent can use a `spawn_agent` tool to spawn another agent instance. (This tool will be implemented in a future stage.)
-- (future extension) `skills`: type: List<Long>, items reference class `Skill`, list of skills that the agent can use.
-
-#### interface `AgentInstruction`
-```
-interface AgentInstruction {
-    val name: String,
-    val message: String,
-    fun loadMessage()
-}
-```
-Implementations of this class include:
-- `RoleInstruction`: describes the role that the agent should take. For instance: "You are a senior software architect assisting a user who often delegates implementation to a separate AI coding agent."
-- `MainInstruction`: contains information about the project the agent should be working on. (usually AGENTS.md file contents)
-- (deprecated) `ModelSettingsInstruction`: contains the instructions for the referenced model settings object in the agent role (`ChatModelSettings.systemMessage` or `ResponsesModelSettings.instructions`). Can be useful in case a certain model needs specific instructions. This class has an extra property `modelSettingsId`. The function `loadMessage` loads the instruction from the database, and stores it in a private `_message` field.
-- `CustomInstruction`: A custom user-editable instruction for the agent. There can be multiple of these within the same list of instructions.
-- (done) `SpawnableAgentsInstruction`: contains information for the agent about how to spawn another agent, and which agent roles are available. This instruction is dynamic and is derived from the property `AgentRole.spawnable agent roles`.
 - (future extension) `SkillsInstruction`: contains information for the agent about how to use a skill, and which skills are available. This instruction is dynamic and is derived from the property `AgentRole.skills`.
-
-#### Future extensions
-**(deprecated for now, because probably not needed) Agent role overrides**
-Sometimes it's useful to override some properties from `AgentRole` temporarily, without having to create a new `AgentRole` in the databse. The class `AgentRoleOverrides` has the following properties:
-- `model settings override`: can override settings defined in the object `ModelSettings` referenced by `model settings id`. For example, this could be useful for setting a specific `temperature` for the current task.
-- `tools override`: Add or remove tools for the current task. This overrides the default `tools` list for the agent role.
-This class can be used in both the UI (ViewModel) and agent instances. 
 
 **Skills**
 Agent Skills are a lightweight, open format for extending AI agent capabilities with specialized knowledge and workflows. See: https://agentskills.io/home.
@@ -387,39 +80,8 @@ The properties for class `Skill` are:
 - `name`: type: String, same name as directory (for example: workspace/skills/<name>)
 - `description`: type String
 
-### (done, partially) Spawnable agent instances
-An agent role can be spawned as an agent instance. An agent instance needs an `AgentInstanceConfig` object to be spawned. It consists of the following items:
-- `agent role`: type: `AgentRole`
+### Allow agents to be ran by a background service
 - `operator type`: type: `OperatorType`. An operator manages the agent's instance. It's either the client app or a dedicated agent operator (running as a background service; similar to the worker, which stays connected to the server (via websocket) at all times). The operator must be registered in the worker as a trusted signer. Every tool call request for the worker is signed by the operator. (The client app already has this capability.)
-- `conversation`: type List<`RawChatMessage`>. This is usually a list with a single user message item. It contains a prompt, which describes the task for the agent to execute.
-- (future extension) `agent role overrides`: type: `AgentRoleOverrides?`, optional
-
-#### (done) Operator built-in tool `spawn_agent`
-Sends a signal to the operator to initiate the creation of a new agent instance. It can be called by the LLM at any time. It has the following parameters:
-- `agent role name`: type: String, references `AgentRole.name`
-- `prompt`: type: String, describes the task for the agent to execute.
-
-**Tool execution flow**
-- The tool must be approved by the operator first, before it can be executed: the server sends a `Chat(Stream)Event.ToolCallApprovalRequested` to the operator and the operator responds with `ChatClientEvent.ServerToolCallApproval`, a new event type. New class to be created: `ServerToolDefinition` with new `ToolType.SERVER`. It's a class derived from the interface `ToolDefinition` with no extra properties.
-- After approval, the server relays the execution of the tool back to the operator, waits for the tool result, and sends the result to the LLM that initiated the `spawn_agent` tool call. The execution relay can be done via a new type of event, sent over websocket. For instance: `Chat(Stream)Event.ServerToolExecutionRequested`.
-- The execution of the tool is orchestrated by the operator. Upon receiving the tool execution request from the server, it creates a new chat session, and sends a `ProcessNewMessageRequest` (with the value of `prompt` as content) to the server, which initiates a new websocket connection. So now the operator has to manage two websocket connections simultaneously.
-- When the `ProcessNewMessageRequest` finishes, the operator has to aggregrate the result. For simplicity, we can use the contents of the last assistant's message from the chat session, which should include a summary report.
-- The operator sends the tool result to the server, via a new `ChatClientEvent.ToolExecutionResult` event.
-- The server sends the result to the LLM that initiated the `spawn_agent` tool call.
-
-
-### (done) Add agent instruction type that's only active for a certain model
-- Multiple instances of this new type of instruction are possible in the list of instructions. The only one active will be the one equal where its model id property is equal to AgentRole.modelId
-- (future stage) `ModelSettingsInstruction` can be deprecated in favor of this. Also, the `systemMessage` property can be removed from `ChatModelSettings` and `ResponsesModelSettings`, since it would have no purpose anymore.
-
-### Projects
-Define a project that several agents can work on together. The properties for class `Project` are: `id`, `name`, `description`.
-- Allows a user to group several agent roles together
-- A project name can be selected in the top app bar. When a project is selected, only the agent roles from that project are shown in the agent role selection box.
-
-### Allow user to compact a conversation manually
-- Compacts the currently active thread (determined by the current leaf message id) in the chat session.
-- Could be implemented as a manual call to a server built-in tool (which are normally only called by the LLM).
 
 ### Add system message property to chat session object
 - The system message is derived from the session's agent role's instructions list, using the `SystemPromptComposer`.
@@ -430,35 +92,12 @@ Define a project that several agents can work on together. The properties for cl
 ### Add LLM tool for creating a user dialog
 This tool enables an LLM to gather information interactively by asking targeted questions or presenting options. It supports workflows such as generating requirements documents, specification documents, bug reports, decision-support dialogs, troubleshooting flows, configuration wizards, and other tasks that benefit from structured user interviews.
 
-### Add a status indicator in chat session list panel
+### (done) Add a status indicator in chat session list panel
 For each chat session, show a different visual indication in each of these situations:
 - agent is busy (tool call loop is running)
 - agent is requesting user input (e.g., tool call approval or user dialog)
-- agent has just completed a task with success
-- agent has just completed a task with failure
-
-### Add predefined Chat model configurations, for use in agent roles
-The `ChatModelConfig` class has the following properties:
-- `id`: type: Long; unique ID for database
-- `name`: type: String; unique short name; for example: `smart_model`, `cheap_model`
-- `displayName`: type: String; optional
-- `description`: type: String; optional
-- `modelId`: type Long; references `LLMModel`
-- `modelSettingsId`: type Long; references `ChatModelSettings.id` or `ResponsesModelSettings.id`
-
-### (done) Server built-in tools
-These could be used by the LLM for actions such as:
-- list agent roles for current user (shows a list of items with all properties from AgentRoleSummary)
-- read agent role info (input: id; shows all properties from AgentRole)
-- create agent role (input: all fields except id)
-- update agent role (input: id and fields to be modified only)
-- list models (only list items accessible by current user; shows all properties from LLMModel)
-- list model settings for a specific model (input: modelId; only list items accessible by current user; shows all properties from ModelSettings, including subtype)
-- list tools (only list items accessible by current user; lists shows only the properties: id, name, description, type, isEnabled)
-- read tool info (input: id; shows all properties from ToolDefinition and its subtype)
-- (future extension) Compact a conversation
-
-All built-in server tools should be scoped by user to prevent unauthorized access
+- agent has just completed a task with success (removed when chat session is selected)
+- agent has just completed a task with failure (removed when chat session is selected)
 
 ### Allow users to call an LLM tool manually
 - Any tool can be called without using an LLM
@@ -474,6 +113,172 @@ Add a built-in "Agent Role Creator" agent role.
 - In the final step (upon user approval), the Agent Role Creator creates the agent role(s), according to the information gathered from the interview.
 
 ### Add server built-in tools for chat session management
+All tools are scoped by user to prevent unauthorized access. The tools are described below.
+
+#### Tool `list_chat_groups`:
+**inputs:** none
+**output:** Json array of objects with properties `id`, `name`, `createdAt` (See class `ChatGroup`)
+
+#### Tool `read_chat_group`:
+**inputs:** `id`
+**output:** Json object with properties `id`, `name`, `createdAt` (See class `ChatGroup`)
+
+#### Tool `create_chat_group`:
+**inputs:** `name`
+**output:** Json object with properties: `id`, `name`, `createdAt` (See class `ChatGroup`)
+
+### Tool `update_chat_group`:
+**inputs:**
+- `id`
+- `name`
+**output:** message confirming update was successful
+
+#### Tool `delete_chat_group`:
+**inputs:** `id`
+**output:** message confirming deletion was successful
+
+#### Tool `search_chat_groups`:
+**inputs:** `query` (string); regular expression; searches for chat groups whose name matches the query.
+**output:** Json array of objects with properties `id`, `name`, `createdAt` (See class `ChatGroup`)
+
+#### Tool `list_chat_sessions`:
+**inputs:**
+- `group_id`: optional; if null, lists sessions from all chat groups
+- `page_range`: optional; [start, end), matching Python slice semantics (similar to `read_text_file` tool in worker module); if null, lists all pages
+- `page_size`: defaults to 50; not applicable when `page_range` is null
+- `sort_by`: enum of `date_created`, `date_last_updated`, `name`; default: `date_last_updated`
+- `sort_direction`: enum of `asc`, `desc`; default: `desc`
+**output:** Json object with properties:
+- `chat_sessions`: Json array of objects with properties: `id`, `name`, `createdAt`, `updatedAt`, `groupId` (See class `ChatSessionSummary`)
+- `current_page` (zero-based index),
+- `total_pages` 
+
+#### Tool `read_chat_session`:
+**inputs:** `id`
+**output:** Json object with properties:
+- `id`
+- `name`
+- `createdAt`
+- `updatedAt`
+- `groupId`
+- `agentRoleId`
+- `currentLeafMessageId` (See class `ChatSession`)
+- `messageTurns`: number of message turns; a message turn is a sequence of messages that are part of the same conversation turn. For example, a user message followed by a reasoning message followed by an assistant message counts as one turn. Though since we only count turns we dont have to consider tool call, tool result or reasoning messages. That's because a turn must include at least a user or assistant message (and at most one of each).
+
+### Tool `create_chat_session`:
+**inputs:**
+- `name`
+- `group_id`: optional; if null, creates session in default group
+- `agent_role_id`: optional; if null, creates session with no agent role
+**output:** Json object with properties: `id`, `name`, `createdAt`, `updatedAt`, `groupId`, `agentRoleId`, `currentLeafMessageId`(always null, since the session is new and has no messages yet) (See class `ChatSession`)
+
+### Tool `update_chat_session`:
+**inputs:**
+- `id`
+- `name`: optional; if null, name is not updated
+- `group_id`: optional; if null, group is not updated
+- `agent_role_id`: optional; if null, agent role is not updated
+**output:** message confirming update was successful
+
+#### Tool `delete_chat_session`:
+**inputs:** `id`
+**output:** message confirming deletion was successful
+
+#### Tool `search_chat_sessions`:
+**inputs:**
+- `query` (string); regular expression; searches for chat sessions whose name matches the query
+- `group_id`: optional; if null, searches sessions from all chat groups
+**output:** Json array of objects with properties: `id`, `name`, `createdAt`, `updatedAt`, `groupId`, `agentRoleId`, `currentLeafMessageId`
+
+#### Tool `list_chat_messages`
+**inputs:** 
+- `session_id`
+- `leafMessageId` (default: current leaf)
+- `include_tool_call_messages` (default: false)
+- `include_tool_result_messages` (default: false)
+- `include_reasoning_messages` (default: false)
+- `exclude_content` (default: false)
+- `turn_range`: optional range of message turns; [start, end), matching Python slice semantics (similar to `read_text_file` tool in worker module); if null, lists all message turns
+**output:** Json object with properties:
+- `session_id`
+- `leafMessageId`
+- `message_turns`: ordered list of message turns; a message turn is ordered as follows: user, reasoning, assistant, tool call, tool result; a turn may exclude one or more items (each turn should at least include a user **or** an assistant message); Json array of message turn objects:
+  - `turn_index`: zero-based
+  - `messages`: Json array of message objects
+    - common properties for all message types: `role` (enum of user, reasoning, assistant, tool call, tool result)
+    - extra properties for user message: `id`, `content`, `createdAt`, `updatedAt`
+    - extra properties for reasoning message: `content`
+    - extra properties for assistant message: `id`, `content`, `createdAt`, `updatedAt`, `modelId`, `modelSettingsId`, `agentRoleId`
+    - extra properties for tool call: `id`, `toolDefinitionId`, `toolName`, `input` (json string); See class `common.models.tool.ToolCall`
+    - extra properties for tool result: `output` (json string), `status`, `errorMessage`, `denialReason`, `executedAt`, `durationMs`, `errorCode`, `errorDetails`; See class `common.models.tool.ToolCall`; properties with value null are omitted
+- `start_turn`: turn index; inclusive
+- `end_turn`: turn index; inclusive
+- `total_turns`: total turns in chat session
+
+#### Tool `read_chat_message`
+**inputs:** `message_id`
+**output:** Json object with properties:
+- `role` (enum of user, reasoning, assistant, tool call, tool result)
+- extra properties for user message: `id`, `content`, `createdAt`, `updatedAt`
+- extra properties for reasoning message: `content`
+- extra properties for assistant message: `id`, `content`, `createdAt`, `updatedAt`, `modelId`, `modelSettingsId`, `agentRoleId`
+- extra properties for tool call: `id`, `toolDefinitionId`, `toolName`, `input` (json string); See class `common.models.tool.ToolCall`
+- extra properties for tool result: `output` (json string), `status`, `errorMessage`, `denialReason`, `executedAt`, `durationMs`, `errorCode`, `errorDetails`; See class `common.models.tool.ToolCall`; properties with value null are omitted
+
+#### Tool `search_chat_messages`
+**inputs:**
+- `session_id`: optional; if null, searches messages from all chat sessions
+- `role`: optional; if specified, only searches for messages of the specified role (user, assistant)
+- `query`: regular expression; searches for user or assistant messages whose content matches the query
+**output:** Json array of message objects with the same properties as `read_chat_message` tool
+
+Notes:
+- file references will be deprecated in the near future, and are not considered in chat messages
+- tool call and tool result pairs have the same id
+
+
+### (done) Allow user to compact a conversation on demand
+- compact the currently displayed thread only
+
+### Allow user to queue a message while an assistant's turn is still in progress
+The user message should be injected into the conversation as soon as possible. (When the current tool step completes)
+
+### Allow LLM to use tools which require a secret key
+- The LLM should never be able to see the secret key itself.
+- Let the user store predefined keys in the server's database, each having a unique (predefined) name. The name could be fixed for the tool, or the LLM could choose from several names using an enum parameter. (For example: GITHUB_PAT_FOR_PACKAGE_UPLOAD)
+- It allows the LLM to do things like these:
+  - Inject a secret key via the run_command tool, using a predefined template string. For example: "<<GITHUB_PAT_FOR_PACKAGE_UPLOAD>>" 
+- `ApiSecretTable` and `ApiSecretOwnersTable` could be used for this, with some modifications: use a standard Long `id` field as primary key instead of `alias` (optional, but preferred to keep referential integrity); add a unique `name` field to `ApiSecretOwnersTable`
+
+### Import/export project
+- Allow user to import/export a project from the UI.
+- JSON format
+- Import: show textfield to paste json code into.
+- Export: show copyable textfield with json code.
+- Should check for unique name conflicts with existing roles before importing
+
+### Add `get_chat_session_summary` server LLM tool
+**inputs:** `id`
+**output:** session summary
+
+### (done) Make conversation compaction configurable per model preset
+- two fields should be added to the model preset database table: enabled flag (default: true) & threshold value (default: null) 
+- If the threshold value is null, the threshold value from user preferences should be used as fallback.
+
+### (done) Add usage stats for assistant messages
+- persist usage stats in assistant message table as a (nullable) JSON text field `usage_stats`. The `AssistantMessage` class should get a new property `usageStats` of type `UsageStats?`.
+- The new data class `UsageStats` should get the following properties: input tokens(total), output tokens(total), total tokens (input + output), reasoning tokens (optional), cached tokens(optional), cache write tokens (optional). All these items are part of the Responses API.
+- ChatScreen: display a dialog with usage stats (and other info) when the message item header (`<model name>:`) is clicked on. Other info could include: model settings name, cost information (out of scope for this feature).
+- adapt `LLMStreamChunk.UsageChunk` and `LLMCompletionResult.UsageStats` (rename `promptTokens` to `inputTokens` and `completionTokens` to `outputTokens`, and add the new properties mentioned above)
+- The client app should **not** need to process a separate usage stats event. The data should be available in `ChatStreamEvent.AssistantMessageEnd.assistantMessage` or `ChatEvent.AssistantMessageSaved.assistantMessage`.
+
+
+### add stateful mode to `run_command` tool
+This would allow an agent to run shell commands interactively
+- add a `mode` enum parameter with values `stateful` and `stateless` (default)
+- add an optional `session_id` parameter for the agent to reference currently running terminal sessions.
+- a new session is created by the tool, when `mode` is stateful, but no `session_id` is provided by the agent. The tool outputs a new session id in that case. The first command should be a shell command such as `bash` or `sh` without parameters, causing the thread to block without terminating.
+- A session is kept alive for some time (specified by the `timeout` parameter), after the last command is issued. The agent can also close a session immediately, by simply using a shell command such as `exit`.
 
 
 ---
@@ -483,14 +288,9 @@ Add a built-in "Agent Role Creator" agent role.
 
 ## Advanced features
 
-### (done) Allow users to add local MCP servers
-Users should be able to add local (STDIO) MCP servers to their account, by specifying a local command to launch the MCP server. This command will run on the client machine, and communicate with the AIChat app over STDIO.
 
 ### Allow users to add remote MCP servers
 Users should be able to add remote (Streamable HTTP) MCP servers to their account, by specifying the server URL.
-
-### (done) Add option to add tools to MCP server
-Tools are functions that the LLM can execute. They are defined by the user and can be used to interact with the outside world. For instance a tool could be defined to search the web for information. The LLM could then use this tool to search the web for information to answer a question.
 
 ### Add option to load knowledge base into MCP server
 This knowledge base can be queried by the LLM to answer questions. It can also add items to the knowledge base itself. The knowledge base is a combination of entities and relationships between them. A query could consist of an entity and an integer to indicate the level of relationships to traverse. The result of the query is a list of entities and relationships that can be used to answer the question. For instance a level 1 query for "John" could return:
@@ -512,32 +312,6 @@ Allow LLM agent to control the app itself. For instance: modifying a chat sessio
 ### AI assistant for prompting
 - Assistant gives suggestions for follow-up questions, based on the conversation history. (and possibly other things)
 - Assistant can be used to enhance (rephrase) the user's prompt, based on the conversation history.
-
-### Allow LLM to enable/disable (MCP) tools for the current chat session
-- Give LLM access to a set of tools: 
-  - Tool to enable/disable tool for the current chat session. (parameters: tool name, enable/disable)
-  - Tool to list all available tools for the current chat session.
-  - Tool to search for tools based on a keyword. (match against tool name and description)
-- The purpose of this feature is to reduce the context size, by only including the tools that are relevant for the current task.
-
-### LLM Council
-Have multiple LLM's (or agent runs) solve the same task, and then have a final LLM summarize the answers and decide which answer is the best.
-
-### Chatbot MCP server (which can be used as a local MCP server within the Chatbot app)
-- The API for the chatbot server application is quite big, and not all of it is needed for an MCP server. Still, the number of MCP functions will be quite large. So we need to add a second layer for the MCP server. For instance: a search function for MCP functions and a generic execute function which takes a function name and parameters. That way the MCP server would require only two functions: search and execute. Other ideas: "Code mode" as described by FastMCP: https://www.jlowin.dev/blog/fastmcp-3-1-code-mode, Cloudflare: https://blog.cloudflare.com/code-mode/, and Anthropic: https://www.anthropic.com/engineering/code-execution-with-mcp
-
-### Sub-agents
-- Agents are responsible for a specific task. The main agent (or system agent) is responsible for managing the conversation and delegating tasks to the sub-agents. Sub-agents can be created on the fly, and have their own memory and tools. They can also be persisted, and loaded for future conversations.
-Open questions: 
-- How to persist sub-agent memory?
-- How to present sub-agents in the UI?
-- Using Chatbot MCP server we could allow the LLM (main agent) call the MCP server to create a new chat session, and send a message with a specially crafted prompt to that session. When the sub-agent in the new chat session completes it's task, it sends a message (with task result) to the main agent to let it know it's done. The main agent can then decide what to do with the result.
-
-#### Other idea
-- Add a new tool definition: "spawn_sub_agent" with new BUILTIN_SERVER tool type. It should have the following inputs:
-  - `agent_name`: The name of the sub-agent to spawn.
-  - `role`: The role of the sub-agent.
-  - `task_description`: A description of the task the sub-agent should perform.
 
 ### Auto-complete user prompts
 - The user starts typing a prompt, and the AI suggests possible completions based on the current conversation, and prompt history (also from other chat sessions), or prompt templates.
@@ -579,7 +353,6 @@ Create snapshots of the workspace folder, to allow roll back to previous points 
 
 ### Allow LLM to search within chat session history
 
-
 ### Agent Tool call loop interleaving
 Interleave an agent tool call loop with user messages generated by another LLM. This could be used in several ways. For instance:
 - to steer an agent in the right direction and prevent tunnel-vision.
@@ -589,15 +362,49 @@ Interleave an agent tool call loop with user messages generated by another LLM. 
 ### Interactive helper tool to guide new users, or aide in quick setup
 
 
+### Agent retrospective
+- A workflow orchestrator sends retrospective prompts to agents, after doing some work. This could include things such as:
+  - issues which could have been prevented
+  - improvement of certain tools (or their specs)
+  - improvement of their own instructions
+  - suggest new tools
+- add a "master orchestrator" role, which drives workflow orchestrator agents, and can alter agent instructions (based on the workflow orchestrator feedback).
+- the master orchestrator can notify the user about issues (blocking, or non-blocking) which require a decision
+- the master orchestrator always uses the `spawn_agent` and `send_message` tools in `fire_and_forget` mode, so that it's always ready to receive new prompts from the user or workflow agents (which use the `send_message` tool in `fire_and_forget` mode after finishing a task, or when faced with a blocking issue.)
+- when the master orchestrator is busy, new prompts should be queued.
+- the master orchestrator role should have auto context compaction enabled, in order to never run out of context. (requires new auto compaction setting for model presets)
+- The master orchestatror can write agent retrospective reports, summarizing the interviews of several agents.
+
+
+### Use Jev to pick suitable skills for a certain task from a library of skills
+
+### Use Jev for computer use
+- OCR the screen, Jev classifies the next action, then click
+- https://github.com/kraayenjon/awesome-jev
+- https://github.com/awlevin/typesafe-computer-use
+
+
+### Oracle
+Idea: Use a very strong (and expensive) LLM as an "oracle" for receiving single-shot responses.
+- The given prompt should be very detailed, and should include all relevant resources (e.g. file contents) needed.
+- An agent supplying the prompt should be able to use predefined templates for including files. For example: `<\INCLUDE-FILE path="/app/workspace/chatbot/...">`. Templates within the prompt are expanded before being sent to the oracle. That way the generated prompt by the LLM can stay small (and cheap), while the received prompt by the oracle can be big. 
+- This idea could also be used for simulating conversations by members of an imaginary software team.
+
+
+### Train a small, specialized LLM model for this harness
+- it should learn how to use all the built-in tools
+
+
+### Provide a canvas for an agent to draw on
+- Could be used for creating videos, using HTML/JS + Canvas, or third-party tools such as remotion.dev
+- Compose Multiplatform WebView
+
 ---
 
 
 
 
 ## Performance improvements
-
-### Override equals & hashCode for ChatMessage class
-Make equals and hashCode methods based on the `id` and `updatedAt` fields only. This should improve the performance of the UI when rendering messages. (See MessageList.kt)
 
 ### Avoid loading the extended Icons library for Compose, to reduce app size
 See Gradle dependencies: `libs.version.toml` and `app/build.gradle.kts`. We now load the extended Icons library: `implementation(compose.materialIconsExtended)`
@@ -610,75 +417,6 @@ Here are detailed user stories for the new feature ideas, following the format a
 # AIChat Desktop App - New Feature User Stories
 
 ## New Features: Basic Interactions
-
-### NF.S1 - Interrupt Streaming Assistant Response
-*   **Description:** As a user, I want to see a "Stop" button in place of the "Send" button while an assistant message is being streamed, so I can gracefully interrupt a long, undesirable, or irrelevant response before it completes.
-*   **Estimate:** M
-*   **Acceptance Criteria:**
-    *   While an assistant message is actively streaming (i.e., `AssistantMessage.isComplete` is false), the "Send" button transforms into a "Stop" button.
-    *   Clicking the "Stop" button sends a signal to the backend to stop the LLM streaming process.
-    *   The UI updates immediately to reflect that the stream has stopped.
-    *   The "Stop" button reverts to "Send" after the stream is interrupted.
-
-### NF.S2 - View Partial Assistant Message Content
-*   **Description:** As a user, if an assistant message stream is interrupted (either by me stopping it or due to an error), I want to see the partial content that was generated before the interruption, so I don't lose the information that was already received.
-*   **Estimate:** S
-*   **Acceptance Criteria:**
-    *   When an assistant message stream stops prematurely, the displayed message content includes all text received up to that point.
-    *   The partial message content is stored in the `AssistantMessage` table.
-    *   The UI clearly indicates that the message is incomplete or was interrupted.
-
-### NF.S3 - Display Streaming Interruption Error
-*   **Description:** As a user, if an assistant message stream is interrupted due to an error (e.g., network issue, LLM error), I want to see a clear error message along with the partial content (if any), so I understand why the stream stopped unexpectedly.
-*   **Estimate:** M
-*   **Acceptance Criteria:**
-    *   If an error occurs during message streaming, the `AssistantMessage.errorMessage` field is populated with a user-friendly description.
-    *   The UI displays this error message clearly, alongside any partial content (NF.S2).
-    *   The error message is visible in the chat interface where the message was being displayed.
-
-### NF.S4 - Delete Entire Message Thread
-*   **Description:** As a user, I want to delete a specific message and all its descendant messages (i.e., the entire sub-thread originating from that message) with a single action, so I can quickly remove entire branches of a conversation that are no longer relevant.
-*   **Estimate:** M
-*   **Acceptance Criteria:**
-    *   A "Delete Thread" button is available in the message actions menu for any message that has children.
-    *   Clicking "Delete Thread" prompts a confirmation dialog warning about recursive deletion.
-    *   Upon confirmation, the backend `deleteMessage` route is called with `mode=recursive` for the specified message ID.
-    *   The backend successfully deletes the target message and all messages that are children or descendants of it from the `ChatMessageTable`.
-    *   The frontend UI instantly removes all deleted messages from the display and updates the conversation structure.
-
-### NF.S5 - Insert Message Above Existing Message
-*   **Description:** As a user, I want to insert a new message *above* an existing message in the conversation flow, so I can add historical context, a forgotten detail, or correct a previous statement without altering the original message or creating a new branch.
-*   **Estimate:** M
-*   **Acceptance Criteria:**
-    *   An "Insert Above" button is available in the message actions menu.
-    *   Clicking "Insert Above" opens an input field to compose a new message, visually placed above the target message.
-    *   The newly inserted message maintains the same `parentMessageId` as the target message (if any) and becomes a new sibling before it.
-    *   The UI updates to reflect the new message's position in the thread.
-
-### NF.S6 - Insert Message Below Existing Message
-*   **Description:** As a user, I want to insert a new message *below* an existing message in the conversation flow, so I can add a follow-up, a clarification, or additional information that logically extends the preceding message without creating a new conversation branch.
-*   **Estimate:** M
-*   **Acceptance Criteria:**
-    *   An "Insert Below" button is available in the message actions menu.
-    *   Clicking "Insert Below" opens an input field to compose a new message, visually placed below the target message.
-    *   The newly inserted message becomes a new child of the target message, maintaining its position in the thread.
-    *   The UI updates to reflect the new message's position and the `childrenMessageIds` of the target message are updated.
-
-### NF.S7 - Select Text within Messages
-*   **Description:** As a user, I want to be able to select and highlight specific portions of text within any message (user or assistant), so I can easily copy snippets, search for definitions, or interact with the text.
-*   **Estimate:** S
-*   **Acceptance Criteria:**
-    *   All message content (user and assistant) in the chat display is selectable using standard text selection methods (e.g., click and drag with the mouse).
-    *   Selected text can be copied to the clipboard using system-standard shortcuts (e.g., Ctrl+C/Cmd+C).
-
-### NF.S8 - Collapse/Expand Long Messages
-*   **Description:** As a user, I want to collapse long messages to hide their full content and expand them when needed, so I can reduce visual clutter, improve readability, and easily navigate conversations with verbose responses.
-*   **Estimate:** M
-*   **Acceptance Criteria:**
-    *   Messages exceeding a defined length (e.g., number of lines or characters) are initially displayed in a collapsed state, showing only a summary or the first few lines.
-    *   A clear UI indicator (e.g., an "Expand" [button, "Show More" text) is present for collapsed messages.
-    *   Clicking the indicator expands the message to reveal its full content.]()
-    *   An indicator (e.g., "Collapse" button, "Show Less" text) is present for expanded messages to revert them to a collapsed state.
 
 ### NF.S9 - Export Chat Session to JSON
 *   **Description:** As a user, I want to export an entire chat session, including all its messages, thread structure, and associated metadata (e.g., model, settings), to a JSON file or the clipboard, so I can back up my conversations, share them, or import them into other applications.
@@ -698,33 +436,6 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   The backend parses the JSON, creating a new `ChatSession` and `ChatMessage` records based on the imported data, including reconstructing the thread relationships.
     *   The imported session appears in the session list after successful import.
     *   Error handling is robust for invalid or malformed JSON.
-
-### NF.S11 - Search Chat Messages
-*   **Description:** As a user, I want to search for specific keywords or phrases within the messages of the currently active chat session, or even across all sessions, so I can quickly find relevant information or past discussions.
-*   **Estimate:** L
-*   **Acceptance Criteria:**
-    *   A search input field is available in the UI (e.g., in the chat area or a global search bar).
-    *   Typing in the search field filters messages in the current session, highlighting matches.
-    *   An option exists to expand the search to all sessions, showing matching sessions and messages.
-    *   Clicking a search result navigates to the relevant message in its session.
-
-### NF.S12 - Send Edited Message as New Prompt
-*   **Description:** As a user, when I am editing a message (user or assistant), I want to have a "Send" button in addition to "Save" and "Cancel" within the edit area, so that the edited message is treated as a new prompt to the assistant, triggering a new LLM response and creating a new conversation branch.
-*   **Estimate:** L
-*   **Acceptance Criteria:**
-    *   When a message is in edit mode (E3.S1, E3.S2), a "Send" button is displayed alongside "Save" and "Cancel".
-    *   Clicking "Send" (instead of "Save") updates the message content locally, then uses this edited message as the `parentMessageId` for a new LLM request.
-    *   The LLM generates a new response, which appears as a child of the edited message, starting a new conversation branch.
-    *   The UI automatically switches to display this new branch.
-
-### NF.S13 - Regenerate Assistant Response
-*   **Description:** As a user, I want to be able to re-trigger the generation of an assistant message, based on its original parent message and context, so I can obtain an alternative response if the previous one was unsatisfactory or incomplete, creating a new branch in the conversation.
-*   **Estimate:** M
-*   **Acceptance Criteria:**
-    *   A "Regenerate" button is available in the message actions menu for assistant messages.
-    *   Clicking "Regenerate" triggers a new LLM request using the context leading up to the assistant's parent message.
-    *   A new assistant message is generated and displayed as a sibling to the original assistant message, creating a new conversation branch.
-    *   The UI automatically switches to display this new branch.
 
 ### NF.S14 - Customize Enabled Features (Per User)
 *   **Description:** As a user, I want to view and customize which optional application features are enabled or disabled for my individual account in my profile settings, so I can tailor the interface and functionality to my specific preferences and workflow.
@@ -756,46 +467,6 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   A "Show Metadata" button or similar UI element is available for assistant messages.
     *   Clicking the button displays a panel or dialog with the assistant message's metadata.
 
-### (done) NF.S17 - Quickly scroll to the bottom of the messages list
-*   **Description:** As a user, I want to be able to quickly scroll to the bottom of the messages list to see the latest messages, so I can easily follow the conversation.
-*   **Estimate:** S
-*   **Acceptance Criteria:**
-    *   A "Scroll to Bottom" button or similar UI element is available.
-    *   Clicking the button smoothly scrolls the messages list to the bottom.
-    *   The button is only visible when the messages list is not already at the bottom.
-
-### NF.S18 - Copy Message Content to Clipboard
-*   **Description:** As a user, I want to be able to copy the content of a specific message to the clipboard, so I can easily share or use the message elsewhere.
-*   **Estimate:** S
-*   **Acceptance Criteria:**
-    *   A "Copy" button or similar UI element is available for each message.
-    *   Clicking the "Copy" button copies the message content to the clipboard.
-    *   A brief visual confirmation (e.g., a "Copied!" tooltip) is shown to the user.
-
-### NF.S19 - Copy Visible Thread Branch to Clipboard
-*   **Description:** As a user, I want to be able to copy the content of the currently visible thread branch to the clipboard, so I can easily share or use the conversation elsewhere.
-*   **Estimate:** M
-*   **Acceptance Criteria:**
-    *   A "Copy Branch" button or similar UI element is available.
-    *   Clicking the "Copy Branch" button copies the content of the currently visible thread branch to the clipboard.
-    *   A brief visual confirmation (e.g., a "Copied!" tooltip) is shown to the user.
-
-### (done) NF.S20 - Switch Between User Accounts
-*   **Description:** As a user, I want to be able to switch between my personal account and any other accounts I have access to (for instance, admin account), without logging out, so I can easily switch between different personas or roles within the application.
-*   **Estimate:** L
-*   **Acceptance Criteria:**
-    *   A "Switch Account" button or similar UI element is available.
-    *   Clicking the "Switch Account" button displays a list of available accounts.
-    *   Selecting an account does not log out the current user but simply switches the active account context.
-
-### (done) NF.S21 - Secure Communication with Server
-*   **Description:** As a user, I want all communication between the client and server to be encrypted, so my data is protected from interception.
-*   **Estimate:** M
-*   **Acceptance Criteria:**
-    *   All communication between the client and server is encrypted using HTTPS.
-    *   The server has a valid SSL/TLS certificate.
-    *   The client verifies the server's certificate to prevent man-in-the-middle attacks.
-    *   For local network (LAN) connections only: On first connection to the server, the client displays a warning if the server's certificate is self-signed. The user must confirm they trust the certificate before proceeding. The client stores the certificate for future use.
 ---
 
 ## New Features: Intermediate
@@ -803,18 +474,6 @@ Here are detailed user stories for the new feature ideas, following the format a
 ### (done, partial) NF.E1 - User Accounts and Permissions (Epic)
 *   **Description:** This epic covers the foundational work for implementing a multi-user environment where each user has their own secure account, distinct chat history, personal configurations, and definable privileges. It also addresses the sharing of public resources across users and robust administration capabilities.
 *   **Estimate:** XL
-
-#### (done) NF.E1.S1 - Register and Log In to Personal Account
-*   **Description:** As a user, I want to register for a new account with unique credentials and subsequently log in, so that my chat history, personal model configurations, and settings are private, securely stored, and distinct from other users of the application.
-*   **Estimate:** L
-*   **Acceptance Criteria:**
-    *   The application presents a login screen on startup if no user is authenticated.
-    *   A "Register New Account" option is available on the login screen.
-    *   The registration process allows users to create a username and password.
-    *   Successfully registered users can log in using their credentials.
-    *   Upon successful login, the user's personal chat sessions, models, and settings are loaded and displayed.
-    *   Passwords are securely hashed and stored (not plaintext).
-    *   There is a clear indication in the UI of the currently logged-in user.
 
 #### (done, partial) NF.E1.S2 - Manage User Accounts and Privileges (Admin)
 *   **Description:** As an administrator, I want to view, create, edit, and delete user accounts, and assign specific roles or privileges (e.g., create public resources, manage other users' permissions), so I can control access levels and administrative capabilities across the application.
@@ -828,71 +487,8 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Admins can delete user accounts (with confirmation), ensuring all associated user data is handled according to policy.
     *   At least one admin user is guaranteed to exist or be created during initial setup.
 
-#### (done) NF.E1.S3 - Access Shared Public Resources
-*   **Description:** As a user, I want certain application resources, such as specific LLM providers, models, or settings profiles, to be marked as "public" and accessible to all users, so I don't have to reconfigure commonly used or institutionally provided resources myself.
-*   **Estimate:** M
-*   **Dependencies:** NF.E1.S2 - Manage User Accounts and Privileges (Admin)
-*   **Acceptance Criteria:**
-    *   Users with appropriate privileges (e.g., administrators, or specific roles defined by NF.E1.S2) can mark LLM providers, models, and settings profiles as "public" during their creation or editing.
-    *   Public resources are clearly identifiable in the UI (e.g., with a "Public" badge).
-    *   All users, regardless of their individual account, can view and select public LLM providers, models, and settings for their chat sessions.
-    *   Standard users cannot edit or delete public resources.
-
-### NF.SM1 - Chat message content rendering support for Markdown and other formats
-*   **Description:** As a user, I want chat message content to support rendering of Markdown and other formats, so I can read assistant responses with formatting, links, and other rich content.
-*   **Estimate:** M
-*   **Acceptance Criteria:**
-    *   Chat message content supports rendering of Markdown and other formats.
-    *   The UI provides a toggle to enable/disable Markdown rendering.
-
-### NF.SM2 - Predefined LLM Tools
-*   **Description:** As a user, I want to be able to select predefined tools (e.g web search), which the assistant can use to extend its capabilities.
-*   **Estimate:** L
-*   **Acceptance Criteria:**
-    *   The user can select which tools are available for a specific prompt.
-    *   Predefined tools are only available for LLMs that support tool calling.
-    *   An admin user can configure predefined tools. (For instance, a web search tool that uses DuckDuckGo)
-    *   When a tool is called, the UI displays a notification that the tool is being used.
-    *   When an assistant message is generated, it includes a list of tools that were used to generate it.
-    *   The user can select an item in the list to view the tool's output.
-
-### NF.SM3 - Web search tool for assistant
-*   **Description:** As a user, I want to be able to let the assistant perform a web search, so that I can get answers to questions that require real-time or up-to-date information.
-*   **Estimate:** L
-*   **Acceptance Criteria:**
-    *    A web search tool can be turned on/off for a specific prompt.
-    *    The tool is only available for LLMs that support tool calling.
-    *    The tool uses DuckDuckGo to perform the search.
-    *    The tool returns the search results to the assistant.
-    *    The tool can be configured to use a different search engine.
-    *    When the tool is called, the UI displays a notification that the tool is being used.
-    *    When an assistant message is generated, it includes a list of tools that were used to generate it.
-    *    The user can select an item in the list to view the tool's output.
-
-
+    
 ## New Features: Advanced
-
-### NF.SA1 - Define and Register Custom LLM Tools
-*   **Description:** As an advanced user or developer, I want to define and register custom external functions or API calls as "tools" with the server, providing their schema and description, so that compatible LLMs can discover and invoke these tools to extend their capabilities (e.g., web search, custom data retrieval).
-*   **Estimate:** L
-*   **Acceptance Criteria:**
-    *   A UI interface (e.g., a dedicated "Tools" section in settings) allows users to define new tools.
-    *   Tool definition includes a unique name, a natural language description, and an OpenAPI-style JSON schema for its input parameters.
-    *   The system allows specifying the actual backend endpoint or function that the tool executes.
-    *   Registered tools are persisted on the server.
-    *   The server exposes a mechanism for LLMs to query available tools and their schemas.
-
-### NF.SA2 - LLM Agent Automated Tool Use
-*   **Description:** As a user, when interacting with an LLM that has access to configured tools (NF.S16), I want it to automatically identify and use the appropriate tools to perform actions or retrieve real-world information that is relevant to my requests, so I receive more accurate, dynamic, and action-oriented responses without manually invoking tools.
-*   **Estimate:** L
-*   **Dependencies:** NF.S16 - Define and Register Custom LLM Tools
-*   **Acceptance Criteria:**
-    *   When an LLM response is requested, the backend determines if a configured LLM model supports tool calling.
-    *   If supported, the backend provides the LLM with the user's prompt and the definitions of available tools.
-    *   If the LLM decides to call a tool, the backend intercepts this call, executes the tool's defined function/API call with the LLM-provided arguments.
-    *   The output of the tool is then fed back to the LLM as additional context.
-    *   The LLM generates a final response, potentially incorporating or summarizing the tool's output.
-    *   The UI indicates when a tool is being used by the LLM (e.g., "LLM is using [Tool Name]...").
 
 ### NF.SA3 - Manage Structured Knowledge Base
 *   **Description:** As an advanced user, I want to import, view, and manage a structured knowledge base within the server, consisting of entities and relationships between them, so I can provide the LLM with specific, domain-relevant factual information that goes beyond its general training data.
@@ -932,31 +528,6 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Upon receiving such a command, the LLM agent invokes the corresponding backend service method or updates frontend state.
     *   Successfully executed commands result in the expected application state changes (e.g., the session's model/settings are updated, a list of models is displayed).
     *   The LLM agent provides feedback to the user regarding the execution of the command (e.g., "Session temperature set to 0.7.").
-
-### NF.EA1 - Local MCP Servers (Epic)
-*   **Description:** As a user, I want the LLM to be able to call local tools via MCP, so that the LLM can access real-time data and perform actions in the external world (such as searching the web, accessing local files, controlling Github repos, etc.).
-*   **Estimate:** XL
-*   **Acceptance Criteria:**
-  *   The user can configure their own local (STDIO) MCP servers. This configuration is comprised of:
-      *   A name for the server
-      *   An executable command to launch the server (e.g., "java", "uv", "docker")
-      *   Arguments to pass to the command
-      *   Environment variables to set before launching the server (e.g., Github access token)
-      *   A working directory to launch the server in (optional)
-  *   The user can test the connection to the MCP server. (For instance, by executing an MCP tool manually, and seeing the result).
-  *   The list of available MCP tools can be retrieved from the MCP server and added to the tool definitions table in the database (on the server). This has to be done at least once, when the user adds the MCP server.
-  *   The user should be able to view the list of available MCP servers and tools from the UI.
-  *   The user should be able to refresh the list of tools from the MCP server. (which will update the tool definitions table)
-  *   The MCP server configuration is stored in the database and is linked to the user's account. (through a separate ownership table)
-  *   The MCP tools are stored in the tool definitions table, and are linked to the MCP server that provides them. (through a separate linkage table)
-  *   MCP servers can be started/stopped from within the application.
-  *   The MCP clients are managed by the application. (i.e. the application launches the MCP server process, and manages the STDIO communication)
-  *   The user can select which MCP servers are enabled for the current chat session.
-  *   The user can select which tools from each MCP server are enabled for the current chat session.  
-  *   The user can configure which tools from each MCP server are enabled/disabled by default.
-  *   The LLM can request to call tools exposed by local MCP servers.
-  *   The server can request the client application to execute MCP tools locally on behalf of the LLM (using WebSocket protocol). (Note: the server controls the LLM, and the client executes MCP tools locally)
-  *   The application can send tool results back to the server (using WebSocket protocol). (The tool results are used by the LLM to generate a response.)
 
 
 ## Non-Functional Requirements (NFRs)
