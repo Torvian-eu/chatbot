@@ -5,6 +5,12 @@ import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
+import eu.torvian.chatbot.worker.builtin.command.ChildEnvironmentProvider
+import eu.torvian.chatbot.worker.builtin.command.CommandLauncher
+import eu.torvian.chatbot.worker.builtin.command.CommandTerminator
+import eu.torvian.chatbot.worker.builtin.command.TrackedCommand
+import eu.torvian.chatbot.worker.builtin.command.deadlineAfterNanos
+import eu.torvian.chatbot.worker.builtin.command.remainingNanos
 import eu.torvian.chatbot.worker.builtin.validation.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -21,10 +27,25 @@ import java.util.concurrent.*
  * Executes a process inside the worker workspace.
  *
  * The command runs with the workspace as the CWD and is subject to a timeout (defaulting to the
- * worker-configured default). The worker relies on its deployment environment (Docker, VM, etc.)
- * to provide additional isolation.
+ * worker-configured default). The owning worker decides the OS account children run as and the
+ * environment they receive: on Linux the resolved isolation state runs them through the
+ * privilege-dropping helper as a separate account, whose file permissions keep the worker's secrets
+ * out of reach, while on platforms without such a mechanism they run as the worker's own account.
+ *
+ * This is an account boundary rather than a sandbox: it does not restrict CPU, memory, disk or
+ * network use, and it can be turned off only through `worker.commandIsolation.enabled = false`.
+ *
+ * @property launcher Turns a requested command into the argv that must actually be executed.
+ * @property childEnvironment Supplies the complete environment for each child, including the case
+ *   where the worker's own environment must not be inherited.
+ * @property terminator Terminates the started command and its descendants; with isolation active
+ *   the worker cannot signal them itself, so the strategy comes from the resolved isolation state.
  */
-class RunCommandTool : BuiltInTool {
+class RunCommandTool(
+    private val launcher: CommandLauncher,
+    private val childEnvironment: ChildEnvironmentProvider,
+    private val terminator: CommandTerminator,
+) : BuiltInTool {
     override val name: String = "run_command"
     override val description: String = BuiltInToolCatalog.specFor(name)!!.description
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
@@ -80,32 +101,44 @@ class RunCommandTool : BuiltInTool {
             return invalidInputResult(validationErrors)
         }
 
+        // A missing or non-string command is reported through the validation list handled above, so
+        // the value is present here while its type still allows for the null that never reaches it.
+        val executableName = requireNotNull(command)
+
         return withContext(context.ioDispatcher) {
-            var process: Process? = null
-            // Keep handles found while the root is alive; they remain useful after the root is
-            // reaped, when descendants may already have been reparented.
-            val capturedDescendants = LinkedHashMap<Long, ProcessHandle>()
+            var trackedCommand: TrackedCommand? = null
+            // Set once the command's lifecycle belongs to executeStartedProcess, which performs its
+            // own cleanup on every failure path; the handlers below must then not terminate the same
+            // tree a second time.
+            var handedToExecutor = false
             try {
-                val processBuilder = ProcessBuilder(listOf(command) + args)
+                val processBuilder = ProcessBuilder(launcher.wrap(executableName, args))
                     .directory(context.workspace.toFile())
                     .redirectErrorStream(false)
-                process = processBuilder.start()
-                capturedDescendants.putAll(snapshotDescendants(process))
+                // The provider decides the child environment: the filtered map while the privilege drop
+                // is active, the worker's own environment otherwise. Assign it explicitly instead of
+                // relying on the JVM's implicit inheritance.
+                processBuilder.environment().clear()
+                processBuilder.environment().putAll(childEnvironment.build())
+                val process = processBuilder.start()
+                val command = TrackedCommand(process)
+                trackedCommand = command
+                terminator.track(command)
                 // This tool is deliberately noninteractive; EOF must be observable immediately.
                 process.outputStream.close()
+                handedToExecutor = true
 
                 executeStartedProcess(
-                    process = process,
+                    command = command,
                     timeoutSeconds = timeoutSeconds,
                     maxLines = maxLines,
                     maxBytes = maxBytes,
-                    capturedDescendants = capturedDescendants,
                 )
             } catch (e: CancellationException) {
-                process?.let { cleanupStartedProcess(it, capturedDescendants) }
+                if (!handedToExecutor) trackedCommand?.let { cleanupStartedProcess(it) }
                 throw e
             } catch (e: Exception) {
-                process?.let { cleanupStartedProcess(it, capturedDescendants) }
+                if (!handedToExecutor) trackedCommand?.let { cleanupStartedProcess(it) }
                 builtInToolErrorResult(
                     BuiltInToolExecutionError.EXECUTION_FAILED,
                     "Failed to run command: ${e.message}"
@@ -117,21 +150,20 @@ class RunCommandTool : BuiltInTool {
     /**
      * Runs a started process while two independent readers drain its output pipes.
      *
-     * @param process The already-started command process.
+     * @param command Tracking state of the already-started command.
      * @param timeoutSeconds Maximum time allowed for the root process to exit.
      * @param maxLines Maximum number of lines retained from each output stream.
      * @param maxBytes Maximum UTF-8 byte count retained from each output stream.
-     * @param capturedDescendants Handles observed while the root was alive.
      * @return The stable tool result for successful completion or a timeout.
      * @throws CancellationException If the caller cancels the command; cleanup is completed first.
      */
     private suspend fun executeStartedProcess(
-        process: Process,
+        command: TrackedCommand,
         timeoutSeconds: Long,
         maxLines: Int,
         maxBytes: Int,
-        capturedDescendants: MutableMap<Long, ProcessHandle>,
     ): BuiltInToolExecutionResult {
+        val process = command.root
         // A dedicated pair prevents the blocking wait on the caller dispatcher from starving either reader.
         val readerExecutor = Executors.newFixedThreadPool(2) { runnable ->
             // A stuck native read must not keep the worker JVM alive after bounded cleanup returns.
@@ -155,7 +187,7 @@ class RunCommandTool : BuiltInTool {
 
                 // Refresh while the root is alive so children created shortly after start are not
                 // lost when the root exits and the operating system reparents them.
-                captureDescendants(process, capturedDescendants)
+                terminator.track(command)
                 val remaining = remainingNanos(commandDeadline)
                 if (remaining <= 0L) {
                     throw TimeoutException("Command deadline exceeded")
@@ -214,16 +246,16 @@ class RunCommandTool : BuiltInTool {
                 details = details,
             )
         } catch (e: CancellationException) {
-            cleanupProcessAndReaders(process, readerFutures, readerExecutor, capturedDescendants)
+            cleanupProcessAndReaders(command, readerFutures, readerExecutor)
             throw e
         } catch (_: TimeoutException) {
-            cleanupProcessAndReaders(process, readerFutures, readerExecutor, capturedDescendants)
+            cleanupProcessAndReaders(command, readerFutures, readerExecutor)
             builtInToolErrorResult(
                 BuiltInToolExecutionError.TIMEOUT,
                 "Command exceeded timeout of $timeoutSeconds seconds"
             )
         } catch (e: Exception) {
-            cleanupProcessAndReaders(process, readerFutures, readerExecutor, capturedDescendants)
+            cleanupProcessAndReaders(command, readerFutures, readerExecutor)
             builtInToolErrorResult(
                 BuiltInToolExecutionError.EXECUTION_FAILED,
                 "Failed to run command: ${e.message}"
@@ -232,37 +264,6 @@ class RunCommandTool : BuiltInTool {
             closeQuietly(process.inputStream)
             closeQuietly(process.errorStream)
             readerExecutor.shutdownNow()
-        }
-    }
-
-    /**
-     * Captures descendants visible immediately after a process starts.
-     *
-     * @param process Root process whose currently visible descendants are copied.
-     * @return A PID-keyed snapshot that remains usable if the root later exits.
-     */
-    private fun snapshotDescendants(process: Process): MutableMap<Long, ProcessHandle> =
-        LinkedHashMap<Long, ProcessHandle>().also { captured ->
-            captureDescendants(process, captured)
-        }
-
-    /**
-     * Adds the root's currently visible descendants to a retained snapshot.
-     *
-     * The Java process-tree view is inherently racy: a child may start between scans or detach and
-     * be reparented. Retaining every observed handle still closes the important root-exit race,
-     * but this remains best-effort cleanup rather than a security boundary.
-     *
-     * @param process Root process whose descendants are inspected.
-     * @param captured Mutable PID-keyed snapshot updated without removing earlier handles.
-     */
-    private fun captureDescendants(
-        process: Process,
-        captured: MutableMap<Long, ProcessHandle>,
-    ) {
-        val root = process.toHandle()
-        runCatching {
-            root.descendants().forEach { handle -> captured.putIfAbsent(handle.pid(), handle) }
         }
     }
 
@@ -302,68 +303,38 @@ class RunCommandTool : BuiltInTool {
         deadlineAfterNanos(TimeUnit.SECONDS.toNanos(timeoutSeconds))
 
     /**
-     * Computes a monotonic deadline without allowing nanosecond addition to overflow.
-     *
-     * @param durationNanos Non-negative duration to add to the current monotonic time.
-     * @return Saturated monotonic deadline in nanoseconds.
-     */
-    private fun deadlineAfterNanos(durationNanos: Long): Long {
-        val now = System.nanoTime()
-        return if (durationNanos > 0L && now > Long.MAX_VALUE - durationNanos) {
-            Long.MAX_VALUE
-        } else {
-            now + durationNanos
-        }
-    }
-
-    /**
-     * Returns non-negative time remaining before a monotonic deadline.
-     *
-     * @param deadline Deadline previously produced by [deadlineAfterNanos].
-     * @return Remaining nanoseconds, or zero after the deadline.
-     */
-    private fun remainingNanos(deadline: Long): Long =
-        (deadline - System.nanoTime()).coerceAtLeast(0L)
-
-    /**
      * Cleans up a started process when reader setup itself fails.
      *
-     * @param process Root process to terminate and reap.
-     * @param capturedDescendants Handles observed while the root was alive.
+     * @param command Tracking state of the command to terminate and reap.
      */
-    private suspend fun cleanupStartedProcess(
-        process: Process,
-        capturedDescendants: MutableMap<Long, ProcessHandle>,
-    ) {
+    private suspend fun cleanupStartedProcess(command: TrackedCommand) {
         withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
             val deadline = deadlineAfterNanos(CLEANUP_GRACE_NANOS)
-            terminateProcessTree(process, capturedDescendants, deadline)
-            closeQuietly(process.inputStream)
-            closeQuietly(process.errorStream)
+            terminator.terminate(command, deadline)
+            closeQuietly(command.root.inputStream)
+            closeQuietly(command.root.errorStream)
         }
     }
 
     /**
      * Terminates a process tree and stops readers without allowing cleanup to extend indefinitely.
      *
-     * @param process Root process whose streams are being read.
+     * @param command Tracking state of the command to terminate and reap.
      * @param readerFutures Reader tasks that may be blocked on the process pipes.
      * @param readerExecutor Executor owning the blocking reader tasks.
-     * @param capturedDescendants Handles observed while the root was alive.
      */
     private suspend fun cleanupProcessAndReaders(
-        process: Process,
+        command: TrackedCommand,
         readerFutures: List<Future<*>>,
         readerExecutor: ExecutorService,
-        capturedDescendants: MutableMap<Long, ProcessHandle>,
     ) {
         withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
             val deadline = deadlineAfterNanos(CLEANUP_GRACE_NANOS)
-            terminateProcessTree(process, capturedDescendants, deadline)
+            terminator.terminate(command, deadline)
             // Closing the streams is required before cancelling because interruption alone may not
             // interrupt a blocking Java pipe read.
-            closeQuietly(process.inputStream)
-            closeQuietly(process.errorStream)
+            closeQuietly(command.root.inputStream)
+            closeQuietly(command.root.errorStream)
             readerFutures.forEach { future -> future.cancel(true) }
             readerExecutor.shutdownNow()
             val remaining = remainingNanos(deadline)
@@ -371,86 +342,6 @@ class RunCommandTool : BuiltInTool {
                 runCatching { readerExecutor.awaitTermination(remaining, TimeUnit.NANOSECONDS) }
             }
         }
-    }
-
-    /**
-     * Signals visible descendants before the root and waits briefly for the process tree to settle.
-     * Java process handles are intentionally best effort rather than a security boundary: detached
-     * or reparented descendants may no longer be visible to this process.
-     *
-     * @param process Root process to terminate and reap.
-     * @param capturedDescendants Handles observed while the root was alive.
-     * @param deadline Monotonic deadline shared by all cleanup waits.
-     */
-    private fun terminateProcessTree(
-        process: Process,
-        capturedDescendants: MutableMap<Long, ProcessHandle>,
-        deadline: Long,
-    ) {
-        // Capture before signalling the root. A child can be reparented as soon as the root exits,
-        // so a post-exit descendants() call alone cannot find a pipe-holding child.
-        captureDescendants(process, capturedDescendants)
-        var descendants = capturedDescendants.values.toList()
-        descendants.forEach(::destroyForcibly)
-
-        // Let ordinary parents observe and reap killed children without delaying root termination.
-        val parentReapDeadline = minOf(deadline, deadlineAfterNanos(DESCENDANT_PRE_ROOT_WAIT_NANOS))
-        waitForDescendants(descendants, parentReapDeadline)
-        runCatching { process.destroyForcibly() }
-        waitForProcessTree(process, descendants, deadline)
-
-        // This rescan catches children created during cleanup while the root was still visible.
-        captureDescendants(process, capturedDescendants)
-        descendants = capturedDescendants.values.toList()
-        descendants.forEach(::destroyForcibly)
-        waitForProcessTree(process, descendants, deadline)
-    }
-
-    /**
-     * Forcefully signals a descendant while suppressing platform-specific cleanup failures.
-     *
-     * @param handle Process handle that should be terminated.
-     */
-    private fun destroyForcibly(handle: ProcessHandle) {
-        runCatching { handle.destroyForcibly() }
-    }
-
-    /**
-     * Waits for descendant handles until the shared cleanup deadline.
-     *
-     * @param descendants Handles captured before or after root termination.
-     * @param deadline Monotonic deadline for this cleanup pass.
-     */
-    private fun waitForDescendants(descendants: Collection<ProcessHandle>, deadline: Long) {
-        descendants
-            .distinctBy { handle -> handle.pid() }
-            .forEach { handle ->
-                val nanosLeft = remainingNanos(deadline)
-                runCatching {
-                    if (nanosLeft > 0L && handle.isAlive) {
-                        handle.onExit().get(nanosLeft, TimeUnit.NANOSECONDS)
-                    }
-                }
-            }
-    }
-
-    /**
-     * Waits for the root and descendant handles until the shared cleanup deadline.
-     *
-     * @param process Root process to reap with the authoritative process wait operation.
-     * @param descendants Handles captured before or after root termination.
-     * @param deadline Monotonic deadline for this cleanup pass.
-     */
-    private fun waitForProcessTree(
-        process: Process,
-        descendants: Collection<ProcessHandle>,
-        deadline: Long,
-    ) {
-        val remaining = remainingNanos(deadline)
-        if (remaining > 0L) {
-            runCatching { process.waitFor(remaining, TimeUnit.NANOSECONDS) }
-        }
-        waitForDescendants(descendants, deadline)
     }
 
     /**
@@ -650,9 +541,6 @@ class RunCommandTool : BuiltInTool {
 
         /** Poll interval that bounds how long a failed reader can remain unobserved. */
         const val READER_FAILURE_POLL_NANOS: Long = 50_000_000L
-
-        /** Short opportunity for a parent to reap signalled descendants before root termination. */
-        const val DESCENDANT_PRE_ROOT_WAIT_NANOS: Long = 100_000_000L
 
         /** Shared monotonic cleanup budget for process-tree termination and reaping. */
         const val CLEANUP_GRACE_NANOS: Long = 2_000_000_000L

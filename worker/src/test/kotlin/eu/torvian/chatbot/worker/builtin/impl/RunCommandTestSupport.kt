@@ -2,6 +2,8 @@ package eu.torvian.chatbot.worker.builtin.impl
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
+import eu.torvian.chatbot.worker.builtin.command.CommandIsolationResolution
+import eu.torvian.chatbot.worker.builtin.command.InheritChildEnvironmentProvider
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,6 +23,25 @@ import kotlin.time.Duration.Companion.milliseconds
 internal object RunCommandTestSupport {
     /** Whether the current test host uses Windows command-line semantics. */
     internal val isWindows: Boolean = System.getProperty("os.name").contains("windows", ignoreCase = true)
+
+    /**
+     * Creates the tool under test with isolation inactive and the current process environment.
+     *
+     * No isolation and no environment filtering is the behaviour these suites were written against,
+     * so a launcher or environment regression surfaces as a changed assertion rather than as a host
+     * difference between CI and a developer machine. The wiring is taken from the unisolated
+     * resolution rather than hand-built, which also asserts what that resolution carries.
+     *
+     * @return Tool instance wired the way an unisolated worker wires it.
+     */
+    internal fun tool(): RunCommandTool {
+        val resolution = CommandIsolationResolution.none()
+        return RunCommandTool(
+            launcher = resolution.launcher,
+            childEnvironment = InheritChildEnvironmentProvider(),
+            terminator = resolution.terminator,
+        )
+    }
 
     /**
      * Builds a platform-appropriate command and arguments that echo [text].
