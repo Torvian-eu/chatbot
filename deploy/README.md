@@ -159,6 +159,7 @@ docker run -it --rm  `
 **Notes**:
 - The worker needs to connect to the server for setup, so we use `host.docker.internal` to allow it to reach the server running on the host machine.
 - Use `-it` for interactive mode since the worker requires user input for initial setup on first run
+- Use `--init` so Docker runs a small init as PID 1: the entrypoint `exec`s the JVM, which cannot reap a killed descendant of an isolated command that was re-parented to it, so without an init such a process stays a zombie until the container is recreated. The compose examples express the same thing as `init: true`.
 - The PUID and PGID environment variables are set to 1000 (the default non-root user on many Linux systems) to allow the worker to write to the mounted volumes without permission issues. Adjust these values if your system uses different user/group IDs.
 
 

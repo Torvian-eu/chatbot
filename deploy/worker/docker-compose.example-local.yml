@@ -20,10 +20,23 @@ services:
   chatbot-worker:
     image: ghcr.io/torvian-eu/chatbot-worker:latest
     container_name: chatbot-worker
+    # Run Docker's init (tini) as PID 1. The entrypoint execs the JVM, so the JVM is PID 1 and never
+    # reaps processes that are not its own children; a killed descendant of an isolated command is
+    # re-parented to PID 1 and would otherwise stay a zombie until the container is recreated.
+    init: true
     environment:
       - CHATBOT_WORKER_SETUP_SERVER_URL=http://host.docker.internal:8080
       - PUID=1000  # Change to your actual host UID (run 'id -u')
       - PGID=1000  # Change to your actual host GID (run 'id -g')
+      # Commands started by built-in tools run as a separate 'agent' account, so that they cannot
+      # read this worker's secrets. Only set the two lines below when your host uid range collides
+      # with the image defaults (agent uid 10002, shared gid 10003).
+      # - AGENT_UID=10002
+      # - AGENT_GID=10003
+      # Isolation is opt-in and defaults to false, which runs commands as the worker account. This
+      # image ships the helper and the accounts above, so the boundary is turned on here; set it to
+      # false to run without it (the worker then logs a WARN at startup).
+      - WORKER_COMMAND_ISOLATION_ENABLED=true
       # Trusted signer(s) for E2EA tool-execution authorization (optional, repeat slots as needed).
       # Each signer needs a unique ID, a Base64 public key, and optional comma-separated permissions.
       # - WORKER_TRUSTED_SIGNER_1_ID=client-desktop-7f3a
