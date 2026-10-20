@@ -307,6 +307,141 @@ class WorkerConfigLoaderTest {
     }
 
     @Test
+    fun `env mapping overrides command isolation`() {
+        val configDir = createTempDirectory("worker-config-test")
+        writeBaseConfig(configDir, workerUid = "worker-base", serverBaseUrl = "https://base.test")
+        configDir.resolve("setup.json").writeText("{}")
+        configDir.resolve("env-mapping.json").writeText(
+            """
+            {
+              "worker": {
+                "commandIsolation": {
+                  "enabled": "WORKER_COMMAND_ISOLATION_ENABLED",
+                  "user": "WORKER_COMMAND_ISOLATION_USER",
+                  "helperPath": "WORKER_COMMAND_ISOLATION_HELPER_PATH"
+                }
+              }
+            }
+            """.trimIndent()
+        )
+
+        try {
+            val values = mapOf(
+                "WORKER_COMMAND_ISOLATION_ENABLED" to "false",
+                "WORKER_COMMAND_ISOLATION_USER" to "custom-agent",
+                "WORKER_COMMAND_ISOLATION_HELPER_PATH" to "/opt/run-as-agent",
+            )
+            val result = either {
+                val dto = loader.loadAppConfigDto(configDir, envProvider = { values[it] }).bind()
+                dto.toDomain(configDir).bind()
+            }
+            assertTrue(result.isRight())
+            val isolation = result.getOrNull()?.worker?.commandIsolation
+            assertEquals(false, isolation?.enabled)
+            assertEquals("custom-agent", isolation?.user)
+            assertEquals("/opt/run-as-agent", isolation?.helperPath)
+        } finally {
+            configDir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that a fresh config directory receives the bundled templates, the reference included.
+     *
+     * The annotated reference is bootstrapped so the documentation survives the rewrite that setup
+     * performs on `application.json`, and it is not a configuration layer of its own.
+     */
+    @Test
+    fun `bootstraps bundled config files into a fresh directory`() {
+        val configDir = createTempDirectory("worker-config-test")
+        writeBaseConfig(configDir, workerUid = "worker-base", serverBaseUrl = "https://base.test")
+        configDir.resolve("setup.json").writeText("{}")
+
+        try {
+            val result = either {
+                val dto = loader.loadAppConfigDto(configDir).bind()
+                dto.toDomain(configDir).bind()
+            }
+
+            assertTrue(result.isRight(), "Load failed: $result")
+            assertEquals(
+                setOf("application.json", "application_example.json", "env-mapping.json", "setup.json"),
+                configDir.toFile().list()?.toSet(),
+            )
+            // The files that already existed are untouched, so the reference adds no new layer.
+            assertEquals("https://base.test", result.getOrNull()?.worker?.server?.baseUrl)
+            assertTrue(
+                configDir.resolve("application_example.json").toFile().readText()
+                    .contains("\"commandIsolation\""),
+                "The bootstrapped reference does not document the isolation group",
+            )
+        } finally {
+            configDir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that the bundled default config leaves isolation off, so a plain installation runs.
+     *
+     * A deployment reads this file rather than the code defaults, so the switch has to be present in
+     * the template as well.
+     */
+    @Test
+    fun `bundled default config disables command isolation`() {
+        val configDir = createTempDirectory("worker-config-test")
+        val bundled = WorkerConfigLoader::class.java
+            .getResourceAsStream("/default-config/application.json")
+            ?: error("The bundled default config is missing from the classpath")
+
+        try {
+            configDir.resolve("application.json")
+                .writeText(bundled.bufferedReader().use { it.readText() })
+
+            val result = loader.loadAppConfigDto(configDir)
+
+            assertTrue(result.isRight(), "Load failed: $result")
+            assertEquals(false, result.getOrNull()?.worker?.commandIsolation?.enabled)
+        } finally {
+            configDir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that the optional environment values reach the domain config from the config file.
+     */
+    @Test
+    fun `command isolation environment set is read from the config file`() {
+        val configDir = createTempDirectory("worker-config-test")
+        writeBaseConfig(
+            configDir,
+            workerUid = "worker-base",
+            serverBaseUrl = "https://base.test",
+            commandIsolationJson = """
+                {
+                  "environment": {
+                    "set": { "HTTP_PROXY": "http://proxy.test:3128" }
+                  }
+                }
+            """.trimIndent()
+        )
+        configDir.resolve("setup.json").writeText("{}")
+
+        try {
+            val result = either {
+                val dto = loader.loadAppConfigDto(configDir).bind()
+                dto.toDomain(configDir).bind()
+            }
+            assertTrue(result.isRight())
+            val environment = result.getOrNull()?.worker?.commandIsolation?.environment
+            // The block replaces the shipped git default as a whole rather than merging with it.
+            assertEquals(mapOf("HTTP_PROXY" to "http://proxy.test:3128"), environment?.set)
+            assertEquals(listOf("PATH", "LANG", "LC_ALL"), environment?.allowPassthrough)
+        } finally {
+            configDir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `unresolved env mapping does not override lower layers`() {
         val configDir = createTempDirectory("worker-config-test")
         writeBaseConfig(configDir, workerUid = "worker-base", serverBaseUrl = "https://base.test")
@@ -462,6 +597,8 @@ class WorkerConfigLoaderTest {
      * @param tokenFilePath Token file path to write.
      * @param refreshSkewSeconds Token refresh skew to write.
      * @param trustedSignersJson Raw JSON array to write as `worker.trustedSigners`.
+     * @param commandIsolationJson Raw JSON object to write as `worker.commandIsolation`; omitted when
+     *   `null`, so the loader falls back to the shipped defaults for that group.
      */
     private fun writeBaseConfig(
         configDir: java.nio.file.Path,
@@ -473,8 +610,10 @@ class WorkerConfigLoaderTest {
         secretsJsonPath: String = "./secrets.json",
         tokenFilePath: String = "./token.json",
         refreshSkewSeconds: Long = 60,
-        trustedSignersJson: String = "[]"
+        trustedSignersJson: String = "[]",
+        commandIsolationJson: String? = null
     ) {
+        val commandIsolation = commandIsolationJson?.let { "\"commandIsolation\": $it," }.orEmpty()
         configDir.resolve("application.json").writeText(
             """
             {
@@ -502,6 +641,7 @@ class WorkerConfigLoaderTest {
                   "enabled": ["*"],
                   "defaultCommandTimeoutSeconds": 600
                 },
+                $commandIsolation
                 "trustedSigners": $trustedSignersJson
               }
             }

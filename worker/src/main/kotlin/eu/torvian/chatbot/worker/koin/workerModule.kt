@@ -5,6 +5,11 @@ import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
 import eu.torvian.chatbot.common.security.JvmAsymmetricCryptoProvider
 import eu.torvian.chatbot.worker.auth.*
 import eu.torvian.chatbot.worker.builtin.*
+import eu.torvian.chatbot.worker.builtin.command.ChildEnvironmentProvider
+import eu.torvian.chatbot.worker.builtin.command.CommandIsolationResolution
+import eu.torvian.chatbot.worker.builtin.command.CommandLauncher
+import eu.torvian.chatbot.worker.builtin.command.CommandTerminator
+import eu.torvian.chatbot.worker.builtin.command.childEnvironmentProvider
 import eu.torvian.chatbot.worker.builtin.impl.*
 import eu.torvian.chatbot.worker.builtin.net.DnsResolver
 import eu.torvian.chatbot.worker.builtin.net.JvmDnsResolver
@@ -64,13 +69,24 @@ import org.apache.logging.log4j.Logger as Log4jLogger
  * @param config Loaded worker runtime config.
  * @param tokenPath Resolved token cache path.
  * @param privateKeyPem Private-key PEM used for challenge signing.
+ * @param commandIsolation Isolation state resolved once at startup; decides how built-in tools
+ *   spawn children, which environment they receive and how their process tree is terminated.
  */
 fun workerModule(
     config: RuntimeConfig,
     tokenPath: Path,
-    privateKeyPem: String
+    privateKeyPem: String,
+    commandIsolation: CommandIsolationResolution,
 ) = module {
     single<RuntimeConfig> { config }
+    single<CommandLauncher> { commandIsolation.launcher }
+    single<ChildEnvironmentProvider> {
+        childEnvironmentProvider(
+            config = config.commandIsolation.environment,
+            resolution = commandIsolation,
+        )
+    }
+    single<CommandTerminator> { commandIsolation.terminator }
     single<List<TrustedSigner>> { get<RuntimeConfig>().trustedSigners }
     single<AsymmetricCryptoProvider> { JvmAsymmetricCryptoProvider() }
     single<VerificationService> {
@@ -283,7 +299,7 @@ fun workerModule(
             MoveFileTool(),
             SearchFilesTool(),
             SearchTextTool(),
-            RunCommandTool(),
+            RunCommandTool(launcher = get(), childEnvironment = get(), terminator = get()),
             FetchWebContentTool(fetchService = get()),
             DownloadFileTool(fetchService = get()),
         ).associateBy { it.name }

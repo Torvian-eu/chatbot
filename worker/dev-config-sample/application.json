@@ -23,6 +23,43 @@
       "enabled": ["*"],
       "defaultCommandTimeoutSeconds": 600
     },
+    /*
+      Command isolation for built-in tools (Linux only). Processes spawned by `run_command` run
+      as a different, unprivileged OS account ("agent") so that ordinary file permissions keep the
+      worker's secrets out of reach. It ships disabled, because the mechanism needs a root-owned
+      setuid helper and a separate account: enabling it where neither exists makes the worker refuse
+      to start. Set "enabled": true in the block below, or start the worker with
+      WORKER_COMMAND_ISOLATION_ENABLED=true, where both exist; the shipped image installs them.
+
+      The remaining keys are optional and the values below are the effective defaults once the switch
+      is on:
+
+        "commandIsolation": {
+          "enabled": true,
+          "user": "agent",
+          "helperPath": "/usr/local/bin/run-as-agent",
+          "environment": {
+            "allowPassthrough": ["PATH", "LANG", "LC_ALL"],
+            "set": {
+              "GIT_CONFIG_COUNT": "1",
+              "GIT_CONFIG_KEY_0": "safe.directory",
+              "GIT_CONFIG_VALUE_0": "*"
+            }
+          }
+        }
+
+      "enabled": true makes the worker refuse to start when the privilege-dropping helper is
+      missing or cannot drop. "environment.allowPassthrough" lists worker environment variables that
+      isolated children receive (a single "*" forwards everything); "environment.set" gives the
+      child values of its own, whether or not the worker defines them. Both apply only while the
+      privilege drop is active, and HOME, USER and LOGNAME always come from the isolated account. The
+      default "set" exempts the shared workspace from git's repository-ownership check for isolated
+      commands only, and is edited here rather than in the environment. See the worker README for the
+      full description and the alternative of an exemption in /home/agent/.gitconfig.
+    */
+    "commandIsolation": {
+      "enabled": false
+    },
     "trustedSigners": []
   }
 }

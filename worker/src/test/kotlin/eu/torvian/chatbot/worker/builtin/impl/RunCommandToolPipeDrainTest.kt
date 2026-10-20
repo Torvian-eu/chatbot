@@ -24,7 +24,10 @@ import kotlin.test.assertTrue
  */
 class RunCommandToolPipeDrainTest {
     /** Tool instance kept local to this test class to avoid shared mutable fixtures. */
-    private val tool = RunCommandTool()
+    private val tool = RunCommandTestSupport.tool()
+
+    /** Outer deadline paired with [COMMAND_TIMEOUT_SECONDS] so it cannot pre-empt it. */
+    private val testDeadline = RunCommandTestSupport.testDeadlineFor(COMMAND_TIMEOUT_SECONDS)
 
     /**
      * Verifies the run-command behavior described by the scenario name: large stdout drains without deadlock and retains bounded output.
@@ -36,8 +39,9 @@ class RunCommandToolPipeDrainTest {
             val (command, args) = RunCommandTestSupport.largeOutputCommand(stderr = false, byteCount = 128 * 1024)
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 4, maxBytes = 32),
+                RunCommandTestSupport.buildInput(command, args, timeout = COMMAND_TIMEOUT_SECONDS, maxLines = 4, maxBytes = 32),
                 RunCommandTestSupport.context(dir),
+                deadline = testDeadline,
             )
 
             RunCommandTestSupport.assertSuccess(result)
@@ -65,8 +69,9 @@ class RunCommandToolPipeDrainTest {
             )
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 4, maxBytes = 32),
+                RunCommandTestSupport.buildInput(command, args, timeout = COMMAND_TIMEOUT_SECONDS, maxLines = 4, maxBytes = 32),
                 RunCommandTestSupport.context(dir),
+                deadline = testDeadline,
             )
 
             RunCommandTestSupport.assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
@@ -90,8 +95,9 @@ class RunCommandToolPipeDrainTest {
             val (command, args) = RunCommandTestSupport.bothStreamsLargeOutputCommand(byteCount = 128 * 1024)
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 4, maxBytes = 32),
+                RunCommandTestSupport.buildInput(command, args, timeout = COMMAND_TIMEOUT_SECONDS, maxLines = 4, maxBytes = 32),
                 RunCommandTestSupport.context(dir),
+                deadline = testDeadline,
             )
 
             RunCommandTestSupport.assertSuccess(result)
@@ -118,8 +124,9 @@ class RunCommandToolPipeDrainTest {
             )
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 10, maxBytes = 48),
+                RunCommandTestSupport.buildInput(command, args, timeout = COMMAND_TIMEOUT_SECONDS, maxLines = 10, maxBytes = 48),
                 RunCommandTestSupport.context(dir),
+                deadline = testDeadline,
             )
 
             RunCommandTestSupport.assertSuccess(result)
@@ -143,8 +150,9 @@ class RunCommandToolPipeDrainTest {
             val (command, args) = RunCommandTestSupport.largeOutputCommand(stderr = false, byteCount = 96 * 1024)
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 2, maxBytes = 24),
+                RunCommandTestSupport.buildInput(command, args, timeout = COMMAND_TIMEOUT_SECONDS, maxLines = 2, maxBytes = 24),
                 RunCommandTestSupport.context(dir),
+                deadline = testDeadline,
             )
 
             RunCommandTestSupport.assertSuccess(result)
@@ -168,8 +176,9 @@ class RunCommandToolPipeDrainTest {
             }
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 30),
+                RunCommandTestSupport.buildInput(command, args, timeout = COMMAND_TIMEOUT_SECONDS),
                 RunCommandTestSupport.context(dir),
+                deadline = testDeadline,
             )
 
             RunCommandTestSupport.assertSuccess(result)
@@ -195,8 +204,9 @@ class RunCommandToolPipeDrainTest {
             val maxBytes = 5
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxLines = 2, maxBytes = maxBytes),
+                RunCommandTestSupport.buildInput(command, args, timeout = COMMAND_TIMEOUT_SECONDS, maxLines = 2, maxBytes = maxBytes),
                 RunCommandTestSupport.context(dir),
+                deadline = testDeadline,
             )
 
             RunCommandTestSupport.assertSuccess(result)
@@ -222,8 +232,9 @@ class RunCommandToolPipeDrainTest {
             val (command, args) = RunCommandTestSupport.largeOutputCommand(stderr = false, byteCount = 96 * 1024)
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
-                RunCommandTestSupport.buildInput(command, args, timeout = 30, maxBytes = 32),
+                RunCommandTestSupport.buildInput(command, args, timeout = COMMAND_TIMEOUT_SECONDS, maxBytes = 32),
                 RunCommandTestSupport.context(dir).copy(ioDispatcher = dispatcher),
+                deadline = testDeadline,
             )
 
             RunCommandTestSupport.assertSuccess(result)
@@ -233,5 +244,16 @@ class RunCommandToolPipeDrainTest {
             executor.shutdownNow()
             dir.toFile().deleteRecursively()
         }
+    }
+
+    private companion object {
+        /**
+         * Timeout every command in this class runs under.
+         *
+         * These scenarios push hundreds of kilobytes through bounded readers, and their processes
+         * compete with every other worker test that runs in parallel, so the value is generous
+         * enough for a loaded runner to still drain the pipes inside it.
+         */
+        const val COMMAND_TIMEOUT_SECONDS: Long = 60L
     }
 }

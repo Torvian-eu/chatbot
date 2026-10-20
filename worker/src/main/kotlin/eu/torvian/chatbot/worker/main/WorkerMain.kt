@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.worker.VersionInfo
+import eu.torvian.chatbot.worker.builtin.command.CommandIsolationDetector
 import eu.torvian.chatbot.worker.config.*
 import eu.torvian.chatbot.worker.koin.workerModule
 import eu.torvian.chatbot.worker.runtime.WorkerRuntime
@@ -103,8 +104,9 @@ class WorkerMain(
      * 4. Optionally runs interactive setup flow and exits cleanly on success
      * 5. Validates configuration and creates domain model
      * 6. Reads private key for TLS
-     * 7. Boots Koin DI container
-     * 8. Initializes HTTP client and runs worker runtime
+     * 7. Resolves command isolation for built-in-tool children
+     * 8. Boots Koin DI container
+     * 9. Initializes HTTP client and runs worker runtime
      *
      * @param args Command-line arguments passed to the worker process.
      * @return Either a logical startup/runtime error or `Unit` on clean completion.
@@ -173,8 +175,14 @@ class WorkerMain(
             .bind()
         val tokenPath = resolvedPaths.tokenPath
 
+        // Resolved before DI so an unusable isolation mechanism is a typed startup error with a log
+        // line at boot, rather than a failure raised lazily by whichever consumer resolves first.
+        val commandIsolation = CommandIsolationDetector.resolve(config.commandIsolation, logger)
+            .mapLeft { WorkerMainError.Config(it) }
+            .bind()
+
         val koinApplication = startKoin {
-            modules(workerModule(config, tokenPath, privateKeyPem))
+            modules(workerModule(config, tokenPath, privateKeyPem, commandIsolation))
         }
         val koin = koinApplication.koin
         val metadataService = koin.get<WorkerMetadataService>()

@@ -3,6 +3,7 @@ package eu.torvian.chatbot.worker.setup
 import arrow.core.Either
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import eu.torvian.chatbot.worker.config.DefaultWorkerConfigLoader
@@ -124,6 +125,61 @@ class DefaultWorkerSetupManagerTest {
 
             val setupJson = json.parseToJsonElement(tempDir.resolve("setup.json").readText()).jsonObject
             assertEquals("false", setupJson["setup"]?.jsonObject?.get("required")?.jsonPrimitive?.content)
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that a hand-written command-isolation block survives the setup rewrite.
+     *
+     * The block is optional and nullable precisely so a rewrite of the fields setup owns does not
+     * inject, drop or alter the operator's isolation choice.
+     */
+    @Test
+    fun `preserves the command isolation block`() = runTest {
+        val tempDir = createTempDirectory("worker-setup-test")
+        val api = FakeWorkerSetupApi()
+        tempDir.resolve("application.json").writeText(
+            """
+            {
+              "worker": {
+                "server": {
+                  "baseUrl": "https://example.test/"
+                },
+                "commandIsolation": {
+                  "enabled": false,
+                  "user": "agent",
+                  "helperPath": "/usr/local/bin/run-as-agent",
+                  "environment": {
+                    "allowPassthrough": ["PATH", "GOPATH"]
+                  }
+                }
+              }
+            }
+            """.trimIndent()
+        )
+        tempDir.resolve("setup.json").writeText("{}")
+        tempDir.resolve("env-mapping.json").writeText("{}")
+
+        try {
+            val mergedConfig = configLoader.loadAppConfigDto(tempDir).getOrNull()
+            assertTrue(mergedConfig != null)
+
+            val result = createManager(api).run(tempDir, mergedConfig)
+            assertTrue(result.isRight(), "setup failed: ${result.swap().getOrNull()}")
+
+            val applicationJson = json.parseToJsonElement(tempDir.resolve("application.json").readText()).jsonObject
+            val isolationJson = applicationJson["worker"]?.jsonObject?.get("commandIsolation")?.jsonObject
+            assertNotNull(isolationJson, "setup dropped the command isolation block")
+            assertEquals(false, isolationJson["enabled"]?.jsonPrimitive?.content?.toBoolean())
+            assertEquals("agent", isolationJson["user"]?.jsonPrimitive?.content)
+            assertEquals("/usr/local/bin/run-as-agent", isolationJson["helperPath"]?.jsonPrimitive?.content)
+            val allowPassthrough = isolationJson["environment"]?.jsonObject?.get("allowPassthrough")
+            assertEquals(
+                listOf("PATH", "GOPATH"),
+                allowPassthrough?.jsonArray?.map { it.jsonPrimitive.content }
+            )
         } finally {
             tempDir.toFile().deleteRecursively()
         }

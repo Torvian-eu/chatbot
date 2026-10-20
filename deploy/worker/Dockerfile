@@ -1,4 +1,18 @@
-# 1. Base image
+# 1a. Helper builder stage
+# Compiles the privilege-dropping helper used by built-in tool commands. The base image is the
+# same as the runtime stage so the helper links against an identical glibc; the compiler never
+# reaches the runtime image.
+FROM eclipse-temurin:25-jdk AS helper-builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY run-as-agent.c /src/run-as-agent.c
+RUN mkdir -p /out && gcc -O2 -Wall -o /out/run-as-agent /src/run-as-agent.c
+
+# 1b. Runtime base image
 FROM eclipse-temurin:25-jdk
 
 # Set environment to non-interactive to avoid prompts
@@ -35,8 +49,21 @@ RUN groupadd -g 10001 torvian && \
 # This prevents UID collisions when torvian is remapped at runtime.
 RUN userdel ubuntu
 
-# 6. Prepare directory structure for app and MCP caches
-RUN mkdir -p /app/config /app/data /app/logs /app/workspace /app/cache/npm /app/cache/uv
+# 5b. Create the isolated account used by built-in tool commands.
+# 'shared' is 'agent's PRIMARY group, which is what makes files created by spawned commands
+# writable by the worker; the helper discards supplementary groups.
+RUN groupadd -g 10003 shared \
+    && useradd -u 10002 -g shared -m -s /bin/bash agent \
+    && usermod -aG shared torvian
+
+# 5c. Install the privilege-dropping helper.
+# Root-owned inside a root-owned directory, setuid so it can drop privileges, and never on a mount.
+COPY --from=helper-builder /out/run-as-agent /usr/local/bin/run-as-agent
+RUN chown root:root /usr/local/bin/run-as-agent \
+    && chmod 4755 /usr/local/bin/run-as-agent
+
+# 6. Prepare directory structure for app and MCP caches, plus the isolated account's home
+RUN mkdir -p /app/config /app/data /app/logs /app/workspace /app/cache/npm /app/cache/uv /home/agent
 
 # 7. Copy application files
 # App code and startup scripts stay root-owned to prevent tampering.
@@ -45,8 +72,22 @@ COPY dist/ /app
 # Startup script must be executable but not writable by 'torvian'.
 RUN chmod 755 /app/start-worker.sh
 
-# Only runtime directories are writable by 'torvian'.
-RUN chown -R torvian:torvian /app/config /app/data /app/logs /app/workspace /app/cache
+# Secret-bearing directories are readable only by the worker account: an isolated command has a
+# different account, so these modes are what keep secrets.json and the token cache out of reach.
+RUN chown -R torvian:torvian /app/config /app/data /app/logs \
+    && chmod 700 /app/config /app/data /app/logs
+
+# Shared directories are group-writable with setgid so new entries keep the 'shared' group.
+RUN chown -R torvian:shared /app/workspace /app/cache \
+    && chmod 2775 /app/workspace /app/cache /app/cache/npm /app/cache/uv
+
+RUN chown agent:shared /home/agent && chmod 0755 /home/agent
+
+# The workspace is owned by 'torvian' while isolated commands run as 'agent', so git refuses it with
+# "detected dubious ownership" until the deployment exempts it; the README documents the two ways to do
+# that for isolated commands only. Nothing is set here on purpose: a system-wide safe.directory would
+# also cover the worker account, the account that a repository planted in the agent-writable workspace
+# can attack through git's configuration hooks.
 
 # 8. Set Environment Variables
 ENV NPM_CONFIG_CACHE=/app/cache/npm

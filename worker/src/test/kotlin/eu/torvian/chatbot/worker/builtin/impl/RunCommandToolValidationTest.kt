@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
  */
 class RunCommandToolValidationTest {
     /** Tool instance kept local to this test class to avoid shared mutable fixtures. */
-    private val tool = RunCommandTool()
+    private val tool = RunCommandTestSupport.tool()
 
     /**
      * Verifies the run-command behavior described by the scenario name: single string args are rejected with invalid input error and helpful message.

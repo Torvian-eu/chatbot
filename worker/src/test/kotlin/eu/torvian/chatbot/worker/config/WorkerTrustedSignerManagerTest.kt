@@ -259,6 +259,55 @@ class WorkerTrustedSignerManagerTest {
     }
 
     /**
+     * Verifies that a hand-written command-isolation block survives the trusted-signer patch.
+     *
+     * The block is optional and nullable precisely so rewriting the signer list does not inject,
+     * drop or alter the operator's isolation choice.
+     */
+    @Test
+    fun `preserves the command isolation block`() {
+        val configDir = createTempDirectory("worker-trusted-signer-test")
+        writeApplicationJson(
+            configDir,
+            """
+            {
+              "worker": {
+                "commandIsolation": {
+                  "enabled": false,
+                  "user": "agent",
+                  "helperPath": "/usr/local/bin/run-as-agent",
+                  "environment": {
+                    "allowPassthrough": ["PATH"]
+                  }
+                },
+                "trustedSigners": []
+              }
+            }
+            """.trimIndent()
+        )
+
+        try {
+            val result = manager.addOrUpdateTrustedSigner(
+                configDir = configDir,
+                signerId = "signer-13",
+                publicKeyBase64 = "DQ==",
+                permissionsCsv = "mcp:read"
+            )
+
+            assertTrue(result.isRight(), "trusted signer update failed: ${result.swap().getOrNull()}")
+
+            val isolation = loadApplicationConfig(configDir).worker?.commandIsolation
+            assertNotNull(isolation, "the signer rewrite dropped the command isolation block")
+            assertEquals(false, isolation.enabled)
+            assertEquals("agent", isolation.user)
+            assertEquals("/usr/local/bin/run-as-agent", isolation.helperPath)
+            assertEquals(listOf("PATH"), isolation.environment?.allowPassthrough)
+        } finally {
+            configDir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
      * Loads the saved application-layer DTO for assertions.
      *
      * @param configDir Config directory that contains `application.json`.

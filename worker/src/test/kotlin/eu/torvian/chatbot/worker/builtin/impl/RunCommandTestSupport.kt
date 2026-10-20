@@ -2,6 +2,8 @@ package eu.torvian.chatbot.worker.builtin.impl
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
+import eu.torvian.chatbot.worker.builtin.command.CommandIsolationResolution
+import eu.torvian.chatbot.worker.builtin.command.InheritChildEnvironmentProvider
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,7 +12,8 @@ import kotlinx.serialization.json.*
 import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Provides stateless fixtures and assertions shared by the run-command JVM tests.
@@ -21,6 +24,25 @@ import kotlin.time.Duration.Companion.milliseconds
 internal object RunCommandTestSupport {
     /** Whether the current test host uses Windows command-line semantics. */
     internal val isWindows: Boolean = System.getProperty("os.name").contains("windows", ignoreCase = true)
+
+    /**
+     * Creates the tool under test with isolation inactive and the current process environment.
+     *
+     * No isolation and no environment filtering is the behaviour these suites were written against,
+     * so a launcher or environment regression surfaces as a changed assertion rather than as a host
+     * difference between CI and a developer machine. The wiring is taken from the unisolated
+     * resolution rather than hand-built, which also asserts what that resolution carries.
+     *
+     * @return Tool instance wired the way an unisolated worker wires it.
+     */
+    internal fun tool(): RunCommandTool {
+        val resolution = CommandIsolationResolution.none()
+        return RunCommandTool(
+            launcher = resolution.launcher,
+            childEnvironment = InheritChildEnvironmentProvider(),
+            terminator = resolution.terminator,
+        )
+    }
 
     /**
      * Builds a platform-appropriate command and arguments that echo [text].
@@ -122,8 +144,32 @@ internal object RunCommandTestSupport {
     }
 
     /**
-     * Executes [input] with the fixed outer deadline used to prevent a process regression from
-     * hanging the test worker indefinitely.
+     * Outer deadline for a wrapped command expected to finish well inside its own timeout.
+     */
+    internal val DEFAULT_TEST_DEADLINE: Duration = 30.seconds
+
+    /**
+     * Slack the outer test deadline keeps on top of the command timeout it wraps.
+     *
+     * Once the command deadline expires the tool still terminates the process tree and drains the
+     * pipes before it can report its own TIMEOUT result, and a loaded runner also delays dispatcher
+     * hops and process start. An outer deadline that is not strictly larger therefore cancels the
+     * call instead of letting the tool report the outcome the test asserts on.
+     */
+    internal val TEST_DEADLINE_MARGIN: Duration = 30.seconds
+
+    /**
+     * Derives an outer test deadline that cannot pre-empt a command timeout.
+     *
+     * @param commandTimeoutSeconds Timeout configured for the command in the tool input.
+     * @return Deadline strictly larger than the command timeout.
+     */
+    internal fun testDeadlineFor(commandTimeoutSeconds: Long): Duration =
+        commandTimeoutSeconds.seconds + TEST_DEADLINE_MARGIN
+
+    /**
+     * Executes [input] with an outer deadline that prevents a process regression from hanging the
+     * test worker indefinitely.
      *
      * The outer timeout runs on [Dispatchers.Default], independently of the command timeout and
      * caller dispatcher, so pipe-draining tests also cover dispatcher isolation.
@@ -131,6 +177,8 @@ internal object RunCommandTestSupport {
      * @param tool Tool instance under test.
      * @param input Validated command input.
      * @param executionContext Isolated workspace and execution configuration.
+     * @param deadline Outer deadline, which must exceed the command timeout configured in [input];
+     *   suites needing more slack derive it with [testDeadlineFor].
      * @return Result produced by [RunCommandTool.execute].
      * @throws kotlinx.coroutines.TimeoutCancellationException When the test-level deadline expires.
      */
@@ -138,8 +186,9 @@ internal object RunCommandTestSupport {
         tool: RunCommandTool,
         input: JsonObject,
         executionContext: BuiltInToolExecutionContext,
+        deadline: Duration = DEFAULT_TEST_DEADLINE,
     ): BuiltInToolExecutionResult = withContext(Dispatchers.Default) {
-        withTimeout(30_000.milliseconds) {
+        withTimeout(deadline) {
             tool.execute(input, executionContext)
         }
     }
