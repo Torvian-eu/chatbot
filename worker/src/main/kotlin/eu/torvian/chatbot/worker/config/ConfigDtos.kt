@@ -43,6 +43,7 @@ data class SetupConfigDto(
  * @property auth Authentication timing and skew configuration (nullable).
  * @property workspace Filesystem workspace configuration for built-in tools (nullable).
  * @property builtInTools Built-in tool enablement/prefix configuration (nullable).
+ * @property commandIsolation UID isolation for built-in-tool child processes (nullable).
  * @property trustedSigners Authorized E2EA signers trusted by this worker (nullable).
  */
 @Serializable
@@ -53,7 +54,54 @@ data class RuntimeConfigDto(
     val auth: AuthConfigDto? = null,
     val workspace: WorkspaceConfigDto? = null,
     val builtInTools: BuiltInToolsConfigDto? = null,
+    val commandIsolation: CommandIsolationConfigDto? = null,
     val trustedSigners: List<TrustedSignerDto>? = null
+)
+
+/**
+ * DTO for the UID boundary applied to processes spawned by built-in tools.
+ *
+ * The mechanism is Linux-only and opt-in: the switch is honoured where a privilege drop is
+ * possible and ignored where the platform offers no mechanism, so one configuration file stays
+ * portable. There is deliberately no launcher-mode or daemon selector: the helper binary is the
+ * single supported mechanism, and while the switch is on its absence fails startup rather than
+ * being a configuration choice.
+ *
+ * @property enabled Whether command isolation is required where the platform supports it. Nulls
+ *   resolve to `false`, so an installation that lacks the helper and the isolated account starts
+ *   and runs commands under the worker's own account. With an explicit `true` the worker resolves
+ *   the mechanism at startup and refuses to start when it cannot honour it, instead of silently
+ *   running commands with the worker's privileges.
+ * @property user OS account that isolated children run as. Detection compares the account the
+ *   helper actually becomes against this value, so a misconfigured account is reported rather
+ *   than silently accepted.
+ * @property helperPath Absolute path of the privilege-dropping helper inside the image.
+ * @property environment Environment policy applied to isolated children (nullable). It has no
+ *   effect unless a privilege drop is actually active, because it exists only to keep the worker's
+ *   pass-through secrets away from a child that runs under a different account.
+ */
+@Serializable
+data class CommandIsolationConfigDto(
+    val enabled: Boolean? = null,
+    val user: String? = null,
+    val helperPath: String? = null,
+    val environment: CommandEnvironmentConfigDto? = null,
+)
+
+/**
+ * DTO for the environment an isolated child process receives.
+ *
+ * @property allowPassthrough Names of worker environment variables the child inherits. A single
+ *   `*` entry forwards the whole environment. Nulls resolve to a minimal default, and the account
+ *   identity variables are always derived from the isolated user rather than listed here.
+ * @property set Variables the child receives with these values, whether or not the worker defines
+ *   them. Null resolves to the default set, which carries the git configuration an isolated child
+ *   needs to work in the shared workspace.
+ */
+@Serializable
+data class CommandEnvironmentConfigDto(
+    val allowPassthrough: List<String>? = null,
+    val set: Map<String, String>? = null,
 )
 
 /**

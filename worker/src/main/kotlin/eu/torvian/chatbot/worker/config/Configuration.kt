@@ -20,6 +20,7 @@ data class Configuration(
  * @property auth Authentication timing configuration.
  * @property workspace Filesystem workspace for built-in tools.
  * @property builtInTools Built-in tool configuration (enabled names, default command timeout).
+ * @property commandIsolation UID boundary applied to built-in-tool child processes.
  * @property trustedSigners Authorized E2EA signers trusted by this worker.
  */
 data class RuntimeConfig(
@@ -29,7 +30,47 @@ data class RuntimeConfig(
     val auth: AuthConfig,
     val workspace: WorkspaceConfig,
     val builtInTools: BuiltInToolsConfig,
+    val commandIsolation: CommandIsolationConfig,
     val trustedSigners: List<TrustedSigner>
+)
+
+/**
+ * Resolved policy for running built-in-tool children under a separate OS account.
+ *
+ * The policy is opt-in: while the switch is off, commands run under the worker's own account. Once
+ * it is on, Linux must be able to honour the policy - a missing or unusable mechanism fails startup
+ * instead of quietly running commands with the worker's privileges. Platforms without a mechanism
+ * ignore the setting, so one configuration file stays portable.
+ *
+ * @property enabled Whether the worker refuses to start when the mechanism is unusable. Defaults to
+ *   `false`.
+ * @property user OS account that isolated children run as.
+ * @property helperPath Absolute path of the privilege-dropping helper.
+ * @property environment Environment policy for children, used only while a privilege drop is active.
+ */
+data class CommandIsolationConfig(
+    val enabled: Boolean,
+    val user: String,
+    val helperPath: String,
+    val environment: CommandEnvironmentConfig,
+)
+
+/**
+ * Environment policy applied to children while a privilege drop is active.
+ *
+ * Children under a different account must not inherit the worker's environment, which may carry
+ * credentials; children sharing the worker's account see the same environment as the worker itself.
+ *
+ * @property allowPassthrough Worker environment variable names the child inherits. A single `*`
+ *   entry forwards the whole environment. Account identity variables are always derived from the
+ *   isolated account and are not affected by this list.
+ * @property set Variables the child receives with these values, independent of the worker's own
+ *   environment. Account identity variables are always derived from the isolated account, so an
+ *   entry naming `HOME`, `USER` or `LOGNAME` has no effect.
+ */
+data class CommandEnvironmentConfig(
+    val allowPassthrough: List<String>,
+    val set: Map<String, String>,
 )
 
 /**

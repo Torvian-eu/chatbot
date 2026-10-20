@@ -108,8 +108,11 @@ open class WorkerTrustedSignerManager(
     private fun mapInputError(error: WorkerConfigError): WorkerTrustedSignerManagerError {
         return when (error) {
             is WorkerConfigError.ConfigInvalid -> WorkerTrustedSignerManagerError.InvalidInput(error)
+            // Isolation availability is resolved at startup, never while mutating this layer, so the
+            // last branch only keeps the mapping total and still reports the underlying reason.
             is WorkerConfigError.ConfigMissing,
-            is WorkerConfigError.ConfigReadFailed -> WorkerTrustedSignerManagerError.Config(error)
+            is WorkerConfigError.ConfigReadFailed,
+            is WorkerConfigError.CommandIsolationUnavailable -> WorkerTrustedSignerManagerError.Config(error)
         }
     }
 

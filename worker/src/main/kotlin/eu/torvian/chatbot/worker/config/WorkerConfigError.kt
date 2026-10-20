@@ -25,5 +25,13 @@ sealed interface WorkerConfigError {
      * @property description Human-readable validation or parse failure detail.
      */
     data class ConfigInvalid(val description: String) : WorkerConfigError
+
+    /**
+     * Indicates that the required command isolation cannot be provided on this host.
+     *
+     * @property reason Human-readable explanation of what was observed (missing helper, unknown
+     *   account, ignored setuid bit, missing capabilities, timeout, ...).
+     */
+    data class CommandIsolationUnavailable(val reason: String) : WorkerConfigError
 }
 

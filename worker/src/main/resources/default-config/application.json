@@ -40,6 +40,62 @@
       "enabled": ["*"],
       "defaultCommandTimeoutSeconds": 600
     },
+    /*
+      Command isolation for built-in tools (Linux only). Processes spawned by `run_command` run
+      as a different, unprivileged OS account ("agent") so that ordinary file permissions keep the
+      worker's secrets out of reach.
+
+      It ships disabled, because the mechanism needs a root-owned setuid helper and a separate
+      account: enabling it where neither exists makes the worker refuse to start. Where both exist -
+      the shipped image installs them - set "enabled": true in the block below, or start the worker
+      with WORKER_COMMAND_ISOLATION_ENABLED=true. While it is disabled, commands run as the worker's
+      account and the startup log states that.
+
+      The remaining keys are optional and the values below are the effective defaults once the switch
+      is on:
+
+        "commandIsolation": {
+          "enabled": true,
+          "user": "agent",
+          "helperPath": "/usr/local/bin/run-as-agent",
+          "environment": {
+            "allowPassthrough": ["PATH", "LANG", "LC_ALL"],
+            "set": {
+              "GIT_CONFIG_COUNT": "1",
+              "GIT_CONFIG_KEY_0": "safe.directory",
+              "GIT_CONFIG_VALUE_0": "*"
+            }
+          }
+        }
+
+      "enabled": true makes the worker refuse to start when the privilege-dropping helper is
+      missing or cannot drop, instead of silently running commands with the worker's privileges.
+      Set it to false to accept that risk deliberately: the worker then logs a warning and commands
+      run as the worker's account. On platforms without the mechanism the setting is ignored and a
+      single informational line is logged.
+
+      "user" and "helperPath" name the account commands run as and the helper binary that performs
+      the drop. "environment.allowPassthrough" lists worker environment variables that isolated
+      children receive; a single "*" forwards everything. "environment.set" carries variables the
+      child receives with the values given here, whether or not the worker defines them. Both are used
+      only while the privilege drop is active, and the account identity variables (HOME, USER,
+      LOGNAME) always come from the isolated account, so a "set" entry naming one of them has no
+      effect. Add the variables your commands need, for example proxy settings or cache roots such as
+      GOPATH, GOCACHE, GRADLE_USER_HOME, NPM_CONFIG_CACHE, UV_CACHE_DIR.
+
+      The default "set" exempts the shared workspace from git's repository-ownership check, because
+      the workspace is owned by the worker account while commands run as the isolated one: git reads
+      GIT_CONFIG_COUNT and the matching GIT_CONFIG_KEY_0/GIT_CONFIG_VALUE_0 entry as configuration
+      (git 2.31 or newer). Values given here live in this file rather than in the worker's process
+      environment, so the exemption reaches isolated commands only: a git the worker itself runs keeps
+      refusing repositories in the workspace, which is what stops a repository planted there from
+      executing code as the worker. Replace or remove this block to decide otherwise, or set the
+      exemption in the isolated account's own global config (/home/agent/.gitconfig) instead. An empty
+      "set" ("{}") removes the default entries rather than adding to them.
+    */
+    "commandIsolation": {
+      "enabled": false
+    },
     "trustedSigners": []
   }
 }

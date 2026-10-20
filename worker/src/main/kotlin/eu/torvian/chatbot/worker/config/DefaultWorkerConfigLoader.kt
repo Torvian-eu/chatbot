@@ -161,7 +161,9 @@ class DefaultWorkerConfigLoader : WorkerConfigLoader {
      * Bootstraps missing default config files into a fresh worker config directory.
      *
      * Existing files are left untouched so local edits are preserved. Only files listed in
-     * [BOOTSTRAP_CONFIG_FILES] are created from bundled resources.
+     * [BOOTSTRAP_CONFIG_FILES] are created from bundled resources; the documented reference
+     * ([APPLICATION_EXAMPLE_FILE_NAME]) is one of them, because the worker rewrites `application.json`
+     * as soon as setup or `--add-trusted-signer` runs and its comments are lost with that rewrite.
      *
      * @receiver The Raise context used to propagate configuration errors.
      * @param configDir Target worker config directory.
@@ -406,9 +408,13 @@ class DefaultWorkerConfigLoader : WorkerConfigLoader {
     companion object {
         /**
          * Layer files that are bootstrapped into a fresh config directory.
+         *
+         * The documented reference is bootstrapped alongside the layers it describes, so a deployment
+         * keeps the annotations after the worker has rewritten `application.json`.
          */
         private val BOOTSTRAP_CONFIG_FILES = listOf(
             APPLICATION_FILE_NAME,
+            APPLICATION_EXAMPLE_FILE_NAME,
             SETUP_FILE_NAME,
             ENV_MAPPING_FILE_NAME
         )
@@ -417,6 +423,11 @@ class DefaultWorkerConfigLoader : WorkerConfigLoader {
          * Base application config file name in the layered worker configuration model.
          */
         const val APPLICATION_FILE_NAME = "application.json"
+
+        /**
+         * Annotated reference for [APPLICATION_FILE_NAME], bootstrapped but never loaded.
+         */
+        const val APPLICATION_EXAMPLE_FILE_NAME = "application_example.json"
 
         /**
          * Optional setup overrides file name in the layered worker configuration model.

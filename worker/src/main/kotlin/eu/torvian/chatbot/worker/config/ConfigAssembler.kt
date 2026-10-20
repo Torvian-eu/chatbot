@@ -50,6 +50,7 @@ fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configurat
     val builtInToolsEnabled = builtInToolsDto.enabled ?: emptyList()
     val defaultCommandTimeoutSeconds = builtInToolsDto.defaultCommandTimeoutSeconds ?: 600L
     val defaultSearchTimeoutSeconds = builtInToolsDto.defaultSearchTimeoutSeconds ?: 5L
+    val commandIsolation = commandIsolationToDomain(worker.commandIsolation)
     val trustedSigners = worker.trustedSigners.orEmpty().mapIndexed { index, signerDto ->
         trustedSignerToDomain(signerDto, index)
     }
@@ -117,8 +118,130 @@ fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configurat
                 defaultCommandTimeoutSeconds = defaultCommandTimeoutSeconds,
                 defaultSearchTimeoutSeconds = defaultSearchTimeoutSeconds
             ),
+            commandIsolation = commandIsolation,
             trustedSigners = trustedSigners
         )
+    )
+}
+
+/**
+ * Effective `worker.commandIsolation.environment.allowPassthrough` names when the block is absent.
+ *
+ * Kept deliberately short: isolated children only need to locate programs and render text the way
+ * the deployment does. Cache roots, proxy settings and project-specific variables are opt-in, so a
+ * deployment decides explicitly which of its process secrets a differently-accounted child may see.
+ */
+private val DEFAULT_COMMAND_ENVIRONMENT_ALLOW_PASSTHROUGH = listOf("PATH", "LANG", "LC_ALL")
+
+/**
+ * Effective `worker.commandIsolation.environment.set` entries when the block is absent.
+ *
+ * The single entry is git's repository-ownership exemption. The shared workspace is owned by the
+ * worker account, so git refuses it in a child that runs as the isolated account, and the exemption
+ * is what makes git usable there. It is a value rather than a pass-through because the deployment
+ * must be able to exempt the child without granting the same trust to a git the worker itself runs,
+ * which would execute a workspace repository's configuration as the worker. A deployment that
+ * prefers to place the exemption somewhere else removes this entry.
+ */
+private val DEFAULT_COMMAND_ENVIRONMENT_SET = mapOf(
+    "GIT_CONFIG_COUNT" to "1",
+    "GIT_CONFIG_KEY_0" to "safe.directory",
+    "GIT_CONFIG_VALUE_0" to "*",
+)
+
+/** Allowlist entry that forwards the whole worker environment. */
+private const val ENVIRONMENT_ALLOW_PASSTHROUGH_WILDCARD = "*"
+
+/**
+ * Effective `worker.commandIsolation.enabled` when the switch is absent.
+ *
+ * The mechanism needs a root-owned setuid helper and a separate account, which only a prepared host
+ * has, so isolation is opt-in: without an explicit `true` the worker runs commands as its own account
+ * and says so at startup, instead of refusing to start on every host that was never set up for it.
+ */
+private const val DEFAULT_COMMAND_ISOLATION_ENABLED = false
+
+/** Shape of a name the child's libc can parse as a single environment variable. */
+private val ENVIRONMENT_VARIABLE_NAME = Regex("[A-Za-z_][A-Za-z0-9_]*")
+
+/**
+ * Normalizes and validates the command-isolation configuration group.
+ *
+ * Validation is shape-only: no host probing and no account lookups, so a configuration file stays
+ * portable across platforms. It also runs while isolation is disabled, because a rejected typo is
+ * more useful than a setting that silently does nothing. Unusable values are raised as
+ * `WorkerConfigError.ConfigInvalid`.
+ *
+ * @receiver The Raise context used to propagate configuration errors.
+ * @param dto Nullable DTO group to resolve.
+ * @return The resolved isolation configuration with defaults applied.
+ */
+private fun Raise<WorkerConfigError>.commandIsolationToDomain(
+    dto: CommandIsolationConfigDto?
+): CommandIsolationConfig {
+    val enabled = dto?.enabled ?: DEFAULT_COMMAND_ISOLATION_ENABLED
+    val user = dto?.user ?: "agent"
+    val helperPath = dto?.helperPath ?: "/usr/local/bin/run-as-agent"
+    val allowPassthrough = dto?.environment?.allowPassthrough ?: DEFAULT_COMMAND_ENVIRONMENT_ALLOW_PASSTHROUGH
+    val set = dto?.environment?.set ?: DEFAULT_COMMAND_ENVIRONMENT_SET
+
+    ensure(user.isNotBlank()) {
+        WorkerConfigError.ConfigInvalid("worker.commandIsolation.user must not be blank")
+    }
+    // The helper lives on the Linux filesystem, so its path is validated as a POSIX path:
+    // Path.isAbsolute is host-dependent and would reject the shipped default on Windows hosts.
+    ensure(helperPath.isNotBlank() && helperPath.startsWith("/")) {
+        WorkerConfigError.ConfigInvalid("worker.commandIsolation.helperPath must be an absolute path")
+    }
+    allowPassthrough.forEachIndexed { index, variableName ->
+        ensure(variableName.isNotBlank()) {
+            WorkerConfigError.ConfigInvalid(
+                "worker.commandIsolation.environment.allowPassthrough[$index] must not be blank"
+            )
+        }
+        // A name libc cannot parse, such as "PATH=/usr/bin", would leave the child with a corrupt
+        // variable, so it is rejected here rather than surfacing as a puzzling command failure.
+        ensure(variableName == ENVIRONMENT_ALLOW_PASSTHROUGH_WILDCARD || ENVIRONMENT_VARIABLE_NAME.matches(variableName)) {
+            WorkerConfigError.ConfigInvalid(
+                "worker.commandIsolation.environment.allowPassthrough[$index] must be an " +
+                    "environment variable name or \"*\""
+            )
+        }
+    }
+    set.forEach { (variableName, value) ->
+        ensure(variableName.isNotBlank()) {
+            WorkerConfigError.ConfigInvalid(
+                "worker.commandIsolation.environment.set must not contain a blank name"
+            )
+        }
+        // A name libc cannot parse would leave the child with a corrupt variable, and a value with a
+        // NUL byte cannot be passed to a process at all, so both are rejected here rather than
+        // surfacing as a puzzling command failure.
+        ensure(ENVIRONMENT_VARIABLE_NAME.matches(variableName)) {
+            WorkerConfigError.ConfigInvalid(
+                "worker.commandIsolation.environment.set['$variableName'] must be an " +
+                    "environment variable name"
+            )
+        }
+        ensure(!value.contains('\u0000')) {
+            WorkerConfigError.ConfigInvalid(
+                "worker.commandIsolation.environment.set['$variableName'] must not contain a NUL byte"
+            )
+        }
+    }
+    ensure(
+        allowPassthrough.contains("PATH") || allowPassthrough.contains(ENVIRONMENT_ALLOW_PASSTHROUGH_WILDCARD)
+    ) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.commandIsolation.environment.allowPassthrough must provide PATH (or use \"*\")"
+        )
+    }
+
+    return CommandIsolationConfig(
+        enabled = enabled,
+        user = user,
+        helperPath = helperPath,
+        environment = CommandEnvironmentConfig(allowPassthrough = allowPassthrough, set = set),
     )
 }
 

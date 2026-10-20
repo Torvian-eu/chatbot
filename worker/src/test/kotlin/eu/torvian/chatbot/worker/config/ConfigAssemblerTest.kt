@@ -105,6 +105,210 @@ class ConfigAssemblerTest {
     }
 
     /**
+     * Verifies that the command-isolation group resolves to the documented defaults when omitted.
+     *
+     * Isolation is opt-in, so an omitted switch leaves it off: the mechanism needs a helper and a
+     * separate account that only a prepared host provides.
+     */
+    @Test
+    fun `uses command isolation defaults when the group is omitted`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(commandIsolation = null).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        val isolation = result.getOrNull()?.worker?.commandIsolation
+        assertEquals(false, isolation?.enabled)
+        assertEquals("agent", isolation?.user)
+        assertEquals("/usr/local/bin/run-as-agent", isolation?.helperPath)
+        assertEquals(listOf("PATH", "LANG", "LC_ALL"), isolation?.environment?.allowPassthrough)
+        // The default set carries git's ownership exemption, so an isolated command can use a
+        // repository that the worker account owns without any system-wide git configuration.
+        assertEquals(
+            mapOf(
+                "GIT_CONFIG_COUNT" to "1",
+                "GIT_CONFIG_KEY_0" to "safe.directory",
+                "GIT_CONFIG_VALUE_0" to "*",
+            ),
+            isolation?.environment?.set,
+        )
+    }
+
+    /**
+     * Verifies that a configured environment value replaces the default set as a whole.
+     */
+    @Test
+    fun `accepts a configured command isolation environment set`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(
+            commandIsolation = CommandIsolationConfigDto(
+                environment = CommandEnvironmentConfigDto(set = mapOf("NO_PROXY" to "localhost"))
+            )
+        ).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        assertEquals(
+            mapOf("NO_PROXY" to "localhost"),
+            result.getOrNull()?.worker?.commandIsolation?.environment?.set
+        )
+    }
+
+    /**
+     * Verifies that an empty configured set removes the default entries instead of adding to them.
+     */
+    @Test
+    fun `accepts an empty command isolation environment set`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(
+            commandIsolation = CommandIsolationConfigDto(
+                environment = CommandEnvironmentConfigDto(set = emptyMap())
+            )
+        ).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        assertEquals(emptyMap(), result.getOrNull()?.worker?.commandIsolation?.environment?.set)
+    }
+
+    /**
+     * Verifies that a configured environment value with an unparsable name is rejected.
+     */
+    @Test
+    fun `rejects command isolation environment set entry that is not an environment variable name`() {
+        assertInvalid(
+            validDto(
+                commandIsolation = CommandIsolationConfigDto(
+                    environment = CommandEnvironmentConfigDto(set = mapOf("NO PROXY" to "localhost"))
+                )
+            ),
+            "worker.commandIsolation.environment.set['NO PROXY'] must be an environment variable name"
+        )
+    }
+
+    /**
+     * Verifies that a configured environment value libc could not pass to a process is rejected.
+     */
+    @Test
+    fun `rejects command isolation environment set value containing a NUL byte`() {
+        assertInvalid(
+            validDto(
+                commandIsolation = CommandIsolationConfigDto(
+                    environment = CommandEnvironmentConfigDto(set = mapOf("NO_PROXY" to "a\u0000b"))
+                )
+            ),
+            "worker.commandIsolation.environment.set['NO_PROXY'] must not contain a NUL byte"
+        )
+    }
+
+    /**
+     * Verifies that a blank isolated account name is rejected before the worker attempts a probe.
+     */
+    @Test
+    fun `rejects blank command isolation user`() {
+        assertInvalid(
+            validDto(commandIsolation = CommandIsolationConfigDto(user = "   ")),
+            "worker.commandIsolation.user must not be blank"
+        )
+    }
+
+    /**
+     * Verifies that a helper path that the process launcher could not resolve on its own is rejected.
+     */
+    @Test
+    fun `rejects relative command isolation helper path`() {
+        assertInvalid(
+            validDto(commandIsolation = CommandIsolationConfigDto(helperPath = "run-as-agent")),
+            "worker.commandIsolation.helperPath must be an absolute path"
+        )
+    }
+
+    /**
+     * Verifies that an allowlist which would leave isolated children unable to find any program is rejected.
+     */
+    @Test
+    fun `rejects command isolation allowlist without effective PATH`() {
+        assertInvalid(
+            validDto(
+                commandIsolation = CommandIsolationConfigDto(
+                    environment = CommandEnvironmentConfigDto(allowPassthrough = listOf("LANG"))
+                )
+            ),
+            "worker.commandIsolation.environment.allowPassthrough must provide PATH"
+        )
+    }
+
+    /**
+     * Verifies that a blank allowlist entry is rejected with the offending position in the message.
+     */
+    @Test
+    fun `rejects blank command isolation allowlist entry`() {
+        assertInvalid(
+            validDto(
+                commandIsolation = CommandIsolationConfigDto(
+                    environment = CommandEnvironmentConfigDto(allowPassthrough = listOf("PATH", " "))
+                )
+            ),
+            "worker.commandIsolation.environment.allowPassthrough[1] must not be blank"
+        )
+    }
+
+    /**
+     * Verifies that an allowlist entry libc could not parse as a single variable name is rejected.
+     */
+    @Test
+    fun `rejects command isolation allowlist entry that is not an environment variable name`() {
+        assertInvalid(
+            validDto(
+                commandIsolation = CommandIsolationConfigDto(
+                    environment = CommandEnvironmentConfigDto(allowPassthrough = listOf("PATH", "PATH=/usr/bin"))
+                )
+            ),
+            "worker.commandIsolation.environment.allowPassthrough[1] must be an environment variable name or \"*\""
+        )
+    }
+
+    /**
+     * Verifies that the wildcard allowlist is accepted without naming PATH explicitly.
+     */
+    @Test
+    fun `accepts wildcard command isolation allowlist without PATH`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(
+            commandIsolation = CommandIsolationConfigDto(
+                environment = CommandEnvironmentConfigDto(allowPassthrough = listOf("*"))
+            )
+        ).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        assertEquals(
+            listOf("*"),
+            result.getOrNull()?.worker?.commandIsolation?.environment?.allowPassthrough
+        )
+    }
+
+    /**
+     * Verifies that an explicit `true` is honoured, which is how a deployment opts in.
+     */
+    @Test
+    fun `accepts enabled command isolation`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(commandIsolation = CommandIsolationConfigDto(enabled = true)).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        assertEquals(true, result.getOrNull()?.worker?.commandIsolation?.enabled)
+    }
+
+    /**
+     * Verifies that disabling isolation is accepted while the group is still validated.
+     */
+    @Test
+    fun `accepts disabled command isolation`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(commandIsolation = CommandIsolationConfigDto(enabled = false)).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        assertEquals(false, result.getOrNull()?.worker?.commandIsolation?.enabled)
+    }
+
+    /**
      * Asserts that converting the supplied DTO fails with a configuration validation error.
      *
      * @param dto Nullable DTO tree to convert.
@@ -132,6 +336,7 @@ class ConfigAssemblerTest {
      * @param identity Identity DTO to place under the worker section.
      * @param storage Storage DTO to place under the worker section.
      * @param auth Auth DTO to place under the worker section.
+     * @param commandIsolation Command-isolation DTO to place under the worker section.
      * @param trustedSigners Trusted signer DTOs to place under the worker section.
      * @return Root DTO ready to pass to [AppConfigDto.toDomain].
      */
@@ -149,6 +354,7 @@ class ConfigAssemblerTest {
             tokenFilePath = "./token.json"
         ),
         auth: AuthConfigDto? = AuthConfigDto(refreshSkewSeconds = 30),
+        commandIsolation: CommandIsolationConfigDto? = CommandIsolationConfigDto(),
         trustedSigners: List<TrustedSignerDto>? = listOf(
             TrustedSignerDto(
                 signerId = "signer-1",
@@ -165,6 +371,7 @@ class ConfigAssemblerTest {
             auth = auth,
             workspace = WorkspaceConfigDto(path = "./workspace"),
             builtInTools = BuiltInToolsConfigDto(enabled = listOf("*"), defaultCommandTimeoutSeconds = 600),
+            commandIsolation = commandIsolation,
             trustedSigners = trustedSigners
         )
     )
