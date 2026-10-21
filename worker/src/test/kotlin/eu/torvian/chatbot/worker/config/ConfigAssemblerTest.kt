@@ -309,6 +309,166 @@ class ConfigAssemblerTest {
     }
 
     /**
+     * Verifies that the terminal-session group resolves to the documented defaults when omitted.
+     */
+    @Test
+    fun `uses terminal session defaults when the group is omitted`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(terminalSessions = null).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        val terminal = result.getOrNull()?.worker?.terminalSessions
+        assertEquals(1800L, terminal?.defaultIdleTimeoutSeconds)
+        assertEquals(28800L, terminal?.maxIdleTimeoutSeconds)
+        assertEquals(86400L, terminal?.maxLifetimeSeconds)
+        assertEquals(8, terminal?.maxSessions)
+        assertEquals(32, terminal?.maxClosedSessions)
+        assertEquals(262144, terminal?.maxOutputBytesPerSession)
+        assertEquals(300L, terminal?.quietMillis)
+        assertEquals(5000L, terminal?.defaultWaitMillis)
+        assertEquals(30000L, terminal?.maxWaitMillis)
+        assertEquals(30L, terminal?.reaperIntervalSeconds)
+        assertEquals(3600L, terminal?.closedSessionRetentionSeconds)
+        assertEquals(120, terminal?.columns)
+        assertEquals(40, terminal?.rows)
+        assertEquals(0.15, terminal?.tuiEscapeRatioThreshold)
+    }
+
+    /**
+     * Verifies that every terminal-session value is carried into the domain model unchanged.
+     */
+    @Test
+    fun `accepts explicit terminal session configuration`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(
+            terminalSessions = TerminalSessionsConfigDto(
+                defaultIdleTimeoutSeconds = 600,
+                maxIdleTimeoutSeconds = 3600,
+                maxLifetimeSeconds = 7200,
+                maxSessions = 2,
+                maxClosedSessions = 4,
+                maxOutputBytesPerSession = 1024,
+                quietMillis = 100,
+                defaultWaitMillis = 1000,
+                maxWaitMillis = 2000,
+                reaperIntervalSeconds = 10,
+                closedSessionRetentionSeconds = 120,
+                columns = 80,
+                rows = 24,
+                tuiEscapeRatioThreshold = 0.25,
+            )
+        ).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        val terminal = result.getOrNull()?.worker?.terminalSessions
+        assertEquals(600L, terminal?.defaultIdleTimeoutSeconds)
+        assertEquals(3600L, terminal?.maxIdleTimeoutSeconds)
+        assertEquals(7200L, terminal?.maxLifetimeSeconds)
+        assertEquals(2, terminal?.maxSessions)
+        assertEquals(4, terminal?.maxClosedSessions)
+        assertEquals(1024, terminal?.maxOutputBytesPerSession)
+        assertEquals(100L, terminal?.quietMillis)
+        assertEquals(1000L, terminal?.defaultWaitMillis)
+        assertEquals(2000L, terminal?.maxWaitMillis)
+        assertEquals(10L, terminal?.reaperIntervalSeconds)
+        assertEquals(120L, terminal?.closedSessionRetentionSeconds)
+        assertEquals(80, terminal?.columns)
+        assertEquals(24, terminal?.rows)
+        assertEquals(0.25, terminal?.tuiEscapeRatioThreshold)
+    }
+
+    /**
+     * Verifies that every terminal-session shape rule is rejected with a path-specific error.
+     */
+    @Test
+    fun `rejects invalid terminal session configuration`() {
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(defaultIdleTimeoutSeconds = 0)),
+            "worker.terminalSessions.defaultIdleTimeoutSeconds must be > 0"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(maxIdleTimeoutSeconds = 0)),
+            "worker.terminalSessions.maxIdleTimeoutSeconds must be > 0"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(maxLifetimeSeconds = 0)),
+            "worker.terminalSessions.maxLifetimeSeconds must be > 0"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(maxLifetimeSeconds = 700000)),
+            "worker.terminalSessions.maxLifetimeSeconds must be <= 604800"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(maxSessions = 0)),
+            "worker.terminalSessions.maxSessions must be > 0"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(maxClosedSessions = 0)),
+            "worker.terminalSessions.maxClosedSessions must be > 0"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(maxOutputBytesPerSession = 0)),
+            "worker.terminalSessions.maxOutputBytesPerSession must be > 0"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(quietMillis = 0)),
+            "worker.terminalSessions.quietMillis must be > 0"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(defaultWaitMillis = 0)),
+            "worker.terminalSessions.defaultWaitMillis must be > 0"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(maxWaitMillis = 0)),
+            "worker.terminalSessions.maxWaitMillis must be > 0"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(reaperIntervalSeconds = 0)),
+            "worker.terminalSessions.reaperIntervalSeconds must be > 0"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(closedSessionRetentionSeconds = 0)),
+            "worker.terminalSessions.closedSessionRetentionSeconds must be > 0"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(defaultIdleTimeoutSeconds = 40000)),
+            "worker.terminalSessions.defaultIdleTimeoutSeconds must be <= maxIdleTimeoutSeconds"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(maxIdleTimeoutSeconds = 100000)),
+            "worker.terminalSessions.maxIdleTimeoutSeconds must be <= maxLifetimeSeconds"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(defaultWaitMillis = 40000)),
+            "worker.terminalSessions.defaultWaitMillis must be <= maxWaitMillis"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(quietMillis = 5000)),
+            "worker.terminalSessions.quietMillis must be < defaultWaitMillis"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(reaperIntervalSeconds = 1800)),
+            "worker.terminalSessions.reaperIntervalSeconds must be < defaultIdleTimeoutSeconds"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(columns = 19)),
+            "worker.terminalSessions.columns must be in 20..500"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(rows = 201)),
+            "worker.terminalSessions.rows must be in 5..200"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(tuiEscapeRatioThreshold = 0.0)),
+            "worker.terminalSessions.tuiEscapeRatioThreshold must be > 0 and <= 1"
+        )
+        assertInvalid(
+            validDto(terminalSessions = TerminalSessionsConfigDto(tuiEscapeRatioThreshold = 1.5)),
+            "worker.terminalSessions.tuiEscapeRatioThreshold must be > 0 and <= 1"
+        )
+    }
+
+    /**
      * Asserts that converting the supplied DTO fails with a configuration validation error.
      *
      * @param dto Nullable DTO tree to convert.
@@ -337,6 +497,7 @@ class ConfigAssemblerTest {
      * @param storage Storage DTO to place under the worker section.
      * @param auth Auth DTO to place under the worker section.
      * @param commandIsolation Command-isolation DTO to place under the worker section.
+     * @param terminalSessions Terminal-session DTO to place under the worker section.
      * @param trustedSigners Trusted signer DTOs to place under the worker section.
      * @return Root DTO ready to pass to [AppConfigDto.toDomain].
      */
@@ -355,6 +516,7 @@ class ConfigAssemblerTest {
         ),
         auth: AuthConfigDto? = AuthConfigDto(refreshSkewSeconds = 30),
         commandIsolation: CommandIsolationConfigDto? = CommandIsolationConfigDto(),
+        terminalSessions: TerminalSessionsConfigDto? = TerminalSessionsConfigDto(),
         trustedSigners: List<TrustedSignerDto>? = listOf(
             TrustedSignerDto(
                 signerId = "signer-1",
@@ -372,6 +534,7 @@ class ConfigAssemblerTest {
             workspace = WorkspaceConfigDto(path = "./workspace"),
             builtInTools = BuiltInToolsConfigDto(enabled = listOf("*"), defaultCommandTimeoutSeconds = 600),
             commandIsolation = commandIsolation,
+            terminalSessions = terminalSessions,
             trustedSigners = trustedSigners
         )
     )

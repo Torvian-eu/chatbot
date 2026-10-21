@@ -21,6 +21,7 @@ data class Configuration(
  * @property workspace Filesystem workspace for built-in tools.
  * @property builtInTools Built-in tool configuration (enabled names, default command timeout).
  * @property commandIsolation UID boundary applied to built-in-tool child processes.
+ * @property terminalSessions Limits and timeouts for interactive terminal sessions.
  * @property trustedSigners Authorized E2EA signers trusted by this worker.
  */
 data class RuntimeConfig(
@@ -31,6 +32,7 @@ data class RuntimeConfig(
     val workspace: WorkspaceConfig,
     val builtInTools: BuiltInToolsConfig,
     val commandIsolation: CommandIsolationConfig,
+    val terminalSessions: TerminalSessionsConfig,
     val trustedSigners: List<TrustedSigner>
 )
 
@@ -53,6 +55,45 @@ data class CommandIsolationConfig(
     val user: String,
     val helperPath: String,
     val environment: CommandEnvironmentConfig,
+)
+
+/**
+ * Resolved limits and timeouts for interactive terminal sessions.
+ *
+ * The values bound memory, session count and how long one tool call can block. There is no enable
+ * flag: a call that reaches the worker executes, and the capability is controlled by server-side
+ * tool enablement.
+ *
+ * @property defaultIdleTimeoutSeconds Idle lifetime applied when `start` omits one.
+ * @property maxIdleTimeoutSeconds Upper bound for a requested idle lifetime.
+ * @property maxLifetimeSeconds Absolute lifetime after which a session is closed even if active.
+ * @property maxSessions Maximum number of live sessions the worker keeps at once.
+ * @property maxClosedSessions Maximum number of closed-session tombstones retained for late reads.
+ * @property maxOutputBytesPerSession Sanitized output bytes retained per live or closed session.
+ * @property quietMillis Silence window after which output is considered settled.
+ * @property defaultWaitMillis Default maximum wait for one tool call when the caller omits it.
+ * @property maxWaitMillis Upper bound for a caller-supplied wait.
+ * @property reaperIntervalSeconds Interval between idle/lifetime/retention sweeps.
+ * @property closedSessionRetentionSeconds How long a closed-session tombstone is retained.
+ * @property columns Initial PTY width in character cells.
+ * @property rows Initial PTY height in character cells.
+ * @property tuiEscapeRatioThreshold Escape-to-printable ratio that marks a session as TUI-driven.
+ */
+data class TerminalSessionsConfig(
+    val defaultIdleTimeoutSeconds: Long,
+    val maxIdleTimeoutSeconds: Long,
+    val maxLifetimeSeconds: Long,
+    val maxSessions: Int,
+    val maxClosedSessions: Int,
+    val maxOutputBytesPerSession: Int,
+    val quietMillis: Long,
+    val defaultWaitMillis: Long,
+    val maxWaitMillis: Long,
+    val reaperIntervalSeconds: Long,
+    val closedSessionRetentionSeconds: Long,
+    val columns: Int,
+    val rows: Int,
+    val tuiEscapeRatioThreshold: Double,
 )
 
 /**

@@ -100,6 +100,40 @@
     "commandIsolation": {
       "enabled": false
     },
+    /*
+      Interactive terminal sessions for the `terminal_session` built-in tool. Sessions run as the
+      same account as `run_command` children and are terminated when the worker shuts down. There is
+      deliberately no worker-side enable flag: the capability is controlled by enabling or disabling
+      the tool for a user on the server, and by whether this worker image contains it. A call that
+      reaches the worker executes.
+
+      Memory is bounded per session and for the closed-session archive: at most `maxSessions` live
+      sessions, and at most `maxClosedSessions` tombstones of `maxOutputBytesPerSession` each (about
+      8 MiB with the defaults). `closedSessionRetentionSeconds` additionally bounds how long a closed
+      session stays inspectable. `reaperIntervalSeconds` must be smaller than
+      `defaultIdleTimeoutSeconds`, so a session is never reaped before it has been idle for at least
+      one full sweep.
+
+      Secrets are not supported in v1: an interactive `ssh` must use keys or an already-authenticated
+      agent. Under command isolation the child is the isolated account and carries PR_SET_NO_NEW_PRIVS,
+      so `sudo`, `su` and `passwd` cannot elevate inside a session.
+    */
+    "terminalSessions": {
+      "defaultIdleTimeoutSeconds": 1800,
+      "maxIdleTimeoutSeconds": 28800,
+      "maxLifetimeSeconds": 86400,
+      "maxSessions": 8,
+      "maxClosedSessions": 32,
+      "maxOutputBytesPerSession": 262144,
+      "quietMillis": 300,
+      "defaultWaitMillis": 5000,
+      "maxWaitMillis": 30000,
+      "reaperIntervalSeconds": 30,
+      "closedSessionRetentionSeconds": 3600,
+      "columns": 120,
+      "rows": 40,
+      "tuiEscapeRatioThreshold": 0.15
+    },
     "trustedSigners": []
   }
 }

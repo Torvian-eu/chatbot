@@ -407,6 +407,33 @@ class WorkerConfigLoaderTest {
     }
 
     /**
+     * Verifies that the bundled template documents the terminal-session group and resolves it.
+     */
+    @Test
+    fun `bundled default config resolves terminal session defaults`() {
+        val configDir = createTempDirectory("worker-config-test")
+        val bundled = WorkerConfigLoader::class.java
+            .getResourceAsStream("/default-config/application.json")
+            ?: error("The bundled default config is missing from the classpath")
+
+        try {
+            configDir.resolve("application.json")
+                .writeText(bundled.bufferedReader().use { it.readText() })
+
+            val result = loader.loadAppConfigDto(configDir)
+
+            assertTrue(result.isRight(), "Load failed: $result")
+            val terminal = result.getOrNull()?.worker?.terminalSessions
+            assertEquals(1800L, terminal?.defaultIdleTimeoutSeconds)
+            assertEquals(8, terminal?.maxSessions)
+            assertEquals(262144, terminal?.maxOutputBytesPerSession)
+            assertEquals(0.15, terminal?.tuiEscapeRatioThreshold)
+        } finally {
+            configDir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
      * Verifies that the optional environment values reach the domain config from the config file.
      */
     @Test

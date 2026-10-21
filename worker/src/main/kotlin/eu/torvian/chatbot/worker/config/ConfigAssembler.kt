@@ -51,6 +51,7 @@ fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configurat
     val defaultCommandTimeoutSeconds = builtInToolsDto.defaultCommandTimeoutSeconds ?: 600L
     val defaultSearchTimeoutSeconds = builtInToolsDto.defaultSearchTimeoutSeconds ?: 5L
     val commandIsolation = commandIsolationToDomain(worker.commandIsolation)
+    val terminalSessions = terminalSessionsToDomain(worker.terminalSessions)
     val trustedSigners = worker.trustedSigners.orEmpty().mapIndexed { index, signerDto ->
         trustedSignerToDomain(signerDto, index)
     }
@@ -119,6 +120,7 @@ fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configurat
                 defaultSearchTimeoutSeconds = defaultSearchTimeoutSeconds
             ),
             commandIsolation = commandIsolation,
+            terminalSessions = terminalSessions,
             trustedSigners = trustedSigners
         )
     )
@@ -160,6 +162,204 @@ private const val ENVIRONMENT_ALLOW_PASSTHROUGH_WILDCARD = "*"
  * and says so at startup, instead of refusing to start on every host that was never set up for it.
  */
 private const val DEFAULT_COMMAND_ISOLATION_ENABLED = false
+
+/** Effective `worker.terminalSessions.defaultIdleTimeoutSeconds` when absent. */
+private const val DEFAULT_TERMINAL_IDLE_TIMEOUT_SECONDS = 1800L
+
+/** Effective `worker.terminalSessions.maxIdleTimeoutSeconds` when absent. */
+private const val DEFAULT_TERMINAL_MAX_IDLE_TIMEOUT_SECONDS = 28800L
+
+/** Effective `worker.terminalSessions.maxLifetimeSeconds` when absent. */
+private const val DEFAULT_TERMINAL_MAX_LIFETIME_SECONDS = 86400L
+
+/** Hard upper bound for `worker.terminalSessions.maxLifetimeSeconds`. */
+private const val MAX_TERMINAL_LIFETIME_SECONDS = 604800L
+
+/** Effective `worker.terminalSessions.maxSessions` when absent. */
+private const val DEFAULT_TERMINAL_MAX_SESSIONS = 8
+
+/** Effective `worker.terminalSessions.maxClosedSessions` when absent. */
+private const val DEFAULT_TERMINAL_MAX_CLOSED_SESSIONS = 32
+
+/** Effective `worker.terminalSessions.maxOutputBytesPerSession` when absent. */
+private const val DEFAULT_TERMINAL_MAX_OUTPUT_BYTES = 262144
+
+/** Effective `worker.terminalSessions.quietMillis` when absent. */
+private const val DEFAULT_TERMINAL_QUIET_MILLIS = 300L
+
+/** Effective `worker.terminalSessions.defaultWaitMillis` when absent. */
+private const val DEFAULT_TERMINAL_WAIT_MILLIS = 5000L
+
+/** Effective `worker.terminalSessions.maxWaitMillis` when absent. */
+private const val DEFAULT_TERMINAL_MAX_WAIT_MILLIS = 30000L
+
+/** Effective `worker.terminalSessions.reaperIntervalSeconds` when absent. */
+private const val DEFAULT_TERMINAL_REAPER_INTERVAL_SECONDS = 30L
+
+/** Effective `worker.terminalSessions.closedSessionRetentionSeconds` when absent. */
+private const val DEFAULT_TERMINAL_CLOSED_RETENTION_SECONDS = 3600L
+
+/** Effective `worker.terminalSessions.columns` when absent. */
+private const val DEFAULT_TERMINAL_COLUMNS = 120
+
+/** Effective `worker.terminalSessions.rows` when absent. */
+private const val DEFAULT_TERMINAL_ROWS = 40
+
+/** Effective `worker.terminalSessions.tuiEscapeRatioThreshold` when absent. */
+private const val DEFAULT_TERMINAL_TUI_ESCAPE_RATIO = 0.15
+
+/** Smallest accepted `worker.terminalSessions.columns`. */
+private const val MIN_TERMINAL_COLUMNS = 20
+
+/** Largest accepted `worker.terminalSessions.columns`. */
+private const val MAX_TERMINAL_COLUMNS = 500
+
+/** Smallest accepted `worker.terminalSessions.rows`. */
+private const val MIN_TERMINAL_ROWS = 5
+
+/** Largest accepted `worker.terminalSessions.rows`. */
+private const val MAX_TERMINAL_ROWS = 200
+
+/**
+ * Normalizes and validates the terminal-session configuration group.
+ *
+ * Validation is shape-only: no PTY probe and no platform check, so a configuration file stays
+ * portable. It runs even when no session is ever started, because a rejected typo is more useful
+ * than a setting that silently does nothing. Unusable values are raised as
+ * `WorkerConfigError.ConfigInvalid`.
+ *
+ * @receiver The Raise context used to propagate configuration errors.
+ * @param dto Nullable DTO group to resolve.
+ * @return The resolved terminal-session configuration with defaults applied.
+ */
+private fun Raise<WorkerConfigError>.terminalSessionsToDomain(
+    dto: TerminalSessionsConfigDto?
+): TerminalSessionsConfig {
+    val defaultIdleTimeoutSeconds =
+        dto?.defaultIdleTimeoutSeconds ?: DEFAULT_TERMINAL_IDLE_TIMEOUT_SECONDS
+    val maxIdleTimeoutSeconds =
+        dto?.maxIdleTimeoutSeconds ?: DEFAULT_TERMINAL_MAX_IDLE_TIMEOUT_SECONDS
+    val maxLifetimeSeconds = dto?.maxLifetimeSeconds ?: DEFAULT_TERMINAL_MAX_LIFETIME_SECONDS
+    val maxSessions = dto?.maxSessions ?: DEFAULT_TERMINAL_MAX_SESSIONS
+    val maxClosedSessions = dto?.maxClosedSessions ?: DEFAULT_TERMINAL_MAX_CLOSED_SESSIONS
+    val maxOutputBytesPerSession =
+        dto?.maxOutputBytesPerSession ?: DEFAULT_TERMINAL_MAX_OUTPUT_BYTES
+    val quietMillis = dto?.quietMillis ?: DEFAULT_TERMINAL_QUIET_MILLIS
+    val defaultWaitMillis = dto?.defaultWaitMillis ?: DEFAULT_TERMINAL_WAIT_MILLIS
+    val maxWaitMillis = dto?.maxWaitMillis ?: DEFAULT_TERMINAL_MAX_WAIT_MILLIS
+    val reaperIntervalSeconds =
+        dto?.reaperIntervalSeconds ?: DEFAULT_TERMINAL_REAPER_INTERVAL_SECONDS
+    val closedSessionRetentionSeconds =
+        dto?.closedSessionRetentionSeconds ?: DEFAULT_TERMINAL_CLOSED_RETENTION_SECONDS
+    val columns = dto?.columns ?: DEFAULT_TERMINAL_COLUMNS
+    val rows = dto?.rows ?: DEFAULT_TERMINAL_ROWS
+    val tuiEscapeRatioThreshold =
+        dto?.tuiEscapeRatioThreshold ?: DEFAULT_TERMINAL_TUI_ESCAPE_RATIO
+
+    ensure(defaultIdleTimeoutSeconds > 0) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.defaultIdleTimeoutSeconds must be > 0"
+        )
+    }
+    ensure(maxIdleTimeoutSeconds > 0) {
+        WorkerConfigError.ConfigInvalid("worker.terminalSessions.maxIdleTimeoutSeconds must be > 0")
+    }
+    ensure(maxLifetimeSeconds > 0) {
+        WorkerConfigError.ConfigInvalid("worker.terminalSessions.maxLifetimeSeconds must be > 0")
+    }
+    ensure(maxLifetimeSeconds <= MAX_TERMINAL_LIFETIME_SECONDS) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.maxLifetimeSeconds must be <= $MAX_TERMINAL_LIFETIME_SECONDS"
+        )
+    }
+    ensure(maxSessions > 0) {
+        WorkerConfigError.ConfigInvalid("worker.terminalSessions.maxSessions must be > 0")
+    }
+    ensure(maxClosedSessions > 0) {
+        WorkerConfigError.ConfigInvalid("worker.terminalSessions.maxClosedSessions must be > 0")
+    }
+    ensure(maxOutputBytesPerSession > 0) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.maxOutputBytesPerSession must be > 0"
+        )
+    }
+    ensure(quietMillis > 0) {
+        WorkerConfigError.ConfigInvalid("worker.terminalSessions.quietMillis must be > 0")
+    }
+    ensure(defaultWaitMillis > 0) {
+        WorkerConfigError.ConfigInvalid("worker.terminalSessions.defaultWaitMillis must be > 0")
+    }
+    ensure(maxWaitMillis > 0) {
+        WorkerConfigError.ConfigInvalid("worker.terminalSessions.maxWaitMillis must be > 0")
+    }
+    ensure(reaperIntervalSeconds > 0) {
+        WorkerConfigError.ConfigInvalid("worker.terminalSessions.reaperIntervalSeconds must be > 0")
+    }
+    ensure(closedSessionRetentionSeconds > 0) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.closedSessionRetentionSeconds must be > 0"
+        )
+    }
+    ensure(defaultIdleTimeoutSeconds <= maxIdleTimeoutSeconds) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.defaultIdleTimeoutSeconds must be <= maxIdleTimeoutSeconds"
+        )
+    }
+    ensure(maxIdleTimeoutSeconds <= maxLifetimeSeconds) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.maxIdleTimeoutSeconds must be <= maxLifetimeSeconds"
+        )
+    }
+    ensure(defaultWaitMillis <= maxWaitMillis) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.defaultWaitMillis must be <= maxWaitMillis"
+        )
+    }
+    ensure(quietMillis < defaultWaitMillis) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.quietMillis must be < defaultWaitMillis"
+        )
+    }
+    // The reaper is lazy, so an interval that is not shorter than the default idle timeout lets a
+    // session outlive its TTL by more than one sweep; this rejects only that confusing setup.
+    ensure(reaperIntervalSeconds < defaultIdleTimeoutSeconds) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.reaperIntervalSeconds must be < defaultIdleTimeoutSeconds"
+        )
+    }
+    ensure(columns in MIN_TERMINAL_COLUMNS..MAX_TERMINAL_COLUMNS) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.columns must be in $MIN_TERMINAL_COLUMNS..$MAX_TERMINAL_COLUMNS"
+        )
+    }
+    ensure(rows in MIN_TERMINAL_ROWS..MAX_TERMINAL_ROWS) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.rows must be in $MIN_TERMINAL_ROWS..$MAX_TERMINAL_ROWS"
+        )
+    }
+    ensure(tuiEscapeRatioThreshold > 0.0 && tuiEscapeRatioThreshold <= 1.0) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.terminalSessions.tuiEscapeRatioThreshold must be > 0 and <= 1"
+        )
+    }
+
+    return TerminalSessionsConfig(
+        defaultIdleTimeoutSeconds = defaultIdleTimeoutSeconds,
+        maxIdleTimeoutSeconds = maxIdleTimeoutSeconds,
+        maxLifetimeSeconds = maxLifetimeSeconds,
+        maxSessions = maxSessions,
+        maxClosedSessions = maxClosedSessions,
+        maxOutputBytesPerSession = maxOutputBytesPerSession,
+        quietMillis = quietMillis,
+        defaultWaitMillis = defaultWaitMillis,
+        maxWaitMillis = maxWaitMillis,
+        reaperIntervalSeconds = reaperIntervalSeconds,
+        closedSessionRetentionSeconds = closedSessionRetentionSeconds,
+        columns = columns,
+        rows = rows,
+        tuiEscapeRatioThreshold = tuiEscapeRatioThreshold,
+    )
+}
 
 /** Shape of a name the child's libc can parse as a single environment variable. */
 private val ENVIRONMENT_VARIABLE_NAME = Regex("[A-Za-z_][A-Za-z0-9_]*")
