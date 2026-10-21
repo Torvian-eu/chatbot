@@ -5,6 +5,7 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.worker.VersionInfo
 import eu.torvian.chatbot.worker.builtin.command.CommandIsolationDetector
+import eu.torvian.chatbot.worker.builtin.terminal.TerminalSessionManager
 import eu.torvian.chatbot.worker.config.*
 import eu.torvian.chatbot.worker.koin.workerModule
 import eu.torvian.chatbot.worker.runtime.WorkerRuntime
@@ -188,6 +189,14 @@ class WorkerMain(
         val metadataService = koin.get<WorkerMetadataService>()
         val httpClient = koin.get<HttpClient>()
         val runtime = koin.get<WorkerRuntime>()
+        val terminalSessions = koin.get<TerminalSessionManager>()
+        // SIGTERM runs JVM hooks without unwinding runBlocking, so the normal stopKoin() path and
+        // Koin's onClose never run; this hook is the only shutdown path that reaches live PTYs.
+        val shutdownHook = Thread(
+            { terminalSessions.close() },
+            "worker-terminal-session-shutdown"
+        )
+        Runtime.getRuntime().addShutdownHook(shutdownHook)
         try {
             metadataService.checkCompatibility().fold(
                 ifLeft = { error ->
@@ -206,6 +215,9 @@ class WorkerMain(
             runtime.close()
             httpClient.close()
             stopKoin()
+            // Removing an already-running hook during JVM shutdown throws; the manager close is
+            // idempotent, so either the hook or this path may win.
+            runCatching { Runtime.getRuntime().removeShutdownHook(shutdownHook) }
         }
     }
 

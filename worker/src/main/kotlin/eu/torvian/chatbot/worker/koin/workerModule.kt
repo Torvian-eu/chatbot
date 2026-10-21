@@ -16,6 +16,7 @@ import eu.torvian.chatbot.worker.builtin.net.JvmDnsResolver
 import eu.torvian.chatbot.worker.builtin.net.KtorWebFetchService
 import eu.torvian.chatbot.worker.builtin.net.PublicUrlValidator
 import eu.torvian.chatbot.worker.builtin.net.WebFetchService
+import eu.torvian.chatbot.worker.builtin.terminal.TerminalSessionManager
 import eu.torvian.chatbot.worker.config.RuntimeConfig
 import eu.torvian.chatbot.worker.config.TrustedSigner
 import eu.torvian.chatbot.worker.mcp.*
@@ -58,6 +59,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.koin.dsl.module
+import org.koin.dsl.onClose
 import java.nio.file.Path
 import java.nio.file.Paths
 import kotlin.time.Duration.Companion.seconds
@@ -278,6 +280,19 @@ fun workerModule(
             mcpClientService = get()
         )
     }
+    single<TerminalSessionManager> {
+        TerminalSessionManager(
+            config = get<RuntimeConfig>().terminalSessions,
+            resolution = commandIsolation,
+            childEnvironment = get(),
+            workspace = Paths.get(get<RuntimeConfig>().workspace.path),
+            logger = LogManager.getLogger(TerminalSessionManager::class.java),
+        )
+    } onClose { manager ->
+        // Tests and stopKoin() paths release the reaper scope; SIGTERM is covered by WorkerMain's hook.
+        manager?.close()
+    }
+
     single<BuiltInToolExecutionContext> {
         val cfg = get<RuntimeConfig>()
         BuiltInToolExecutionContext(
@@ -300,6 +315,7 @@ fun workerModule(
             SearchFilesTool(),
             SearchTextTool(),
             RunCommandTool(launcher = get(), childEnvironment = get(), terminator = get()),
+            TerminalSessionTool(manager = get()),
             FetchWebContentTool(fetchService = get()),
             DownloadFileTool(fetchService = get()),
         ).associateBy { it.name }

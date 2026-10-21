@@ -33,6 +33,7 @@ jakarta-mail = "2.1.5"         # Jakarta Mail API version
 angus-mail = "2.0.5"           # Angus Mail (Jakarta Mail implementation) version
 mcp-sdk = "0.12.0"            # MCP Kotlin SDK version
 jsoup = "1.23.1"               # Jsoup HTML parser/cleaner version
+pty4j = "0.14.0"              # pty4j native PTY backend for terminal sessions
 
 [libraries]
 # Kotlin
@@ -160,6 +161,9 @@ mcp-sdk-client = { module = "io.modelcontextprotocol:kotlin-sdk-client", version
 
 # HTML parsing / cleaning
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+
+# PTY backend for interactive terminal sessions
+pty4j = { module = "org.jetbrains.pty4j:pty4j", version.ref = "pty4j" }
 
 # Jakarta Mail / Angus Mail
 jakarta-mail = { module = "jakarta.mail:jakarta.mail-api", version.ref = "jakarta-mail" }
