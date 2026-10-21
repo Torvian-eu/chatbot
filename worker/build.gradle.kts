@@ -35,6 +35,9 @@ dependencies {
     // HTML parsing/cleaning (for cleanHtml tool option)
     implementation(libs.jsoup)
 
+    // PTY backend for interactive terminal sessions
+    implementation(libs.pty4j)
+
     // Testing dependencies
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)

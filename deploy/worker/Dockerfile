@@ -63,7 +63,8 @@ RUN chown root:root /usr/local/bin/run-as-agent \
     && chmod 4755 /usr/local/bin/run-as-agent
 
 # 6. Prepare directory structure for app and MCP caches, plus the isolated account's home
-RUN mkdir -p /app/config /app/data /app/logs /app/workspace /app/cache/npm /app/cache/uv /home/agent
+RUN mkdir -p /app/config /app/data /app/logs /app/workspace /app/cache/npm /app/cache/uv /home/agent \
+    && mkdir -p /app/data/tmp/pty4j
 
 # 7. Copy application files
 # App code and startup scripts stay root-owned to prevent tampering.
@@ -75,7 +76,9 @@ RUN chmod 755 /app/start-worker.sh
 # Secret-bearing directories are readable only by the worker account: an isolated command has a
 # different account, so these modes are what keep secrets.json and the token cache out of reach.
 RUN chown -R torvian:torvian /app/config /app/data /app/logs \
-    && chmod 700 /app/config /app/data /app/logs
+    && chmod 700 /app/config /app/data /app/logs \
+    && chown torvian:torvian /app/data/tmp/pty4j \
+    && chmod 0700 /app/data/tmp/pty4j
 
 # Shared directories are group-writable with setgid so new entries keep the 'shared' group.
 RUN chown -R torvian:shared /app/workspace /app/cache \

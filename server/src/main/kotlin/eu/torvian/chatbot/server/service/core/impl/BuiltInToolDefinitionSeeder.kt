@@ -20,7 +20,7 @@ import org.apache.logging.log4j.Logger
 /**
  * Seeds the default built-in worker tool definitions for a worker.
  *
- * The eight built-in tools are registered once per worker. Seeding is idempotent: a tool is only
+ * The catalog's built-in tools are registered once per worker. Seeding is idempotent: a tool is only
  * created when no linkage exists for the same worker + unprefixed `builtInToolName`. The public
  * [BuiltInWorkerToolDefinition.name] is derived from the worker's configured prefix (when present),
  * while [BuiltInWorkerToolDefinition.builtInToolName] always stores the unprefixed canonical name.

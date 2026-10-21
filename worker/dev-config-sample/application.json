@@ -60,6 +60,22 @@
     "commandIsolation": {
       "enabled": false
     },
+    "terminalSessions": {
+      "defaultIdleTimeoutSeconds": 1800,
+      "maxIdleTimeoutSeconds": 28800,
+      "maxLifetimeSeconds": 86400,
+      "maxSessions": 8,
+      "maxClosedSessions": 32,
+      "maxOutputBytesPerSession": 262144,
+      "quietMillis": 300,
+      "defaultWaitMillis": 5000,
+      "maxWaitMillis": 30000,
+      "reaperIntervalSeconds": 30,
+      "closedSessionRetentionSeconds": 3600,
+      "columns": 120,
+      "rows": 40,
+      "tuiEscapeRatioThreshold": 0.15
+    },
     "trustedSigners": []
   }
 }

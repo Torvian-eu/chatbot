@@ -601,4 +601,4 @@ private fun ResetConfirmationDialog(
  * Built-in tool names that perform privileged filesystem or process operations and therefore
  * warrant a visual danger indication in the UI.
  */
-private val DANGEROUS_BUILT_IN_TOOLS = setOf("run_command")
+private val DANGEROUS_BUILT_IN_TOOLS = setOf("run_command", "terminal_session")

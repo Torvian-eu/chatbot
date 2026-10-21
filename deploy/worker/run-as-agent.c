@@ -97,7 +97,16 @@ int main(int argc, char **argv) {
     // re-parented tree by signalling this group, and a stalled lookup would otherwise let the relay
     // report a not-yet-existing group as a delivered signal, after which the command starts and
     // outlives its timeout. Creating the group lowers no privilege and adds no authority.
-    if (!signal_mode && setpgid(0, 0) != 0) { perror("run-as-agent: setpgid"); return 10; }
+    //
+    // pty4j's child calls setsid() before it execs this helper, so the helper can already be a
+    // session and process-group leader. Linux rejects setpgid(0,0) on a session leader with EPERM,
+    // and that state is exactly what the group-signalling contract needs, so it is success here.
+    // The command's group id remains the direct child's pid, which is what signal mode addresses.
+    if (!signal_mode) {
+        if (getpgid(0) != getpid()) {
+            if (setpgid(0, 0) != 0) { perror("run-as-agent: setpgid"); return 10; }
+        }
+    }
 
     struct passwd *pw = getpwnam(ISOLATED_USER);
     if (pw == NULL) {
