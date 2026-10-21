@@ -106,6 +106,15 @@ for shared_root in /app/workspace /app/cache /app/cache/*; do
     normalize_shared_root "$shared_root"
 done
 
+# --- 7. pty4j native extraction directory ---
+# Native libraries are loaded from this path, so it must be executable and must stay out of the
+# shared workspace and cache, which are writable by the isolated account. A mounted volume may be
+# empty or carry the wrong owner, so the directory is re-applied on every start.
+PTY4J_TMPDIR=/app/data/tmp/pty4j
+mkdir -p "$PTY4J_TMPDIR"
+chown torvian:torvian "$PTY4J_TMPDIR"
+chmod 0700 "$PTY4J_TMPDIR"
+
 # Ensure applications started through gosu use the correct home directory.
 # The isolated child's HOME is set by the worker, not by this shell.
 export HOME=/home/torvian
@@ -115,14 +124,15 @@ echo "Starting Chatbot Worker..."
 # Ensure the script runs relative to its own location
 cd "$(dirname "$0")"
 
-# Apply default JVM memory settings only if JAVA_OPTS was not already provided
+# Apply default JVM settings only if JAVA_OPTS was not already provided. Operators who override
+# JAVA_OPTS take responsibility for keeping the pty4j temp dir and native-access flags.
 if [ -z "${JAVA_OPTS:-}" ]; then
-    export JAVA_OPTS="-Xmx2G -Xms512M"
+    export JAVA_OPTS="-Xmx2G -Xms512M -Dpty4j.tmpdir=$PTY4J_TMPDIR --enable-native-access=ALL-UNNAMED"
 fi
 
 echo "Launching worker process as torvian ($(id -u torvian))..."
 
-# --- 7. Execute via gosu ---
+# --- 8. Execute via gosu ---
 # We use 'exec gosu' to replace the shell process with the Java process.
 # This ensures that signals (SIGTERM) are passed directly to Java.
 exec gosu torvian java $JAVA_OPTS -cp "lib/*" eu.torvian.chatbot.worker.main.WorkerMain "$@"
