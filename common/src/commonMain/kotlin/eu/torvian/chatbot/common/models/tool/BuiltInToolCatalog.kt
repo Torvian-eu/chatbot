@@ -281,6 +281,97 @@ object BuiltInToolCatalog {
             }
         ),
         BuiltInToolSpec(
+            builtInToolName = "terminal_session",
+            description = "Manage a long-lived interactive terminal session inside the worker workspace. " +
+                "Sessions persist across tool calls and are identified by the session_id returned by 'start'. " +
+                "'start' creates a session, 'send' writes input to it, 'poll' reads output produced since the last read, " +
+                "and 'close' terminates it. Input is written verbatim: include \"\\n\" to submit a line, use \"\\n\" " +
+                "alone for Enter, and note that an empty string is not a continuation signal. Output may be partial: " +
+                "QUIET means the process is alive but has been silent recently and is usually waiting for input, not " +
+                "that it exited. Full-screen terminal UI programs are unsupported; prefer non-interactive flags and " +
+                "line-oriented output. Sessions are bounded by a worker-configured idle timeout.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("action", buildJsonObject {
+                        put("type", "string")
+                        put("enum", buildJsonArray { add("start"); add("send"); add("poll"); add("close") })
+                        put(
+                            "description",
+                            "Operation to perform. 'start' creates a session; 'send' writes input; 'poll' returns " +
+                                "output produced since the last read; 'close' terminates the session."
+                        )
+                    })
+                    put("session_id", buildJsonObject {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "Session id returned by 'start' (six characters, for example \"aB3xY9\"). " +
+                                "Required for send, poll and close; must be omitted for start."
+                        )
+                    })
+                    put("command", buildJsonObject {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "Executable name or absolute path for 'start' (e.g. \"bash\", \"sh\", \"ssh\"). " +
+                                "Must be a single executable without spaces; put arguments in 'args'."
+                        )
+                    })
+                    put("args", buildJsonObject {
+                        put("type", "array")
+                        put("items", buildJsonObject { put("type", "string") })
+                        put(
+                            "description",
+                            "Arguments for the started executable. For an interactive shell use command=\"bash\" " +
+                                "with no args. For a direct SSH session use command=\"ssh\", args=[\"-tt\", \"user@host\"]."
+                        )
+                    })
+                    put("input", buildJsonObject {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "Text written verbatim to the process for 'send'. Include \"\\n\" to submit a line; " +
+                                "\"\\n\" alone is Enter. Must be non-empty."
+                        )
+                    })
+                    put("idleTimeout", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put(
+                            "description",
+                            "Idle lifetime in seconds for the new session (start only). Capped by the worker's " +
+                                "maximum. Omit to use the worker default."
+                        )
+                    })
+                    put("waitMillis", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 100)
+                        put("maximum", 30000)
+                        put("default", 5000)
+                        put(
+                            "description",
+                            "Maximum time this call waits for output to settle before returning (send/poll/close). " +
+                                "The call returns earlier when output is quiet."
+                        )
+                    })
+                    put("maxLines", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 100)
+                        put("description", "Maximum lines of output returned by this call.")
+                    })
+                    put("maxBytes", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 4)
+                        put("default", 8000)
+                        put("description", "Maximum UTF-8 bytes of output returned by this call.")
+                    })
+                })
+                put("required", buildJsonArray { add("action") })
+            }
+        ),
+        BuiltInToolSpec(
             builtInToolName = "search_text",
             description = "Search UTF-8 text files in the workspace for matching text or regex patterns, returning matching file paths and line numbers.",
             inputSchema = buildJsonObject {
