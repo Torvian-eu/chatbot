@@ -82,6 +82,11 @@ fun daoModule() = module {
     single<LocalMCPToolDefinitionDao> { LocalMCPToolDefinitionDaoExposed(get()) }
     single<LocalMCPServerSignatureDao> { LocalMCPServerSignatureDaoExposed(get()) }
 
+    // Worker credential DAOs
+    single<WorkerCredentialProfileDao> { WorkerCredentialProfileDaoExposed(get()) }
+    single<WorkerCredentialSecretDao> { WorkerCredentialSecretDaoExposed(get()) }
+    single<WorkerCredentialProfileSignatureDao> { WorkerCredentialProfileSignatureDaoExposed(get()) }
+
     // Worker DAOs
     single<WorkerDao> { WorkerDaoExposed(get()) }
 
