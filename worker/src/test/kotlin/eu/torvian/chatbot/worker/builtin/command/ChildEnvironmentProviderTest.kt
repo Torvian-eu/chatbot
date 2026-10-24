@@ -56,22 +56,6 @@ class ChildEnvironmentProviderTest {
         assertEquals(setOf("PATH", "HOME", "USER", "LOGNAME"), environment.keys)
     }
 
-    /** Verifies that the wildcard entry forwards the entire worker environment. */
-    @Test
-    fun `wildcard allowlist forwards the whole environment`() {
-        val provider = AllowlistChildEnvironmentProvider(
-            config = CommandEnvironmentConfig(listOf("*"), set = emptyMap()),
-            isolatedUser = "agent",
-            isolatedHome = "/home/agent",
-            parent = parent,
-        )
-
-        val environment = provider.build()
-
-        assertEquals("super-secret", environment["SECRET_TOKEN"])
-        assertEquals("/usr/bin", environment["PATH"])
-    }
-
     /** Verifies that identity variables describe the isolated account, not the worker account. */
     @Test
     fun `identity variables describe the isolated account`() {

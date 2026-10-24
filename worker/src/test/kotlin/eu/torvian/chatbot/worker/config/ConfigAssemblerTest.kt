@@ -295,27 +295,65 @@ class ConfigAssemblerTest {
                     environment = CommandEnvironmentConfigDto(allowPassthrough = listOf("PATH", "PATH=/usr/bin"))
                 )
             ),
-            "worker.commandIsolation.environment.allowPassthrough[1] must be an environment variable name or \"*\""
+            "worker.commandIsolation.environment.allowPassthrough[1] must be an environment variable name"
         )
     }
 
     /**
-     * Verifies that the wildcard allowlist is accepted without naming PATH explicitly.
+     * Verifies that a sensitive name cannot be forwarded to an isolated child through the allowlist.
      */
     @Test
-    fun `accepts wildcard command isolation allowlist without PATH`() {
+    fun `rejects sensitive name in command isolation allowlist`() {
+        assertInvalid(
+            validDto(
+                commandIsolation = CommandIsolationConfigDto(
+                    environment = CommandEnvironmentConfigDto(
+                        allowPassthrough = listOf("PATH", "CHATBOT_WORKER_PRIVATE_KEY_PEM")
+                    )
+                )
+            ),
+            "worker.commandIsolation.environment.allowPassthrough[1] must not name " +
+                "'CHATBOT_WORKER_PRIVATE_KEY_PEM'"
+        )
+    }
+
+    /**
+     * Verifies that a sensitive name cannot be given a deployment value through the `set` map.
+     */
+    @Test
+    fun `rejects sensitive name in command isolation set`() {
+        assertInvalid(
+            validDto(
+                commandIsolation = CommandIsolationConfigDto(
+                    environment = CommandEnvironmentConfigDto(
+                        allowPassthrough = listOf("PATH"),
+                        set = mapOf("CHATBOT_WORKER_PRIVATE_KEY_PEM" to "-----BEGIN PRIVATE KEY-----"),
+                    )
+                )
+            ),
+            "worker.commandIsolation.environment.set['CHATBOT_WORKER_PRIVATE_KEY_PEM']"
+        )
+    }
+
+    /**
+     * Verifies that an ordinary allowlist still resolves to the configured names.
+     */
+    @Test
+    fun `accepts ordinary command isolation allowlist`() {
         val configDir = createTempDirectory("config-assembler-test")
         val result = validDto(
             commandIsolation = CommandIsolationConfigDto(
-                environment = CommandEnvironmentConfigDto(allowPassthrough = listOf("*"))
+                environment = CommandEnvironmentConfigDto(
+                    allowPassthrough = listOf("PATH", "NPM_CONFIG_CACHE"),
+                    set = mapOf("NPM_CONFIG_YES" to "true"),
+                )
             )
         ).toDomain(configDir)
 
         assertTrue(result.isRight())
-        assertEquals(
-            listOf("*"),
-            result.getOrNull()?.worker?.commandIsolation?.environment?.allowPassthrough
-        )
+        val environment = result.getOrNull()?.worker?.commandIsolation?.environment
+        assertEquals(listOf("PATH", "NPM_CONFIG_CACHE"), environment?.allowPassthrough)
+        assertEquals(mapOf("NPM_CONFIG_YES" to "true"), environment?.set)
     }
 
     /**

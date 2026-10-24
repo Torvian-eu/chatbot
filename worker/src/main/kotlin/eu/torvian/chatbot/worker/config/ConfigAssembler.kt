@@ -161,9 +161,6 @@ private val DEFAULT_COMMAND_ENVIRONMENT_SET = mapOf(
     "GIT_CONFIG_VALUE_0" to "*",
 )
 
-/** Allowlist entry that forwards the whole worker environment. */
-private const val ENVIRONMENT_ALLOW_PASSTHROUGH_WILDCARD = "*"
-
 /**
  * Effective `worker.commandIsolation.enabled` when the switch is absent.
  *
@@ -411,10 +408,18 @@ private fun Raise<WorkerConfigError>.commandIsolationToDomain(
         }
         // A name libc cannot parse, such as "PATH=/usr/bin", would leave the child with a corrupt
         // variable, so it is rejected here rather than surfacing as a puzzling command failure.
-        ensure(variableName == ENVIRONMENT_ALLOW_PASSTHROUGH_WILDCARD || ENVIRONMENT_VARIABLE_NAME.matches(variableName)) {
+        ensure(ENVIRONMENT_VARIABLE_NAME.matches(variableName)) {
             WorkerConfigError.ConfigInvalid(
                 "worker.commandIsolation.environment.allowPassthrough[$index] must be an " +
-                    "environment variable name or \"*\""
+                    "environment variable name"
+            )
+        }
+        // A named sensitive variable would hand the child the worker's own credential material, which
+        // no allowlist entry is allowed to do.
+        ensure(!SensitiveEnvironmentNames.contains(variableName)) {
+            WorkerConfigError.ConfigInvalid(
+                "worker.commandIsolation.environment.allowPassthrough[$index] must not name " +
+                    "'$variableName': it carries the worker's own credential material"
             )
         }
     }
@@ -438,12 +443,19 @@ private fun Raise<WorkerConfigError>.commandIsolationToDomain(
                 "worker.commandIsolation.environment.set['$variableName'] must not contain a NUL byte"
             )
         }
+        // Values are the operator's to choose, but not under a name the worker itself uses for
+        // credential material: the entry would shadow the worker's meaning of the name in every
+        // isolated child, so the name's own purpose would not survive intact.
+        ensure(!SensitiveEnvironmentNames.contains(variableName)) {
+            WorkerConfigError.ConfigInvalid(
+                "worker.commandIsolation.environment.set['$variableName'] must not name a variable " +
+                    "that carries the worker's own credential material"
+            )
+        }
     }
-    ensure(
-        allowPassthrough.contains("PATH") || allowPassthrough.contains(ENVIRONMENT_ALLOW_PASSTHROUGH_WILDCARD)
-    ) {
+    ensure(allowPassthrough.contains("PATH")) {
         WorkerConfigError.ConfigInvalid(
-            "worker.commandIsolation.environment.allowPassthrough must provide PATH (or use \"*\")"
+            "worker.commandIsolation.environment.allowPassthrough must provide PATH"
         )
     }
 

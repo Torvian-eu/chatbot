@@ -77,12 +77,12 @@
 
       "user" and "helperPath" name the account commands run as and the helper binary that performs
       the drop. "environment.allowPassthrough" lists worker environment variables that isolated
-      children receive; a single "*" forwards everything. "environment.set" carries variables the
-      child receives with the values given here, whether or not the worker defines them. Both are used
-      only while the privilege drop is active, and the account identity variables (HOME, USER,
-      LOGNAME) always come from the isolated account, so a "set" entry naming one of them has no
-      effect. Add the variables your commands need, for example proxy settings or cache roots such as
-      GOPATH, GOCACHE, GRADLE_USER_HOME, NPM_CONFIG_CACHE, UV_CACHE_DIR.
+      children receive; a name carrying the worker's own secrets is rejected. "environment.set"
+      carries variables the child receives with the values given here, whether or not the worker
+      defines them. Both are used only while the privilege drop is active, and the account identity
+      variables (HOME, USER, LOGNAME) always come from the isolated account, so a "set" entry naming
+      one of them has no effect. Add the variables your commands need, for example proxy settings or
+      cache roots such as GOPATH, GOCACHE, GRADLE_USER_HOME, NPM_CONFIG_CACHE, UV_CACHE_DIR.
 
       The default "set" exempts the shared workspace from git's repository-ownership check, because
       the workspace is owned by the worker account while commands run as the isolated one: git reads

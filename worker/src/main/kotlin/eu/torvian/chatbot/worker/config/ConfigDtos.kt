@@ -119,9 +119,9 @@ data class CredentialsConfigDto(
 /**
  * DTO for the environment an isolated child process receives.
  *
- * @property allowPassthrough Names of worker environment variables the child inherits. A single
- *   `*` entry forwards the whole environment. Nulls resolve to a minimal default, and the account
- *   identity variables are always derived from the isolated user rather than listed here.
+ * @property allowPassthrough Names of worker environment variables the child inherits. Nulls resolve
+ *   to a minimal default, and the account identity variables are always derived from the isolated user
+ *   rather than listed here.
  * @property set Variables the child receives with these values, whether or not the worker defines
  *   them. Null resolves to the default set, which carries the git configuration an isolated child
  *   needs to work in the shared workspace.

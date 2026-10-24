@@ -51,9 +51,10 @@
 
       "enabled": true makes the worker refuse to start when the privilege-dropping helper is
       missing or cannot drop. "environment.allowPassthrough" lists worker environment variables that
-      isolated children receive (a single "*" forwards everything); "environment.set" gives the
-      child values of its own, whether or not the worker defines them. Both apply only while the
-      privilege drop is active, and HOME, USER and LOGNAME always come from the isolated account. The
+      isolated children receive; a name carrying the worker's own secrets is rejected.
+      "environment.set" gives the child values of its own, whether or not the worker defines them.
+      Both apply only while the privilege drop is active, and HOME, USER and LOGNAME always come from
+      the isolated account. The
       default "set" exempts the shared workspace from git's repository-ownership check for isolated
       commands only, and is edited here rather than in the environment. See the worker README for the
       full description and the alternative of an exemption in /home/agent/.gitconfig.

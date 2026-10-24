@@ -132,12 +132,13 @@ data class TerminalSessionsConfig(
  * Children under a different account must not inherit the worker's environment, which may carry
  * credentials; children sharing the worker's account see the same environment as the worker itself.
  *
- * @property allowPassthrough Worker environment variable names the child inherits. A single `*`
- *   entry forwards the whole environment. Account identity variables are always derived from the
- *   isolated account and are not affected by this list.
+ * @property allowPassthrough Worker environment variable names the child inherits. A name carrying
+ *   the worker's own credential material is rejected at startup. Account identity variables are always
+ *   derived from the isolated account and are not affected by this list.
  * @property set Variables the child receives with these values, independent of the worker's own
  *   environment. Account identity variables are always derived from the isolated account, so an
- *   entry naming `HOME`, `USER` or `LOGNAME` has no effect.
+ *   entry naming `HOME`, `USER` or `LOGNAME` has no effect; a name carrying the worker's own
+ *   credential material is rejected at startup.
  */
 data class CommandEnvironmentConfig(
     val allowPassthrough: List<String>,
