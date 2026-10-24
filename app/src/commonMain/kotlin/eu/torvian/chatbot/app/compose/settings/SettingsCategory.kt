@@ -13,6 +13,7 @@ enum class SettingsCategory {
     Projects,
     McpServers,
     Workers,
+    Credentials,
     BuiltInTools,
     OperatorTools,
     ServerBuiltInTools,
@@ -37,6 +38,7 @@ val SettingsCategory.displayLabel: String
         SettingsCategory.Projects -> "Projects"
         SettingsCategory.McpServers -> "MCP Servers"
         SettingsCategory.Workers -> "Workers"
+        SettingsCategory.Credentials -> "Credentials"
         SettingsCategory.BuiltInTools -> "Built-in Tools"
         SettingsCategory.OperatorTools -> "Operator Tools"
         SettingsCategory.ServerBuiltInTools -> "Server Built-In Tools"

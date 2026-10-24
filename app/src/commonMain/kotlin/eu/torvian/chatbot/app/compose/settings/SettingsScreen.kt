@@ -156,6 +156,12 @@ fun SettingsScreen(
                         breadcrumbSegments = breadcrumbs
                     }
 
+                    SettingsCategory.Credentials -> CredentialSettingsTabRoute(
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+
                     SettingsCategory.BuiltInTools -> BuiltInToolsTabRoute(
                         authState = authState,
                         categoryResetSignal = categoryResetSignal
