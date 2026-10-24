@@ -212,7 +212,7 @@ private fun AgentToolNames(tools: List<ToolDefinition>) {
 /**
  * Card rendering a single instruction entry with its kind tag and resolved message.
  *
- * `SPAWNABLE_AGENTS` entries are tagged as server-resolved (`auto`). A
+ * Generated-message entries are tagged as server-resolved (`auto`). A
  * `MODEL_SPECIFIC` entry shows its target model name and an "active"/"inactive" badge depending on
  * whether the role is currently running on that model; unknown kinds are rendered generically.
  *
@@ -231,9 +231,10 @@ private fun InstructionCard(
     modifier: Modifier = Modifier
 ) {
     // Server-resolved kinds are not user-editable (their text is generated on every read).
-    val isReadOnly = instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS
+    val isReadOnly = instruction.type in AgentInstructionTypes.generatedMessageKinds
     val statusTag = when (instruction.type) {
         AgentInstructionTypes.SPAWNABLE_AGENTS -> "auto (spawnable agents)"
+        AgentInstructionTypes.CREDENTIAL_PROFILES -> "auto (credential profiles)"
         AgentInstructionTypes.MODEL_SPECIFIC -> {
             val modelId = instruction.modelSpecificId()
             val modelName = modelsById[modelId]?.displayName

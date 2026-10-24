@@ -128,7 +128,7 @@ data class AgentRoleInstructionDraft(
  * @return The value to store, or null for the generated-message kind.
  */
 private fun storedMessage(type: String, message: String): String? =
-    if (type == AgentInstructionTypes.SPAWNABLE_AGENTS) null else message
+    if (type in AgentInstructionTypes.generatedMessageKinds) null else message
 
 /**
  * Expresses a reported instruction as a form draft that keeps its identity.

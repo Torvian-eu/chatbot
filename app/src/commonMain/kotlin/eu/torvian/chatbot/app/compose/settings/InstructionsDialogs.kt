@@ -88,7 +88,7 @@ private fun InstructionEditDialog(
     state: InstructionsDialogState.EditInstruction,
     actions: InstructionsTabActions
 ) {
-    val isMessageReadOnly = state.instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS
+    val isMessageReadOnly = state.instruction.type in AgentInstructionTypes.generatedMessageKinds
 
     AlertDialog(
         onDismissRequest = actions::onCancelDialog,

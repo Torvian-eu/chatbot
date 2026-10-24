@@ -375,12 +375,13 @@ fun AgentRoleFormDialog(
                             )
                         } else {
                             formState.instructions.forEachIndexed { index, instruction ->
-                                val isSpawnableAgents = instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS
+                                val isGeneratedMessage =
+                                    instruction.type in AgentInstructionTypes.generatedMessageKinds
                                 // Types outside the editable set render as fully read-only.
                                 val isUnknownType = instruction.type !in editableInstructionTypes
-                                // Types already used by OTHER rows. ROLE/MAIN/SPAWNABLE_AGENTS
-                                // are single-instance (the server rejects duplicates); CUSTOM and
-                                // MODEL_SPECIFIC are multi-instance.
+                                // Types already used by OTHER rows. The singleton kinds (see
+                                // AgentInstructionTypes.singletonKinds) are single-instance because the
+                                // server rejects duplicates; CUSTOM and MODEL_SPECIFIC are multi-instance.
                                 val unavailableTypes = formState.instructions
                                     .filterIndexed { i, _ -> i != index }
                                     .map { it.type }
@@ -398,7 +399,7 @@ fun AgentRoleFormDialog(
                                     models = models,
                                     usedModelIds = usedModelIds,
                                     roleModelId = selectedPreset?.modelId,
-                                    isMessageReadOnly = isSpawnableAgents,
+                                    isMessageReadOnly = isGeneratedMessage,
                                     isFullyReadOnly = isUnknownType,
                                     unavailableTypes = unavailableTypes,
                                     canMoveUp = index > 0,
@@ -753,7 +754,7 @@ private fun InstructionEditorRow(
  * @param instruction The instruction draft to describe.
  * @return A one- to two-line hint; unknown kinds get a generic read-only note.
  */
-private fun instructionHint(instruction: AgentRoleInstructionDraft): String = when (instruction.type) {
+internal fun instructionHint(instruction: AgentRoleInstructionDraft): String = when (instruction.type) {
     AgentInstructionTypes.ROLE ->
         "Defines the assistant's role — e.g. 'You are a senior software architect'."
     AgentInstructionTypes.MAIN ->
@@ -762,6 +763,8 @@ private fun instructionHint(instruction: AgentRoleInstructionDraft): String = wh
         "Free-form instruction — add anything you want the model to follow."
     AgentInstructionTypes.SPAWNABLE_AGENTS ->
         "Auto — advertises the roles selected above to the spawn_agent tool."
+    AgentInstructionTypes.CREDENTIAL_PROFILES ->
+        "Auto — advertises the credential profiles assigned to this role's terminal_session worker."
     AgentInstructionTypes.MODEL_SPECIFIC ->
         "Applies only when the role runs on the selected model."
     else -> "Unknown instruction type — read-only."
