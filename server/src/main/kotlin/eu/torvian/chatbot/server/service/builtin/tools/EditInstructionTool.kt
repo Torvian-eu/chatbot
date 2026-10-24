@@ -89,12 +89,12 @@ class EditInstructionTool(
             }
             .bind()
 
-        // A row of this kind stores no message (its text is generated per linked role at read time),
-        // so there is nothing to replace and no way to persist the result.
-        ensure(persisted.type != AgentInstructionTypes.SPAWNABLE_AGENTS) {
+        // Rows of a generated-message kind store no message (their text is produced per linked role at
+        // read time), so there is nothing to replace and no way to persist the result.
+        ensure(persisted.type !in AgentInstructionTypes.generatedMessageKinds) {
             ServerBuiltInToolHandlerError.OperationFailed(
                 "instruction_message_not_editable",
-                "Instruction ${persisted.id} is a '${AgentInstructionTypes.SPAWNABLE_AGENTS}' " +
+                "Instruction ${persisted.id} is a '${persisted.type}' " +
                     "instruction: its text is generated for each linked agent role at read time, so " +
                     "it stores no message to edit."
             )

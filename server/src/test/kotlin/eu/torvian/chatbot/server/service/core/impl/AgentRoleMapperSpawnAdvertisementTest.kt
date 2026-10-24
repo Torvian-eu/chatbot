@@ -2,6 +2,8 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.ProjectDao
+import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileDao
+import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import io.mockk.coEvery
@@ -31,6 +33,8 @@ class AgentRoleMapperSpawnAdvertisementTest {
         agentRoleDao = agentRoleDao,
         toolDefinitionDao = toolDefinitionDao,
         projectDao = projectDao,
+        credentialProfileDao = mockk<WorkerCredentialProfileDao>(),
+        workerDao = mockk<WorkerDao>(),
         json = Json { ignoreUnknownKeys = true }
     )
 

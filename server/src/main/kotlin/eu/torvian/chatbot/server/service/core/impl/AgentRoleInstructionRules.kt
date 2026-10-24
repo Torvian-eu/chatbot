@@ -32,9 +32,10 @@ internal object AgentRoleInstructionRules {
     /**
      * Validates the per-role instruction-list rules for one effective instruction list.
      *
-     * Enforces: at most one `role`, one `main` and one `spawnable_agents` row; every `model_specific`
-     * row carries a `modelId`; and `model_specific` rows target distinct models. Content-level
-     * duplicates of any kind are legal and unchecked here.
+     * Enforces: at most one row of each singleton kind (see
+     * [AgentInstructionTypes.singletonKinds]); every `model_specific` row carries a `modelId`; and
+     * `model_specific` rows target distinct models. Content-level duplicates of any kind are legal and
+     * unchecked here.
      *
      * @param instructions The referenced rows in the role's order.
      * @param raise The raise scope of the caller.
@@ -59,12 +60,13 @@ internal object AgentRoleInstructionRules {
      * @return The violated rule's wording, or null when the list is valid.
      */
     fun violationReason(instructions: List<RuleInput>): String? {
-        val roleCount = instructions.count { it.type == AgentInstructionTypes.ROLE }
-        val mainCount = instructions.count { it.type == AgentInstructionTypes.MAIN }
-        val spawnableInstructionCount = instructions.count { it.type == AgentInstructionTypes.SPAWNABLE_AGENTS }
-        if (roleCount > 1) return "At most one 'role' instruction is allowed"
-        if (mainCount > 1) return "At most one 'main' instruction is allowed"
-        if (spawnableInstructionCount > 1) return "At most one 'spawnable_agents' instruction is allowed"
+        // Singleton kinds are checked from one list, so a kind added there is enforced here without a
+        // second place having to learn about it.
+        AgentInstructionTypes.singletonKinds.forEach { kind ->
+            if (instructions.count { it.type == kind } > 1) {
+                return "At most one '$kind' instruction is allowed"
+            }
+        }
 
         // A `model_specific` instruction is meaningless without its target model: the composer keeps
         // only the instance matching the active model, so a missing target would be silently dropped

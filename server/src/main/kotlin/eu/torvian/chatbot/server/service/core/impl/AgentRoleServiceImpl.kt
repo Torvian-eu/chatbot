@@ -98,7 +98,9 @@ class AgentRoleServiceImpl(
     private val transactionScope: TransactionScope,
     private val agentRoleSpawnableRoleDao: AgentRoleSpawnableRoleDao,
     private val projectDao: ProjectDao,
-    private val sessionDao: SessionDao
+    private val sessionDao: SessionDao,
+    private val credentialProfileDao: WorkerCredentialProfileDao,
+    private val workerDao: WorkerDao
 ) : AgentRoleService {
 
     /**
@@ -124,6 +126,8 @@ class AgentRoleServiceImpl(
         agentRoleDao = agentRoleDao,
         toolDefinitionDao = toolDefinitionDao,
         projectDao = projectDao,
+        credentialProfileDao = credentialProfileDao,
+        workerDao = workerDao,
         json = json
     )
 
