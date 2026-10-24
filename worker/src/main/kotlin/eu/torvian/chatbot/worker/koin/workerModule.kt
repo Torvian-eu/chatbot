@@ -19,10 +19,20 @@ import eu.torvian.chatbot.worker.builtin.net.WebFetchService
 import eu.torvian.chatbot.worker.builtin.terminal.TerminalSessionManager
 import eu.torvian.chatbot.worker.config.RuntimeConfig
 import eu.torvian.chatbot.worker.config.TrustedSigner
+import eu.torvian.chatbot.worker.credential.CredentialProfileValidator
+import eu.torvian.chatbot.worker.credential.CredentialSyncCommandExecutor
+import eu.torvian.chatbot.worker.credential.CredentialSyncCommandExecutorImpl
+import eu.torvian.chatbot.worker.credential.DefaultCredentialProfileValidator
+import eu.torvian.chatbot.worker.credential.InMemoryWorkerCredentialStore
+import eu.torvian.chatbot.worker.credential.WorkerCredentialStore
+import eu.torvian.chatbot.worker.credential.api.AssignedCredentialBootstrapper
+import eu.torvian.chatbot.worker.credential.api.KtorWorkerCredentialApi
+import eu.torvian.chatbot.worker.credential.api.WorkerCredentialApi
 import eu.torvian.chatbot.worker.mcp.*
 import eu.torvian.chatbot.worker.mcp.api.AssignedConfigBootstrapper
 import eu.torvian.chatbot.worker.mcp.api.KtorWorkerMcpServerApi
 import eu.torvian.chatbot.worker.mcp.api.WorkerMcpServerApi
+import eu.torvian.chatbot.worker.protocol.factory.CredentialSyncCommandInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.McpRuntimeCommandInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.McpToolCallInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.ToolCallInteractionFactory
@@ -117,6 +127,39 @@ fun workerModule(
     single<InteractionIdProvider> { UuidInteractionIdProvider() }
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
     single<McpServerConfigStore> { InMemoryMcpServerConfigStore() }
+
+    // Credential profiles and encrypted secrets: memory-only cache plus its data path.
+    single<WorkerCredentialStore> { InMemoryWorkerCredentialStore() }
+    single<CredentialProfileValidator> {
+        DefaultCredentialProfileValidator(
+            verificationService = get(),
+            deploymentEnvironmentKeys = config.commandIsolation.environment.set.keys,
+        )
+    }
+    single<WorkerCredentialApi> {
+        KtorWorkerCredentialApi(
+            client = get(),
+            authenticatedRequestExecutor = get(),
+        )
+    }
+    single {
+        AssignedCredentialBootstrapper(
+            api = get(),
+            profileValidator = get(),
+            store = get(),
+            pinnedWorkerId = config.identity.workerId,
+        )
+    }
+    single<CredentialSyncCommandExecutor> {
+        CredentialSyncCommandExecutorImpl(
+            profileValidator = get(),
+            store = get(),
+            pinnedWorkerId = config.identity.workerId,
+        )
+    }
+    single<CredentialSyncCommandInteractionFactory> {
+        CredentialSyncCommandInteractionFactory(executor = get())
+    }
     single<McpProcessManager> { JvmMcpProcessManager() }
     single<WorkerAuthenticatedRequestExecutor> {
         DefaultWorkerAuthenticatedRequestExecutor(
@@ -199,6 +242,7 @@ fun workerModule(
             authManager = get(),
             sessionRunner = get(),
             bootstrapper = get(),
+            credentialBootstrapper = get(),
             transportConfig = get()
         )
     }
@@ -256,7 +300,13 @@ fun workerModule(
                 WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES to get<McpRuntimeCommandInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_CREATE to get<McpRuntimeCommandInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_UPDATE to get<McpRuntimeCommandInteractionFactory>(),
-                WorkerProtocolCommandTypes.MCP_SERVER_DELETE to get<McpRuntimeCommandInteractionFactory>()
+                WorkerProtocolCommandTypes.MCP_SERVER_DELETE to get<McpRuntimeCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_PROFILE_CREATE to get<CredentialSyncCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_PROFILE_UPDATE to get<CredentialSyncCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_PROFILE_DELETE to get<CredentialSyncCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_SECRET_CREATE to get<CredentialSyncCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_SECRET_UPDATE to get<CredentialSyncCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_SECRET_DELETE to get<CredentialSyncCommandInteractionFactory>()
             ),
             emitter = get(),
             registry = get(),
