@@ -178,7 +178,11 @@ class WorkerMain(
 
         // Resolved before DI so an unusable isolation mechanism is a typed startup error with a log
         // line at boot, rather than a failure raised lazily by whichever consumer resolves first.
-        val commandIsolation = CommandIsolationDetector.resolve(config.commandIsolation, logger)
+        val commandIsolation = CommandIsolationDetector.resolve(
+            config = config.commandIsolation,
+            credentials = config.credentials,
+            logger = logger,
+        )
             .mapLeft { WorkerMainError.Config(it) }
             .bind()
 

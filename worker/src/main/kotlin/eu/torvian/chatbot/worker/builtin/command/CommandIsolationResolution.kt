@@ -15,6 +15,10 @@ import org.apache.logging.log4j.Logger
  * account's processes through the same helper, so neither a launcher that claims an account nor one
  * that drops without naming it can be built. The account's home directory travels with it for the
  * same reason: it is read from the account database rather than assumed from the account name.
+ *
+ * A second, credential-bearing account may be carried alongside: [secretAccount] is the only
+ * supported way to run a process as an account other than the isolated command account, and it is
+ * absent whenever no privilege drop is active.
  */
 sealed interface CommandIsolationResolution {
     /** argv wrapper applied to every spawned child. */
@@ -30,6 +34,14 @@ sealed interface CommandIsolationResolution {
     val isolatedHome: String?
 
     /**
+     * Account credential profile targets run as, or `null` when this worker has none.
+     *
+     * Null is what makes `attach` fail with `PERMISSION_DENIED` on a host without the mechanism, so no
+     * consumer may fall back to [isolatedUser] or to the worker's own account.
+     */
+    val secretAccount: SecretCommandAccount?
+
+    /**
      * No privilege drop is active: children run as the worker account, which owns and signals them.
      */
     object None : CommandIsolationResolution {
@@ -37,6 +49,7 @@ sealed interface CommandIsolationResolution {
         override val terminator: CommandTerminator = ProcessHandleCommandTerminator()
         override val isolatedUser: String? = null
         override val isolatedHome: String? = null
+        override val secretAccount: SecretCommandAccount? = null
     }
 
     /**
@@ -51,12 +64,15 @@ sealed interface CommandIsolationResolution {
      * @property terminator Group-signalling terminator using the same helper.
      * @property isolatedUser Account the helper drops to before it execs.
      * @property isolatedHome Home directory of that account, used for the child's `HOME`.
+     * @property secretAccount Account credential profile targets run as, or `null` when this worker
+     *   cannot run one.
      */
     class Isolated private constructor(
         override val launcher: SetuidHelperLauncher,
         override val terminator: CommandTerminator,
         override val isolatedUser: String,
         override val isolatedHome: String,
+        override val secretAccount: SecretCommandAccount?,
     ) : CommandIsolationResolution {
         internal companion object {
             /**
@@ -66,15 +82,24 @@ sealed interface CommandIsolationResolution {
              * @param user Account the helper drops to.
              * @param home Home directory of that account.
              * @param logger Logger receiving a WARN when a termination signal cannot be delivered.
+             * @param secretAccount Account credential profile targets run as, or `null` when this
+             *   worker resolves none.
              * @return The isolated state, whose terminator signals through [helperPath].
              */
-            fun create(helperPath: String, user: String, home: String, logger: Logger): Isolated {
+            fun create(
+                helperPath: String,
+                user: String,
+                home: String,
+                logger: Logger,
+                secretAccount: SecretCommandAccount?,
+            ): Isolated {
                 val launcher = SetuidHelperLauncher(helperPath)
                 return Isolated(
                     launcher = launcher,
                     terminator = HelperSignalRelay(HelperProcessGroupSignaller(launcher, logger)),
                     isolatedUser = user,
                     isolatedHome = home,
+                    secretAccount = secretAccount,
                 )
             }
         }
@@ -93,6 +118,8 @@ sealed interface CommandIsolationResolution {
          * @param user Account the helper drops to.
          * @param home Home directory of that account.
          * @param logger Logger receiving a WARN when a termination signal cannot be delivered.
+         * @param secretAccount Account credential profile targets run as, or `null` when this worker
+         *   resolves none.
          * @return The resolved isolated state.
          */
         fun isolated(
@@ -100,6 +127,7 @@ sealed interface CommandIsolationResolution {
             user: String,
             home: String,
             logger: Logger,
-        ): CommandIsolationResolution = Isolated.create(helperPath, user, home, logger)
+            secretAccount: SecretCommandAccount? = null,
+        ): CommandIsolationResolution = Isolated.create(helperPath, user, home, logger, secretAccount)
     }
 }

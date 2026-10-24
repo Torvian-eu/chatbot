@@ -36,12 +36,21 @@ services:
       # image ships the helper and the accounts above, so the boundary is turned on here; set it to
       # false to run without it (the worker then logs a WARN at startup).
       - WORKER_COMMAND_ISOLATION_ENABLED=true
+      # Credential profile targets run as a third account ('vault'), so that a secret a profile
+      # loaded is unreadable by the 'agent' sessions the model drives. Only set this when your host
+      # uid range collides with the image default (vault uid 10004).
+      # - VAULT_UID=10004
       # Trusted signer(s) for E2EA tool-execution authorization (optional, repeat slots as needed).
       # Each signer needs a unique ID, a Base64 public key, and optional comma-separated permissions.
       # - WORKER_TRUSTED_SIGNER_1_ID=client-desktop-7f3a
       # - WORKER_TRUSTED_SIGNER_1_PUBLIC_KEY_BASE64=MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcD...
       # - WORKER_TRUSTED_SIGNER_1_PERMISSION_1=mcp:read
       # - WORKER_TRUSTED_SIGNER_1_PERMISSION_2=mcp:write
+    # Per-attach secret files live under /run/torvian/secrets. Mounting /run/torvian as a tmpfs keeps
+    # them out of the container's writable layer, so a restart starts from an empty tree. Without the
+    # mount they live on disk for the profile's lifetime and the worker's startup sweep removes them.
+    tmpfs:
+      - /run/torvian:mode=0711,uid=10001,gid=10001
     volumes:
       - ./config:/app/config
       - ./data:/app/data
@@ -50,6 +59,11 @@ services:
       - npm-cache:/app/cache/npm
       - uv-cache:/app/cache/uv
     restart: unless-stopped
+    # Shutdown stops every live session's processes and removes their secret trees before the JVM exits.
+    # That work is bounded but not instant: the shared budget plus one grace per cleanup step per
+    # session, which is about a minute with the default maxSessions of 8. Docker's 10 s default would
+    # SIGKILL the shutdown hook, leaving trees for the next start to sweep, so the grace covers it.
+    stop_grace_period: 90s
 
 volumes:
   npm-cache:

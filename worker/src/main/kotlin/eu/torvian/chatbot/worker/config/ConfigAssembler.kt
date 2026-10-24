@@ -53,6 +53,7 @@ fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configurat
     val defaultCommandTimeoutSeconds = builtInToolsDto.defaultCommandTimeoutSeconds ?: 600L
     val defaultSearchTimeoutSeconds = builtInToolsDto.defaultSearchTimeoutSeconds ?: 5L
     val commandIsolation = commandIsolationToDomain(worker.commandIsolation)
+    val credentials = credentialsToDomain(worker.credentials, commandIsolation)
     val terminalSessions = terminalSessionsToDomain(worker.terminalSessions)
     val trustedSigners = worker.trustedSigners.orEmpty().mapIndexed { index, signerDto ->
         trustedSignerToDomain(signerDto, index)
@@ -128,6 +129,7 @@ fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configurat
                 defaultSearchTimeoutSeconds = defaultSearchTimeoutSeconds
             ),
             commandIsolation = commandIsolation,
+            credentials = credentials,
             terminalSessions = terminalSessions,
             trustedSigners = trustedSigners
         )
@@ -452,6 +454,103 @@ private fun Raise<WorkerConfigError>.commandIsolationToDomain(
         environment = CommandEnvironmentConfig(allowPassthrough = allowPassthrough, set = set),
     )
 }
+
+/**
+ * Account names the platform's libc can resolve through the account database.
+ *
+ * A name outside this shape would be rejected by the helper's lookup, so it is caught while the
+ * configuration is read rather than at the first `attach`.
+ */
+private val ACCOUNT_NAME = Regex("[a-z_][a-z0-9_.-]{0,31}")
+
+/**
+ * Normalizes and validates the credential deployment group.
+ *
+ * Validation is shape-only: no account lookup, no helper probe and no filesystem check, so a
+ * configuration file stays portable and startup failure stays with the isolation detector. The
+ * account must differ from the isolated command account, because the whole point of the second
+ * account is that model-driven shell commands cannot reach a loaded secret.
+ *
+ * @receiver The Raise context used to propagate configuration errors.
+ * @param dto Nullable DTO group to resolve.
+ * @param commandIsolation Already resolved command-isolation configuration the credential account
+ *   must stay distinct from.
+ * @return The resolved credential configuration with defaults applied.
+ */
+private fun Raise<WorkerConfigError>.credentialsToDomain(
+    dto: CredentialsConfigDto?,
+    commandIsolation: CommandIsolationConfig,
+): CredentialsConfig {
+    val vaultUser = dto?.vaultUser ?: DEFAULT_VAULT_USER
+    val vaultHelperPath = dto?.vaultHelperPath ?: DEFAULT_VAULT_HELPER_PATH
+    val askpassScriptPath = dto?.askpassScriptPath ?: DEFAULT_ASKPASS_SCRIPT_PATH
+    val secretDir = dto?.secretDir ?: DEFAULT_SECRET_DIR
+    val secretWorkingDirectory = dto?.secretWorkingDirectory ?: DEFAULT_SECRET_WORKING_DIRECTORY
+    val maxSecretBytes = dto?.maxSecretBytes ?: DEFAULT_MAX_SECRET_BYTES
+
+    ensure(ACCOUNT_NAME.matches(vaultUser)) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.credentials.vaultUser must be an account name matching ${ACCOUNT_NAME.pattern}"
+        )
+    }
+    // Sharing the account would let an ordinary, model-driven shell read every loaded secret, so the
+    // two accounts are required to differ rather than merely encouraged to.
+    ensure(vaultUser != commandIsolation.user) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.credentials.vaultUser must differ from worker.commandIsolation.user"
+        )
+    }
+    listOf(
+        "worker.credentials.vaultHelperPath" to vaultHelperPath,
+        "worker.credentials.askpassScriptPath" to askpassScriptPath,
+        "worker.credentials.secretDir" to secretDir,
+        "worker.credentials.secretWorkingDirectory" to secretWorkingDirectory,
+    ).forEach { (path, value) ->
+        // Validated as a POSIX path: these paths name locations inside the Linux worker image, and
+        // Path.isAbsolute is host-dependent.
+        ensure(value.startsWith("/")) {
+            WorkerConfigError.ConfigInvalid("$path must be an absolute path")
+        }
+    }
+    ensure(maxSecretBytes in MIN_MAX_SECRET_BYTES..MAX_MAX_SECRET_BYTES) {
+        WorkerConfigError.ConfigInvalid(
+            "worker.credentials.maxSecretBytes must be in $MIN_MAX_SECRET_BYTES..$MAX_MAX_SECRET_BYTES"
+        )
+    }
+
+    return CredentialsConfig(
+        vaultUser = vaultUser,
+        vaultHelperPath = vaultHelperPath,
+        askpassScriptPath = askpassScriptPath,
+        secretDir = secretDir,
+        secretWorkingDirectory = secretWorkingDirectory,
+        maxSecretBytes = maxSecretBytes,
+    )
+}
+
+/** Effective `worker.credentials.vaultUser` when absent. */
+private const val DEFAULT_VAULT_USER = "vault"
+
+/** Effective `worker.credentials.vaultHelperPath` when absent. */
+private const val DEFAULT_VAULT_HELPER_PATH = "/usr/local/bin/run-as-vault"
+
+/** Effective `worker.credentials.askpassScriptPath` when absent. */
+private const val DEFAULT_ASKPASS_SCRIPT_PATH = "/usr/local/bin/torvian-askpass"
+
+/** Effective `worker.credentials.secretDir` when absent. */
+private const val DEFAULT_SECRET_DIR = "/run/torvian/secrets"
+
+/** Effective `worker.credentials.secretWorkingDirectory` when absent. */
+private const val DEFAULT_SECRET_WORKING_DIRECTORY = "/home/vault/work"
+
+/** Effective `worker.credentials.maxSecretBytes` when absent. */
+private const val DEFAULT_MAX_SECRET_BYTES = 8192
+
+/** Smallest accepted `worker.credentials.maxSecretBytes`. */
+private const val MIN_MAX_SECRET_BYTES = 1
+
+/** Largest accepted `worker.credentials.maxSecretBytes`. */
+private const val MAX_MAX_SECRET_BYTES = 1_048_576
 
 /**
  * Extracts and validates a required string configuration value.

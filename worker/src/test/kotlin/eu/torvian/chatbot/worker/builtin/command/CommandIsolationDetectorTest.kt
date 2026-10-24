@@ -2,6 +2,7 @@ package eu.torvian.chatbot.worker.builtin.command
 
 import eu.torvian.chatbot.worker.config.CommandEnvironmentConfig
 import eu.torvian.chatbot.worker.config.CommandIsolationConfig
+import eu.torvian.chatbot.worker.config.CredentialsConfig
 import eu.torvian.chatbot.worker.config.WorkerConfigError
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -43,6 +44,7 @@ class CommandIsolationDetectorTest {
     fun `unsupported platform does not attempt isolation`() {
         val result = CommandIsolationDetector.resolve(
             config = config(),
+            credentials = credentials(),
             logger = logger,
             probe = forbiddenProbe,
             isLinux = false,
@@ -52,6 +54,8 @@ class CommandIsolationDetectorTest {
         val resolution = result.getOrNull()
         assertIs<NoopLauncher>(resolution?.launcher)
         assertNull(resolution?.isolatedUser)
+        // Without a privilege drop there is no account a credential could be loaded into.
+        assertNull(resolution?.secretAccount)
     }
 
     /** Verifies that disabling isolation skips the probe entirely. */
@@ -59,6 +63,7 @@ class CommandIsolationDetectorTest {
     fun `disabled isolation does not attempt isolation`() {
         val result = CommandIsolationDetector.resolve(
             config = config(enabled = false),
+            credentials = credentials(),
             logger = logger,
             probe = forbiddenProbe,
             isLinux = true,
@@ -68,6 +73,8 @@ class CommandIsolationDetectorTest {
         val resolution = result.getOrNull()
         assertIs<NoopLauncher>(resolution?.launcher)
         assertNull(resolution?.isolatedUser)
+        // Credential availability follows isolation, so no vault account is resolved here either.
+        assertNull(resolution?.secretAccount)
     }
 
     /** Verifies that a working helper activates isolation for the configured account. */
@@ -77,8 +84,17 @@ class CommandIsolationDetectorTest {
 
         val result = CommandIsolationDetector.resolve(
             config = config,
+            credentials = credentials(),
             logger = logger,
-            probe = { HelperProbeResult.EffectiveUser("agent", ISOLATED_USER_ID, "/opt/agent-home") },
+            // Both helpers are probed once isolation is on, so the stub answers for whichever path
+            // the detector asks about.
+            probe = { probed ->
+                if (probed.helperPath == VAULT_HELPER_PATH) {
+                    HelperProbeResult.EffectiveUser(VAULT_USER, VAULT_USER_ID, "/home/vault")
+                } else {
+                    HelperProbeResult.EffectiveUser("agent", ISOLATED_USER_ID, "/opt/agent-home")
+                }
+            },
             isLinux = true,
             ownUserId = { WORKER_USER_ID },
         )
@@ -89,6 +105,9 @@ class CommandIsolationDetectorTest {
         assertEquals("agent", resolution?.isolatedUser)
         // The account's home travels with the account so the child's HOME matches its real record.
         assertEquals("/opt/agent-home", resolution?.isolatedHome)
+        // The credential account is resolved alongside it, so consumers never derive it themselves.
+        assertEquals("vault", resolution?.secretAccount?.user)
+        assertEquals("/home/vault", resolution?.secretAccount?.home)
     }
 
     /** Verifies that an account mismatch fails startup and names both accounts. */
@@ -96,6 +115,7 @@ class CommandIsolationDetectorTest {
     fun `reported account mismatch fails startup`() {
         val result = CommandIsolationDetector.resolve(
             config = config(user = "agent"),
+            credentials = credentials(),
             logger = logger,
             probe = { HelperProbeResult.EffectiveUser("torvian", WORKER_USER_ID, "/home/torvian") },
             isLinux = true,
@@ -116,6 +136,7 @@ class CommandIsolationDetectorTest {
     fun `helper running commands as the worker user id fails startup`() {
         val result = CommandIsolationDetector.resolve(
             config = config(user = "agent"),
+            credentials = credentials(),
             logger = logger,
             probe = { HelperProbeResult.EffectiveUser("agent", WORKER_USER_ID, "/home/agent") },
             isLinux = true,
@@ -132,6 +153,7 @@ class CommandIsolationDetectorTest {
     fun `unreadable worker user id fails startup`() {
         val result = CommandIsolationDetector.resolve(
             config = config(),
+            credentials = credentials(),
             logger = logger,
             probe = { HelperProbeResult.EffectiveUser("agent", ISOLATED_USER_ID, "/home/agent") },
             isLinux = true,
@@ -147,6 +169,7 @@ class CommandIsolationDetectorTest {
     fun `failed probe fails startup carrying the probe reason`() {
         val result = CommandIsolationDetector.resolve(
             config = config(),
+            credentials = credentials(),
             logger = logger,
             probe = { HelperProbeResult.Failed("helper is not executable") },
             isLinux = true,
@@ -241,6 +264,7 @@ class CommandIsolationDetectorTest {
 
         val result = CommandIsolationDetector.resolve(
             config = config(helperPath = missingHelperPath),
+            credentials = credentials(),
             logger = logger,
             isLinux = true,
         )
@@ -386,6 +410,18 @@ class CommandIsolationDetectorTest {
         environment = CommandEnvironmentConfig(listOf("PATH", "LANG", "LC_ALL"), set = emptyMap()),
     )
 
+    /**
+     * @return Credential configuration whose vault account is distinct from the agent account.
+     */
+    private fun credentials(): CredentialsConfig = CredentialsConfig(
+        vaultUser = VAULT_USER,
+        vaultHelperPath = VAULT_HELPER_PATH,
+        askpassScriptPath = "/usr/local/bin/torvian-askpass",
+        secretDir = "/run/torvian/secrets",
+        secretWorkingDirectory = "/home/vault/work",
+        maxSecretBytes = 8192,
+    )
+
     private companion object {
         /** Whether the current test host cannot run an executable shell script. */
         val isWindows: Boolean = System.getProperty("os.name").contains("windows", ignoreCase = true)
@@ -401,5 +437,14 @@ class CommandIsolationDetectorTest {
 
         /** User id the isolated account is assumed to have in the decision-table cases. */
         const val ISOLATED_USER_ID = 10002L
+
+        /** User id the credential account is assumed to have in the decision-table cases. */
+        const val VAULT_USER_ID = 10004L
+
+        /** Account name the credential cases assume for `worker.credentials.vaultUser`. */
+        const val VAULT_USER = "vault"
+
+        /** Helper path the credential cases assume for `worker.credentials.vaultHelperPath`. */
+        const val VAULT_HELPER_PATH = "/usr/local/bin/run-as-vault"
     }
 }

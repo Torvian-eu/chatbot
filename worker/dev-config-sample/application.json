@@ -61,6 +61,14 @@
     "commandIsolation": {
       "enabled": false
     },
+    "credentials": {
+      "vaultUser": "vault",
+      "vaultHelperPath": "/usr/local/bin/run-as-vault",
+      "askpassScriptPath": "/usr/local/bin/torvian-askpass",
+      "secretDir": "/run/torvian/secrets",
+      "secretWorkingDirectory": "/home/vault/work",
+      "maxSecretBytes": 8192
+    },
     "terminalSessions": {
       "defaultIdleTimeoutSeconds": 1800,
       "maxIdleTimeoutSeconds": 28800,

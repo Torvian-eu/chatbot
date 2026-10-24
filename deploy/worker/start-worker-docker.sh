@@ -24,12 +24,48 @@ if [ -n "${AGENT_UID}" ]; then
     usermod -o -u "${AGENT_UID}" agent
 fi
 
-# --- 3. Fail fast when both accounts resolve to the same uid ---
-# Isolation is impossible in that case, and a wrong mapping would be worse than a clear failure.
+# --- 2b. Optional remap of the credential-bearing account ---
+# 'vault' is the account credential profile targets run as. Remapping it is only needed when the
+# host uid range collides with the image default (uid 10004). Its primary group is 'shared', which
+# AGENT_GID already remaps, so there is no separate gid setting here.
+VAULT_HOME=/home/vault
+VAULT_WORK=/home/vault/work
+if [ -n "${VAULT_UID}" ]; then
+    usermod -o -u "${VAULT_UID}" vault
+fi
+
+# --- 3. Fail fast when any two accounts resolve to the same uid ---
+# Isolation is impossible in that case, and a wrong mapping would be worse than a clear failure. The
+# credential account must differ from both others as well: sharing an account would let a session the
+# model drives read a loaded secret.
 if [ "$(id -u torvian)" = "$(id -u agent)" ]; then
     echo "FATAL: 'torvian' and 'agent' resolve to the same uid ($(id -u torvian)); command isolation is impossible." >&2
     exit 1
 fi
+if [ "$(id -u vault)" = "$(id -u torvian)" ] || [ "$(id -u vault)" = "$(id -u agent)" ]; then
+    echo "FATAL: 'vault' resolves to the uid of another account ($(id -u vault)); credential isolation is impossible." >&2
+    exit 1
+fi
+
+# The helpers are group-executable by 'torvian' only. If 'shared' resolved to the same gid, 'agent'
+# could execute run-as-vault and become 'vault', which would defeat the whole boundary.
+if [ "$(getent group torvian | cut -d: -f3)" = "$(getent group shared | cut -d: -f3)" ]; then
+    echo "FATAL: 'torvian' and 'shared' resolve to the same gid; helper execution cannot be restricted." >&2
+    exit 1
+fi
+
+# A PUID/PGID remap changes the 'torvian' group id, while the helper files keep the group of the
+# image they were built in, so their ownership is re-applied on every start. A missing helper is
+# reported rather than silently skipped: with isolation enabled the worker would refuse to start
+# anyway, and the message is clearer here.
+for helper in /usr/local/bin/run-as-agent /usr/local/bin/run-as-vault; do
+    if [ -f "$helper" ]; then
+        chown root:torvian "$helper"
+        chmod 4750 "$helper"
+    else
+        echo "WARN: $helper is missing; credential and command isolation cannot work." >&2
+    fi
+done
 
 # New files are group-writable so the worker and the isolated account can share the workspace.
 umask 0002
@@ -40,12 +76,28 @@ umask 0002
 chown -R torvian:torvian /app/config /app/data /app/logs
 chmod 700 /app/config /app/data /app/logs
 
-# --- 5. The isolated account's home ---
-# A pre-existing volume mounted over /home has no /home/agent because Docker never repopulates an
-# existing volume, while the worker derives the child's HOME as /home/<account>.
+# --- 5. The isolated accounts' homes ---
+# A pre-existing volume mounted over /home has no /home/agent or /home/vault because Docker never
+# repopulates an existing volume, while the worker derives each child's HOME as /home/<account>.
 mkdir -p "$AGENT_HOME"
 chown agent:shared "$AGENT_HOME"
 chmod 0755 "$AGENT_HOME"
+
+# The credential account's home and working directory are 0711: profile targets start here, and
+# pty4j changes directory before the privilege drop, while the child still has the worker's uid. The
+# vault helper sets umask 0077, so files created here stay owner-only despite the 'shared' group.
+mkdir -p "$VAULT_HOME" "$VAULT_WORK"
+chown vault:shared "$VAULT_HOME" "$VAULT_WORK"
+chmod 0711 "$VAULT_HOME" "$VAULT_WORK"
+
+# --- 5b. Secret root ---
+# One tree per attached profile is created inside by run-as-vault. The directory is worker-owned so
+# the worker can list it for the startup sweep, and traversable but not listable by the credential
+# account; a tmpfs mount at /run/torvian is cleared when the container restarts.
+SECRET_DIR=/run/torvian/secrets
+mkdir -p /run/torvian "$SECRET_DIR"
+chown torvian:torvian /run/torvian "$SECRET_DIR"
+chmod 0711 /run/torvian "$SECRET_DIR"
 
 # Optional: repair the worker's own home, which a pre-populated /home volume keeps at the image's
 # baked uid even after the PUID remap.

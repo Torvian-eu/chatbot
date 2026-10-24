@@ -98,6 +98,28 @@
       "enabled": false
     },
     /*
+      Deployment paths for credential profile targets. A profile is a fixed command plus a secret
+      managed on the server; the model can only ask for a profile by name, and no profile or secret
+      value belongs in this file.
+
+      Availability follows commandIsolation: with it off this worker starts normally and an attach
+      reports PERMISSION_DENIED, and with it on the helper below must drop to an account of its own
+      or startup fails. `vaultUser` must differ from `commandIsolation.user`, so a shell the model
+      drives cannot read a loaded secret. `secretWorkingDirectory` is a credential-only directory and
+      never the shared workspace, because a command that loads configuration from its working
+      directory would otherwise execute model-written code as the credential account. `maxSecretBytes`
+      bounds one decrypted value. Mount `secretDir` as a tmpfs so leftover material cannot survive a
+      restart.
+    */
+    "credentials": {
+      "vaultUser": "vault",
+      "vaultHelperPath": "/usr/local/bin/run-as-vault",
+      "askpassScriptPath": "/usr/local/bin/torvian-askpass",
+      "secretDir": "/run/torvian/secrets",
+      "secretWorkingDirectory": "/home/vault/work",
+      "maxSecretBytes": 8192
+    },
+    /*
       Interactive terminal sessions for the `terminal_session` built-in tool. Sessions run as the
       same account as `run_command` children and are terminated when the worker shuts down. There is
       deliberately no worker-side enable flag: the capability is controlled by enabling or disabling

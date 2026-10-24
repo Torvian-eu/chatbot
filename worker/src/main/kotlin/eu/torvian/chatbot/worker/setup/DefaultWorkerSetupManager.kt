@@ -364,9 +364,13 @@ class DefaultWorkerSetupManager(
                 configLoader.resolveLayerPath(configDir, DefaultWorkerConfigLoader.APPLICATION_FILE_NAME).toString(),
                 error.description
             )
-            // Keeps the mapping total: isolation availability is resolved at startup and never
-            // surfaces while writing this layer.
+            // Keeps the mapping total: isolation and credential availability are resolved at startup and
+            // never surface while writing this layer.
             is WorkerConfigError.CommandIsolationUnavailable -> WorkerSetupError.ConfigInvalid(
+                configLoader.resolveLayerPath(configDir, DefaultWorkerConfigLoader.APPLICATION_FILE_NAME).toString(),
+                error.reason
+            )
+            is WorkerConfigError.CredentialsUnavailable -> WorkerSetupError.ConfigInvalid(
                 configLoader.resolveLayerPath(configDir, DefaultWorkerConfigLoader.APPLICATION_FILE_NAME).toString(),
                 error.reason
             )

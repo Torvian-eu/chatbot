@@ -503,6 +503,108 @@ class ConfigAssemblerTest {
     }
 
     /**
+     * Verifies that the credential group resolves to the documented defaults when omitted.
+     */
+    @Test
+    fun `uses credential defaults when the group is omitted`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(credentials = null).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        val credentials = result.getOrNull()?.worker?.credentials
+        assertEquals("vault", credentials?.vaultUser)
+        assertEquals("/usr/local/bin/run-as-vault", credentials?.vaultHelperPath)
+        assertEquals("/usr/local/bin/torvian-askpass", credentials?.askpassScriptPath)
+        assertEquals("/run/torvian/secrets", credentials?.secretDir)
+        assertEquals("/home/vault/work", credentials?.secretWorkingDirectory)
+        assertEquals(8192, credentials?.maxSecretBytes)
+    }
+
+    /** Verifies that explicit credential values are carried into the domain model. */
+    @Test
+    fun `accepts explicit credential configuration`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(
+            credentials = CredentialsConfigDto(
+                vaultUser = "credentials",
+                vaultHelperPath = "/opt/run-as-vault",
+                askpassScriptPath = "/opt/askpass",
+                secretDir = "/run/credentials",
+                secretWorkingDirectory = "/home/credentials/work",
+                maxSecretBytes = 1024,
+            )
+        ).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        val credentials = result.getOrNull()?.worker?.credentials
+        assertEquals("credentials", credentials?.vaultUser)
+        assertEquals("/opt/run-as-vault", credentials?.vaultHelperPath)
+        assertEquals("/opt/askpass", credentials?.askpassScriptPath)
+        assertEquals("/run/credentials", credentials?.secretDir)
+        assertEquals("/home/credentials/work", credentials?.secretWorkingDirectory)
+        assertEquals(1024, credentials?.maxSecretBytes)
+    }
+
+    /**
+     * Verifies that sharing the isolated command account is rejected.
+     *
+     * One account for both would let a shell the model drives read every loaded secret.
+     */
+    @Test
+    fun `rejects credential account equal to the command isolation account`() {
+        assertInvalid(
+            validDto(
+                commandIsolation = CommandIsolationConfigDto(user = "agent"),
+                credentials = CredentialsConfigDto(vaultUser = "agent"),
+            ),
+            "worker.credentials.vaultUser must differ from worker.commandIsolation.user"
+        )
+    }
+
+    /** Verifies that a credential account name the account database cannot resolve is rejected. */
+    @Test
+    fun `rejects invalid credential account name`() {
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(vaultUser = "Vault Account")),
+            "worker.credentials.vaultUser must be an account name"
+        )
+    }
+
+    /** Verifies that every credential path must be absolute. */
+    @Test
+    fun `rejects relative credential paths`() {
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(secretDir = "./secrets")),
+            "worker.credentials.secretDir must be an absolute path"
+        )
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(secretWorkingDirectory = "work")),
+            "worker.credentials.secretWorkingDirectory must be an absolute path"
+        )
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(vaultHelperPath = "run-as-vault")),
+            "worker.credentials.vaultHelperPath must be an absolute path"
+        )
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(askpassScriptPath = "askpass")),
+            "worker.credentials.askpassScriptPath must be an absolute path"
+        )
+    }
+
+    /** Verifies that the secret size bound stays inside its documented range. */
+    @Test
+    fun `rejects out of range credential secret size`() {
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(maxSecretBytes = 0)),
+            "worker.credentials.maxSecretBytes must be in 1..1048576"
+        )
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(maxSecretBytes = 1_048_577)),
+            "worker.credentials.maxSecretBytes must be in 1..1048576"
+        )
+    }
+
+    /**
      * Asserts that converting the supplied DTO fails with a configuration validation error.
      *
      * @param dto Nullable DTO tree to convert.
@@ -545,6 +647,7 @@ class ConfigAssemblerTest {
      * @param storage Storage DTO to place under the worker section.
      * @param auth Auth DTO to place under the worker section.
      * @param commandIsolation Command-isolation DTO to place under the worker section.
+     * @param credentials Credential deployment DTO to place under the worker section.
      * @param terminalSessions Terminal-session DTO to place under the worker section.
      * @param trustedSigners Trusted signer DTOs to place under the worker section.
      * @return Root DTO ready to pass to [AppConfigDto.toDomain].
@@ -564,6 +667,7 @@ class ConfigAssemblerTest {
         ),
         auth: AuthConfigDto? = AuthConfigDto(refreshSkewSeconds = 30),
         commandIsolation: CommandIsolationConfigDto? = CommandIsolationConfigDto(),
+        credentials: CredentialsConfigDto? = CredentialsConfigDto(),
         terminalSessions: TerminalSessionsConfigDto? = TerminalSessionsConfigDto(),
         trustedSigners: List<TrustedSignerDto>? = listOf(
             TrustedSignerDto(
@@ -582,6 +686,7 @@ class ConfigAssemblerTest {
             workspace = WorkspaceConfigDto(path = "./workspace"),
             builtInTools = BuiltInToolsConfigDto(enabled = listOf("*"), defaultCommandTimeoutSeconds = 600),
             commandIsolation = commandIsolation,
+            credentials = credentials,
             terminalSessions = terminalSessions,
             trustedSigners = trustedSigners
         )

@@ -44,6 +44,7 @@ data class SetupConfigDto(
  * @property workspace Filesystem workspace configuration for built-in tools (nullable).
  * @property builtInTools Built-in tool enablement/prefix configuration (nullable).
  * @property commandIsolation UID isolation for built-in-tool child processes (nullable).
+ * @property credentials Deployment paths for credential profile targets (nullable).
  * @property terminalSessions Limits and timeouts for interactive terminal sessions (nullable).
  * @property trustedSigners Authorized E2EA signers trusted by this worker (nullable).
  */
@@ -56,6 +57,7 @@ data class RuntimeConfigDto(
     val workspace: WorkspaceConfigDto? = null,
     val builtInTools: BuiltInToolsConfigDto? = null,
     val commandIsolation: CommandIsolationConfigDto? = null,
+    val credentials: CredentialsConfigDto? = null,
     val terminalSessions: TerminalSessionsConfigDto? = null,
     val trustedSigners: List<TrustedSignerDto>? = null
 )
@@ -88,6 +90,30 @@ data class CommandIsolationConfigDto(
     val user: String? = null,
     val helperPath: String? = null,
     val environment: CommandEnvironmentConfigDto? = null,
+)
+
+/**
+ * DTO for the deployment paths credential profile targets use.
+ *
+ * Every field is optional so an image's defaults apply without restating them, and there is no
+ * enable flag: whether a credential can be attached follows the command-isolation switch.
+ *
+ * @property vaultUser Account profile targets run as; null resolves to `vault`.
+ * @property vaultHelperPath Absolute path of the helper that drops to that account.
+ * @property askpassScriptPath Absolute path of the askpass helper `askpass` profiles are handed.
+ * @property secretDir Absolute path of the directory holding one tree per attached profile.
+ * @property secretWorkingDirectory Absolute working directory for profile targets, never the shared
+ *   workspace.
+ * @property maxSecretBytes Largest accepted decrypted secret size.
+ */
+@Serializable
+data class CredentialsConfigDto(
+    val vaultUser: String? = null,
+    val vaultHelperPath: String? = null,
+    val askpassScriptPath: String? = null,
+    val secretDir: String? = null,
+    val secretWorkingDirectory: String? = null,
+    val maxSecretBytes: Int? = null,
 )
 
 /**
