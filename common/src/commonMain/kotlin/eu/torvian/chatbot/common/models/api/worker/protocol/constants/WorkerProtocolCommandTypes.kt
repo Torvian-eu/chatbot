@@ -63,4 +63,34 @@ object WorkerProtocolCommandTypes {
      * Command type used to remove one assigned MCP server configuration from worker cache.
      */
     const val MCP_SERVER_DELETE = "mcp.server.delete"
+
+    /**
+     * Command type used to add one assigned credential profile to worker cache.
+     */
+    const val CREDENTIAL_PROFILE_CREATE = "credential.profile.create"
+
+    /**
+     * Command type used to replace one assigned credential profile in worker cache.
+     */
+    const val CREDENTIAL_PROFILE_UPDATE = "credential.profile.update"
+
+    /**
+     * Command type used to remove one assigned credential profile from worker cache.
+     */
+    const val CREDENTIAL_PROFILE_DELETE = "credential.profile.delete"
+
+    /**
+     * Command type used to add one encrypted credential secret to worker cache.
+     */
+    const val CREDENTIAL_SECRET_CREATE = "credential.secret.create"
+
+    /**
+     * Command type used to replace one encrypted credential secret in worker cache.
+     */
+    const val CREDENTIAL_SECRET_UPDATE = "credential.secret.update"
+
+    /**
+     * Command type used to remove one encrypted credential secret from worker cache.
+     */
+    const val CREDENTIAL_SECRET_DELETE = "credential.secret.delete"
 }
