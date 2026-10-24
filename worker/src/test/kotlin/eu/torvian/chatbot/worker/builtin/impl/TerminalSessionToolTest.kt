@@ -14,12 +14,14 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.unmockkAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -77,9 +79,20 @@ class TerminalSessionToolTest {
         return assertNotNull(result.errorDetails)
     }
 
+    /**
+     * @param result Tool result to inspect.
+     * @return The individual validation messages carried by `errorDetails`.
+     */
+    private fun parseValidationErrors(
+        result: eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult,
+    ): List<String> =
+        assertNotNull(result.errorDetails)
+            .let { Json.parseToJsonElement(it).jsonObject.getValue("validationErrors").jsonArray }
+            .map { it.jsonPrimitive.content }
+
     @Test
     fun `unknown action is rejected`(): Unit = runBlocking {
-        val result = tool.execute(input("attach"), context())
+        val result = tool.execute(input("resume"), context())
 
         assertTrue(validationErrors(result).contains("action"))
     }
@@ -159,6 +172,32 @@ class TerminalSessionToolTest {
         )
 
         assertTrue(validationErrors(result).contains("Unknown parameter: 'bogus'"))
+    }
+
+    /**
+     * A key the tool advertises but this action does not accept must be reported once, as forbidden for
+     * the action, and never also as an unknown parameter.
+     */
+    @Test
+    fun `credential sent with a non-attach action yields one message`(): Unit = runBlocking {
+        listOf("start", "send", "poll", "detach", "close").forEach { action ->
+            val result = tool.execute(
+                input(action) {
+                    put("session_id", "aB3xY9")
+                    put("input", "x")
+                    put("command", "bash")
+                    put("credential", "vps")
+                },
+                context(),
+            )
+
+            val errors = parseValidationErrors(result)
+            assertEquals(
+                listOf("Argument 'credential' is not allowed for action '$action'"),
+                errors.filter { it.contains("credential") },
+                "Unexpected credential messages for action '$action': $errors",
+            )
+        }
     }
 
     @Test

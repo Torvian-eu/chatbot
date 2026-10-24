@@ -97,7 +97,9 @@ data class CommandIsolationConfig(
  * @property maxLifetimeSeconds Absolute lifetime after which a session is closed even if active.
  * @property maxSessions Maximum number of live sessions the worker keeps at once.
  * @property maxClosedSessions Maximum number of closed-session tombstones retained for late reads.
- * @property maxOutputBytesPerSession Sanitized output bytes retained per live or closed session.
+ * @property maxOutputBytesPerSession Sanitized output bytes retained per target, not per session: an
+ *   attached session keeps one buffer for the shell and one for the profile, so it can hold up to
+ *   twice this value.
  * @property quietMillis Silence window after which output is considered settled.
  * @property defaultWaitMillis Default maximum wait for one tool call when the caller omits it.
  * @property maxWaitMillis Upper bound for a caller-supplied wait.

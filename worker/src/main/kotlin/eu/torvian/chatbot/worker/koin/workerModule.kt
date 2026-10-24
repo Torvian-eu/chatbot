@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
 import eu.torvian.chatbot.common.security.JvmAsymmetricCryptoProvider
 import eu.torvian.chatbot.worker.auth.*
 import eu.torvian.chatbot.worker.builtin.*
+import eu.torvian.chatbot.worker.builtin.command.AllowlistChildEnvironmentProvider
 import eu.torvian.chatbot.worker.builtin.command.ChildEnvironmentProvider
 import eu.torvian.chatbot.worker.builtin.command.CommandIsolationResolution
 import eu.torvian.chatbot.worker.builtin.command.CommandLauncher
@@ -16,6 +17,7 @@ import eu.torvian.chatbot.worker.builtin.net.JvmDnsResolver
 import eu.torvian.chatbot.worker.builtin.net.KtorWebFetchService
 import eu.torvian.chatbot.worker.builtin.net.PublicUrlValidator
 import eu.torvian.chatbot.worker.builtin.net.WebFetchService
+import eu.torvian.chatbot.worker.builtin.terminal.CredentialAttachDependencies
 import eu.torvian.chatbot.worker.builtin.terminal.TerminalSessionManager
 import eu.torvian.chatbot.worker.builtin.terminal.secret.SecretMaterialFactory
 import eu.torvian.chatbot.worker.config.RuntimeConfig
@@ -356,11 +358,32 @@ fun workerModule(
         )
     }
     single<TerminalSessionManager> {
+        val cfg = get<RuntimeConfig>()
+        // Credential attach is wired only when a credential account was resolved: with isolation off
+        // there is no account a secret could be loaded into, so `attach` reports PERMISSION_DENIED
+        // instead of quietly delivering under the worker's own account.
+        val secretAccount = commandIsolation.secretAccount
         TerminalSessionManager(
-            config = get<RuntimeConfig>().terminalSessions,
+            config = cfg.terminalSessions,
             resolution = commandIsolation,
             childEnvironment = get(),
-            workspace = Paths.get(get<RuntimeConfig>().workspace.path),
+            workspace = Paths.get(cfg.workspace.path),
+            credentials = secretAccount?.let { account ->
+                CredentialAttachDependencies(
+                    store = get(),
+                    decryptor = get(),
+                    materialFactory = get(),
+                    // A second allowlist provider rather than the command one: the profile child is a
+                    // different account with a different HOME, and it must not inherit the worker's
+                    // environment either.
+                    vaultEnvironment = AllowlistChildEnvironmentProvider(
+                        config = cfg.commandIsolation.environment,
+                        isolatedUser = account.user,
+                        isolatedHome = account.home,
+                    ),
+                    secretWorkingDirectory = Paths.get(cfg.credentials.secretWorkingDirectory),
+                )
+            },
             logger = LogManager.getLogger(TerminalSessionManager::class.java),
         )
     } onClose { manager ->

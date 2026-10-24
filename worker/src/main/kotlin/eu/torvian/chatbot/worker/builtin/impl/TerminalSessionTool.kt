@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
+import eu.torvian.chatbot.worker.builtin.terminal.AttachTransition
 import eu.torvian.chatbot.worker.builtin.terminal.TerminalSessionError
 import eu.torvian.chatbot.worker.builtin.terminal.TerminalSessionManager
 import eu.torvian.chatbot.worker.builtin.terminal.TerminalSnapshot
@@ -44,12 +45,13 @@ internal class TerminalSessionTool(
     ): BuiltInToolExecutionResult {
         val validationErrors = mutableListOf<String>()
         val action = parseRequiredString(input, "action", validationErrors)
-        val allowedKeys = action?.let { ACTION_KEYS[it] } ?: ALL_KEYS
-        addUnknownParameterErrors(input, allowedKeys, validationErrors)
+
+        addUnknownParameterErrors(input, ALL_KEYS, validationErrors)
 
         if (action != null && action !in ACTION_KEYS) {
             validationErrors.add(
-                "Argument 'action' must be one of start, send, poll or close; received \"$action\"."
+                "Argument 'action' must be one of ${ACTION_KEYS.keys.joinToString(", ")}; " +
+                    "received \"$action\"."
             )
         }
 
@@ -82,10 +84,11 @@ internal class TerminalSessionTool(
         var sessionId: String? = null
         var sessionInput: String? = null
         var idleTimeoutSeconds: Long? = null
+        var credentialProfile: String? = null
 
         when (action) {
             "start" -> {
-                rejectPresent(input, action, validationErrors, "session_id", "input")
+                rejectPresent(input, action, validationErrors, "session_id", "input", "credential")
                 command = parseRequiredString(input, "command", validationErrors)
                 command?.let { value ->
                     if (value.any { it.isWhitespace() }) {
@@ -109,7 +112,7 @@ internal class TerminalSessionTool(
             }
 
             "send" -> {
-                rejectPresent(input, action, validationErrors, "command", "args", "idleTimeout")
+                rejectPresent(input, action, validationErrors, "command", "args", "idleTimeout", "credential")
                 sessionId = parseSessionId(input, validationErrors)
                 sessionInput = parseRequiredString(input, "input", validationErrors)
                 if (sessionInput != null && sessionInput.isEmpty()) {
@@ -117,7 +120,7 @@ internal class TerminalSessionTool(
                 }
             }
 
-            "poll", "close" -> {
+            "poll", "close", "detach" -> {
                 rejectPresent(
                     input,
                     action,
@@ -126,8 +129,18 @@ internal class TerminalSessionTool(
                     "args",
                     "input",
                     "idleTimeout",
+                    "credential",
                 )
                 sessionId = parseSessionId(input, validationErrors)
+            }
+
+            "attach" -> {
+                rejectPresent(input, action, validationErrors, "command", "args", "idleTimeout")
+                sessionId = parseSessionId(input, validationErrors)
+                credentialProfile = parseRequiredString(input, "credential", validationErrors)
+                if (credentialProfile != null && credentialProfile.isBlank()) {
+                    validationErrors.add("Argument 'credential' must name a profile assigned to this worker")
+                }
             }
         }
 
@@ -153,6 +166,21 @@ internal class TerminalSessionTool(
             )
 
             "poll" -> manager.poll(
+                sessionId = requireNotNull(sessionId),
+                waitMillis = waitMillis,
+                maxLines = maxLines,
+                maxBytes = maxBytes,
+            )
+
+            "attach" -> manager.attach(
+                sessionId = requireNotNull(sessionId),
+                profileName = requireNotNull(credentialProfile),
+                waitMillis = waitMillis,
+                maxLines = maxLines,
+                maxBytes = maxBytes,
+            )
+
+            "detach" -> manager.detach(
                 sessionId = requireNotNull(sessionId),
                 waitMillis = waitMillis,
                 maxLines = maxLines,
@@ -258,6 +286,48 @@ internal class TerminalSessionTool(
                 BuiltInToolExecutionError.EXECUTION_FAILED,
                 "Could not start terminal session: ${error.detail}",
             )
+
+            is TerminalSessionError.CredentialSupportUnavailable -> builtInToolErrorResult(
+                BuiltInToolExecutionError.PERMISSION_DENIED,
+                error.detail,
+            )
+
+            is TerminalSessionError.CredentialUnavailable -> builtInToolErrorResult(
+                BuiltInToolExecutionError.CREDENTIAL_UNAVAILABLE,
+                "Credential profile '${error.profile}' cannot be attached: ${error.detail}. " +
+                    "The secret value is never returned; fix the assignment or re-enter the secret.",
+            )
+
+            is TerminalSessionError.UnknownProfile -> invalidInputResult(
+                listOf(
+                    "No credential profile named '${error.profile}' is assigned to this worker. " +
+                        if (error.known.isEmpty()) {
+                            "No profile is assigned; ask an operator to create one for this worker."
+                        } else {
+                            "Assigned profiles: ${error.known.joinToString(", ")}."
+                        }
+                )
+            )
+
+            is TerminalSessionError.AlreadyAttached -> invalidInputResult(
+                listOf(
+                    "Session '${error.sessionId}' already has profile '${error.profile}' attached. " +
+                        "Detach it, or poll until the profile exits, before attaching another."
+                )
+            )
+
+            is TerminalSessionError.NotAttached -> invalidInputResult(
+                listOf(
+                    "Session '${error.sessionId}' has no attached profile, so there is nothing to detach."
+                )
+            )
+
+            is TerminalSessionError.NotQuiet -> invalidInputResult(
+                listOf(
+                    "Session '${error.sessionId}' is not quiet, so a profile cannot be attached safely. " +
+                        "Poll until the shell reports QUIET, or close the session and start a new shell."
+                )
+            )
         }
 
     /**
@@ -293,6 +363,20 @@ internal class TerminalSessionTool(
             put("bufferBytes", snapshot.bufferBytes)
             put("idleTimeoutSeconds", snapshot.idleTimeoutSeconds)
             put("tuiDetected", snapshot.tuiDetected)
+            put("attached", snapshot.attached)
+            put(
+                "attachProfile",
+                snapshot.attachProfile?.let { JsonPrimitive(it) } ?: JsonNull,
+            )
+            put(
+                "attachChannel",
+                snapshot.attachChannel?.let { JsonPrimitive(it.name.lowercase()) } ?: JsonNull,
+            )
+            put(
+                "attachExitCode",
+                snapshot.attachExitCode?.let { JsonPrimitive(it) } ?: JsonNull,
+            )
+            put("transition", snapshot.transition.name)
         },
     )
 
@@ -305,12 +389,50 @@ internal class TerminalSessionTool(
     private fun outputBody(snapshot: TerminalSnapshot): String = buildString {
         append("status: ").append(snapshot.status.name).append('\n')
         append("session_id: ").append(snapshot.sessionId).append('\n')
+        // Only a session that carries attach state gains the line, so a session that never attaches
+        // keeps the exact header readers already parse.
+        attachStateLine(snapshot)?.let { append(it).append('\n') }
         append("--- output ---\n")
         append(snapshot.output)
         if (snapshot.tuiHint) {
             if (isNotEmpty() && last() != '\n') append('\n')
             append(TUI_HINT)
         }
+    }
+
+    /**
+     * Renders the single header line that reports attach state.
+     *
+     * The structured `details` of a built-in tool are not part of what the model or the app receive,
+     * so this line is the only channel in which they learn that a profile is attached, how it
+     * delivers its secret, or that the session returned to its shell. Only the profile name and
+     * channel are rendered; a secret reference and value never reach a tool result.
+     *
+     * @param snapshot Snapshot to describe.
+     * @return The header line, or null when the session has never had a profile attached.
+     */
+    private fun attachStateLine(snapshot: TerminalSnapshot): String? {
+        val transition = snapshot.transition
+        if (!snapshot.attached && transition == AttachTransition.NONE) return null
+
+        val target = buildList {
+            snapshot.attachProfile?.let { add("profile $it") }
+            snapshot.attachChannel?.let { add("channel ${it.name.lowercase()}") }
+        }.joinToString(", ")
+        // The wording states what happened on this call, so the reason stays evident even though the
+        // transition itself is only a field name in `details`.
+        val change = when (transition) {
+            AttachTransition.NONE -> null
+            AttachTransition.ATTACHED -> "profile attached on this call"
+            AttachTransition.DETACHED -> "profile detached on this call; input now reaches the shell"
+            AttachTransition.PROFILE_EXITED -> {
+                val code = snapshot.attachExitCode?.let { "exit code $it" } ?: "an unknown exit code"
+                "profile exited on its own with $code; input now reaches the shell"
+            }
+        }
+        val facts = listOfNotNull(target.takeIf { it.isNotEmpty() }, change)
+        val suffix = if (facts.isEmpty()) "" else " (${facts.joinToString("; ")})"
+        return "attached: ${snapshot.attached}$suffix"
     }
 
     private companion object {
@@ -322,13 +444,14 @@ internal class TerminalSessionTool(
             "args",
             "input",
             "idleTimeout",
+            "credential",
             "waitMillis",
             "maxLines",
             "maxBytes",
         )
 
         /** Per-action accepted key sets, matching the documented validation table. */
-        val ACTION_KEYS: Map<String, Set<String>> = mapOf(
+        val ACTION_KEYS: Map<String, Set<String>> = linkedMapOf(
             "start" to setOf(
                 "action",
                 "command",
@@ -340,6 +463,15 @@ internal class TerminalSessionTool(
             ),
             "send" to setOf("action", "session_id", "input", "waitMillis", "maxLines", "maxBytes"),
             "poll" to setOf("action", "session_id", "waitMillis", "maxLines", "maxBytes"),
+            "attach" to setOf(
+                "action",
+                "session_id",
+                "credential",
+                "waitMillis",
+                "maxLines",
+                "maxBytes",
+            ),
+            "detach" to setOf("action", "session_id", "waitMillis", "maxLines", "maxBytes"),
             "close" to setOf("action", "session_id", "waitMillis", "maxLines", "maxBytes"),
         )
 

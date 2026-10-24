@@ -6,9 +6,12 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.worker.builtin.command.ChildEnvironmentProvider
 import eu.torvian.chatbot.worker.builtin.command.CommandIsolationResolution
+import eu.torvian.chatbot.worker.builtin.command.CommandTerminator
 import eu.torvian.chatbot.worker.builtin.command.TrackedCommand
 import eu.torvian.chatbot.worker.builtin.command.remainingNanos
 import eu.torvian.chatbot.worker.config.TerminalSessionsConfig
+import eu.torvian.chatbot.worker.credential.SecretMaterialError
+import eu.torvian.chatbot.worker.credential.SecretResolutionError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -46,11 +49,14 @@ import kotlin.time.Duration.Companion.milliseconds
  * @param resolution Resolved isolation state used for launcher, environment and terminator.
  * @param childEnvironment Provider of the complete child environment.
  * @param workspace Working directory for every session child.
+ * @param credentials Collaborators needed to attach a credential profile, or null when this worker
+ *   resolved no credential account and therefore cannot attach one.
  * @param processFactory Starts the PTY process; tests substitute an ordinary process.
  * @param clock Monotonic nanosecond clock used for reaping and settle decisions.
  * @param idGenerator Session-id generator seam; tests use it to force collisions.
  * @param ioDispatcher Dispatcher for blocking spawn, write, terminate and join work.
- * @param shutdownGraceMillis Shared budget for closing every session at shutdown.
+ * @param shutdownGraceMillis Shared budget for the action-lock wait of each session closed at
+ *   shutdown; cleanup steps keep their own grace on top of it.
  * @param logger Receives lifecycle, limit and leak warnings.
  */
 internal class TerminalSessionManager(
@@ -58,6 +64,7 @@ internal class TerminalSessionManager(
     private val resolution: CommandIsolationResolution,
     private val childEnvironment: ChildEnvironmentProvider,
     private val workspace: Path,
+    private val credentials: CredentialAttachDependencies? = null,
     private val processFactory: TerminalProcessFactory = Pty4jTerminalProcessFactory(),
     private val clock: () -> Long = System::nanoTime,
     private val idGenerator: () -> String = { randomSessionToken() },
@@ -131,11 +138,16 @@ internal class TerminalSessionManager(
             }
             val session = TerminalSession(
                 id = sessionId,
-                process = process,
-                terminator = resolution.terminator,
-                buffer = OutputRingBuffer(config.maxOutputBytesPerSession),
-                sanitizer = TerminalOutputSanitizer(config.tuiEscapeRatioThreshold),
-                config = config,
+                shell = SessionTarget(
+                    name = "$sessionId-shell",
+                    process = process,
+                    terminator = resolution.terminator,
+                    buffer = OutputRingBuffer(config.maxOutputBytesPerSession),
+                    sanitizer = TerminalOutputSanitizer(config.tuiEscapeRatioThreshold),
+                    quietMillis = config.quietMillis,
+                    clock = clock,
+                    logger = logger,
+                ),
                 idleTimeoutSeconds = resolveIdleTimeout(idleTimeoutSeconds),
                 clock = clock,
                 logger = logger,
@@ -209,6 +221,15 @@ internal class TerminalSessionManager(
                     session.readClosedSnapshot(maxLines, maxBytes),
                 )
             }
+            // A profile that exited on its own has already returned the session to its shell, so the
+            // input this call carries goes to the shell rather than failing against a dead process.
+            ensure(!reconcileProfileExit(session, maxLines, maxBytes)) {
+                TerminalSessionError.SessionClosed(
+                    sessionId,
+                    session.closedReason ?: TerminalCloseReason.PROFILE_EXITED,
+                    session.readClosedSnapshot(maxLines, maxBytes),
+                )
+            }
             ensure(session.isWritable()) {
                 TerminalSessionError.SessionNotWritable(sessionId, session.exitCode)
             }
@@ -254,11 +275,276 @@ internal class TerminalSessionManager(
             // A closed session cannot produce more output, so there is nothing to settle: returning
             // the pending chunk (or an empty one) immediately is what makes a late poll cheap.
             if (session.isClosed) return@withLock session.readClosedSnapshot(maxLines, maxBytes)
+            // An exited profile returns the session to its shell here, so this read reports the
+            // shell's status together with the transition that moved the active target.
+            if (reconcileProfileExit(session, maxLines, maxBytes)) {
+                return@withLock session.readClosedSnapshot(maxLines, maxBytes)
+            }
             val startVersion = session.currentOutputVersion()
             session.recordActivity()
             awaitSnapshot(
                 session = session,
                 startOutputVersion = startVersion,
+                waitMillis = waitMillis,
+                maxLines = maxLines,
+                maxBytes = maxBytes,
+                requireOutputSinceStart = false,
+            )
+        }
+    }
+
+    /**
+     * Starts a credential profile and makes it the active target.
+     *
+     * The profile's command and arguments come from the profile, never from the caller: the model may
+     * only name a profile. The secret is decrypted here, handed to the channel material, and dropped
+     * as soon as the material exists, so no plaintext outlives the call.
+     *
+     * @param sessionId Session handle returned by [start].
+     * @param profileName Name of a profile assigned to this worker.
+     * @param waitMillis Maximum time this call waits for output to settle.
+     * @param maxLines Maximum lines returned by this call.
+     * @param maxBytes Maximum bytes returned by this call.
+     * @return Session snapshot with status `ATTACHED`, or a logical failure.
+     */
+    suspend fun attach(
+        sessionId: String,
+        profileName: String,
+        waitMillis: Long,
+        maxLines: Int,
+        maxBytes: Int,
+    ): Either<TerminalSessionError, TerminalSnapshot> = either {
+        val session = lookup(sessionId)
+        session.actionLock.withLock {
+            ensure(!session.isClosed) {
+                TerminalSessionError.SessionClosed(
+                    sessionId,
+                    session.closedReason ?: TerminalCloseReason.REQUESTED,
+                    session.readClosedSnapshot(maxLines, maxBytes),
+                )
+            }
+            val dependencies = credentials ?: raise(
+                TerminalSessionError.CredentialSupportUnavailable(
+                    "This worker cannot attach a credential profile: worker.commandIsolation.enabled " +
+                        "is off, or this platform has no credential account. Nothing falls back to the " +
+                        "worker's own account."
+                )
+            )
+            ensure(!session.isAttached) {
+                TerminalSessionError.AlreadyAttached(sessionId, session.attachedProfileName.orEmpty())
+            }
+            ensure(session.isWritable()) {
+                TerminalSessionError.SessionNotWritable(sessionId, session.exitCode)
+            }
+
+            val profile = dependencies.store.profile(profileName) ?: raise(
+                TerminalSessionError.UnknownProfile(
+                    profile = profileName,
+                    known = dependencies.store.profiles()
+                        .filter { it.isEnabled }
+                        .map { it.name }
+                        .sorted(),
+                )
+            )
+            ensure(profile.isEnabled) {
+                TerminalSessionError.CredentialUnavailable(profileName, "the profile is disabled")
+            }
+            // Attaching mid-command would leave the shell's foreground job running and hand anything
+            // typed after detach to an unexpected process.
+            ensure(session.isQuietEnoughToAttach()) {
+                TerminalSessionError.NotQuiet(sessionId)
+            }
+
+            val encrypted = dependencies.store.secret(profile.secretRef) ?: raise(
+                TerminalSessionError.CredentialUnavailable(
+                    profileName,
+                    "secret '${profile.secretRef}' is not assigned to this worker"
+                )
+            )
+            val secretAccount = resolution.secretAccount
+                ?: raise(
+                    TerminalSessionError.CredentialSupportUnavailable(
+                        "This worker resolved no credential account although one was required."
+                    )
+                )
+
+            val value = dependencies.decryptor.decrypt(encrypted).fold(
+                { error ->
+                    raise(
+                        TerminalSessionError.CredentialUnavailable(
+                            profileName,
+                            "secret '${profile.secretRef}' could not be used: ${describe(error)}"
+                        )
+                    )
+                },
+                { it },
+            )
+            // One deadline covers the preparation, and cleanup derives its own grace from it: the helper
+            // blocks while this action holds the session lock, so it can never be given its own private
+            // timeout on top of the caller's budget.
+            val deadline = deadlineAfterMillis(CREDENTIAL_PREPARATION_MILLIS)
+            val material = try {
+                // Not cancellable: a helper that already wrote the file would otherwise leave it behind
+                // when the cancellation lands on the way out of this block. The preparation budget
+                // bounds the wait instead, and the catch path below owns the cleanup once it returns.
+                withContext(NonCancellable + ioDispatcher) {
+                    dependencies.materialFactory.create(profile, value, deadline).fold(
+                        { error ->
+                            raise(
+                                TerminalSessionError.CredentialUnavailable(
+                                    profileName,
+                                    "the ${profile.channel.name.lowercase()} channel is not ready: " +
+                                        ((error as? SecretMaterialError.PreparationFailed)?.reason ?: error)
+                                )
+                            )
+                        },
+                        { it },
+                    )
+                }
+            } finally {
+                // The material owns its own copies; the decrypted value must not outlive it.
+                value.close()
+            }
+
+            // Published as soon as the material exists, before the spec is built: nothing may throw
+            // between the two points, and a close that wins the action-lock race must reach both the
+            // process and the written secret.
+            var spawnedProcess: Process? = null
+            val staged = PendingProfile(
+                profile = profile.name,
+                terminate = { terminateDeadline ->
+                    spawnedProcess?.let {
+                        terminalTerminate(it, secretAccount.terminator, terminateDeadline)
+                    }
+                },
+                material = material,
+            )
+            session.stageProfile(staged)
+
+            var registered = false
+            try {
+                val spec = TerminalProcessSpec(
+                    argv = secretAccount.launcher.wrap(profile.command, profile.args),
+                    // The profile's own knobs come after the terminal defaults so a deployment cannot be
+                    // surprised by an inherited value; the channel environment wins last.
+                    environment = terminalEnvironment(dependencies.vaultEnvironment.build()) +
+                        profile.environmentVariables +
+                        material.environment,
+                    workingDirectory = dependencies.secretWorkingDirectory,
+                    columns = config.columns,
+                    rows = config.rows,
+                )
+
+                val process = try {
+                    // Recorded inside the block: a cancellation after the factory returned must still
+                    // reach the cleanup below, which is the only path that owns the process then.
+                    withContext(ioDispatcher) { processFactory.start(spec).also { spawnedProcess = it } }
+                } catch (e: IOException) {
+                    raise(
+                        TerminalSessionError.SpawnFailed(
+                            "Failed to start profile '${profile.name}': ${e.message}"
+                        )
+                    )
+                }
+
+                val target = SessionTarget(
+                    name = "$sessionId-profile",
+                    process = process,
+                    terminator = secretAccount.terminator,
+                    buffer = OutputRingBuffer(config.maxOutputBytesPerSession),
+                    sanitizer = TerminalOutputSanitizer(config.tuiEscapeRatioThreshold),
+                    quietMillis = config.quietMillis,
+                    clock = clock,
+                    logger = logger,
+                )
+
+                if (!session.attach(profile, target, material)) {
+                    // The session closed while the profile was being spawned; the close path owns cleanup
+                    // semantics, so release everything here and report the closed session.
+                    session.clearStagedProfile()
+                    runCatching { target.teardown(deadlineAfterMillis(TERMINATION_GRACE_MILLIS)) }
+                    runCatching { material.close(withCleanupGrace(deadline)) }
+                    raise(
+                        TerminalSessionError.SessionClosed(
+                            sessionId,
+                            session.closedReason ?: TerminalCloseReason.REQUESTED,
+                            session.readClosedSnapshot(maxLines, maxBytes),
+                        )
+                    )
+                }
+                registered = true
+
+                logger.info(
+                    "Terminal session {} attached profile {}; channel={} account={}",
+                    sessionId,
+                    profile.name,
+                    profile.channel,
+                    secretAccount.user
+                )
+
+                awaitSnapshot(
+                    session = session,
+                    startOutputVersion = 0L,
+                    waitMillis = waitMillis,
+                    maxLines = maxLines,
+                    maxBytes = maxBytes,
+                    requireOutputSinceStart = true,
+                )
+            } catch (t: Throwable) {
+                // A spawn that failed or was cancelled before the profile became the active target must
+                // not leave a process or a written secret behind. Once it is registered the session owns
+                // both, and its close/detach paths reclaim them.
+                if (!registered) {
+                    session.clearStagedProfile()
+                    // Termination and the helper call both block, and this path runs while the caller's
+                    // scope may already be cancelled, so neither may be skipped by cancellation.
+                    withContext(NonCancellable + ioDispatcher) {
+                        runCatching { staged.close(deadline) }
+                    }
+                }
+                throw t
+            }
+        }
+    }
+
+    /**
+     * Terminates the attached profile and returns the session to its shell.
+     *
+     * @param sessionId Session handle returned by [start].
+     * @param waitMillis Maximum time this call waits for the shell to settle.
+     * @param maxLines Maximum lines returned by this call.
+     * @param maxBytes Maximum bytes returned by this call.
+     * @return Session snapshot with status `DETACHED`, or a logical failure.
+     */
+    suspend fun detach(
+        sessionId: String,
+        waitMillis: Long,
+        maxLines: Int,
+        maxBytes: Int,
+    ): Either<TerminalSessionError, TerminalSnapshot> = either {
+        val session = lookup(sessionId)
+        session.actionLock.withLock {
+            ensure(!session.isClosed) {
+                TerminalSessionError.SessionClosed(
+                    sessionId,
+                    session.closedReason ?: TerminalCloseReason.REQUESTED,
+                    session.readClosedSnapshot(maxLines, maxBytes),
+                )
+            }
+            ensure(session.isAttached) { TerminalSessionError.NotAttached(sessionId) }
+
+            session.recordActivity()
+            val deadline = deadlineAfterMillis(TERMINATION_GRACE_MILLIS)
+            // The caps are passed through so the profile's unread tail is returned by this call rather
+            // than dropped with the target it came from.
+            withContext(ioDispatcher) {
+                session.detach(DetachReason.REQUESTED, deadline, maxLines, maxBytes)
+            }
+            logger.info("Terminal session {} detached its profile on request", sessionId)
+
+            awaitSnapshot(
+                session = session,
+                startOutputVersion = session.currentOutputVersion(),
                 waitMillis = waitMillis,
                 maxLines = maxLines,
                 maxBytes = maxBytes,
@@ -300,7 +586,18 @@ internal class TerminalSessionManager(
         snapshot
     }
 
-    /** Cancels the reaper and closes every live session with one shared deadline. */
+    /**
+     * Cancels the reaper and closes every live session with one shared deadline.
+     *
+     * The shared deadline bounds each session's wait for the action lock, so a slow session cannot stop
+     * the ones after it from being closed. It does not bound cleanup itself: every termination and
+     * secret removal keeps its own grace, so the sessions whose share of the budget is already spent
+     * still stop their processes and remove their secret trees. Shutdown therefore takes at most the
+     * shared budget plus one bounded grace per cleanup step per session: with the shipped limits that is
+     * just over a minute, well beyond Docker's default stop timeout, which is why the deployment
+     * examples stop the container with a grace that covers it. A container killed before then leaves
+     * only secret trees, which the next start sweeps, and processes, which die with the container.
+     */
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         reaperJob.cancel()
@@ -337,6 +634,17 @@ internal class TerminalSessionManager(
         }
         scope.cancel()
     }
+
+    /**
+     * Reports whether a session's shell has ended, as the session itself observes it.
+     *
+     * Exposed so a test can sequence two process exits without waiting on a fixed delay: several
+     * outcomes depend on which exit the session saw first.
+     *
+     * @param sessionId Session handle returned by [start].
+     * @return True when the shell process ended and its reader drained; false for an unknown id.
+     */
+    internal fun shellHasExited(sessionId: String): Boolean = registry[sessionId]?.shellHasExited() ?: false
 
     /**
      * Runs one reaper sweep; exposed so tests can drive it with a deterministic clock.
@@ -398,6 +706,11 @@ internal class TerminalSessionManager(
     ): TerminalSnapshot {
         val deadline = deadlineAfterMillis(waitMillis)
         while (true) {
+            // A profile can exit while this call is waiting for output to settle, so the exit is
+            // reconciled on every iteration rather than only once before the wait.
+            if (reconcileProfileExit(session, maxLines, maxBytes)) {
+                return session.readSnapshot(maxLines, maxBytes)
+            }
             val preview = session.preview(maxLines, maxBytes)
             val producedSinceStart = preview.producedOutputVersion > startOutputVersion
             if (preview.status == TerminalStatus.EXITED || preview.status == TerminalStatus.CLOSED) {
@@ -410,7 +723,11 @@ internal class TerminalSessionManager(
             ) {
                 return session.readSnapshot(maxLines, maxBytes)
             }
-            val relevantOutput = producedSinceStart ||
+            // A tail a detach carried is output this action produced, even though the target that
+            // produced it is gone; counting it keeps the settle loop from waiting out the deadline
+            // on a shell that has nothing to say.
+            val relevantOutput = preview.carriesTransitionOutput ||
+                producedSinceStart ||
                 (!requireOutputSinceStart && preview.pendingBytes > 0)
             if (relevantOutput && preview.quietForMillis >= config.quietMillis) {
                 return session.readSnapshot(maxLines, maxBytes)
@@ -428,6 +745,61 @@ internal class TerminalSessionManager(
      */
     private fun Raise<TerminalSessionError>.lookup(sessionId: String): TerminalSession =
         registry[sessionId] ?: raise(TerminalSessionError.SessionNotFound(sessionId))
+
+    /**
+     * Returns the session to its shell when the attached profile has exited.
+     *
+     * The call that observes the exit reports the shell's status with the `PROFILE_EXITED`
+     * transition, so the model learns that its input now reaches the shell instead of the profile, and
+     * it carries whatever the profile printed after the previous read, which is where a failing
+     * command prints its diagnostic. A shell that is already gone means there is nothing to return to,
+     * and the session closes.
+     *
+     * @param session Session about to be read or written.
+     * @param maxLines Maximum lines returned by this call, shared with the profile's unread tail.
+     * @param maxBytes Maximum bytes returned by this call, shared with the profile's unread tail.
+     * @return True when the session was closed as a result.
+     */
+    private suspend fun reconcileProfileExit(
+        session: TerminalSession,
+        maxLines: Int,
+        maxBytes: Int,
+    ): Boolean {
+        if (!session.isAttached || !session.attachedProfileHasExited()) return false
+
+        val deadline = deadlineAfterMillis(TERMINATION_GRACE_MILLIS)
+        if (session.shellHasExited()) {
+            session.closeAfterProfileExit(
+                deadline = deadline,
+                maxLines = maxLines,
+                maxBytes = maxBytes,
+                ioDispatcher = ioDispatcher,
+            )
+            archiveClosed(session)
+            logger.info("Terminal session {} closed; its profile exited and its shell was already gone", session.id)
+            return true
+        }
+
+        withContext(ioDispatcher) {
+            session.detach(DetachReason.PROFILE_EXITED, deadline, maxLines, maxBytes)
+        }
+        return false
+    }
+
+    /**
+     * @param error Failure raised while resolving a profile's secret.
+     * @return A model-facing reason naming no value and no ciphertext.
+     */
+    private fun describe(error: SecretResolutionError): String = when (error) {
+        is SecretResolutionError.NotAssigned -> "no secret is assigned under that reference"
+        is SecretResolutionError.DecryptionFailed -> error.reason
+        is SecretResolutionError.KeyMismatch ->
+            "it was encrypted to certificate ${error.secretFingerprint}, but this worker's certificate " +
+                "is ${error.workerFingerprint}; re-enter the secret after a certificate rotation"
+
+        is SecretResolutionError.TooLarge -> "it exceeds ${error.maxBytes} bytes"
+        is SecretResolutionError.InvalidValue -> "it is not non-empty UTF-8 text"
+    }
 
     /**
      * Reserves a fresh id against live and tombstoned sessions.
@@ -509,14 +881,21 @@ internal class TerminalSessionManager(
      * exited: handle operations are best-effort and waits return immediately.
      *
      * @param process Started process to tear down.
+     * @param terminator Strategy that reaches the account [process] was spawned as. A credential profile
+     *   target belongs to the credential account, and only that account's helper can signal it.
+     * @param deadline Monotonic deadline shared by the termination.
      */
-    private fun terminalTerminate(process: Process) {
+    private fun terminalTerminate(
+        process: Process,
+        terminator: CommandTerminator = resolution.terminator,
+        deadline: Long = deadlineAfterMillis(TERMINATION_GRACE_MILLIS),
+    ) {
         runCatching { process.outputStream.close() }
         runCatching { process.inputStream.close() }
         runCatching {
-            resolution.terminator.terminate(
+            terminator.terminate(
                 TrackedCommand(process),
-                deadlineAfterMillis(TERMINATION_GRACE_MILLIS),
+                deadline,
             )
         }
         // A terminator that cannot address the process (for example a handle-less PTY child) still
@@ -567,6 +946,14 @@ internal class TerminalSessionManager(
 
         /** Bounded grace for terminating one session. */
         const val TERMINATION_GRACE_MILLIS = 2_000L
+
+        /**
+         * Budget for decrypting and writing the secret file on one attach.
+         *
+         * The preparation runs while the session action lock is held, so it needs a bound of its own.
+         * Cleanup after a failed preparation is not charged to this budget.
+         */
+        const val CREDENTIAL_PREPARATION_MILLIS = 10_000L
 
         /** Shared grace for closing every session on worker shutdown. */
         const val SHUTDOWN_GRACE_MILLIS = 5_000L

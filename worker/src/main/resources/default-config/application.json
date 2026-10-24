@@ -133,9 +133,10 @@
       `defaultIdleTimeoutSeconds`, so a session is never reaped before it has been idle for at least
       one full sweep.
 
-      Secrets are not supported in v1: an interactive `ssh` must use keys or an already-authenticated
-      agent. Under command isolation the child is the isolated account and carries PR_SET_NO_NEW_PRIVS,
-      so `sudo`, `su` and `passwd` cannot elevate inside a session.
+      Attaching a credential selects a server-defined profile for that session: the profile fixes the
+      command, its arguments and how the secret reaches it, and the model never sees a secret value.
+      Under command isolation the child is the isolated account and carries PR_SET_NO_NEW_PRIVS, so
+      `sudo`, `su` and `passwd` cannot elevate inside a session.
     */
     "terminalSessions": {
       "defaultIdleTimeoutSeconds": 1800,
