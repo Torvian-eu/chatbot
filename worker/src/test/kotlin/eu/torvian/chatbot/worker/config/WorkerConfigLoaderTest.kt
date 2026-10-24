@@ -9,6 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WorkerConfigLoaderTest {
@@ -431,6 +432,46 @@ class WorkerConfigLoaderTest {
         } finally {
             configDir.toFile().deleteRecursively()
         }
+    }
+
+    /**
+     * Verifies that the shipped templates document the worker-id pin and leave it unset.
+     *
+     * Absence is the documented "protection not configured" state, so the shipped file must load with no
+     * pin rather than force one on a deployment that never registered.
+     */
+    @Test
+    fun `bundled default config leaves the worker id pin unset`() {
+        val configDir = createTempDirectory("worker-config-test")
+        val bundled = WorkerConfigLoader::class.java
+            .getResourceAsStream("/default-config/application.json")
+            ?: error("The bundled default config is missing from the classpath")
+
+        try {
+            val bundledText = bundled.bufferedReader().use { it.readText() }
+            assertTrue(
+                bundledText.contains("\"workerId\""),
+                "The bundled template does not document the worker-id pin",
+            )
+            configDir.resolve("application.json").writeText(bundledText)
+
+            val result = loader.loadAppConfigDto(configDir)
+
+            assertTrue(result.isRight(), "Load failed: $result")
+            assertNull(result.getOrNull()?.worker?.identity?.workerId)
+        } finally {
+            configDir.toFile().deleteRecursively()
+        }
+
+        // The annotated reference is what an operator reads after a rewrite dropped the comments.
+        val reference = WorkerConfigLoader::class.java
+            .getResourceAsStream("/default-config/application_example.json")
+            ?: error("The bundled default config reference is missing from the classpath")
+        val referenceText = reference.bufferedReader().use { it.readText() }
+        assertTrue(
+            referenceText.contains("\"workerId\""),
+            "The bootstrapped reference does not document the worker-id pin",
+        )
     }
 
     /**

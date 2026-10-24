@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.setup
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 
 /**
  * HTTP API used by setup to login, register the worker, and logout.
@@ -26,14 +27,15 @@ interface WorkerSetupApi : AutoCloseable {
      * @param workerUid Worker identifier to register.
      * @param displayName Human-readable label for the worker shown in management UIs.
      * @param certificatePem PEM-encoded public certificate for the worker identity.
-     * @return Either a logical setup error or `Unit` on success.
+     * @return Either a logical setup error or the worker the server created for this registration;
+     *   setup persists [WorkerDto.id] as the worker-id pin.
      */
     suspend fun registerWorker(
         accessToken: String,
         workerUid: String,
         displayName: String,
         certificatePem: String
-    ): Either<WorkerSetupError, Unit>
+    ): Either<WorkerSetupError, WorkerDto>
 
     /**
      * Logs out the setup session that was used to register the worker.

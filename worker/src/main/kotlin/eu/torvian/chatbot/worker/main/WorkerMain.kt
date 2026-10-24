@@ -182,6 +182,15 @@ class WorkerMain(
             .mapLeft { WorkerMainError.Config(it) }
             .bind()
 
+        // Absence is the documented "protection not configured" state, so it is a warning and never a
+        // startup failure; the line makes the inactive per-row credential worker-id check visible.
+        if (config.identity.workerId == null) {
+            logger.warn(
+                "Per-row credential worker-id check is not configured; set worker.identity.workerId to " +
+                    "the numeric id the server assigned at registration to enable it"
+            )
+        }
+
         val koinApplication = startKoin {
             modules(workerModule(config, tokenPath, privateKeyPem, commandIsolation))
         }

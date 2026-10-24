@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 import eu.torvian.chatbot.worker.config.DefaultWorkerConfigLoader
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.exists
@@ -16,12 +17,14 @@ import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 class DefaultWorkerSetupManagerTest {
     private val json = Json { ignoreUnknownKeys = true }
     private val configLoader = DefaultWorkerConfigLoader()
     private val credentials = WorkerSetupCredentials(username = "setup-user", password = "setup-pass")
 
+    /** Verifies that setup records the id the server assigned as the worker-id pin. */
     @Test
     fun `creates config and secrets when config is missing`() = runTest {
         val tempDir = createTempDirectory("worker-setup-test")
@@ -53,6 +56,11 @@ class DefaultWorkerSetupManagerTest {
             assertEquals("https://localhost:8443/", serverJson?.get("baseUrl")?.jsonPrimitive?.content)
             assertEquals(api.registerWorkerUid, identityJson?.get("uid")?.jsonPrimitive?.content)
             assertEquals("my-worker", identityJson?.get("displayName")?.jsonPrimitive?.content)
+            assertEquals(
+                api.assignedWorkerId.toString(),
+                identityJson?.get("workerId")?.jsonPrimitive?.content,
+                "setup must persist the id the server assigned"
+            )
             assertNotNull(identityJson?.get("certificateFingerprint")?.jsonPrimitive?.content)
             assertTrue(identityJson["certificatePem"]?.jsonPrimitive?.content.orEmpty().contains("BEGIN CERTIFICATE"))
             assertEquals("./secrets.json", storageJson?.get("secretsJsonPath")?.jsonPrimitive?.content)
@@ -125,6 +133,35 @@ class DefaultWorkerSetupManagerTest {
 
             val setupJson = json.parseToJsonElement(tempDir.resolve("setup.json").readText()).jsonObject
             assertEquals("false", setupJson["setup"]?.jsonObject?.get("required")?.jsonPrimitive?.content)
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Verifies that a failed registration leaves both config layers exactly as they were.
+     *
+     * The pin is the value the owner later checks against the server, so a partly written file would
+     * make a worker that was never registered look provisioned.
+     */
+    @Test
+    fun `a registration failure leaves the config untouched`() = runTest {
+        val tempDir = createTempDirectory("worker-setup-test")
+        val api = FakeWorkerSetupApi(registerShouldFail = true)
+        val manager = createManager(api)
+
+        try {
+            val mergedConfig = configLoader.loadAppConfigDto(tempDir).getOrNull()
+            assertTrue(mergedConfig != null)
+            // Loading a fresh directory bootstraps the templates, so the comparison starts here.
+            val applicationBefore = tempDir.resolve("application.json").readText()
+            val setupBefore = tempDir.resolve("setup.json").readText()
+
+            val result = manager.run(tempDir, mergedConfig, "https://localhost:8443/")
+
+            assertTrue(result.isLeft(), "expected setup to fail")
+            assertEquals(applicationBefore, tempDir.resolve("application.json").readText())
+            assertEquals(setupBefore, tempDir.resolve("setup.json").readText())
         } finally {
             tempDir.toFile().deleteRecursively()
         }
@@ -267,7 +304,8 @@ class DefaultWorkerSetupManagerTest {
     }
 
     private class FakeWorkerSetupApi(
-        private val loginShouldFail: Boolean = false
+        private val loginShouldFail: Boolean = false,
+        private val registerShouldFail: Boolean = false
     ) : WorkerSetupApi {
         var loginUsername: String? = null
         var loginPassword: String? = null
@@ -277,6 +315,9 @@ class DefaultWorkerSetupManagerTest {
         var registerCertificatePem: String? = null
         var logoutAccessToken: String? = null
         val loginIssuedToken: String = "setup-login-token"
+
+        /** Numeric worker id the fake registration reports as assigned. */
+        val assignedWorkerId: Long = 42L
 
         override suspend fun login(username: String, password: String, deviceId: String): Either<WorkerSetupError, String> {
             loginUsername = username
@@ -293,14 +334,27 @@ class DefaultWorkerSetupManagerTest {
             workerUid: String,
             displayName: String,
             certificatePem: String
-        ): Either<WorkerSetupError, Unit> {
+        ): Either<WorkerSetupError, WorkerDto> {
             if (accessToken != loginIssuedToken) {
                 return Either.Left(WorkerSetupError.WorkerRegistrationFailed("unexpected token"))
+            }
+            if (registerShouldFail) {
+                return Either.Left(WorkerSetupError.WorkerRegistrationFailed("registration rejected"))
             }
             registerWorkerUid = workerUid
             registerDisplayName = displayName
             registerCertificatePem = certificatePem
-            return Either.Right(Unit)
+            return Either.Right(
+                WorkerDto(
+                    id = assignedWorkerId,
+                    workerUid = workerUid,
+                    ownerUserId = 1L,
+                    displayName = displayName,
+                    certificateFingerprint = "setup-test-fingerprint",
+                    allowedScopes = emptyList(),
+                    createdAt = Instant.fromEpochMilliseconds(0),
+                )
+            )
         }
 
         override suspend fun logout(accessToken: String): Either<WorkerSetupError, Unit> {

@@ -24,6 +24,7 @@ import java.nio.file.Path
  * - Ensures the refresh skew is non-negative
  * - Ensures the workspace path is non-blank
  * - Ensures the default command timeout is positive
+ * - Ensures a configured `worker.identity.workerId` is positive; its absence stays legal
  *
  * @receiver The [AppConfigDto] to convert and validate.
  * @return Either a logical configuration error or the fully validated [Configuration].
@@ -43,6 +44,7 @@ fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configurat
     val displayName = identityDto.displayName?.takeIf { it.isNotBlank() } ?: "my-worker"
     val certificateFingerprint = required("worker.identity.certificateFingerprint", identityDto.certificateFingerprint)
     val certificatePem = required("worker.identity.certificatePem", identityDto.certificatePem)
+    val workerId = identityDto.workerId
     val secretsJsonPath = required("worker.storage.secretsJsonPath", storageDto.secretsJsonPath)
     val tokenFilePath = required("worker.storage.tokenFilePath", storageDto.tokenFilePath)
     val refreshSkewSeconds = authDto.refreshSkewSeconds ?: 60L
@@ -68,6 +70,11 @@ fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configurat
     }
     ensure(certificatePem.isNotBlank()) {
         WorkerConfigError.ConfigInvalid("worker.identity.certificatePem must not be blank")
+    }
+    // Absence is the documented "protection not configured" state and must stay legal, so only a
+    // present value is validated: no server assigns a non-positive worker id.
+    ensure(workerId == null || workerId > 0) {
+        WorkerConfigError.ConfigInvalid("worker.identity.workerId must be > 0 when present")
     }
     ensure(secretsJsonPath.isNotBlank()) {
         WorkerConfigError.ConfigInvalid("worker.storage.secretsJsonPath must not be blank")
@@ -102,7 +109,8 @@ fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configurat
                 uid = uid,
                 displayName = displayName,
                 certificateFingerprint = certificateFingerprint,
-                certificatePem = certificatePem
+                certificatePem = certificatePem,
+                workerId = workerId
             ),
             storage = StorageConfig(
                 secretsJsonPath = secretsJsonPath,

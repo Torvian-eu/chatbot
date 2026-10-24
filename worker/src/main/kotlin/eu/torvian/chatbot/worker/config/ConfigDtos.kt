@@ -175,6 +175,8 @@ data class ServerConfigDto(
  *
  * @property uid Unique identifier for this worker instance.
  * @property displayName Human-readable label for this worker shown in management UIs.
+ * @property workerId Numeric worker id setup records at registration; null disables the per-row
+ *   credential worker-id check.
  * @property certificateFingerprint SHA-256 fingerprint of the worker certificate.
  * @property certificatePem PEM-encoded public certificate for the worker identity.
  */
@@ -182,6 +184,7 @@ data class ServerConfigDto(
 data class IdentityConfigDto(
     val uid: String? = null,
     val displayName: String? = null,
+    val workerId: Long? = null,
     val certificateFingerprint: String? = null,
     val certificatePem: String? = null
 )

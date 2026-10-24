@@ -15,6 +15,7 @@
     "identity": {
       "uid": "",
       "displayName": "my-worker",
+      "workerId": 42,
       "certificateFingerprint": "",
       "certificatePem": ""
     },

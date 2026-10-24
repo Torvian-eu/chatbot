@@ -190,6 +190,8 @@ data class ServerConfig(
  *
  * @property uid Unique identifier for this worker instance.
  * @property displayName Human-readable label for this worker shown in management UIs.
+ * @property workerId Numeric worker id pinned by `worker.identity.workerId`; null means no per-row
+ *   credential worker-id check.
  * @property certificateFingerprint SHA-256 fingerprint of the worker certificate.
  * @property certificatePem PEM-encoded public certificate.
  */
@@ -197,7 +199,8 @@ data class IdentityConfig(
     val uid: String,
     val displayName: String,
     val certificateFingerprint: String,
-    val certificatePem: String
+    val certificatePem: String,
+    val workerId: Long? = null
 )
 
 /**

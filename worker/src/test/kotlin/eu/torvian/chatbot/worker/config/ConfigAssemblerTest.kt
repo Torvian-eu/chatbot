@@ -4,6 +4,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -63,6 +64,39 @@ class ConfigAssemblerTest {
         assertEquals("my-worker", config?.worker?.identity?.displayName)
         assertEquals(60, config?.worker?.auth?.refreshSkewSeconds)
         assertEquals(emptyList(), config?.worker?.trustedSigners)
+    }
+
+    /**
+     * Verifies the optional worker-id pin is carried into the domain model unchanged.
+     */
+    @Test
+    fun `carries the configured worker id pin`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(identity = identity(workerId = 7L)).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        assertEquals(7L, result.getOrNull()?.worker?.identity?.workerId)
+    }
+
+    /**
+     * Verifies an absent pin is legal, because it only disables the per-row credential worker-id check.
+     */
+    @Test
+    fun `accepts an absent worker id pin`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(identity = identity(workerId = null)).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        assertNull(result.getOrNull()?.worker?.identity?.workerId)
+    }
+
+    /**
+     * Verifies a non-positive pin fails startup with an error naming the configuration key.
+     */
+    @Test
+    fun `rejects non-positive worker id pins`() {
+        assertInvalid(validDto(identity = identity(workerId = 0)), "worker.identity.workerId must be > 0")
+        assertInvalid(validDto(identity = identity(workerId = -3)), "worker.identity.workerId must be > 0")
     }
 
     /**
@@ -487,6 +521,20 @@ class ConfigAssemblerTest {
             "Expected '$expectedDescriptionFragment' in '${invalid.description}'"
         )
     }
+
+    /**
+     * Creates an identity group with the required fields filled in, so a test can vary one value.
+     *
+     * @param workerId Optional worker-id pin to place in the group.
+     * @return Identity DTO with the other required values set to test fixtures.
+     */
+    private fun identity(workerId: Long?): IdentityConfigDto = IdentityConfigDto(
+        uid = "worker-1",
+        displayName = "Worker One",
+        workerId = workerId,
+        certificateFingerprint = "fingerprint-1",
+        certificatePem = "certificate-pem-1"
+    )
 
     /**
      * Creates a valid app configuration DTO that individual tests can selectively invalidate.
