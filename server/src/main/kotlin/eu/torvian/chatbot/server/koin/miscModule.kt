@@ -72,7 +72,10 @@ fun miscModule() = module {
             serverBuiltInToolNamePrefixService = get(),
             compactionPreferenceService = get(),
             conversationManualCompactionService = get(),
-            threadStatsService = get()
+            threadStatsService = get(),
+            credentialSyncService = get(),
+            workerCredentialProfileService = get(),
+            workerCredentialSecretService = get()
         )
     }
 }

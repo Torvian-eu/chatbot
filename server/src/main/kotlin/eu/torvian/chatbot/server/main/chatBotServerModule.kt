@@ -97,6 +97,7 @@ fun Application.configureKoin(config: AppConfiguration, serverControl: ServerCon
             chatServiceModule(),
             toolServiceModule(),
             mcpServiceModule(),
+            credentialServiceModule(),
             mainModule(this@configureKoin), // Pass Application instance for Ktor specific bindings if needed
             serverControlModule(serverControl) // Register ServerControlService in Koin
         )

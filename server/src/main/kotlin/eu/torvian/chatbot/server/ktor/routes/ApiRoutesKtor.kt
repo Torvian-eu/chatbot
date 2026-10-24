@@ -10,6 +10,7 @@ import eu.torvian.chatbot.server.service.security.AccountManagementService
 import eu.torvian.chatbot.server.service.security.DeviceTrustService
 import eu.torvian.chatbot.server.service.security.SecurityAuditService
 import eu.torvian.chatbot.server.service.security.AuthorizationService
+import eu.torvian.chatbot.server.worker.credential.CredentialSyncService
 import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
 import io.ktor.server.routing.*
@@ -58,7 +59,10 @@ class ApiRoutesKtor(
     private val serverBuiltInToolNamePrefixService: ServerBuiltInToolNamePrefixService,
     private val compactionPreferenceService: CompactionPreferenceService,
     private val conversationManualCompactionService: ConversationManualCompactionService,
-    private val threadStatsService: ThreadStatsService
+    private val threadStatsService: ThreadStatsService,
+    private val credentialSyncService: CredentialSyncService,
+    private val workerCredentialProfileService: WorkerCredentialProfileService,
+    private val workerCredentialSecretService: WorkerCredentialSecretService
 ) {
     /**
      * Configures the API routes using the Ktor Resources plugin.
@@ -88,6 +92,7 @@ class ApiRoutesKtor(
         configureBuiltInToolRoutes(route)
         configureOperatorToolRoutes(route)
         configureServerBuiltInToolRoutes(route)
+        configureCredentialRoutes(route)
     }
 
     /**
@@ -271,5 +276,19 @@ class ApiRoutesKtor(
      */
     fun configureServerBuiltInToolRoutes(route: Route) {
         route.configureServerBuiltInToolRoutes(serverBuiltInToolDefinitionService)
+    }
+
+    /**
+     * Configures routes related to credential profile and secret management, plus the
+     * worker-authenticated credential bootstrap (/api/v1/credential-profiles,
+     * /api/v1/credential-secrets, /api/v1/credentials/assigned).
+     */
+    fun configureCredentialRoutes(route: Route) {
+        route.configureCredentialRoutes(
+            credentialSyncService = credentialSyncService,
+            profileService = workerCredentialProfileService,
+            secretService = workerCredentialSecretService,
+            json = json
+        )
     }
 }

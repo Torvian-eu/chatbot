@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.testutils.koin
 import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.server.domain.config.AccountSecurityMode
 import eu.torvian.chatbot.server.koin.chatServiceModule
+import eu.torvian.chatbot.server.koin.credentialServiceModule
 import eu.torvian.chatbot.server.koin.daoModule
 import eu.torvian.chatbot.server.koin.mcpServiceModule
 import eu.torvian.chatbot.server.koin.miscModule
@@ -45,6 +46,7 @@ fun defaultTestContainer(
             chatServiceModule(),
             toolServiceModule(),
             mcpServiceModule(),
+            credentialServiceModule(),
             miscModule(),
             testSetupModule(llmApiClient)
         )
