@@ -33,5 +33,12 @@ sealed interface WorkerConfigError {
      *   account, ignored setuid bit, missing capabilities, timeout, ...).
      */
     data class CommandIsolationUnavailable(val reason: String) : WorkerConfigError
+
+    /**
+     * Indicates that the directories credential profile targets depend on are unusable.
+     *
+     * @property reason Human-readable explanation naming the path and the condition that failed.
+     */
+    data class CredentialsUnavailable(val reason: String) : WorkerConfigError
 }
 

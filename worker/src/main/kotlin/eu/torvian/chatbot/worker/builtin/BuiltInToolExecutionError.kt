@@ -30,5 +30,8 @@ object BuiltInToolExecutionError {
 
     /** Any other execution failure (caller-supplied message). */
     const val EXECUTION_FAILED = "execution_failed"
+
+    /** A credential profile exists, but its secret could not be decrypted or delivered. */
+    const val CREDENTIAL_UNAVAILABLE = "credential_unavailable"
 }
 

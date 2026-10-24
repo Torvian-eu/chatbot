@@ -1,12 +1,22 @@
 package eu.torvian.chatbot.worker.builtin.terminal
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
+import eu.torvian.chatbot.worker.builtin.command.remainingNanos
 import eu.torvian.chatbot.worker.config.TerminalSessionsConfig
+import eu.torvian.chatbot.worker.credential.SecretMaterialError
+import eu.torvian.chatbot.worker.credential.SecretTree
+import eu.torvian.chatbot.worker.credential.SecretTreeFactory
+import eu.torvian.chatbot.worker.credential.SecretValue
 import java.io.ByteArrayOutputStream
 import java.io.FilterInputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.Optional
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
@@ -41,6 +51,8 @@ internal class FakeTerminalProcess(private val initialExitCode: Int = 0) : Proce
     private var blockInputWrites = false
     @Volatile
     private var gateReads = false
+    @Volatile
+    private var directKillRefused = false
     private var alive = true
     private var exitStatus = initialExitCode
 
@@ -120,11 +132,11 @@ internal class FakeTerminalProcess(private val initialExitCode: Int = 0) : Proce
     }
 
     override fun destroy() {
-        finish(143)
+        if (!directKillRefused) finish(143)
     }
 
     override fun destroyForcibly(): Process {
-        finish(137)
+        if (!directKillRefused) finish(137)
         return this
     }
 
@@ -206,6 +218,16 @@ internal class FakeTerminalProcess(private val initialExitCode: Int = 0) : Proce
     /** Releases a gated input write. */
     fun releaseInputWrites() {
         inputWriteRelease.countDown()
+    }
+
+    /**
+     * Makes every direct process-handle kill do nothing.
+     *
+     * Models a process the worker may not signal itself: a profile target runs under the credential
+     * account, so its termination has to go through that account's helper.
+     */
+    fun refuseDirectKill() {
+        directKillRefused = true
     }
 
     /**
@@ -297,6 +319,49 @@ internal class MutableClock(var nanos: Long = 1_000_000_000L) {
     /** @return The current nanosecond value. */
     operator fun invoke(): Long = nanos
 }
+
+/**
+ * [SecretTreeFactory] writing into a temporary directory and removing a tree only while its deadline
+ * leaves time to run.
+ *
+ * The credential helper reports a failure immediately when its wait budget is already spent, so a tree
+ * created through this factory survives exactly when cleanup is given an exhausted deadline.
+ *
+ * @property root Directory the per-attach trees are created under.
+ */
+internal class DeadlineGatedTreeFactory(private val root: Path) : SecretTreeFactory {
+    override fun create(
+        fileName: String,
+        value: SecretValue,
+        deadline: Long,
+    ): Either<SecretMaterialError, SecretTree> {
+        if (remainingNanos(deadline) <= 0L) return SecretMaterialError.PreparationFailed("no time left").left()
+        val directory = Files.createTempDirectory(root, "tree-")
+        val file = directory.resolve(fileName)
+        Files.write(file, value.copyBytes())
+        return GatedTree(directory.toString(), file.toString()).right()
+    }
+
+    override fun clear(directoryPath: String, deadline: Long): Either<SecretMaterialError, Unit> {
+        if (remainingNanos(deadline) <= 0L) return SecretMaterialError.PreparationFailed("no time left").left()
+        Path.of(directoryPath).toFile().deleteRecursively()
+        return Unit.right()
+    }
+
+    /**
+     * @return How many per-attach trees still exist under [root].
+     */
+    fun remaining(): Int = Files.list(root).use { stream -> stream.count().toInt() }
+}
+
+/**
+ * @property directoryPath Directory holding the file.
+ * @property secretPath File that was written.
+ */
+private data class GatedTree(
+    override val directoryPath: String,
+    override val secretPath: String,
+) : SecretTree
 
 /**
  * @return A small but valid terminal-session configuration for tests.

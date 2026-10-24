@@ -145,6 +145,7 @@ fun defaultInstructionName(type: String): String = when (type) {
     AgentInstructionTypes.MAIN -> "Main instruction"
     AgentInstructionTypes.CUSTOM -> "Custom instruction"
     AgentInstructionTypes.SPAWNABLE_AGENTS -> "Available agents"
+    AgentInstructionTypes.CREDENTIAL_PROFILES -> "Available credential profiles"
     AgentInstructionTypes.MODEL_SPECIFIC -> "Model-specific instruction"
     else -> type
 }

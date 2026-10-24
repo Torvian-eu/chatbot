@@ -7,6 +7,8 @@ import eu.torvian.chatbot.worker.VersionInfo
 import eu.torvian.chatbot.worker.builtin.command.CommandIsolationDetector
 import eu.torvian.chatbot.worker.builtin.terminal.TerminalSessionManager
 import eu.torvian.chatbot.worker.config.*
+import eu.torvian.chatbot.worker.credential.CredentialEnvironmentValidator
+import eu.torvian.chatbot.worker.credential.CredentialSecretSweeper
 import eu.torvian.chatbot.worker.koin.workerModule
 import eu.torvian.chatbot.worker.runtime.WorkerRuntime
 import eu.torvian.chatbot.worker.service.api.WorkerMetadataService
@@ -178,15 +180,47 @@ class WorkerMain(
 
         // Resolved before DI so an unusable isolation mechanism is a typed startup error with a log
         // line at boot, rather than a failure raised lazily by whichever consumer resolves first.
-        val commandIsolation = CommandIsolationDetector.resolve(config.commandIsolation, logger)
+        val commandIsolation = CommandIsolationDetector.resolve(
+            config = config.commandIsolation,
+            credentials = config.credentials,
+            logger = logger,
+        )
             .mapLeft { WorkerMainError.Config(it) }
             .bind()
+
+        // Only checked when a credential account was resolved: on hosts without the mechanism there
+        // are no such directories, and the POSIX checks do not apply. A misconfigured deployment is a
+        // startup failure rather than a deferred attach error.
+        if (commandIsolation.secretAccount != null) {
+            CredentialEnvironmentValidator(config.credentials).validate(logger)
+                .mapLeft { WorkerMainError.Config(it) }
+                .bind()
+        }
+
+        // Absence is the documented "protection not configured" state, so it is a warning and never a
+        // startup failure; the line makes the inactive per-row credential worker-id check visible.
+        if (config.identity.workerId == null) {
+            logger.warn(
+                "Per-row credential worker-id check is not configured; set worker.identity.workerId to " +
+                    "the numeric id the server assigned at registration to enable it"
+            )
+        }
 
         val koinApplication = startKoin {
             modules(workerModule(config, tokenPath, privateKeyPem, commandIsolation))
         }
         val koin = koinApplication.koin
         val metadataService = koin.get<WorkerMetadataService>()
+
+        // Stale material from a previous process is removed before any session can be accepted. A
+        // failure is a WARN: leftover trees are untidy, not a reason to refuse to run.
+        if (commandIsolation.secretAccount != null) {
+            CredentialSecretSweeper(
+                secretDir = config.credentials.secretDir,
+                trees = koin.get(),
+            ).sweep(logger)
+        }
+
         val httpClient = koin.get<HttpClient>()
         val runtime = koin.get<WorkerRuntime>()
         val terminalSessions = koin.get<TerminalSessionManager>()

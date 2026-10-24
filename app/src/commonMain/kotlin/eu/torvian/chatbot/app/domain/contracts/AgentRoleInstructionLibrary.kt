@@ -8,26 +8,24 @@ import eu.torvian.chatbot.common.models.agent.modelIdOrNull
  * The instruction kinds offered by the role form, both as a new row's type and as a library row that
  * can be linked.
  *
- * Every well-known, client-editable kind is included. `role`, `main` and `spawnable_agents` are
- * single-instance (mirroring the server's per-role rules); `custom` and `model_specific` may appear
- * more than once, with each `model_specific` row targeting its own model.
+ * Every well-known, client-editable kind is included. The singleton kinds come from
+ * `AgentInstructionTypes.singletonKinds`, so the form and the server's per-role rules cannot disagree
+ * about which kinds may appear twice; `custom` and `model_specific` are multi-instance, with each
+ * `model_specific` row targeting its own model.
  */
 val editableInstructionTypes: List<String> = listOf(
     AgentInstructionTypes.ROLE,
     AgentInstructionTypes.MAIN,
     AgentInstructionTypes.CUSTOM,
     AgentInstructionTypes.SPAWNABLE_AGENTS,
+    AgentInstructionTypes.CREDENTIAL_PROFILES,
     AgentInstructionTypes.MODEL_SPECIFIC
 )
 
 /**
  * Instruction kinds a role may link at most once, mirroring the server's per-role rules.
  */
-private val singleInstanceInstructionTypes = setOf(
-    AgentInstructionTypes.ROLE,
-    AgentInstructionTypes.MAIN,
-    AgentInstructionTypes.SPAWNABLE_AGENTS
-)
+private val singleInstanceInstructionTypes = AgentInstructionTypes.singletonKinds
 
 /**
  * The library rows the role currently being edited may link.

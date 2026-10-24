@@ -4,16 +4,23 @@ import eu.torvian.chatbot.common.models.agent.AgentInstructionDto
 import eu.torvian.chatbot.common.models.agent.AgentInstructionTypes
 import eu.torvian.chatbot.common.models.agent.modelIdOrNull
 import eu.torvian.chatbot.common.models.agent.AgentRoleDto
+import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.ProjectDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
+import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileDao
+import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
 import eu.torvian.chatbot.server.data.entities.InstructionEntity
 import eu.torvian.chatbot.server.data.entities.ModelPresetEntity
 import eu.torvian.chatbot.server.service.core.agent.AgentInstruction
 import eu.torvian.chatbot.server.service.core.agent.AgentRole
 import eu.torvian.chatbot.server.service.core.agent.AgentRoleSummary
+import eu.torvian.chatbot.server.service.core.agent.CredentialProfileSummary
+import eu.torvian.chatbot.server.service.core.agent.CredentialProfilesAdvertisement
+import eu.torvian.chatbot.server.service.core.agent.CredentialProfilesGroup
+import eu.torvian.chatbot.server.service.core.agent.CredentialProfilesInstruction
 import eu.torvian.chatbot.server.service.core.agent.CustomInstruction
 import eu.torvian.chatbot.server.service.core.agent.MainInstruction
 import eu.torvian.chatbot.server.service.core.agent.ModelSpecificInstruction
@@ -39,21 +46,29 @@ import org.apache.logging.log4j.Logger
  *
  * @property agentRoleDao DAO used by the spawn allow-list advertisement loader (owner-scoped role
  *            reads).
- * @property toolDefinitionDao DAO used by the `spawn_agent`-availability loader (tool reads scoped
- *            to the role's tool ids).
+ * @property toolDefinitionDao DAO used by the `spawn_agent`-availability loader and to resolve the
+ *            worker of a `terminal_session` tool definition (tool reads scoped to the role's tool ids).
  * @property projectDao DAO used to resolve the project labels of the advertisement (one batched read
  *            covering the targets' projects and the owning role's own project).
+ * @property credentialProfileDao DAO used by the credential-profile advertisement loader (profiles
+ *            bound to the workers the role's `terminal_session` tools target).
+ * @property workerDao DAO used to label each credential-profile group with its worker's display name.
  * @property json Shared JSON codec used to parse the raw `custom` JSON text of stored instructions.
  */
 internal class AgentRoleMapper(
     private val agentRoleDao: AgentRoleDao,
     private val toolDefinitionDao: ToolDefinitionDao,
     private val projectDao: ProjectDao,
+    private val credentialProfileDao: WorkerCredentialProfileDao,
+    private val workerDao: WorkerDao,
     private val json: Json
 ) {
     companion object {
         /** Logger used for dropped-instruction diagnostics (malformed stored instructions). */
         private val logger: Logger = LogManager.getLogger(AgentRoleMapper::class.java)
+
+        /** Built-in tool name whose definition names the worker an `attach` call is dispatched to. */
+        private const val TERMINAL_SESSION_TOOL_NAME = "terminal_session"
     }
 
     /**
@@ -201,6 +216,61 @@ internal class AgentRoleMapper(
     }
 
     /**
+     * Loads the credential profiles this role may attach.
+     *
+     * Profiles are scoped to the workers the role's `terminal_session` tool definitions target, because
+     * that is where an `attach` call is dispatched and therefore whose cache must hold the name. The
+     * definitions are matched on `builtInToolName` rather than on the public `name`, which is not
+     * globally unique and may carry a configured prefix for disambiguation across workers.
+     *
+     * The fixed command line is never rendered: only its program basename and argument count appear
+     * when an operator supplied no description, because an argument can carry a host or a token.
+     *
+     * @param roleToolIds Tool ids attached to the role being mapped.
+     * @return The advertisement, in worker order and with profiles in creation order per worker.
+     */
+    suspend fun loadCredentialProfilesAdvertisement(roleToolIds: Set<Long>): CredentialProfilesAdvertisement {
+        val workerIds = toolDefinitionDao.getToolDefinitionsByIds(roleToolIds)
+            .filterIsInstance<BuiltInWorkerToolDefinition>()
+            .filter { it.builtInToolName == TERMINAL_SESSION_TOOL_NAME }
+            .map { it.workerId }
+            .distinct()
+        if (workerIds.isEmpty()) return CredentialProfilesAdvertisement(groups = emptyList())
+
+        val groups = workerIds.map { workerId ->
+            val workerName = workerDao.getWorkerById(workerId).getOrNull()
+                ?.displayName
+                ?.takeIf { it.isNotBlank() }
+                ?: "worker #$workerId"
+            CredentialProfilesGroup(
+                workerId = workerId,
+                workerName = workerName,
+                profiles = credentialProfileDao.getEnabledProfilesByWorkerId(workerId).map { profile ->
+                    CredentialProfileSummary(
+                        name = profile.name,
+                        description = profile.description?.takeIf { it.isNotBlank() }
+                            ?: commandSummary(profile.command, profile.args.size),
+                        channel = profile.channel.name.lowercase()
+                    )
+                }
+            )
+        }
+        return CredentialProfilesAdvertisement(groups = groups)
+    }
+
+    /**
+     * @param command Absolute command the profile runs.
+     * @param argumentCount Number of fixed arguments it passes.
+     * @return A short description that names the program but never an argument, which could carry a
+     *   host or a token.
+     */
+    private fun commandSummary(command: String, argumentCount: Int): String {
+        val program = command.substringAfterLast('/').ifBlank { command }
+        val arguments = if (argumentCount == 1) "1 argument" else "$argumentCount arguments"
+        return "`$program` with $arguments"
+    }
+
+    /**
      * Converts a server domain [AgentRole] into a wire [AgentRoleDto], resolving every instruction
      * message first so the DTO always carries non-null, current text.
      *
@@ -256,6 +326,17 @@ internal class AgentRoleMapper(
             spawnAgentToolAvailableLoader = {
                 toolDefinitionDao.getToolDefinitionsByIds(roleToolIds)
                     .any { it.name == OperatorToolCatalog.SPAWN_AGENT_NAME }
+            },
+            id = row.id,
+            linkedRoleIds = linkedRoleIds
+        )
+
+        AgentInstructionTypes.CREDENTIAL_PROFILES -> CredentialProfilesInstruction(
+            name = row.name,
+            advertisementLoader = { loadCredentialProfilesAdvertisement(roleToolIds) },
+            terminalSessionToolAvailableLoader = {
+                toolDefinitionDao.getToolDefinitionsByIds(roleToolIds)
+                    .any { it is BuiltInWorkerToolDefinition && it.builtInToolName == TERMINAL_SESSION_TOOL_NAME }
             },
             id = row.id,
             linkedRoleIds = linkedRoleIds
@@ -372,6 +453,15 @@ internal class AgentRoleMapper(
                     name = instruction.name,
                     message = instruction.message,
                     custom = buildJsonObject { put("modelId", instruction.modelId) },
+                    id = instruction.id,
+                    linkedRoleIds = instruction.linkedRoleIds
+                )
+
+            is CredentialProfilesInstruction ->
+                AgentInstructionDto(
+                    type = AgentInstructionTypes.CREDENTIAL_PROFILES,
+                    name = instruction.name,
+                    message = instruction.message,
                     id = instruction.id,
                     linkedRoleIds = instruction.linkedRoleIds
                 )

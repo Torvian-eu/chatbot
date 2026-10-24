@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.runtime
 
 import eu.torvian.chatbot.worker.auth.WorkerAuthManagerError
+import eu.torvian.chatbot.worker.credential.api.AssignedCredentialBootstrapError
 import eu.torvian.chatbot.worker.mcp.api.AssignedConfigBootstrapError
 
 /**
@@ -33,4 +34,15 @@ sealed interface WorkerRuntimeError {
      * @property error The underlying bootstrap error.
      */
     data class AssignedConfigBootstrap(val error: AssignedConfigBootstrapError) : WorkerRuntimeError
+
+    /**
+     * Assigned credential profiles and secrets could not be bootstrapped.
+     *
+     * Carries a retryable failure that ended the run in single-run mode, and also
+     * [AssignedCredentialBootstrapError.WorkerIdMismatch], which is never retried in either mode because
+     * the server then disagrees with the identity the owner pinned.
+     *
+     * @property error The underlying bootstrap error.
+     */
+    data class CredentialBootstrap(val error: AssignedCredentialBootstrapError) : WorkerRuntimeError
 }

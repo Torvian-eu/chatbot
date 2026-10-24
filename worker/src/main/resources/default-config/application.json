@@ -13,6 +13,7 @@
     "identity": {
       "uid": "",
       "displayName": "my-worker",
+      "workerId": null,
       "certificateFingerprint": "",
       "certificatePem": ""
     },
@@ -76,12 +77,12 @@
 
       "user" and "helperPath" name the account commands run as and the helper binary that performs
       the drop. "environment.allowPassthrough" lists worker environment variables that isolated
-      children receive; a single "*" forwards everything. "environment.set" carries variables the
-      child receives with the values given here, whether or not the worker defines them. Both are used
-      only while the privilege drop is active, and the account identity variables (HOME, USER,
-      LOGNAME) always come from the isolated account, so a "set" entry naming one of them has no
-      effect. Add the variables your commands need, for example proxy settings or cache roots such as
-      GOPATH, GOCACHE, GRADLE_USER_HOME, NPM_CONFIG_CACHE, UV_CACHE_DIR.
+      children receive; a name carrying the worker's own secrets is rejected. "environment.set"
+      carries variables the child receives with the values given here, whether or not the worker
+      defines them. Both are used only while the privilege drop is active, and the account identity
+      variables (HOME, USER, LOGNAME) always come from the isolated account, so a "set" entry naming
+      one of them has no effect. Add the variables your commands need, for example proxy settings or
+      cache roots such as GOPATH, GOCACHE, GRADLE_USER_HOME, NPM_CONFIG_CACHE, UV_CACHE_DIR.
 
       The default "set" exempts the shared workspace from git's repository-ownership check, because
       the workspace is owned by the worker account while commands run as the isolated one: git reads
@@ -97,6 +98,28 @@
       "enabled": false
     },
     /*
+      Deployment paths for credential profile targets. A profile is a fixed command plus a secret
+      managed on the server; the model can only ask for a profile by name, and no profile or secret
+      value belongs in this file.
+
+      Availability follows commandIsolation: with it off this worker starts normally and an attach
+      reports PERMISSION_DENIED, and with it on the helper below must drop to an account of its own
+      or startup fails. `vaultUser` must differ from `commandIsolation.user`, so a shell the model
+      drives cannot read a loaded secret. `secretWorkingDirectory` is a credential-only directory and
+      never the shared workspace, because a command that loads configuration from its working
+      directory would otherwise execute model-written code as the credential account. `maxSecretBytes`
+      bounds one decrypted value. Mount `secretDir` as a tmpfs so leftover material cannot survive a
+      restart.
+    */
+    "credentials": {
+      "vaultUser": "vault",
+      "vaultHelperPath": "/usr/local/bin/run-as-vault",
+      "askpassScriptPath": "/usr/local/bin/torvian-askpass",
+      "secretDir": "/run/torvian/secrets",
+      "secretWorkingDirectory": "/home/vault/work",
+      "maxSecretBytes": 8192
+    },
+    /*
       Interactive terminal sessions for the `terminal_session` built-in tool. Sessions run as the
       same account as `run_command` children and are terminated when the worker shuts down. There is
       deliberately no worker-side enable flag: the capability is controlled by enabling or disabling
@@ -110,9 +133,10 @@
       `defaultIdleTimeoutSeconds`, so a session is never reaped before it has been idle for at least
       one full sweep.
 
-      Secrets are not supported in v1: an interactive `ssh` must use keys or an already-authenticated
-      agent. Under command isolation the child is the isolated account and carries PR_SET_NO_NEW_PRIVS,
-      so `sudo`, `su` and `passwd` cannot elevate inside a session.
+      Attaching a credential selects a server-defined profile for that session: the profile fixes the
+      command, its arguments and how the secret reaches it, and the model never sees a secret value.
+      Under command isolation the child is the isolated account and carries PR_SET_NO_NEW_PRIVS, so
+      `sudo`, `su` and `passwd` cannot elevate inside a session.
     */
     "terminalSessions": {
       "defaultIdleTimeoutSeconds": 1800,

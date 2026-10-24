@@ -44,6 +44,7 @@ data class SetupConfigDto(
  * @property workspace Filesystem workspace configuration for built-in tools (nullable).
  * @property builtInTools Built-in tool enablement/prefix configuration (nullable).
  * @property commandIsolation UID isolation for built-in-tool child processes (nullable).
+ * @property credentials Deployment paths for credential profile targets (nullable).
  * @property terminalSessions Limits and timeouts for interactive terminal sessions (nullable).
  * @property trustedSigners Authorized E2EA signers trusted by this worker (nullable).
  */
@@ -56,6 +57,7 @@ data class RuntimeConfigDto(
     val workspace: WorkspaceConfigDto? = null,
     val builtInTools: BuiltInToolsConfigDto? = null,
     val commandIsolation: CommandIsolationConfigDto? = null,
+    val credentials: CredentialsConfigDto? = null,
     val terminalSessions: TerminalSessionsConfigDto? = null,
     val trustedSigners: List<TrustedSignerDto>? = null
 )
@@ -91,11 +93,35 @@ data class CommandIsolationConfigDto(
 )
 
 /**
+ * DTO for the deployment paths credential profile targets use.
+ *
+ * Every field is optional so an image's defaults apply without restating them, and there is no
+ * enable flag: whether a credential can be attached follows the command-isolation switch.
+ *
+ * @property vaultUser Account profile targets run as; null resolves to `vault`.
+ * @property vaultHelperPath Absolute path of the helper that drops to that account.
+ * @property askpassScriptPath Absolute path of the askpass helper `askpass` profiles are handed.
+ * @property secretDir Absolute path of the directory holding one tree per attached profile.
+ * @property secretWorkingDirectory Absolute working directory for profile targets, never the shared
+ *   workspace.
+ * @property maxSecretBytes Largest accepted decrypted secret size.
+ */
+@Serializable
+data class CredentialsConfigDto(
+    val vaultUser: String? = null,
+    val vaultHelperPath: String? = null,
+    val askpassScriptPath: String? = null,
+    val secretDir: String? = null,
+    val secretWorkingDirectory: String? = null,
+    val maxSecretBytes: Int? = null,
+)
+
+/**
  * DTO for the environment an isolated child process receives.
  *
- * @property allowPassthrough Names of worker environment variables the child inherits. A single
- *   `*` entry forwards the whole environment. Nulls resolve to a minimal default, and the account
- *   identity variables are always derived from the isolated user rather than listed here.
+ * @property allowPassthrough Names of worker environment variables the child inherits. Nulls resolve
+ *   to a minimal default, and the account identity variables are always derived from the isolated user
+ *   rather than listed here.
  * @property set Variables the child receives with these values, whether or not the worker defines
  *   them. Null resolves to the default set, which carries the git configuration an isolated child
  *   needs to work in the shared workspace.
@@ -175,6 +201,8 @@ data class ServerConfigDto(
  *
  * @property uid Unique identifier for this worker instance.
  * @property displayName Human-readable label for this worker shown in management UIs.
+ * @property workerId Numeric worker id setup records at registration; null disables the per-row
+ *   credential worker-id check.
  * @property certificateFingerprint SHA-256 fingerprint of the worker certificate.
  * @property certificatePem PEM-encoded public certificate for the worker identity.
  */
@@ -182,6 +210,7 @@ data class ServerConfigDto(
 data class IdentityConfigDto(
     val uid: String? = null,
     val displayName: String? = null,
+    val workerId: Long? = null,
     val certificateFingerprint: String? = null,
     val certificatePem: String? = null
 )

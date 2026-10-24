@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
 import eu.torvian.chatbot.common.security.JvmAsymmetricCryptoProvider
 import eu.torvian.chatbot.worker.auth.*
 import eu.torvian.chatbot.worker.builtin.*
+import eu.torvian.chatbot.worker.builtin.command.AllowlistChildEnvironmentProvider
 import eu.torvian.chatbot.worker.builtin.command.ChildEnvironmentProvider
 import eu.torvian.chatbot.worker.builtin.command.CommandIsolationResolution
 import eu.torvian.chatbot.worker.builtin.command.CommandLauncher
@@ -16,13 +17,29 @@ import eu.torvian.chatbot.worker.builtin.net.JvmDnsResolver
 import eu.torvian.chatbot.worker.builtin.net.KtorWebFetchService
 import eu.torvian.chatbot.worker.builtin.net.PublicUrlValidator
 import eu.torvian.chatbot.worker.builtin.net.WebFetchService
+import eu.torvian.chatbot.worker.builtin.terminal.CredentialAttachDependencies
 import eu.torvian.chatbot.worker.builtin.terminal.TerminalSessionManager
+import eu.torvian.chatbot.worker.builtin.terminal.secret.SecretMaterialFactory
 import eu.torvian.chatbot.worker.config.RuntimeConfig
 import eu.torvian.chatbot.worker.config.TrustedSigner
+import eu.torvian.chatbot.worker.credential.CredentialProfileValidator
+import eu.torvian.chatbot.worker.credential.CredentialSecretDecryptor
+import eu.torvian.chatbot.worker.credential.CredentialSyncCommandExecutor
+import eu.torvian.chatbot.worker.credential.CredentialSyncCommandExecutorImpl
+import eu.torvian.chatbot.worker.credential.DefaultCredentialProfileValidator
+import eu.torvian.chatbot.worker.credential.DefaultCredentialSecretDecryptor
+import eu.torvian.chatbot.worker.credential.HelperSecretTreeFactory
+import eu.torvian.chatbot.worker.credential.InMemoryWorkerCredentialStore
+import eu.torvian.chatbot.worker.credential.SecretTreeFactory
+import eu.torvian.chatbot.worker.credential.WorkerCredentialStore
+import eu.torvian.chatbot.worker.credential.api.AssignedCredentialBootstrapper
+import eu.torvian.chatbot.worker.credential.api.KtorWorkerCredentialApi
+import eu.torvian.chatbot.worker.credential.api.WorkerCredentialApi
 import eu.torvian.chatbot.worker.mcp.*
 import eu.torvian.chatbot.worker.mcp.api.AssignedConfigBootstrapper
 import eu.torvian.chatbot.worker.mcp.api.KtorWorkerMcpServerApi
 import eu.torvian.chatbot.worker.mcp.api.WorkerMcpServerApi
+import eu.torvian.chatbot.worker.protocol.factory.CredentialSyncCommandInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.McpRuntimeCommandInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.McpToolCallInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.ToolCallInteractionFactory
@@ -117,6 +134,59 @@ fun workerModule(
     single<InteractionIdProvider> { UuidInteractionIdProvider() }
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
     single<McpServerConfigStore> { InMemoryMcpServerConfigStore() }
+
+    // Credential profiles and encrypted secrets: memory-only cache plus its data path.
+    single<WorkerCredentialStore> { InMemoryWorkerCredentialStore() }
+    single<CredentialSecretDecryptor> {
+        DefaultCredentialSecretDecryptor(
+            privateKeyPem = privateKeyPem,
+            workerCertificateFingerprint = config.identity.certificateFingerprint,
+            maxSecretBytes = config.credentials.maxSecretBytes,
+        )
+    }
+    single<SecretTreeFactory> {
+        HelperSecretTreeFactory(
+            secretDir = config.credentials.secretDir,
+            vaultHelperPath = config.credentials.vaultHelperPath,
+            logger = LogManager.getLogger(HelperSecretTreeFactory::class.java),
+        )
+    }
+    single {
+        SecretMaterialFactory(
+            trees = get(),
+            askpassScriptPath = config.credentials.askpassScriptPath,
+        )
+    }
+    single<CredentialProfileValidator> {
+        DefaultCredentialProfileValidator(
+            verificationService = get(),
+            deploymentEnvironmentKeys = config.commandIsolation.environment.set.keys,
+        )
+    }
+    single<WorkerCredentialApi> {
+        KtorWorkerCredentialApi(
+            client = get(),
+            authenticatedRequestExecutor = get(),
+        )
+    }
+    single {
+        AssignedCredentialBootstrapper(
+            api = get(),
+            profileValidator = get(),
+            store = get(),
+            pinnedWorkerId = config.identity.workerId,
+        )
+    }
+    single<CredentialSyncCommandExecutor> {
+        CredentialSyncCommandExecutorImpl(
+            profileValidator = get(),
+            store = get(),
+            pinnedWorkerId = config.identity.workerId,
+        )
+    }
+    single<CredentialSyncCommandInteractionFactory> {
+        CredentialSyncCommandInteractionFactory(executor = get())
+    }
     single<McpProcessManager> { JvmMcpProcessManager() }
     single<WorkerAuthenticatedRequestExecutor> {
         DefaultWorkerAuthenticatedRequestExecutor(
@@ -199,6 +269,7 @@ fun workerModule(
             authManager = get(),
             sessionRunner = get(),
             bootstrapper = get(),
+            credentialBootstrapper = get(),
             transportConfig = get()
         )
     }
@@ -256,7 +327,13 @@ fun workerModule(
                 WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES to get<McpRuntimeCommandInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_CREATE to get<McpRuntimeCommandInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_UPDATE to get<McpRuntimeCommandInteractionFactory>(),
-                WorkerProtocolCommandTypes.MCP_SERVER_DELETE to get<McpRuntimeCommandInteractionFactory>()
+                WorkerProtocolCommandTypes.MCP_SERVER_DELETE to get<McpRuntimeCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_PROFILE_CREATE to get<CredentialSyncCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_PROFILE_UPDATE to get<CredentialSyncCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_PROFILE_DELETE to get<CredentialSyncCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_SECRET_CREATE to get<CredentialSyncCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_SECRET_UPDATE to get<CredentialSyncCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.CREDENTIAL_SECRET_DELETE to get<CredentialSyncCommandInteractionFactory>()
             ),
             emitter = get(),
             registry = get(),
@@ -281,11 +358,32 @@ fun workerModule(
         )
     }
     single<TerminalSessionManager> {
+        val cfg = get<RuntimeConfig>()
+        // Credential attach is wired only when a credential account was resolved: with isolation off
+        // there is no account a secret could be loaded into, so `attach` reports PERMISSION_DENIED
+        // instead of quietly delivering under the worker's own account.
+        val secretAccount = commandIsolation.secretAccount
         TerminalSessionManager(
-            config = get<RuntimeConfig>().terminalSessions,
+            config = cfg.terminalSessions,
             resolution = commandIsolation,
             childEnvironment = get(),
-            workspace = Paths.get(get<RuntimeConfig>().workspace.path),
+            workspace = Paths.get(cfg.workspace.path),
+            credentials = secretAccount?.let { account ->
+                CredentialAttachDependencies(
+                    store = get(),
+                    decryptor = get(),
+                    materialFactory = get(),
+                    // A second allowlist provider rather than the command one: the profile child is a
+                    // different account with a different HOME, and it must not inherit the worker's
+                    // environment either.
+                    vaultEnvironment = AllowlistChildEnvironmentProvider(
+                        config = cfg.commandIsolation.environment,
+                        isolatedUser = account.user,
+                        isolatedHome = account.home,
+                    ),
+                    secretWorkingDirectory = Paths.get(cfg.credentials.secretWorkingDirectory),
+                )
+            },
             logger = LogManager.getLogger(TerminalSessionManager::class.java),
         )
     } onClose { manager ->

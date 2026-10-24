@@ -51,7 +51,9 @@ fun serviceModule() = module {
             json = get(),
             transactionScope = get(),
             projectDao = get(),
-            sessionDao = get()
+            sessionDao = get(),
+            credentialProfileDao = get(),
+            workerDao = get()
         )
     }
     single<InstructionService> {

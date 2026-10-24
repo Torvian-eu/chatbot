@@ -4,6 +4,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -63,6 +64,39 @@ class ConfigAssemblerTest {
         assertEquals("my-worker", config?.worker?.identity?.displayName)
         assertEquals(60, config?.worker?.auth?.refreshSkewSeconds)
         assertEquals(emptyList(), config?.worker?.trustedSigners)
+    }
+
+    /**
+     * Verifies the optional worker-id pin is carried into the domain model unchanged.
+     */
+    @Test
+    fun `carries the configured worker id pin`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(identity = identity(workerId = 7L)).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        assertEquals(7L, result.getOrNull()?.worker?.identity?.workerId)
+    }
+
+    /**
+     * Verifies an absent pin is legal, because it only disables the per-row credential worker-id check.
+     */
+    @Test
+    fun `accepts an absent worker id pin`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(identity = identity(workerId = null)).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        assertNull(result.getOrNull()?.worker?.identity?.workerId)
+    }
+
+    /**
+     * Verifies a non-positive pin fails startup with an error naming the configuration key.
+     */
+    @Test
+    fun `rejects non-positive worker id pins`() {
+        assertInvalid(validDto(identity = identity(workerId = 0)), "worker.identity.workerId must be > 0")
+        assertInvalid(validDto(identity = identity(workerId = -3)), "worker.identity.workerId must be > 0")
     }
 
     /**
@@ -261,27 +295,65 @@ class ConfigAssemblerTest {
                     environment = CommandEnvironmentConfigDto(allowPassthrough = listOf("PATH", "PATH=/usr/bin"))
                 )
             ),
-            "worker.commandIsolation.environment.allowPassthrough[1] must be an environment variable name or \"*\""
+            "worker.commandIsolation.environment.allowPassthrough[1] must be an environment variable name"
         )
     }
 
     /**
-     * Verifies that the wildcard allowlist is accepted without naming PATH explicitly.
+     * Verifies that a sensitive name cannot be forwarded to an isolated child through the allowlist.
      */
     @Test
-    fun `accepts wildcard command isolation allowlist without PATH`() {
+    fun `rejects sensitive name in command isolation allowlist`() {
+        assertInvalid(
+            validDto(
+                commandIsolation = CommandIsolationConfigDto(
+                    environment = CommandEnvironmentConfigDto(
+                        allowPassthrough = listOf("PATH", "CHATBOT_WORKER_PRIVATE_KEY_PEM")
+                    )
+                )
+            ),
+            "worker.commandIsolation.environment.allowPassthrough[1] must not name " +
+                "'CHATBOT_WORKER_PRIVATE_KEY_PEM'"
+        )
+    }
+
+    /**
+     * Verifies that a sensitive name cannot be given a deployment value through the `set` map.
+     */
+    @Test
+    fun `rejects sensitive name in command isolation set`() {
+        assertInvalid(
+            validDto(
+                commandIsolation = CommandIsolationConfigDto(
+                    environment = CommandEnvironmentConfigDto(
+                        allowPassthrough = listOf("PATH"),
+                        set = mapOf("CHATBOT_WORKER_PRIVATE_KEY_PEM" to "-----BEGIN PRIVATE KEY-----"),
+                    )
+                )
+            ),
+            "worker.commandIsolation.environment.set['CHATBOT_WORKER_PRIVATE_KEY_PEM']"
+        )
+    }
+
+    /**
+     * Verifies that an ordinary allowlist still resolves to the configured names.
+     */
+    @Test
+    fun `accepts ordinary command isolation allowlist`() {
         val configDir = createTempDirectory("config-assembler-test")
         val result = validDto(
             commandIsolation = CommandIsolationConfigDto(
-                environment = CommandEnvironmentConfigDto(allowPassthrough = listOf("*"))
+                environment = CommandEnvironmentConfigDto(
+                    allowPassthrough = listOf("PATH", "NPM_CONFIG_CACHE"),
+                    set = mapOf("NPM_CONFIG_YES" to "true"),
+                )
             )
         ).toDomain(configDir)
 
         assertTrue(result.isRight())
-        assertEquals(
-            listOf("*"),
-            result.getOrNull()?.worker?.commandIsolation?.environment?.allowPassthrough
-        )
+        val environment = result.getOrNull()?.worker?.commandIsolation?.environment
+        assertEquals(listOf("PATH", "NPM_CONFIG_CACHE"), environment?.allowPassthrough)
+        assertEquals(mapOf("NPM_CONFIG_YES" to "true"), environment?.set)
     }
 
     /**
@@ -469,6 +541,108 @@ class ConfigAssemblerTest {
     }
 
     /**
+     * Verifies that the credential group resolves to the documented defaults when omitted.
+     */
+    @Test
+    fun `uses credential defaults when the group is omitted`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(credentials = null).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        val credentials = result.getOrNull()?.worker?.credentials
+        assertEquals("vault", credentials?.vaultUser)
+        assertEquals("/usr/local/bin/run-as-vault", credentials?.vaultHelperPath)
+        assertEquals("/usr/local/bin/torvian-askpass", credentials?.askpassScriptPath)
+        assertEquals("/run/torvian/secrets", credentials?.secretDir)
+        assertEquals("/home/vault/work", credentials?.secretWorkingDirectory)
+        assertEquals(8192, credentials?.maxSecretBytes)
+    }
+
+    /** Verifies that explicit credential values are carried into the domain model. */
+    @Test
+    fun `accepts explicit credential configuration`() {
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto(
+            credentials = CredentialsConfigDto(
+                vaultUser = "credentials",
+                vaultHelperPath = "/opt/run-as-vault",
+                askpassScriptPath = "/opt/askpass",
+                secretDir = "/run/credentials",
+                secretWorkingDirectory = "/home/credentials/work",
+                maxSecretBytes = 1024,
+            )
+        ).toDomain(configDir)
+
+        assertTrue(result.isRight())
+        val credentials = result.getOrNull()?.worker?.credentials
+        assertEquals("credentials", credentials?.vaultUser)
+        assertEquals("/opt/run-as-vault", credentials?.vaultHelperPath)
+        assertEquals("/opt/askpass", credentials?.askpassScriptPath)
+        assertEquals("/run/credentials", credentials?.secretDir)
+        assertEquals("/home/credentials/work", credentials?.secretWorkingDirectory)
+        assertEquals(1024, credentials?.maxSecretBytes)
+    }
+
+    /**
+     * Verifies that sharing the isolated command account is rejected.
+     *
+     * One account for both would let a shell the model drives read every loaded secret.
+     */
+    @Test
+    fun `rejects credential account equal to the command isolation account`() {
+        assertInvalid(
+            validDto(
+                commandIsolation = CommandIsolationConfigDto(user = "agent"),
+                credentials = CredentialsConfigDto(vaultUser = "agent"),
+            ),
+            "worker.credentials.vaultUser must differ from worker.commandIsolation.user"
+        )
+    }
+
+    /** Verifies that a credential account name the account database cannot resolve is rejected. */
+    @Test
+    fun `rejects invalid credential account name`() {
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(vaultUser = "Vault Account")),
+            "worker.credentials.vaultUser must be an account name"
+        )
+    }
+
+    /** Verifies that every credential path must be absolute. */
+    @Test
+    fun `rejects relative credential paths`() {
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(secretDir = "./secrets")),
+            "worker.credentials.secretDir must be an absolute path"
+        )
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(secretWorkingDirectory = "work")),
+            "worker.credentials.secretWorkingDirectory must be an absolute path"
+        )
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(vaultHelperPath = "run-as-vault")),
+            "worker.credentials.vaultHelperPath must be an absolute path"
+        )
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(askpassScriptPath = "askpass")),
+            "worker.credentials.askpassScriptPath must be an absolute path"
+        )
+    }
+
+    /** Verifies that the secret size bound stays inside its documented range. */
+    @Test
+    fun `rejects out of range credential secret size`() {
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(maxSecretBytes = 0)),
+            "worker.credentials.maxSecretBytes must be in 1..1048576"
+        )
+        assertInvalid(
+            validDto(credentials = CredentialsConfigDto(maxSecretBytes = 1_048_577)),
+            "worker.credentials.maxSecretBytes must be in 1..1048576"
+        )
+    }
+
+    /**
      * Asserts that converting the supplied DTO fails with a configuration validation error.
      *
      * @param dto Nullable DTO tree to convert.
@@ -489,6 +663,20 @@ class ConfigAssemblerTest {
     }
 
     /**
+     * Creates an identity group with the required fields filled in, so a test can vary one value.
+     *
+     * @param workerId Optional worker-id pin to place in the group.
+     * @return Identity DTO with the other required values set to test fixtures.
+     */
+    private fun identity(workerId: Long?): IdentityConfigDto = IdentityConfigDto(
+        uid = "worker-1",
+        displayName = "Worker One",
+        workerId = workerId,
+        certificateFingerprint = "fingerprint-1",
+        certificatePem = "certificate-pem-1"
+    )
+
+    /**
      * Creates a valid app configuration DTO that individual tests can selectively invalidate.
      *
      * @param setup Optional setup section for the root config.
@@ -497,6 +685,7 @@ class ConfigAssemblerTest {
      * @param storage Storage DTO to place under the worker section.
      * @param auth Auth DTO to place under the worker section.
      * @param commandIsolation Command-isolation DTO to place under the worker section.
+     * @param credentials Credential deployment DTO to place under the worker section.
      * @param terminalSessions Terminal-session DTO to place under the worker section.
      * @param trustedSigners Trusted signer DTOs to place under the worker section.
      * @return Root DTO ready to pass to [AppConfigDto.toDomain].
@@ -516,6 +705,7 @@ class ConfigAssemblerTest {
         ),
         auth: AuthConfigDto? = AuthConfigDto(refreshSkewSeconds = 30),
         commandIsolation: CommandIsolationConfigDto? = CommandIsolationConfigDto(),
+        credentials: CredentialsConfigDto? = CredentialsConfigDto(),
         terminalSessions: TerminalSessionsConfigDto? = TerminalSessionsConfigDto(),
         trustedSigners: List<TrustedSignerDto>? = listOf(
             TrustedSignerDto(
@@ -534,6 +724,7 @@ class ConfigAssemblerTest {
             workspace = WorkspaceConfigDto(path = "./workspace"),
             builtInTools = BuiltInToolsConfigDto(enabled = listOf("*"), defaultCommandTimeoutSeconds = 600),
             commandIsolation = commandIsolation,
+            credentials = credentials,
             terminalSessions = terminalSessions,
             trustedSigners = trustedSigners
         )

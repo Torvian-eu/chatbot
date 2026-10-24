@@ -66,6 +66,7 @@ class AgentRoleInstructionLibraryTest {
                 AgentInstructionTypes.MAIN,
                 AgentInstructionTypes.CUSTOM,
                 AgentInstructionTypes.SPAWNABLE_AGENTS,
+                AgentInstructionTypes.CREDENTIAL_PROFILES,
                 AgentInstructionTypes.MODEL_SPECIFIC
             ),
             editableInstructionTypes

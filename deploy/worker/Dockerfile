@@ -1,7 +1,7 @@
 # 1a. Helper builder stage
-# Compiles the privilege-dropping helper used by built-in tool commands. The base image is the
-# same as the runtime stage so the helper links against an identical glibc; the compiler never
-# reaches the runtime image.
+# Compiles the privilege-dropping helpers used by built-in tool commands and by credential profile
+# targets. The base image is the same as the runtime stage so the helpers link against an identical
+# glibc; the compiler never reaches the runtime image.
 FROM eclipse-temurin:25-jdk AS helper-builder
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -9,8 +9,11 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY run-as-agent.c /src/run-as-agent.c
-RUN mkdir -p /out && gcc -O2 -Wall -o /out/run-as-agent /src/run-as-agent.c
+# Both helpers include privilege_drop.h, so the privilege-drop sequence exists once.
+COPY run-as-agent.c run-as-vault.c privilege_drop.h /src/
+RUN mkdir -p /out \
+    && gcc -O2 -Wall -o /out/run-as-agent /src/run-as-agent.c \
+    && gcc -O2 -Wall -o /out/run-as-vault /src/run-as-vault.c
 
 # 1b. Runtime base image
 FROM eclipse-temurin:25-jdk
@@ -50,17 +53,44 @@ RUN groupadd -g 10001 torvian && \
 RUN userdel ubuntu
 
 # 5b. Create the isolated account used by built-in tool commands.
-# 'shared' is 'agent's PRIMARY group, which is what makes files created by spawned commands
-# writable by the worker; the helper discards supplementary groups.
+# 'shared' is the PRIMARY group of both isolated accounts, which is what makes files created by
+# spawned commands writable by the worker; the helpers discard supplementary groups.
 RUN groupadd -g 10003 shared \
     && useradd -u 10002 -g shared -m -s /bin/bash agent \
     && usermod -aG shared torvian
 
-# 5c. Install the privilege-dropping helper.
-# Root-owned inside a root-owned directory, setuid so it can drop privileges, and never on a mount.
+# 5c. Create the credential-bearing account.
+# Only credential profile targets run as 'vault'. Its own trees under /run/torvian/secrets are
+# 0700 and vault-owned, so the 'shared' primary group does not expose them. The home directory is
+# 0711 on purpose: pty4j changes directory in the forked child before it execs the helper, while the
+# child still has the worker's uid, so the path must be traversable but not listable.
+RUN useradd -u 10004 -g shared -m -s /bin/bash vault \
+    && mkdir -p /home/vault/work \
+    && chown vault:shared /home/vault /home/vault/work \
+    && chmod 0711 /home/vault /home/vault/work
+
+# 5d. Install the privilege-dropping helpers.
+# Root-owned inside a root-owned directory, setuid so they can drop privileges, and never on a mount.
+# 4750, not 4755: only the worker group may execute them, because a world-executable run-as-vault
+# would let any ordinary session become 'vault' and read every secret.
 COPY --from=helper-builder /out/run-as-agent /usr/local/bin/run-as-agent
-RUN chown root:root /usr/local/bin/run-as-agent \
-    && chmod 4755 /usr/local/bin/run-as-agent
+COPY --from=helper-builder /out/run-as-vault /usr/local/bin/run-as-vault
+RUN chown root:torvian /usr/local/bin/run-as-agent /usr/local/bin/run-as-vault \
+    && chmod 4750 /usr/local/bin/run-as-agent /usr/local/bin/run-as-vault
+
+# 5e. Install the askpass helper used by 'askpass' credential profiles.
+# Root-owned and not writable by the worker or the isolated accounts; it holds no secret, only the
+# path of the per-attach file the selected profile's secret is written to.
+COPY torvian-askpass.sh /usr/local/bin/torvian-askpass
+RUN chown root:root /usr/local/bin/torvian-askpass \
+    && chmod 0755 /usr/local/bin/torvian-askpass
+
+# 5f. Create the secret root.
+# Worker-owned and traversable by the credential account but not listable by it, and never
+# world-listable: the per-attach trees the helper creates inside are what hold secrets.
+RUN mkdir -p /run/torvian/secrets \
+    && chown torvian:torvian /run/torvian /run/torvian/secrets \
+    && chmod 0711 /run/torvian /run/torvian/secrets
 
 # 6. Prepare directory structure for app and MCP caches, plus the isolated account's home
 RUN mkdir -p /app/config /app/data /app/logs /app/workspace /app/cache/npm /app/cache/uv /home/agent \

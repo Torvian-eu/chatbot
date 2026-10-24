@@ -53,14 +53,10 @@ class AllowlistChildEnvironmentProvider(
 ) : ChildEnvironmentProvider {
     override fun build(): Map<String, String> {
         val environment = LinkedHashMap<String, String>()
-        if (config.allowPassthrough.contains(WILDCARD)) {
-            environment.putAll(parent)
-        } else {
-            // A name the worker does not define is omitted rather than set to an empty value, so a
-            // child tool can tell "unset" apart from "explicitly empty".
-            config.allowPassthrough.forEach { name ->
-                parent[name]?.let { value -> environment[name] = value }
-            }
+        // A name the worker does not define is omitted rather than set to an empty value, so a child
+        // tool can tell "unset" apart from "explicitly empty".
+        config.allowPassthrough.forEach { name ->
+            parent[name]?.let { value -> environment[name] = value }
         }
 
         // Written after the pass-through so a configured value is what the child sees, including for
@@ -76,9 +72,6 @@ class AllowlistChildEnvironmentProvider(
     }
 
     private companion object {
-        /** Allowlist entry that forwards every variable of the worker environment. */
-        const val WILDCARD = "*"
-
         /** Variable tools use to locate per-account configuration. */
         const val HOME_VARIABLE = "HOME"
 

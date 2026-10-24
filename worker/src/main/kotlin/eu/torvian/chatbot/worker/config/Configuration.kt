@@ -21,6 +21,7 @@ data class Configuration(
  * @property workspace Filesystem workspace for built-in tools.
  * @property builtInTools Built-in tool configuration (enabled names, default command timeout).
  * @property commandIsolation UID boundary applied to built-in-tool child processes.
+ * @property credentials Deployment paths for the credential-bearing account.
  * @property terminalSessions Limits and timeouts for interactive terminal sessions.
  * @property trustedSigners Authorized E2EA signers trusted by this worker.
  */
@@ -32,8 +33,35 @@ data class RuntimeConfig(
     val workspace: WorkspaceConfig,
     val builtInTools: BuiltInToolsConfig,
     val commandIsolation: CommandIsolationConfig,
+    val credentials: CredentialsConfig,
     val terminalSessions: TerminalSessionsConfig,
     val trustedSigners: List<TrustedSigner>
+)
+
+/**
+ * Deployment knobs for credential profile targets.
+ *
+ * Credential profiles and their secret values are not worker configuration: they are managed on the
+ * server and delivered over the authenticated worker protocol. Only the paths and limits the image
+ * provides live here, and there is no enable switch — availability follows
+ * [CommandIsolationConfig.enabled], so a worker with isolation off starts normally and refuses to
+ * attach a credential.
+ *
+ * @property vaultUser Account profile targets run as; must differ from [CommandIsolationConfig.user].
+ * @property vaultHelperPath Absolute path of the helper that drops to [vaultUser].
+ * @property askpassScriptPath Absolute path of the askpass helper handed to `askpass` profiles.
+ * @property secretDir Absolute path of the directory holding one tree per attached profile.
+ * @property secretWorkingDirectory Absolute working directory for profile targets; it is not the
+ *   shared workspace, so a profile cannot load model-writable configuration.
+ * @property maxSecretBytes Largest accepted decrypted secret size.
+ */
+data class CredentialsConfig(
+    val vaultUser: String,
+    val vaultHelperPath: String,
+    val askpassScriptPath: String,
+    val secretDir: String,
+    val secretWorkingDirectory: String,
+    val maxSecretBytes: Int,
 )
 
 /**
@@ -69,7 +97,9 @@ data class CommandIsolationConfig(
  * @property maxLifetimeSeconds Absolute lifetime after which a session is closed even if active.
  * @property maxSessions Maximum number of live sessions the worker keeps at once.
  * @property maxClosedSessions Maximum number of closed-session tombstones retained for late reads.
- * @property maxOutputBytesPerSession Sanitized output bytes retained per live or closed session.
+ * @property maxOutputBytesPerSession Sanitized output bytes retained per target, not per session: an
+ *   attached session keeps one buffer for the shell and one for the profile, so it can hold up to
+ *   twice this value.
  * @property quietMillis Silence window after which output is considered settled.
  * @property defaultWaitMillis Default maximum wait for one tool call when the caller omits it.
  * @property maxWaitMillis Upper bound for a caller-supplied wait.
@@ -102,12 +132,13 @@ data class TerminalSessionsConfig(
  * Children under a different account must not inherit the worker's environment, which may carry
  * credentials; children sharing the worker's account see the same environment as the worker itself.
  *
- * @property allowPassthrough Worker environment variable names the child inherits. A single `*`
- *   entry forwards the whole environment. Account identity variables are always derived from the
- *   isolated account and are not affected by this list.
+ * @property allowPassthrough Worker environment variable names the child inherits. A name carrying
+ *   the worker's own credential material is rejected at startup. Account identity variables are always
+ *   derived from the isolated account and are not affected by this list.
  * @property set Variables the child receives with these values, independent of the worker's own
  *   environment. Account identity variables are always derived from the isolated account, so an
- *   entry naming `HOME`, `USER` or `LOGNAME` has no effect.
+ *   entry naming `HOME`, `USER` or `LOGNAME` has no effect; a name carrying the worker's own
+ *   credential material is rejected at startup.
  */
 data class CommandEnvironmentConfig(
     val allowPassthrough: List<String>,
@@ -190,6 +221,8 @@ data class ServerConfig(
  *
  * @property uid Unique identifier for this worker instance.
  * @property displayName Human-readable label for this worker shown in management UIs.
+ * @property workerId Numeric worker id pinned by `worker.identity.workerId`; null means no per-row
+ *   credential worker-id check.
  * @property certificateFingerprint SHA-256 fingerprint of the worker certificate.
  * @property certificatePem PEM-encoded public certificate.
  */
@@ -197,7 +230,8 @@ data class IdentityConfig(
     val uid: String,
     val displayName: String,
     val certificateFingerprint: String,
-    val certificatePem: String
+    val certificatePem: String,
+    val workerId: Long? = null
 )
 
 /**

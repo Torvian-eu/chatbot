@@ -46,6 +46,10 @@ abstract class AgentRoleServiceImplTestBase {
     protected lateinit var projectDao: ProjectDao
     /** Mocked session DAO backing the role-update legality sweep. */
     protected lateinit var sessionDao: SessionDao
+    /** Mocked credential-profile DAO backing the credential advertisement loader. */
+    protected lateinit var credentialProfileDao: WorkerCredentialProfileDao
+    /** Mocked worker DAO labelling each credential-profile group. */
+    protected lateinit var workerDao: WorkerDao
     /** Mocked preset DAO backing preset validation and resolution. */
     protected lateinit var modelPresetDao: ModelPresetDao
     /** Mocked settings DAO backing preset settings validation. */
@@ -109,6 +113,8 @@ abstract class AgentRoleServiceImplTestBase {
         agentRoleInstructionDao = mockk()
         projectDao = mockk()
         sessionDao = mockk()
+        credentialProfileDao = mockk()
+        workerDao = mockk()
         modelPresetDao = mockk()
         settingsDao = mockk()
         toolDefinitionDao = mockk()
@@ -129,7 +135,9 @@ abstract class AgentRoleServiceImplTestBase {
             json = json,
             transactionScope = transactionScope,
             projectDao = projectDao,
-            sessionDao = sessionDao
+            sessionDao = sessionDao,
+            credentialProfileDao = credentialProfileDao,
+            workerDao = workerDao
         )
 
         // The spawn allow-list DAO is always consulted (non-nullable dependency); default its reads

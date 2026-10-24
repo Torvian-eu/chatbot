@@ -32,7 +32,8 @@ class AssignedConfigBootstrapper(
      * Fetches assigned server configurations from the server and populates the local store.
      *
      * On success, all assigned configurations are cached and available for the runtime.
-     * On failure, logs the error but does not block session continuation.
+     * On failure, the failure is returned to the caller. The connection loop treats it as a cycle
+     * failure and does not open a session until the bootstrap succeeds.
      *
      * @return Either a configuration bootstrap error or `Unit` on success.
      */

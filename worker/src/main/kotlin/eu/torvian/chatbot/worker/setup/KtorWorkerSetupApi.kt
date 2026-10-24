@@ -8,6 +8,8 @@ import eu.torvian.chatbot.common.api.resources.WorkerResource
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.worker.RegisterWorkerRequest
+import eu.torvian.chatbot.common.models.api.worker.RegisterWorkerResponse
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.okhttp.*
@@ -66,7 +68,7 @@ class KtorWorkerSetupApi(
         workerUid: String,
         displayName: String,
         certificatePem: String
-    ): Either<WorkerSetupError, Unit> {
+    ): Either<WorkerSetupError, WorkerDto> {
         logger.debug("Registering worker during setup (workerUid={}, displayName={})", workerUid, displayName)
         return execute("register worker") {
             client.post(WorkerResource.Register()) {
@@ -78,7 +80,7 @@ class KtorWorkerSetupApi(
                         certificatePem = certificatePem
                     )
                 )
-            }.body<Unit>()
+            }.body<RegisterWorkerResponse>().worker
         }.mapLeft { error ->
             when (error) {
                 is WorkerSetupError.UnexpectedHttpStatus -> WorkerSetupError.WorkerRegistrationFailed(

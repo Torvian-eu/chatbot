@@ -427,8 +427,8 @@ internal fun usedByLabel(
  * @return The note shown in place of the absent text, or an empty string for a kind that stores text.
  */
 internal fun generatedMessageNote(instruction: AgentInstructionDto): String =
-    if (instruction.type == AgentInstructionTypes.SPAWNABLE_AGENTS) {
-        "Message generated per linked role"
-    } else {
-        ""
+    when (instruction.type) {
+        AgentInstructionTypes.SPAWNABLE_AGENTS -> "Message generated per linked role"
+        AgentInstructionTypes.CREDENTIAL_PROFILES -> "Message generated from the assigned profiles"
+        else -> ""
     }

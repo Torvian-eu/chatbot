@@ -289,17 +289,32 @@ object BuiltInToolCatalog {
                 "alone for Enter, and note that an empty string is not a continuation signal. Output may be partial: " +
                 "QUIET means the process is alive but has been silent recently and is usually waiting for input, not " +
                 "that it exited. Full-screen terminal UI programs are unsupported; prefer non-interactive flags and " +
-                "line-oriented output. Sessions are bounded by a worker-configured idle timeout.",
+                "line-oriented output. Sessions are bounded by a worker-configured idle timeout. " +
+                "'attach' runs an operator-defined credential profile as a separate operating-system account and " +
+                "routes the session's input and output to it; the profile's command and arguments are fixed by the " +
+                "operator and cannot be changed here, and the credential value itself is never returned and cannot be " +
+                "requested. While attached the session is driving the profile process directly, so shell operators " +
+                "such as $?, && and pipes do not apply around it. When the profile process exits or 'detach' is " +
+                "called, the session returns to the shell with its state intact. 'askpass' profiles answer SSH and " +
+                "Git prompts automatically, and 'env' and 'file' profiles expose the credential only to the profile's " +
+                "own process; generic password prompts that do not use askpass are not supported. Note that the call " +
+                "which observes the profile's exit has already returned to the shell, so it reports the shell's " +
+                "status with transition=PROFILE_EXITED and the profile's exit code in attachExitCode.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
                     put("action", buildJsonObject {
                         put("type", "string")
-                        put("enum", buildJsonArray { add("start"); add("send"); add("poll"); add("close") })
+                        put(
+                            "enum",
+                            buildJsonArray { add("start"); add("send"); add("poll"); add("attach"); add("detach"); add("close") }
+                        )
                         put(
                             "description",
                             "Operation to perform. 'start' creates a session; 'send' writes input; 'poll' returns " +
-                                "output produced since the last read; 'close' terminates the session."
+                                "output produced since the last read; 'attach' starts a named credential profile as a " +
+                                "separate account and routes the session to it; 'detach' stops the profile and returns " +
+                                "to the shell; 'close' terminates the session."
                         )
                     })
                     put("session_id", buildJsonObject {
@@ -307,7 +322,17 @@ object BuiltInToolCatalog {
                         put(
                             "description",
                             "Session id returned by 'start' (six characters, for example \"aB3xY9\"). " +
-                                "Required for send, poll and close; must be omitted for start."
+                                "Required for send, poll, attach, detach and close; must be omitted for start."
+                        )
+                    })
+                    put("credential", buildJsonObject {
+                        put("type", "string")
+                        put(
+                            "description",
+                            "Name of a credential profile assigned to this worker by the server. Required for " +
+                                "'attach' and forbidden on every other action. The profile's fixed command runs as a " +
+                                "separate account and the session's input and output are routed to it until it exits " +
+                                "or 'detach' is called."
                         )
                     })
                     put("command", buildJsonObject {
@@ -351,8 +376,8 @@ object BuiltInToolCatalog {
                         put("default", 5000)
                         put(
                             "description",
-                            "Maximum time this call waits for output to settle before returning (send/poll/close). " +
-                                "The call returns earlier when output is quiet."
+                            "Maximum time this call waits for output to settle before returning " +
+                                "(send/poll/attach/detach/close). The call returns earlier when output is quiet."
                         )
                     })
                     put("maxLines", buildJsonObject {

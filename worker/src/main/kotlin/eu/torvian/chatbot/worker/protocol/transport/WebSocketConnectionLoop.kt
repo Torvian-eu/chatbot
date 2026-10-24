@@ -4,6 +4,8 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.worker.auth.WorkerAuthManager
+import eu.torvian.chatbot.worker.credential.api.AssignedCredentialBootstrapError
+import eu.torvian.chatbot.worker.credential.api.AssignedCredentialBootstrapper
 import eu.torvian.chatbot.worker.mcp.api.AssignedConfigBootstrapper
 import eu.torvian.chatbot.worker.runtime.WorkerRuntimeError
 import kotlinx.coroutines.CancellationException
@@ -14,16 +16,19 @@ import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import kotlin.math.roundToLong
 import kotlin.random.Random
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Maintains an authenticated worker WebSocket session with reconnect, re-auth, and bootstrap behavior.
  *
  * Orchestrates the per-cycle startup sequence:
  * 1. Bootstrap assigned MCP configs (using authenticated executor with token refresh)
- * 2. Get current valid token (ensures bootstrap refresh is accounted for)
- * 3. Open WebSocket session with that token
- * 4. On auth rejection, set flag for next-cycle forced reauth
- * 5. On any session failure, schedule reconnect with backoff
+ * 2. Bootstrap assigned credential profiles and secrets, retrying on failure like the MCP bootstrap,
+ *    while a response contradicting the configured worker-id pin ends the run
+ * 3. Get current valid token (ensures bootstrap refresh is accounted for)
+ * 4. Open WebSocket session with that token
+ * 5. On auth rejection, set flag for next-cycle forced reauth
+ * 6. On any session failure, schedule reconnect with backoff
  */
 class WebSocketConnectionLoop(
     /**
@@ -45,9 +50,19 @@ class WebSocketConnectionLoop(
      * Bootstrapper for assigned MCP server configurations.
      *
      * Called before each websocket session to fetch and cache server configurations.
-     * Failures cause cycle abort; outer loop handles reconnect and backoff.
+     * A failure restarts the cycle: the worker cannot serve MCP tools without its assignment.
      */
     private val bootstrapper: AssignedConfigBootstrapper,
+
+    /**
+     * Bootstrapper for assigned credential profiles and encrypted secrets.
+     *
+     * Called immediately after the MCP bootstrap. A failure restarts the cycle, so no session is opened
+     * against a cache that the server could not populate. A response that resolves a different worker id
+     * than `worker.identity.workerId` is fatal instead: it ends the run, because the server then
+     * disagrees with the identity the owner pinned.
+     */
+    private val credentialBootstrapper: AssignedCredentialBootstrapper,
 
     /**
      * Reconnect timing configuration.
@@ -70,13 +85,17 @@ class WebSocketConnectionLoop(
      * Per-cycle orchestration:
      * 1. Acquire or refresh token
      * 2. Bootstrap assigned MCP configurations
-     * 3. Acquire fresh token (to account for bootstrap-triggered reauth)
-     * 4. Open and run WebSocket session
-     * 5. Schedule reconnect on any failure
+     * 3. Bootstrap assigned credential profiles and secrets
+     * 4. Acquire fresh token (to account for bootstrap-triggered reauth)
+     * 5. Open and run WebSocket session
+     * 6. Schedule reconnect on any failure
      *
      * @param runOnce When `true`, performs one authenticated connect attempt and returns.
      * @return Either a startup/runtime error or `Unit`.
-     *         In runOnce mode, any startup failure (auth or bootstrap) is returned as a Left.
+     *         In runOnce mode, any startup failure (auth or bootstrap) is returned as a Left. A
+     *         credential bootstrap that contradicts the configured worker-id pin returns
+     *         [WorkerRuntimeError.CredentialBootstrap] carrying
+     *         [AssignedCredentialBootstrapError.WorkerIdMismatch] regardless of the mode.
      */
     override suspend fun run(runOnce: Boolean): Either<WorkerRuntimeError, Unit> {
         var delayMs = transportConfig.reconnectInitialDelayMs.coerceAtLeast(100L)
@@ -92,7 +111,7 @@ class WebSocketConnectionLoop(
                         is Either.Right -> logger.debug("Worker forced re-authentication succeeded")
                         is Either.Left -> {
                             logger.warn("Worker forced re-authentication failed; scheduling retry (error={})", reauthResult.value)
-                            delay(withJitter(delayMs))
+                            delay(withJitter(delayMs).milliseconds)
                             delayMs = nextDelay(delayMs)
                             continue
                         }
@@ -115,13 +134,45 @@ class WebSocketConnectionLoop(
                         }
                         val reconnectDelay = withJitter(delayMs)
                         logger.info("Retrying bootstrap in {} ms", reconnectDelay)
-                        delay(reconnectDelay)
+                        delay(reconnectDelay.milliseconds)
                         delayMs = nextDelay(delayMs)
                         continue
                     }
                 }
 
-                // Step 3: Acquire fresh token for websocket session.
+                // Step 3: Bootstrap assigned credential profiles and secrets.
+                // A failure is retried like the MCP bootstrap; only a worker-id disagreement is fatal.
+                logger.debug("Starting assigned credential bootstrap")
+                when (val credentialResult = credentialBootstrapper.bootstrap()) {
+                    is Either.Right -> {
+                        logger.info("Successfully bootstrapped assigned credentials")
+                    }
+                    is Either.Left -> {
+                        val error = credentialResult.value
+                        if (error is AssignedCredentialBootstrapError.WorkerIdMismatch) {
+                            // A disagreement is never retried in either mode: the server's notion of this
+                            // worker is not the owner's, so no session may be opened under it.
+                            logger.error(
+                                "Credential bootstrap resolved worker {} while worker.identity.workerId is {}; " +
+                                    "refusing to run under a worker identity the owner did not pin",
+                                error.actual,
+                                error.expected
+                            )
+                            return WorkerRuntimeError.CredentialBootstrap(error).left()
+                        }
+                        logger.warn("Failed to bootstrap assigned credentials: {}", error)
+                        if (runOnce) {
+                            return WorkerRuntimeError.CredentialBootstrap(error).left()
+                        }
+                        val reconnectDelay = withJitter(delayMs)
+                        logger.info("Retrying bootstrap in {} ms", reconnectDelay)
+                        delay(reconnectDelay.milliseconds)
+                        delayMs = nextDelay(delayMs)
+                        continue
+                    }
+                }
+
+                // Step 4: Acquire fresh token for websocket session.
                 // This ensures any token refresh triggered by bootstrap is reflected.
                 logger.debug("Acquiring fresh token for websocket session (post-bootstrap)")
                 val wsToken = when (val wsTokenResult = authManager.getValidToken()) {
@@ -134,7 +185,7 @@ class WebSocketConnectionLoop(
                         if (runOnce) {
                             return WorkerRuntimeError.Auth(wsTokenResult.value).left()
                         }
-                        delay(withJitter(delayMs))
+                        delay(withJitter(delayMs).milliseconds)
                         delayMs = nextDelay(delayMs)
                         forceReauthenticate = true
                         continue
@@ -160,7 +211,7 @@ class WebSocketConnectionLoop(
 
                 val reconnectDelay = withJitter(delayMs)
                 logger.info("Reconnecting worker WebSocket in {} ms", reconnectDelay)
-                delay(reconnectDelay)
+                delay(reconnectDelay.milliseconds)
             }
         } catch (_: CancellationException) {
             logger.info("Worker WebSocket connection loop cancelled")

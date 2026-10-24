@@ -204,6 +204,13 @@ fun appSettingsModule(): Module = module {
         )
     }
     viewModel {
+        CredentialSettingsViewModel(
+            credentialRepository = get(),
+            workerRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
         WorkersViewModel(
             workerRepository = get(),
             notificationService = get()

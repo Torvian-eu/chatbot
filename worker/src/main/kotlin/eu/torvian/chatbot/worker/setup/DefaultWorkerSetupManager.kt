@@ -3,6 +3,7 @@ package eu.torvian.chatbot.worker.setup
 import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.right
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 import eu.torvian.chatbot.worker.config.AppConfigDto
 import eu.torvian.chatbot.worker.config.AuthConfigDto
 import eu.torvian.chatbot.worker.config.DefaultWorkerConfigLoader
@@ -101,31 +102,20 @@ class DefaultWorkerSetupManager(
         val loginDeviceId = setupDeviceId?.takeIf { it.isNotBlank() } ?: uid
         val setupApi = setupApiFactory(serverUrl)
 
-        var accessToken: String? = null
-        var logoutError: WorkerSetupError? = null
-
-        try {
-            accessToken = setupApi.login(credentials.username, credentials.password, loginDeviceId).bind()
-
-            setupApi.registerWorker(
-                accessToken = accessToken,
-                workerUid = uid,
-                displayName = displayName,
-                certificatePem = preparedIdentity.certificatePem
-            ).bind()
-        } finally {
-            accessToken?.let { token ->
-                setupApi.logout(token).onLeft { logoutError = it }
-            }
-            setupApi.close()
-        }
-
-        logoutError?.let { raise(it) }
+        val worker = registerWorkerSession(
+            setupApi = setupApi,
+            credentials = credentials,
+            deviceId = loginDeviceId,
+            workerUid = uid,
+            displayName = displayName,
+            certificatePem = preparedIdentity.certificatePem
+        ).bind()
 
         val updatedApplicationConfig = buildUpdatedApplicationConfig(
             existingConfig = mergedConfig,
             serverUrl = serverUrl,
             uid = uid,
+            workerId = worker.id,
             displayName = displayName,
             certificateFingerprint = preparedIdentity.certificateFingerprint,
             certificatePem = preparedIdentity.certificatePem,
@@ -146,6 +136,50 @@ class DefaultWorkerSetupManager(
             DefaultWorkerConfigLoader.SETUP_FILE_NAME,
             buildCompletedSetupConfig()
         ).mapLeft { mapConfigError(it, normalizedConfigDir) }.bind()
+    }
+
+    /**
+     * Logs in, registers this worker, and logs the setup session out again.
+     *
+     * The logout and the client close run for every outcome once login has succeeded, and a login or
+     * registration error is raised before any logout failure so a failed logout cannot mask it.
+     *
+     * @param setupApi Client created for this attempt; it is closed by this function.
+     * @param credentials Owner credentials used for the setup login.
+     * @param deviceId Device identifier reported on login.
+     * @param workerUid Worker identifier to register.
+     * @param displayName Human-readable label for the worker.
+     * @param certificatePem PEM-encoded public certificate for the worker identity.
+     * @return Either a setup error or the worker the server created, whose id becomes the pin.
+     */
+    private suspend fun registerWorkerSession(
+        setupApi: WorkerSetupApi,
+        credentials: WorkerSetupCredentials,
+        deviceId: String,
+        workerUid: String,
+        displayName: String,
+        certificatePem: String
+    ): Either<WorkerSetupError, WorkerDto> = either {
+        var accessToken: String? = null
+        var logoutError: WorkerSetupError? = null
+
+        val worker = try {
+            val token = setupApi.login(credentials.username, credentials.password, deviceId).bind()
+            accessToken = token
+            setupApi.registerWorker(
+                accessToken = token,
+                workerUid = workerUid,
+                displayName = displayName,
+                certificatePem = certificatePem
+            ).bind()
+        } finally {
+            accessToken?.let { token -> setupApi.logout(token).onLeft { logoutError = it } }
+            setupApi.close()
+        }
+
+        // Reached only when registration succeeded, because a raised error above skips this line.
+        logoutError?.let { raise(it) }
+        worker
     }
 
     /**
@@ -248,6 +282,8 @@ class DefaultWorkerSetupManager(
      * @param existingConfig Previously merged application configuration.
      * @param serverUrl Resolved server base URL to persist.
      * @param uid Resolved or generated worker unique identifier.
+     * @param workerId Numeric worker id the server assigned during registration; setup owns this key,
+     *   and its presence activates the per-row credential worker-id check.
      * @param certificateFingerprint Generated certificate fingerprint to persist.
      * @param certificatePem Generated public certificate PEM to persist.
      * @param secretsPathValue Path value for the secrets JSON file.
@@ -260,6 +296,7 @@ class DefaultWorkerSetupManager(
         existingConfig: AppConfigDto,
         serverUrl: String,
         uid: String,
+        workerId: Long,
         displayName: String,
         certificateFingerprint: String,
         certificatePem: String,
@@ -282,6 +319,7 @@ class DefaultWorkerSetupManager(
                 ),
                 identity = existingIdentity.copy(
                     uid = uid,
+                    workerId = workerId,
                     displayName = displayName,
                     certificateFingerprint = certificateFingerprint,
                     certificatePem = certificatePem
@@ -326,9 +364,13 @@ class DefaultWorkerSetupManager(
                 configLoader.resolveLayerPath(configDir, DefaultWorkerConfigLoader.APPLICATION_FILE_NAME).toString(),
                 error.description
             )
-            // Keeps the mapping total: isolation availability is resolved at startup and never
-            // surfaces while writing this layer.
+            // Keeps the mapping total: isolation and credential availability are resolved at startup and
+            // never surface while writing this layer.
             is WorkerConfigError.CommandIsolationUnavailable -> WorkerSetupError.ConfigInvalid(
+                configLoader.resolveLayerPath(configDir, DefaultWorkerConfigLoader.APPLICATION_FILE_NAME).toString(),
+                error.reason
+            )
+            is WorkerConfigError.CredentialsUnavailable -> WorkerSetupError.ConfigInvalid(
                 configLoader.resolveLayerPath(configDir, DefaultWorkerConfigLoader.APPLICATION_FILE_NAME).toString(),
                 error.reason
             )

@@ -6,6 +6,7 @@
     "identity": {
       "uid": "worker-1",
       "displayName": "my-worker",
+      "workerId": 42,
       "certificateFingerprint": "3b6bcc2fb96199bc23b4c253b9dba0d3940fa349b7a1ccf6c8a089297213ae29",
       "certificatePem": "-----BEGIN CERTIFICATE-----\nMIIDFTCCAf2gAwIBAgIRAMTsGWDtcey9CBvOwaJdQnowDQYJKoZIhvcNAQELBQAw\nPDEXMBUGA1UEAwwOQ2hhdGJvdCBXb3JrZXIxEDAOBgNVBAoMB0NoYXRib3QxDzAN\nBgNVBAsMBldvcmtlcjAeFw0yNjA0MTExNjQ0NTVaFw0zNjA0MTExNjQ0NTVaMDwx\nFzAVBgNVBAMMDkNoYXRib3QgV29ya2VyMRAwDgYDVQQKDAdDaGF0Ym90MQ8wDQYD\nVQQLDAZXb3JrZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCO/umg\nQ/B4OsqTE6t6KtpvWjyVcLVFvGJbcvy1xW1gsZBv+jHudEdxTPe2lF7RTLVZ9n1c\n50Ey0iRlA1H6NWKgXKOBwfqHwZSzl8OeSK3PoN5x6fpqXZMnlN55OnO3UCoW0aVF\nt29dxl/2rR74rCARUZhXK7q9DTJELq84iZoBj7016lCGxseHfDgALtM0MPxDY7iD\n7LtZpCrk+K0vll+9zn6VsEg+YYIARq/QV5HsUdWiSeGxetHp/FHAWXfmk7SJLQgM\noMwWUsh/VafK4FoaSaWZQTlH3w2PAayosJ6GyKxKMVcUrRJGvPzYqyaWyOlNXXLt\nA2NytMhwsv6/5AeJAgMBAAGjEjAQMA4GA1UdDwEB/wQEAwIFoDANBgkqhkiG9w0B\nAQsFAAOCAQEAhVkTAQNZLan0PPUDBrzSFW6vo1YJ/xT6xShkP0gErotso8NkwzTF\nQkfk8coa4Ab8EniE9BgFUspJirekRI0msNbe7+AB+uCf/xsEIImBtMi7FWgRUcGD\n+VvxRXKOC5PDi8e4UnKZzLjfdAB3S/ZTqYXOhji1SWqQmCjFyIxhEZvSveIgx8xp\nccPZHmGZW7Ijm2TikAeztIehGiIz079jCOHX/vKdX5DfP5/P3IKuV3YWwRPt9mps\nz9S/vdSAVb6xGCRFCEqF9SPJzBSe9dF1/XEgx825d4C73ErAUHGZOju2rjNIp2eh\n+NoVktQSu2ERXg9qleby2q2jd0c+kF7k3g==\n-----END CERTIFICATE-----\n"
     },
@@ -50,15 +51,24 @@
 
       "enabled": true makes the worker refuse to start when the privilege-dropping helper is
       missing or cannot drop. "environment.allowPassthrough" lists worker environment variables that
-      isolated children receive (a single "*" forwards everything); "environment.set" gives the
-      child values of its own, whether or not the worker defines them. Both apply only while the
-      privilege drop is active, and HOME, USER and LOGNAME always come from the isolated account. The
+      isolated children receive; a name carrying the worker's own secrets is rejected.
+      "environment.set" gives the child values of its own, whether or not the worker defines them.
+      Both apply only while the privilege drop is active, and HOME, USER and LOGNAME always come from
+      the isolated account. The
       default "set" exempts the shared workspace from git's repository-ownership check for isolated
       commands only, and is edited here rather than in the environment. See the worker README for the
       full description and the alternative of an exemption in /home/agent/.gitconfig.
     */
     "commandIsolation": {
       "enabled": false
+    },
+    "credentials": {
+      "vaultUser": "vault",
+      "vaultHelperPath": "/usr/local/bin/run-as-vault",
+      "askpassScriptPath": "/usr/local/bin/torvian-askpass",
+      "secretDir": "/run/torvian/secrets",
+      "secretWorkingDirectory": "/home/vault/work",
+      "maxSecretBytes": 8192
     },
     "terminalSessions": {
       "defaultIdleTimeoutSeconds": 1800,

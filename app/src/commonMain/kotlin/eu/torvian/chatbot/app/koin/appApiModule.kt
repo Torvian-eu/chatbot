@@ -85,6 +85,13 @@ fun appApiModule(config: AppConfiguration): Module = module {
     single<LocalMCPToolApi> {
         KtorLocalMCPToolApiClient(get())
     }
+    single<CredentialApi> {
+        KtorCredentialApiClient(
+            client = get(),
+            json = get(),
+            requestSigningService = get()
+        )
+    }
     single<BuiltInToolApi> {
         KtorBuiltInToolApiClient(get())
     }
@@ -192,6 +199,9 @@ fun appApiModule(config: AppConfiguration): Module = module {
         DefaultLocalMCPServerRuntimeStatusRepository(
             api = get()
         )
+    }
+    single<CredentialRepository> {
+        DefaultCredentialRepository(api = get())
     }
     single<WorkerRepository> {
         DefaultWorkerRepository(

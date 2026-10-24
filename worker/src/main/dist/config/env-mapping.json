@@ -38,6 +38,14 @@
       "user": "WORKER_COMMAND_ISOLATION_USER",
       "helperPath": "WORKER_COMMAND_ISOLATION_HELPER_PATH"
     },
+    "credentials": {
+      "vaultUser": "WORKER_CREDENTIALS_VAULT_USER",
+      "vaultHelperPath": "WORKER_CREDENTIALS_VAULT_HELPER_PATH",
+      "askpassScriptPath": "WORKER_CREDENTIALS_ASKPASS_SCRIPT_PATH",
+      "secretDir": "WORKER_CREDENTIALS_SECRET_DIR",
+      "secretWorkingDirectory": "WORKER_CREDENTIALS_SECRET_WORKING_DIRECTORY",
+      "maxSecretBytes": "WORKER_CREDENTIALS_MAX_SECRET_BYTES"
+    },
     "trustedSigners": [
       {
         "signerId": "WORKER_TRUSTED_SIGNER_1_ID",

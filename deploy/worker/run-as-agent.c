@@ -5,7 +5,7 @@
 //   run-as-agent --signal <TERM|KILL> <pgid>   drop privileges, then signal a process group
 //
 // Build:   gcc -O2 -Wall -o run-as-agent run-as-agent.c
-// Install: install -o root -g root -m 4755 run-as-agent /usr/local/bin/run-as-agent
+// Install: install -o root -g torvian -m 4750 run-as-agent /usr/local/bin/run-as-agent
 //
 // SECURITY
 //  - The target account is hardcoded below. Never accept a UID/GID from argv or the
@@ -18,7 +18,6 @@
 //    delivers a signal, so the parent stays the single authority over what the child can see.
 #define _GNU_SOURCE
 #include <errno.h>
-#include <grp.h>
 #include <limits.h>
 #include <pwd.h>
 #include <signal.h>
@@ -28,25 +27,11 @@
 #include <unistd.h>
 #include <sys/prctl.h>
 
+#include "privilege_drop.h"
+
 #define ISOLATED_USER "agent"
+#define PROGRAM "run-as-agent"
 #define SIGNAL_MODE "--signal"
-
-// Drops every credential the caller may hold and refuses to continue unless the drop fully took
-// effect. Shared by both modes, so the helper can never act while it still holds privileges.
-static int drop_privileges(const struct passwd *pw) {
-    // Drop every supplementary group first: the caller's groups must not leak into the child.
-    // 'agent' keeps 'shared' as its primary group, so the workspace stays usable by both accounts.
-    if (setgroups(0, NULL) != 0) { perror("run-as-agent: setgroups"); return 4; }
-    if (setgid(pw->pw_gid) != 0) { perror("run-as-agent: setgid"); return 5; }
-    if (setuid(pw->pw_uid) != 0) { perror("run-as-agent: setuid"); return 6; }
-
-    // Refuse to run if the drop did not fully take effect (defence against ordering bugs).
-    if (getuid() != pw->pw_uid || geteuid() != pw->pw_uid || getgid() != pw->pw_gid) {
-        fprintf(stderr, "run-as-agent: privilege drop failed\n");
-        return 7;
-    }
-    return 0;
-}
 
 // Maps the signal name the worker sends. Only the two signals the cleanup path uses are accepted,
 // so a caller cannot pick a signal with a different default disposition.
@@ -114,7 +99,7 @@ int main(int argc, char **argv) {
         return 3;
     }
 
-    int drop_result = drop_privileges(pw);
+    int drop_result = drop_privileges(PROGRAM, pw);
     if (drop_result != 0) return drop_result;
 
     if (signal_mode) {

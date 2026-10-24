@@ -1,10 +1,12 @@
 package eu.torvian.chatbot.worker.builtin.command
 
 import arrow.core.Either
+import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.ensureNotNull
 import eu.torvian.chatbot.worker.config.CommandIsolationConfig
+import eu.torvian.chatbot.worker.config.CredentialsConfig
 import eu.torvian.chatbot.worker.config.WorkerConfigError
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -51,6 +53,8 @@ internal object CommandIsolationDetector {
      * failure instead of a silent fallback to the worker's own privileges.
      *
      * @param config Resolved isolation configuration.
+     * @param credentials Resolved credential deployment configuration naming the account and helper
+     *   credential profile targets use.
      * @param logger Logger used to report the selected state and the reason for any failure.
      * @param probe Helper probe, overridable in tests.
      * @param isLinux Whether the host can support the Linux-only mechanism, overridable in tests.
@@ -60,6 +64,7 @@ internal object CommandIsolationDetector {
      */
     fun resolve(
         config: CommandIsolationConfig,
+        credentials: CredentialsConfig,
         logger: Logger,
         probe: (CommandIsolationConfig) -> HelperProbeResult = CommandIsolationDetector::probeHelper,
         isLinux: Boolean = System.getProperty("os.name").lowercase().contains("linux"),
@@ -119,11 +124,26 @@ internal object CommandIsolationDetector {
                     result.user,
                     result.home
                 )
+
+                // Credential availability follows isolation rather than a separate switch: without a
+                // privilege drop there is no account a secret could be loaded into, so the vault is
+                // resolved here and nowhere else. A wrong or missing helper is a startup failure for
+                // the same reason the agent helper is: an unreachable boundary is worse than none.
+                val secretAccount = secretAccountFor(
+                    config = config,
+                    credentials = credentials,
+                    agentUserId = result.uid,
+                    workerUserId = workerUserId,
+                    probe = probe,
+                    logger = logger,
+                )
+
                 CommandIsolationResolution.isolated(
                     helperPath = config.helperPath,
                     user = config.user,
                     home = result.home,
                     logger = logger,
+                    secretAccount = secretAccount,
                 )
             }
 
@@ -131,6 +151,88 @@ internal object CommandIsolationDetector {
                 WorkerConfigError.CommandIsolationUnavailable("${result.reason}; $OPT_OUT_HINT")
             )
         }
+    }
+
+    /**
+     * Probes the credential helper and returns the account profile targets run as.
+     *
+     * The account is checked the same way the isolated command account is: by what the helper reports
+     * it became, not by the name it was told to become. Both the worker's own user id and the agent
+     * user id are refused, because either would let an account the model already drives read a loaded
+     * secret.
+     *
+     * @receiver The Raise context used to propagate configuration errors.
+     * @param config Resolved isolation configuration, whose helper path is replaced for the probe.
+     * @param credentials Credential deployment configuration naming the account and helper to probe.
+     * @param agentUserId Numeric user id the isolated command account reported.
+     * @param workerUserId Numeric user id of this worker process.
+     * @param probe Helper probe reused for the credential helper.
+     * @param logger Logger used to report the resolved account.
+     * @return The resolved credential account.
+     */
+    private fun Raise<WorkerConfigError>.secretAccountFor(
+        config: CommandIsolationConfig,
+        credentials: CredentialsConfig,
+        agentUserId: Long,
+        workerUserId: Long,
+        probe: (CommandIsolationConfig) -> HelperProbeResult,
+        logger: Logger,
+    ): SecretCommandAccount {
+        val vaultHelperPath = credentials.vaultHelperPath
+        // The probe reads only the helper path, so the isolation config is reused rather than
+        // duplicated into a second configuration shape.
+        val vault = when (val result = probe(config.copy(helperPath = vaultHelperPath))) {
+            is HelperProbeResult.EffectiveUser -> result
+            is HelperProbeResult.Failed -> raise(
+                WorkerConfigError.CommandIsolationUnavailable(
+                    "Credential helper $vaultHelperPath cannot be used: ${result.reason}; $OPT_OUT_HINT"
+                )
+            )
+        }
+
+        ensure(vault.user == credentials.vaultUser) {
+            WorkerConfigError.CommandIsolationUnavailable(
+                "Credential helper $vaultHelperPath runs commands as '${vault.user}' but " +
+                    "worker.credentials.vaultUser is '${credentials.vaultUser}'; $OPT_OUT_HINT"
+            )
+        }
+        ensure(vault.uid != workerUserId) {
+            WorkerConfigError.CommandIsolationUnavailable(
+                "Credential helper $vaultHelperPath runs commands with user id ${vault.uid}, which is " +
+                    "the worker's own user id, so a loaded secret would be readable by this process; " +
+                    "worker.credentials.vaultUser ('${credentials.vaultUser}') must name an account " +
+                    "with its own user id; $OPT_OUT_HINT"
+            )
+        }
+        ensure(vault.uid != agentUserId) {
+            WorkerConfigError.CommandIsolationUnavailable(
+                "Credential helper $vaultHelperPath runs commands with user id ${vault.uid}, which is " +
+                    "the user id of the isolated command account '${config.user}', so a shell the " +
+                    "model controls could read a loaded secret; " +
+                    "worker.credentials.vaultUser ('${credentials.vaultUser}') must name an account " +
+                    "with its own user id; $OPT_OUT_HINT"
+            )
+        }
+        ensure(vault.home.isNotBlank()) {
+            WorkerConfigError.CommandIsolationUnavailable(
+                "Credential helper $vaultHelperPath reported no home directory for '${vault.user}'; " +
+                    "the account needs a home the profile targets can start in; $OPT_OUT_HINT"
+            )
+        }
+
+        logger.info(
+            "Credential profiles run as '{}' (home {}) through {}; secrets are delivered only to " +
+                "processes started by that account.",
+            vault.user,
+            vault.home,
+            vaultHelperPath
+        )
+        return SecretCommandAccount.create(
+            helperPath = vaultHelperPath,
+            user = credentials.vaultUser,
+            home = vault.home,
+            logger = logger,
+        )
     }
 
     /**

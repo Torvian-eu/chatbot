@@ -3,18 +3,32 @@ package eu.torvian.chatbot.worker.protocol.transport
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.credential.AssignedCredentialsDto
 import eu.torvian.chatbot.worker.auth.StoredServiceToken
 import eu.torvian.chatbot.worker.auth.WorkerAuthManager
 import eu.torvian.chatbot.worker.auth.WorkerAuthManagerError
+import eu.torvian.chatbot.worker.credential.InMemoryWorkerCredentialStore
+import eu.torvian.chatbot.worker.credential.api.AssignedCredentialBootstrapError
+import eu.torvian.chatbot.worker.credential.api.AssignedCredentialBootstrapper
+import eu.torvian.chatbot.worker.credential.api.WorkerCredentialApi
+import eu.torvian.chatbot.worker.credential.api.WorkerCredentialApiError
 import eu.torvian.chatbot.worker.mcp.api.AssignedConfigBootstrapError
 import eu.torvian.chatbot.worker.mcp.api.AssignedConfigBootstrapper
 import eu.torvian.chatbot.worker.mcp.api.WorkerMcpServerApiError
 import eu.torvian.chatbot.worker.runtime.WorkerRuntimeError
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 
 /**
@@ -46,7 +60,7 @@ class WebSocketConnectionLoopTest {
 
         val config = fakeTransportConfig()
 
-        val loop = WebSocketConnectionLoop(authManager, sessionRunner, bootstrapper, config)
+        val loop = WebSocketConnectionLoop(authManager, sessionRunner, bootstrapper, credentialBootstrapper(), config)
         val result = loop.run(runOnce = true)
 
         assertTrue(result.isLeft())
@@ -72,7 +86,7 @@ class WebSocketConnectionLoopTest {
 
         val config = fakeTransportConfig()
 
-        val loop = WebSocketConnectionLoop(authManager, sessionRunner, bootstrapper, config)
+        val loop = WebSocketConnectionLoop(authManager, sessionRunner, bootstrapper, credentialBootstrapper(), config)
         val result = loop.run(runOnce = true)
 
         assertTrue(result.isRight())
@@ -103,7 +117,7 @@ class WebSocketConnectionLoopTest {
 
         val config = fakeTransportConfig()
 
-        val loop = WebSocketConnectionLoop(authManager, sessionRunner, bootstrapper, config)
+        val loop = WebSocketConnectionLoop(authManager, sessionRunner, bootstrapper, credentialBootstrapper(), config)
         val result = loop.run(runOnce = true)
 
         assertTrue(result.isRight())
@@ -116,6 +130,164 @@ class WebSocketConnectionLoopTest {
     }
 
     // Test helpers
+
+    /**
+     * Verifies that a credential bootstrap contradicting the pinned worker id ends the run in runOnce
+     * mode before any session is opened.
+     */
+    @Test
+    fun `a worker id mismatch ends the run in runOnce mode`() = runTest {
+        val sessionRunner = mockk<WebSocketSessionRunner>()
+        coEvery { sessionRunner.run(any()) } returns WebSocketSessionResult(stableConnection = true, authRejected = false)
+
+        val loop = WebSocketConnectionLoop(
+            FakeAuthManager(token = StoredServiceToken("token", Instant.parse("2026-04-10T12:30:00Z"))),
+            sessionRunner,
+            mcpBootstrapper(),
+            credentialBootstrapper(assignedWorkerId = 9L, pinnedWorkerId = 2L),
+            fakeTransportConfig()
+        )
+
+        val runtimeError = assertIs<WorkerRuntimeError.CredentialBootstrap>(
+            assertIs<Either.Left<WorkerRuntimeError>>(loop.run(runOnce = true)).value
+        )
+
+        val mismatch = assertIs<AssignedCredentialBootstrapError.WorkerIdMismatch>(runtimeError.error)
+        assertEquals(2L, mismatch.expected)
+        assertEquals(9L, mismatch.actual)
+        coVerify(exactly = 0) { sessionRunner.run(any()) }
+    }
+
+    /**
+     * Verifies that the same mismatch also ends a long-running loop instead of reconnecting.
+     */
+    @Test
+    fun `a worker id mismatch ends the run in normal mode`() = runTest {
+        val sessionRunner = mockk<WebSocketSessionRunner>()
+        coEvery { sessionRunner.run(any()) } returns WebSocketSessionResult(stableConnection = true, authRejected = false)
+
+        val loop = WebSocketConnectionLoop(
+            FakeAuthManager(token = StoredServiceToken("token", Instant.parse("2026-04-10T12:30:00Z"))),
+            sessionRunner,
+            mcpBootstrapper(),
+            credentialBootstrapper(assignedWorkerId = 9L, pinnedWorkerId = 2L),
+            fakeTransportConfig()
+        )
+
+        // The loop returns rather than sleeping, so this call cannot block the test.
+        val runtimeError = assertIs<WorkerRuntimeError.CredentialBootstrap>(
+            assertIs<Either.Left<WorkerRuntimeError>>(loop.run(runOnce = false)).value
+        )
+
+        val mismatch = assertIs<AssignedCredentialBootstrapError.WorkerIdMismatch>(runtimeError.error)
+        assertEquals(2L, mismatch.expected)
+        assertEquals(9L, mismatch.actual)
+        coVerify(exactly = 0) { sessionRunner.run(any()) }
+    }
+
+    /**
+     * Verifies that a credential fetch failure fails the run in runOnce mode, like the MCP bootstrap.
+     */
+    @Test
+    fun `a credential fetch failure fails the run in runOnce mode`() = runTest {
+        val sessionRunner = mockk<WebSocketSessionRunner>()
+        coEvery { sessionRunner.run(any()) } returns WebSocketSessionResult(stableConnection = true, authRejected = false)
+
+        val loop = WebSocketConnectionLoop(
+            FakeAuthManager(token = StoredServiceToken("token", Instant.parse("2026-04-10T12:30:00Z"))),
+            sessionRunner,
+            mcpBootstrapper(),
+            credentialBootstrapper(
+                pinnedWorkerId = 2L,
+                fetchError = WorkerCredentialApiError.UnexpectedHttpStatus("fetch", 500)
+            ),
+            fakeTransportConfig()
+        )
+
+        val error = assertIs<WorkerRuntimeError.CredentialBootstrap>(
+            assertIs<Either.Left<WorkerRuntimeError>>(loop.run(runOnce = true)).value
+        )
+
+        assertIs<AssignedCredentialBootstrapError.FetchFailed>(error.error)
+        coVerify(exactly = 0) { sessionRunner.run(any()) }
+    }
+
+    /**
+     * Verifies that the long-running loop retries a credential fetch failure and opens no session until
+     * the assignment has been fetched.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a credential fetch failure retries before a session is opened`() = runTest {
+        val api = mockk<WorkerCredentialApi>()
+        coEvery { api.getAssignedCredentials() } returnsMany listOf(
+            WorkerCredentialApiError.UnexpectedHttpStatus("fetch", 500).left(),
+            AssignedCredentialsDto(workerId = 1L).right(),
+        )
+        val sessionRunner = mockk<WebSocketSessionRunner>()
+        coEvery { sessionRunner.run(any()) } returns WebSocketSessionResult(stableConnection = true, authRejected = false)
+
+        val loop = WebSocketConnectionLoop(
+            FakeAuthManager(token = StoredServiceToken("token", Instant.parse("2026-04-10T12:30:00Z"))),
+            sessionRunner,
+            mcpBootstrapper(),
+            AssignedCredentialBootstrapper(
+                api = api,
+                profileValidator = mockk(relaxed = true),
+                store = InMemoryWorkerCredentialStore(),
+                pinnedWorkerId = 1L,
+            ),
+            fakeTransportConfig()
+        )
+
+        backgroundScope.launch { loop.run(runOnce = false) }
+
+        // The first cycle fails and no session is opened for it.
+        runCurrent()
+        coVerify(exactly = 0) { sessionRunner.run(any()) }
+
+        // One backoff later the second attempt succeeds, and exactly one session is opened.
+        advanceTimeBy(150.milliseconds)
+        coVerify(exactly = 1) { sessionRunner.run(any()) }
+    }
+
+    /**
+     * Builds an MCP bootstrapper that succeeds, so only the credential path is under test.
+     *
+     * @return Successful MCP bootstrapper.
+     */
+    private fun mcpBootstrapper(): AssignedConfigBootstrapper {
+        val bootstrapper = mockk<AssignedConfigBootstrapper>()
+        coEvery { bootstrapper.bootstrap() } returns Unit.right()
+        return bootstrapper
+    }
+
+    /**
+     * Builds a credential bootstrapper over a mocked API with no rows.
+     *
+     * @param assignedWorkerId Worker id the mocked response resolves.
+     * @param pinnedWorkerId Worker id configured as `worker.identity.workerId`.
+     * @param fetchError Optional fetch failure the mocked API reports instead of a response.
+     * @return A bootstrapper wired to that assignment.
+     */
+    private fun credentialBootstrapper(
+        assignedWorkerId: Long = 1L,
+        pinnedWorkerId: Long? = assignedWorkerId,
+        fetchError: WorkerCredentialApiError? = null,
+    ): AssignedCredentialBootstrapper {
+        val api = mockk<WorkerCredentialApi>()
+        coEvery { api.getAssignedCredentials() } returns if (fetchError != null) {
+            fetchError.left()
+        } else {
+            AssignedCredentialsDto(workerId = assignedWorkerId).right()
+        }
+        return AssignedCredentialBootstrapper(
+            api = api,
+            profileValidator = mockk(relaxed = true),
+            store = InMemoryWorkerCredentialStore(),
+            pinnedWorkerId = pinnedWorkerId,
+        )
+    }
 
     private fun fakeTransportConfig(): WebSocketTransportConfig {
         return WebSocketTransportConfig(

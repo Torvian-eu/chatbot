@@ -112,7 +112,8 @@ open class WorkerTrustedSignerManager(
             // last branch only keeps the mapping total and still reports the underlying reason.
             is WorkerConfigError.ConfigMissing,
             is WorkerConfigError.ConfigReadFailed,
-            is WorkerConfigError.CommandIsolationUnavailable -> WorkerTrustedSignerManagerError.Config(error)
+            is WorkerConfigError.CommandIsolationUnavailable,
+            is WorkerConfigError.CredentialsUnavailable -> WorkerTrustedSignerManagerError.Config(error)
         }
     }
 

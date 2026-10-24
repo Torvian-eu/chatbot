@@ -53,10 +53,10 @@ internal object InstructionContentRules {
         ensure(type != AgentInstructionTypes.MODEL_SPECIFIC || custom.modelIdOrNull() != null) {
             validationFailed("A 'model_specific' instruction must include custom.modelId")
         }
-        // The generated-message kind stores no text at all: its message is produced per linked role at
+        // Generated-message kinds store no text at all: their message is produced per linked role at
         // read time, so a supplied value is not persisted and must not pretend otherwise.
-        ensure(type != AgentInstructionTypes.SPAWNABLE_AGENTS || message.isNullOrEmpty()) {
-            validationFailed("A 'spawnable_agents' instruction takes no message")
+        ensure(type !in AgentInstructionTypes.generatedMessageKinds || message.isNullOrEmpty()) {
+            validationFailed("A '$type' instruction takes no message")
         }
     }
 
@@ -69,5 +69,5 @@ internal object InstructionContentRules {
      * @return The value to persist.
      */
     fun storedMessage(type: String, message: String?): String? =
-        if (type == AgentInstructionTypes.SPAWNABLE_AGENTS) null else message
+        if (type in AgentInstructionTypes.generatedMessageKinds) null else message
 }
