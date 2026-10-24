@@ -7,6 +7,8 @@ import eu.torvian.chatbot.worker.VersionInfo
 import eu.torvian.chatbot.worker.builtin.command.CommandIsolationDetector
 import eu.torvian.chatbot.worker.builtin.terminal.TerminalSessionManager
 import eu.torvian.chatbot.worker.config.*
+import eu.torvian.chatbot.worker.credential.CredentialEnvironmentValidator
+import eu.torvian.chatbot.worker.credential.CredentialSecretSweeper
 import eu.torvian.chatbot.worker.koin.workerModule
 import eu.torvian.chatbot.worker.runtime.WorkerRuntime
 import eu.torvian.chatbot.worker.service.api.WorkerMetadataService
@@ -186,6 +188,15 @@ class WorkerMain(
             .mapLeft { WorkerMainError.Config(it) }
             .bind()
 
+        // Only checked when a credential account was resolved: on hosts without the mechanism there
+        // are no such directories, and the POSIX checks do not apply. A misconfigured deployment is a
+        // startup failure rather than a deferred attach error.
+        if (commandIsolation.secretAccount != null) {
+            CredentialEnvironmentValidator(config.credentials).validate(logger)
+                .mapLeft { WorkerMainError.Config(it) }
+                .bind()
+        }
+
         // Absence is the documented "protection not configured" state, so it is a warning and never a
         // startup failure; the line makes the inactive per-row credential worker-id check visible.
         if (config.identity.workerId == null) {
@@ -200,6 +211,16 @@ class WorkerMain(
         }
         val koin = koinApplication.koin
         val metadataService = koin.get<WorkerMetadataService>()
+
+        // Stale material from a previous process is removed before any session can be accepted. A
+        // failure is a WARN: leftover trees are untidy, not a reason to refuse to run.
+        if (commandIsolation.secretAccount != null) {
+            CredentialSecretSweeper(
+                secretDir = config.credentials.secretDir,
+                trees = koin.get(),
+            ).sweep(logger)
+        }
+
         val httpClient = koin.get<HttpClient>()
         val runtime = koin.get<WorkerRuntime>()
         val terminalSessions = koin.get<TerminalSessionManager>()

@@ -17,13 +17,18 @@ import eu.torvian.chatbot.worker.builtin.net.KtorWebFetchService
 import eu.torvian.chatbot.worker.builtin.net.PublicUrlValidator
 import eu.torvian.chatbot.worker.builtin.net.WebFetchService
 import eu.torvian.chatbot.worker.builtin.terminal.TerminalSessionManager
+import eu.torvian.chatbot.worker.builtin.terminal.secret.SecretMaterialFactory
 import eu.torvian.chatbot.worker.config.RuntimeConfig
 import eu.torvian.chatbot.worker.config.TrustedSigner
 import eu.torvian.chatbot.worker.credential.CredentialProfileValidator
+import eu.torvian.chatbot.worker.credential.CredentialSecretDecryptor
 import eu.torvian.chatbot.worker.credential.CredentialSyncCommandExecutor
 import eu.torvian.chatbot.worker.credential.CredentialSyncCommandExecutorImpl
 import eu.torvian.chatbot.worker.credential.DefaultCredentialProfileValidator
+import eu.torvian.chatbot.worker.credential.DefaultCredentialSecretDecryptor
+import eu.torvian.chatbot.worker.credential.HelperSecretTreeFactory
 import eu.torvian.chatbot.worker.credential.InMemoryWorkerCredentialStore
+import eu.torvian.chatbot.worker.credential.SecretTreeFactory
 import eu.torvian.chatbot.worker.credential.WorkerCredentialStore
 import eu.torvian.chatbot.worker.credential.api.AssignedCredentialBootstrapper
 import eu.torvian.chatbot.worker.credential.api.KtorWorkerCredentialApi
@@ -130,6 +135,26 @@ fun workerModule(
 
     // Credential profiles and encrypted secrets: memory-only cache plus its data path.
     single<WorkerCredentialStore> { InMemoryWorkerCredentialStore() }
+    single<CredentialSecretDecryptor> {
+        DefaultCredentialSecretDecryptor(
+            privateKeyPem = privateKeyPem,
+            workerCertificateFingerprint = config.identity.certificateFingerprint,
+            maxSecretBytes = config.credentials.maxSecretBytes,
+        )
+    }
+    single<SecretTreeFactory> {
+        HelperSecretTreeFactory(
+            secretDir = config.credentials.secretDir,
+            vaultHelperPath = config.credentials.vaultHelperPath,
+            logger = LogManager.getLogger(HelperSecretTreeFactory::class.java),
+        )
+    }
+    single {
+        SecretMaterialFactory(
+            trees = get(),
+            askpassScriptPath = config.credentials.askpassScriptPath,
+        )
+    }
     single<CredentialProfileValidator> {
         DefaultCredentialProfileValidator(
             verificationService = get(),
