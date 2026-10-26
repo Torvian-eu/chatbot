@@ -739,6 +739,7 @@ class TerminalSessionManagerAttachTest {
                         materialFactory = SecretMaterialFactory(
                             trees = secretTreeFactory,
                             askpassScriptPath = "/usr/local/bin/torvian-askpass",
+                            logger = logger,
                         ),
                         vaultEnvironment = object : ChildEnvironmentProvider {
                             override fun build(): Map<String, String> =

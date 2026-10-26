@@ -14,6 +14,9 @@ internal interface SecretMaterial {
     /**
      * Deletes files and zeroes copies; idempotent.
      *
+     * Cleanup runs on exit paths that must not fail, so a removal that does not succeed is reported at
+     * WARN and never thrown, and the material reports no secret content.
+     *
      * @param deadline Monotonic deadline the deletion, including any helper call, must respect.
      */
     fun close(deadline: Long)

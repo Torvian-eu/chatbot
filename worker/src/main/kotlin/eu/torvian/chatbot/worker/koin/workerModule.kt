@@ -155,6 +155,7 @@ fun workerModule(
         SecretMaterialFactory(
             trees = get(),
             askpassScriptPath = config.credentials.askpassScriptPath,
+            logger = LogManager.getLogger(SecretMaterialFactory::class.java),
         )
     }
     single<CredentialProfileValidator> {

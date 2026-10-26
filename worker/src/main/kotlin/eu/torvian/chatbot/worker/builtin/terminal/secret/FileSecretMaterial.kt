@@ -7,6 +7,7 @@ import eu.torvian.chatbot.worker.credential.SecretMaterialError
 import eu.torvian.chatbot.worker.credential.SecretTree
 import eu.torvian.chatbot.worker.credential.SecretTreeFactory
 import eu.torvian.chatbot.worker.credential.SecretValue
+import org.apache.logging.log4j.Logger
 
 /**
  * Material for the `file` channel: one credential-only file and a variable holding its path.
@@ -18,16 +19,29 @@ import eu.torvian.chatbot.worker.credential.SecretValue
  * @property trees Factory that owns the per-attach tree, used again to remove it.
  * @property tree Tree holding the value.
  * @property environment Environment the profile's command receives.
+ * @property logger Receives a WARN when the tree could not be removed; never receives the value.
  */
 internal class FileSecretMaterial private constructor(
     private val trees: SecretTreeFactory,
     private val tree: SecretTree,
     override val environment: Map<String, String>,
+    private val logger: Logger,
 ) : SecretMaterial {
 
-    /** Removes the secret tree; idempotent. */
+    /** Removes the secret tree; idempotent, and logs a failure instead of throwing it. */
     override fun close(deadline: Long) {
-        trees.clear(tree.directoryPath, deadline)
+        trees.clear(tree.directoryPath, deadline).fold(
+            ifLeft = { error ->
+                // Cleanup must not throw, but a tree that survived stays invisible until the next
+                // startup sweep, so it is reported here; the line names no secret material.
+                logger.warn(
+                    "Credential secret tree {} could not be removed: {}",
+                    tree.directoryPath,
+                    (error as? SecretMaterialError.PreparationFailed)?.reason ?: error,
+                )
+            },
+            ifRight = { },
+        )
     }
 
     internal companion object {
@@ -39,6 +53,7 @@ internal class FileSecretMaterial private constructor(
          * @param envName Variable that receives the absolute path of the created file.
          * @param value Decrypted secret to write.
          * @param deadline Monotonic deadline the helper call must respect.
+         * @param logger Receives a WARN when the tree could not be removed.
          * @return Either a typed preparation failure or the material to close after the profile exits.
          */
         fun create(
@@ -47,6 +62,7 @@ internal class FileSecretMaterial private constructor(
             envName: String?,
             value: SecretValue,
             deadline: Long,
+            logger: Logger,
         ): Either<SecretMaterialError, SecretMaterial> = either {
             ensure(!fileName.isNullOrBlank()) {
                 SecretMaterialError.PreparationFailed("file profiles must name the file to create")
@@ -56,7 +72,12 @@ internal class FileSecretMaterial private constructor(
             }
 
             val tree = trees.create(fileName, value, deadline).bind()
-            FileSecretMaterial(trees = trees, tree = tree, environment = mapOf(envName to tree.secretPath))
+            FileSecretMaterial(
+                trees = trees,
+                tree = tree,
+                environment = mapOf(envName to tree.secretPath),
+                logger = logger,
+            )
         }
     }
 }

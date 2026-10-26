@@ -5,6 +5,10 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.worker.builtin.command.remainingNanos
 import java.io.IOException
+import java.nio.file.DirectoryNotEmptyException
+import java.nio.file.Files
+import java.nio.file.NoSuchFileException
+import java.nio.file.Path
 import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
 import org.apache.logging.log4j.Logger
@@ -26,9 +30,10 @@ internal sealed interface SecretMaterialError {
 /**
  * One per-attach secret directory and the file inside it.
  *
- * The directory and the file are created and removed by the credential helper, because the worker runs
- * unprivileged and cannot `chown` a file to the credential account or unlink inside a directory that
- * account owns.
+ * The credential helper creates the directory and the file, because the worker cannot `chown` a file to
+ * the credential account. Removal is split: the helper unlinks the contents of the directory, which
+ * that account owns, and the worker deletes the directory itself, which it owns through the secret
+ * root.
  */
 internal interface SecretTree {
     /** Absolute path of the file written into this tree. */
@@ -62,6 +67,16 @@ internal interface SecretTreeFactory {
     /**
      * Removes one per-attach directory, including its contents.
      *
+     * The work is two steps, because no single account can do both: the credential account owns the
+     * directory and its contents but has traverse-only permission on the secret root, while the worker
+     * owns the root and cannot unlink inside the directory. The helper therefore empties the directory
+     * and this call deletes the emptied directory. A directory that is not empty once the helper is
+     * done is a failure, never a reason to delete recursively.
+     *
+     * [deadline] bounds the helper call only. Deleting the already emptied directory is a single unlink
+     * and is not gated on the remaining budget, so a helper that finished late still leaves nothing
+     * behind for the next sweep to report.
+     *
      * Missing entries count as success, because cleanup runs on paths whose state is unknown.
      *
      * @param directoryPath Absolute path of the directory to remove.
@@ -81,7 +96,7 @@ internal object HelperSecretTreeProtocol {
     /** Helper mode that creates one secret file from stdin. */
     const val WRITE_SECRET_MODE = "--write-secret"
 
-    /** Helper mode that removes one secret tree. */
+    /** Helper mode that empties one secret tree without removing its directory. */
     const val CLEAR_SECRET_DIR_MODE = "--clear-secret-dir"
 
     /**
@@ -94,7 +109,7 @@ internal object HelperSecretTreeProtocol {
 
     /**
      * @param secretDir Secret root the helper enforces as a boundary.
-     * @param directoryPath Absolute path of the directory to remove.
+     * @param directoryPath Absolute path of the directory to empty.
      * @return Arguments passed to the helper after its own path.
      */
     fun clearSecretDirArguments(secretDir: String, directoryPath: String): List<String> =
@@ -194,11 +209,49 @@ internal class HelperSecretTreeFactory(
     override fun clear(
         directoryPath: String,
         deadline: Long,
-    ): Either<SecretMaterialError, Unit> = runHelper(
-        arguments = HelperSecretTreeProtocol.clearSecretDirArguments(secretDir, directoryPath),
-        stdin = null,
-        deadline = deadline,
-    )
+    ): Either<SecretMaterialError, Unit> = either {
+        runHelper(
+            arguments = HelperSecretTreeProtocol.clearSecretDirArguments(secretDir, directoryPath),
+            stdin = null,
+            deadline = deadline,
+        ).bind()
+
+        removeEmptiedDirectory(directoryPath).bind()
+    }
+
+    /**
+     * Deletes the tree directory the helper has just emptied.
+     *
+     * The helper drops to the credential account, which may only traverse the secret root, so removing
+     * an entry inside the root is the worker's job. Nothing is deleted recursively: a directory that
+     * still holds something means the helper failed to unlink it, and that must surface as a failure.
+     * No deadline applies here: the delete is a single unlink, and skipping it would leave the empty
+     * directory the sweep reports after the next start.
+     *
+     * @param directoryPath Absolute path of the emptied directory.
+     * @return Either a typed failure or unit once the directory is gone.
+     */
+    private fun removeEmptiedDirectory(
+        directoryPath: String,
+    ): Either<SecretMaterialError, Unit> = either {
+        try {
+            Files.delete(Path.of(directoryPath))
+        } catch (_: NoSuchFileException) {
+            // Another cleanup already removed it; asking twice is normal.
+        } catch (_: DirectoryNotEmptyException) {
+            raise(
+                SecretMaterialError.PreparationFailed(
+                    "secret tree directory $directoryPath is not empty after the credential helper emptied it"
+                )
+            )
+        } catch (e: IOException) {
+            raise(
+                SecretMaterialError.PreparationFailed(
+                    "secret tree directory $directoryPath could not be removed: ${e.message}"
+                )
+            )
+        }
+    }
 
     /**
      * Runs the helper once and classifies its outcome.

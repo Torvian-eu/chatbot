@@ -68,7 +68,7 @@ class TerminalSessionCleanupTest {
             )
             val material = assertNotNull(
                 FileSecretMaterial
-                    .create(trees, "credentials.json", "SECRET_FILE", SecretValue("token".toCharArray()), freshDeadline())
+                    .create(trees, "credentials.json", "SECRET_FILE", SecretValue("token".toCharArray()), freshDeadline(), logger)
                     .getOrNull()
             )
             assertTrue(session.attach(profile(), target("profile", profileProcess, profileTerminator), material))
@@ -108,7 +108,7 @@ class TerminalSessionCleanupTest {
         val trees = DeadlineGatedTreeFactory(secretRoot)
         val material = assertNotNull(
             FileSecretMaterial
-                .create(trees, "credentials.json", "SECRET_FILE", SecretValue("token".toCharArray()), freshDeadline())
+                .create(trees, "credentials.json", "SECRET_FILE", SecretValue("token".toCharArray()), freshDeadline(), logger)
                 .getOrNull()
         )
         val staged = PendingProfile(
@@ -146,7 +146,7 @@ class TerminalSessionCleanupTest {
         )
         val material = assertNotNull(
             FileSecretMaterial
-                .create(trees, "credentials.json", "SECRET_FILE", SecretValue("token".toCharArray()), freshDeadline())
+                .create(trees, "credentials.json", "SECRET_FILE", SecretValue("token".toCharArray()), freshDeadline(), logger)
                 .getOrNull()
         )
         assertTrue(

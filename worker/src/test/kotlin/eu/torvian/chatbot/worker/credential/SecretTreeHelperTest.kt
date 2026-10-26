@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -112,6 +113,94 @@ class SecretTreeHelperTest {
         assertEquals("hunter2", Files.readString(stub.stdin))
         assertEquals("credentials.json", Path.of(tree.secretPath).fileName.toString())
         assertEquals(Path.of(tree.secretPath).parent.toString(), tree.directoryPath)
+    }
+
+    /**
+     * Verifies that a successful clear removes the emptied directory, which the helper cannot remove.
+     *
+     * The stub plays the helper: it unlinks the tree contents as the credential account and exits, so
+     * only the factory's own removal of the directory can make the tree disappear.
+     */
+    @Test
+    fun `clear removes the emptied directory after the helper succeeds`() {
+        val stub = recordingStubOrSkip(emptiesTree = true)
+        val secretDir = temporaryDirectory("secret-root")
+        val tree = Files.createDirectory(secretDir.resolve("token"))
+        Files.writeString(tree.resolve("credentials.json"), "hunter2")
+
+        val error = HelperSecretTreeFactory(secretDir.toString(), stub.script.toString(), logger)
+            .clear(tree.toString(), deadline())
+            .swap().getOrNull()
+
+        assertNull(error, "The clear failed: ${(error as? SecretMaterialError.PreparationFailed)?.reason}")
+        assertEquals(
+            listOf(CLEAR_SECRET_DIR_MODE, secretDir.toString(), tree.toString()),
+            stub.recordedArguments(),
+        )
+        assertFalse(Files.exists(tree), "The emptied tree directory survived the clear")
+    }
+
+    /**
+     * Verifies that removing a tree that is already gone counts as success.
+     */
+    @Test
+    fun `clear succeeds when the directory is already gone`() {
+        val stub = recordingStubOrSkip()
+        val secretDir = temporaryDirectory("secret-root")
+
+        val error = HelperSecretTreeFactory(secretDir.toString(), stub.script.toString(), logger)
+            .clear(secretDir.resolve("token").toString(), deadline())
+            .swap().getOrNull()
+
+        assertNull(error, "The clear failed: ${(error as? SecretMaterialError.PreparationFailed)?.reason}")
+    }
+
+    /**
+     * Verifies that a leftover the helper failed to unlink fails the clear instead of being deleted.
+     *
+     * Deleting the directory recursively would report a tree as cleaned while its secret file was still
+     * there, so the factory must stop at the directory itself.
+     */
+    @Test
+    fun `clear fails when the directory is still not empty`() {
+        val stub = recordingStubOrSkip()
+        val secretDir = temporaryDirectory("secret-root")
+        val tree = Files.createDirectory(secretDir.resolve("token"))
+        val leftover = Files.writeString(tree.resolve("credentials.json"), "hunter2")
+
+        val error = assertIs<SecretMaterialError.PreparationFailed>(
+            HelperSecretTreeFactory(secretDir.toString(), stub.script.toString(), logger)
+                .clear(tree.toString(), deadline())
+                .swap().getOrNull()
+        )
+
+        assertTrue(error.reason.contains("not empty"), "Unexpected reason: ${error.reason}")
+        assertTrue(Files.exists(leftover), "The clear removed a file the helper left behind")
+    }
+
+    /**
+     * Verifies that a spent budget stops at the helper step and deletes nothing.
+     *
+     * The deadline bounds the helper call, which is the only step that can prove the tree was emptied.
+     * The deletion that follows a successful helper consults no deadline, so a helper that returns in
+     * time always ends with no directory left, while one that does not return leaves the tree for the
+     * sweep instead of reporting it as removed.
+     */
+    @Test
+    fun `clear with a spent budget fails at the helper and deletes nothing`() {
+        val stub = recordingStubOrSkip(blockSeconds = 30)
+        val secretDir = temporaryDirectory("secret-root")
+        val tree = Files.createDirectory(secretDir.resolve("token"))
+        val leftover = Files.writeString(tree.resolve("credentials.json"), "hunter2")
+
+        val error = assertIs<SecretMaterialError.PreparationFailed>(
+            HelperSecretTreeFactory(secretDir.toString(), stub.script.toString(), logger)
+                .clear(tree.toString(), System.nanoTime() - TimeUnit.SECONDS.toNanos(1))
+                .swap().getOrNull()
+        )
+
+        assertTrue(error.reason.contains("deadline"), "Unexpected reason: ${error.reason}")
+        assertTrue(Files.exists(leftover), "A helper that never returned had its tree deleted")
     }
 
     /**
@@ -248,10 +337,15 @@ class SecretTreeHelperTest {
     }
 
     /**
-     * Verifies that removing the same tree twice succeeds, because cleanup runs on unknown state.
+     * Verifies that the helper empties a tree and leaves the directory, and that a second call succeeds,
+     * because cleanup runs on unknown state.
+     *
+     * The directory is then removed the way the worker removes it. That deletion succeeds only while the
+     * tree is empty, because removing an entry inside the secret root needs write permission the
+     * credential account does not have.
      */
     @Test
-    fun `clear-secret-dir is idempotent`() {
+    fun `clear-secret-dir empties the tree and is idempotent`() {
         assumeIsolationGate()
         val secretDir = temporaryDirectory("secret-root")
         val token = "fedcba9876543210fedcba9876543210"
@@ -269,8 +363,10 @@ class SecretTreeHelperTest {
         val second = runHelper(listOf(CLEAR_SECRET_DIR_MODE, secretDir.toString(), tree.toString()))
 
         assertEquals(0, first.exitCode, "The first removal failed: ${first.stderr}")
-        assertEquals(0, second.exitCode, "Removing a missing tree is not idempotent: ${second.stderr}")
-        assertFalse(Files.exists(tree), "The secret tree survived removal")
+        assertEquals(0, second.exitCode, "Removing an already emptied tree is not idempotent: ${second.stderr}")
+        assertTrue(Files.exists(tree), "The helper removed the directory its caller is expected to remove")
+        Files.delete(tree)
+        assertFalse(Files.exists(tree), "The emptied secret tree survived removal")
     }
 
     /**
@@ -322,6 +418,7 @@ class SecretTreeHelperTest {
      * @param stderrLine Optional diagnostic line the stub writes to stderr.
      * @param blockSeconds Optional number of seconds the stub blocks instead of finishing.
      * @param readsStdin Whether the stub consumes its stdin before it exits.
+     * @param emptiesTree Whether the stub unlinks the contents of the tree it is pointed at.
      * @return A recording stub, or skip the test on a host that cannot run a shell script.
      */
     private fun recordingStubOrSkip(
@@ -329,6 +426,7 @@ class SecretTreeHelperTest {
         stderrLine: String? = null,
         blockSeconds: Int? = null,
         readsStdin: Boolean = true,
+        emptiesTree: Boolean = false,
     ): RecordingStub {
         assumeTrue(!isWindows, "a stub helper is a POSIX shell script")
         val directory = temporaryDirectory("helper-stub")
@@ -342,6 +440,8 @@ class SecretTreeHelperTest {
             // `exec` replaces the stub, so a killed helper takes its blocker with it.
             if (blockSeconds != null) appendLine("exec sleep $blockSeconds")
             if (readsStdin) appendLine("cat > '$stdin'")
+            // The clear mode's third argument is the tree the helper empties.
+            if (emptiesTree) appendLine("rm -f \"\$3\"/*")
             stderrLine?.let { appendLine("echo '$it' >&2") }
             appendLine("exit $exitCode")
         }

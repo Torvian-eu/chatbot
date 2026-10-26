@@ -9,8 +9,8 @@ import org.apache.logging.log4j.Logger
 /**
  * Removes secret trees left behind by a previous worker process.
  *
- * The trees are owned by the credential account, so the worker cannot delete them itself; each entry is
- * removed through the same helper that created it. A failure is a WARN and never a startup error:
+ * The trees are owned by the credential account, so no single account can delete one: the helper empties
+ * the tree and the worker removes the emptied directory. A failure is a WARN and never a startup error:
  * leftover material is untidy, not a reason to refuse to run.
  *
  * The sweep runs only when a credential account was resolved, because on hosts without the mechanism

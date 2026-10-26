@@ -7,6 +7,7 @@ import eu.torvian.chatbot.worker.credential.CredentialProfile
 import eu.torvian.chatbot.worker.credential.SecretMaterialError
 import eu.torvian.chatbot.worker.credential.SecretTreeFactory
 import eu.torvian.chatbot.worker.credential.SecretValue
+import org.apache.logging.log4j.Logger
 
 /**
  * Builds the channel-specific material for one attach.
@@ -18,10 +19,12 @@ import eu.torvian.chatbot.worker.credential.SecretValue
  *
  * @property trees Factory that creates and removes per-attach trees.
  * @property askpassScriptPath Absolute path of the askpass helper `askpass` profiles are handed.
+ * @property logger Handed to channels that remove a tree, so a cleanup failure is reported there.
  */
 internal class SecretMaterialFactory(
     private val trees: SecretTreeFactory,
     private val askpassScriptPath: String,
+    private val logger: Logger,
 ) {
     /**
      * Builds the material [profile] describes.
@@ -44,6 +47,7 @@ internal class SecretMaterialFactory(
                 askpassUsername = profile.askpassUsername,
                 value = value,
                 deadline = deadline,
+                logger = logger,
             ).bind()
 
             CredentialChannel.ENV -> EnvSecretMaterial.create(
@@ -57,6 +61,7 @@ internal class SecretMaterialFactory(
                 envName = profile.envName,
                 value = value,
                 deadline = deadline,
+                logger = logger,
             ).bind()
         }
     }
