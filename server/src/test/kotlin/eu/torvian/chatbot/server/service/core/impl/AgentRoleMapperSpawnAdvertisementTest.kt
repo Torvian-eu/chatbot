@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.ProjectDao
+import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileAgentRoleDao
 import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileDao
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
@@ -34,6 +35,7 @@ class AgentRoleMapperSpawnAdvertisementTest {
         toolDefinitionDao = toolDefinitionDao,
         projectDao = projectDao,
         credentialProfileDao = mockk<WorkerCredentialProfileDao>(),
+        credentialProfileLinkDao = mockk<WorkerCredentialProfileAgentRoleDao>(),
         workerDao = mockk<WorkerDao>(),
         json = Json { ignoreUnknownKeys = true }
     )

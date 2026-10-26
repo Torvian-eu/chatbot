@@ -68,6 +68,9 @@ import eu.torvian.chatbot.server.data.dao.error.AgentRoleError as AgentRoleDaoEr
  * @property sessionDao DAO used to restore the Session Legality Invariant when a role update changes
  *            its project membership (role-update legality sweep).
  * @property json Shared JSON codec used to parse instruction `custom` JSON text.
+ * @property credentialProfileDao DAO for the credential-profile advertisement loader.
+ * @property credentialProfileLinkDao DAO for the profile ↔ agent-role links, used to keep each role's
+ *            advertisement limited to the profiles linked to it.
  * @property transactionScope Transaction wrapper that keeps validation + persistence atomic.
  *
  * Project membership is a single nullable `project_id` column on the role row (a role belongs to at
@@ -100,6 +103,7 @@ class AgentRoleServiceImpl(
     private val projectDao: ProjectDao,
     private val sessionDao: SessionDao,
     private val credentialProfileDao: WorkerCredentialProfileDao,
+    private val credentialProfileLinkDao: WorkerCredentialProfileAgentRoleDao,
     private val workerDao: WorkerDao
 ) : AgentRoleService {
 
@@ -127,6 +131,7 @@ class AgentRoleServiceImpl(
         toolDefinitionDao = toolDefinitionDao,
         projectDao = projectDao,
         credentialProfileDao = credentialProfileDao,
+        credentialProfileLinkDao = credentialProfileLinkDao,
         workerDao = workerDao,
         json = json
     )

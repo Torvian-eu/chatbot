@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.models.tool.OperatorToolCatalog
 import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.ProjectDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
+import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileAgentRoleDao
 import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileDao
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
@@ -52,6 +53,8 @@ import org.apache.logging.log4j.Logger
  *            covering the targets' projects and the owning role's own project).
  * @property credentialProfileDao DAO used by the credential-profile advertisement loader (profiles
  *            bound to the workers the role's `terminal_session` tools target).
+ * @property credentialProfileLinkDao DAO used by the same loader to keep only the profiles linked to
+ *            the role being mapped.
  * @property workerDao DAO used to label each credential-profile group with its worker's display name.
  * @property json Shared JSON codec used to parse the raw `custom` JSON text of stored instructions.
  */
@@ -60,6 +63,7 @@ internal class AgentRoleMapper(
     private val toolDefinitionDao: ToolDefinitionDao,
     private val projectDao: ProjectDao,
     private val credentialProfileDao: WorkerCredentialProfileDao,
+    private val credentialProfileLinkDao: WorkerCredentialProfileAgentRoleDao,
     private val workerDao: WorkerDao,
     private val json: Json
 ) {
@@ -123,7 +127,8 @@ internal class AgentRoleMapper(
                 ownerId = ownerId,
                 spawnableRoleIds = spawnableRoleIds,
                 roleToolIds = tools,
-                currentProjectId = projectId
+                currentProjectId = projectId,
+                agentRoleId = entity.id
             )
         },
         disabled = disabled
@@ -219,7 +224,9 @@ internal class AgentRoleMapper(
      * Loads the credential profiles this role may attach.
      *
      * Profiles are scoped to the workers the role's `terminal_session` tool definitions target, because
-     * that is where an `attach` call is dispatched and therefore whose cache must hold the name. The
+     * that is where an `attach` call is dispatched and therefore whose cache must hold the name. Within
+     * a worker only enabled profiles linked to [agentRoleId] are listed, so a profile is advertised on
+     * the intersection of worker and role link and never to a role that has not been linked to it. The
      * definitions are matched on `builtInToolName` rather than on the public `name`, which is not
      * globally unique and may carry a configured prefix for disambiguation across workers.
      *
@@ -227,15 +234,22 @@ internal class AgentRoleMapper(
      * when an operator supplied no description, because an argument can carry a host or a token.
      *
      * @param roleToolIds Tool ids attached to the role being mapped.
+     * @param agentRoleId The mapped role's own id, used to keep only the profiles linked to it.
      * @return The advertisement, in worker order and with profiles in creation order per worker.
      */
-    suspend fun loadCredentialProfilesAdvertisement(roleToolIds: Set<Long>): CredentialProfilesAdvertisement {
+    suspend fun loadCredentialProfilesAdvertisement(
+        roleToolIds: Set<Long>,
+        agentRoleId: Long,
+    ): CredentialProfilesAdvertisement {
         val workerIds = toolDefinitionDao.getToolDefinitionsByIds(roleToolIds)
             .filterIsInstance<BuiltInWorkerToolDefinition>()
             .filter { it.builtInToolName == TERMINAL_SESSION_TOOL_NAME }
             .map { it.workerId }
             .distinct()
         if (workerIds.isEmpty()) return CredentialProfilesAdvertisement(groups = emptyList())
+
+        val linkedProfileIds = credentialProfileLinkDao.getProfileIdsByAgentRoleId(agentRoleId)
+        if (linkedProfileIds.isEmpty()) return CredentialProfilesAdvertisement(groups = emptyList())
 
         val groups = workerIds.map { workerId ->
             val workerName = workerDao.getWorkerById(workerId).getOrNull()
@@ -245,7 +259,9 @@ internal class AgentRoleMapper(
             CredentialProfilesGroup(
                 workerId = workerId,
                 workerName = workerName,
-                profiles = credentialProfileDao.getEnabledProfilesByWorkerId(workerId).map { profile ->
+                profiles = credentialProfileDao.getEnabledProfilesByWorkerId(workerId)
+                    .filter { it.id in linkedProfileIds }
+                    .map { profile ->
                     CredentialProfileSummary(
                         name = profile.name,
                         description = profile.description?.takeIf { it.isNotBlank() }
@@ -306,6 +322,8 @@ internal class AgentRoleMapper(
      * @param spawnableRoleIds Unordered target ids used by the dynamic marker.
      * @param roleToolIds Tool ids used to determine whether `spawn_agent` is enabled.
      * @param currentProjectId Project of the role being mapped, used by the advertisement's intro.
+     * @param agentRoleId Id of the role being mapped, used to scope the credential-profile advertisement
+     *        to the profiles linked to it.
      * @return The corresponding [AgentInstruction], or null when the kind is unrecognized or a
      *         `model_specific` row is missing its `modelId` in `custom` (both logged as warnings —
      *         they indicate a database inconsistency).
@@ -316,7 +334,8 @@ internal class AgentRoleMapper(
         ownerId: Long,
         spawnableRoleIds: Set<Long>,
         roleToolIds: Set<Long>,
-        currentProjectId: Long?
+        currentProjectId: Long?,
+        agentRoleId: Long
     ): AgentInstruction? = when (row.type) {
         AgentInstructionTypes.SPAWNABLE_AGENTS -> SpawnableAgentsInstruction(
             name = row.name,
@@ -333,7 +352,7 @@ internal class AgentRoleMapper(
 
         AgentInstructionTypes.CREDENTIAL_PROFILES -> CredentialProfilesInstruction(
             name = row.name,
-            advertisementLoader = { loadCredentialProfilesAdvertisement(roleToolIds) },
+            advertisementLoader = { loadCredentialProfilesAdvertisement(roleToolIds, agentRoleId) },
             terminalSessionToolAvailableLoader = {
                 toolDefinitionDao.getToolDefinitionsByIds(roleToolIds)
                     .any { it is BuiltInWorkerToolDefinition && it.builtInToolName == TERMINAL_SESSION_TOOL_NAME }

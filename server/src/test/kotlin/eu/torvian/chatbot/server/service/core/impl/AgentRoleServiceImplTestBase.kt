@@ -48,6 +48,8 @@ abstract class AgentRoleServiceImplTestBase {
     protected lateinit var sessionDao: SessionDao
     /** Mocked credential-profile DAO backing the credential advertisement loader. */
     protected lateinit var credentialProfileDao: WorkerCredentialProfileDao
+    /** Mocked link DAO scoping each role's credential advertisement to its linked profiles. */
+    protected lateinit var credentialProfileLinkDao: WorkerCredentialProfileAgentRoleDao
     /** Mocked worker DAO labelling each credential-profile group. */
     protected lateinit var workerDao: WorkerDao
     /** Mocked preset DAO backing preset validation and resolution. */
@@ -114,6 +116,7 @@ abstract class AgentRoleServiceImplTestBase {
         projectDao = mockk()
         sessionDao = mockk()
         credentialProfileDao = mockk()
+        credentialProfileLinkDao = mockk()
         workerDao = mockk()
         modelPresetDao = mockk()
         settingsDao = mockk()
@@ -137,6 +140,7 @@ abstract class AgentRoleServiceImplTestBase {
             projectDao = projectDao,
             sessionDao = sessionDao,
             credentialProfileDao = credentialProfileDao,
+            credentialProfileLinkDao = credentialProfileLinkDao,
             workerDao = workerDao
         )
 
