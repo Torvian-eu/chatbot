@@ -224,7 +224,8 @@ fun AgentRoleFormDialog(
                         // Spawn permissions are an unordered set: toggling a chip adds or removes the
                         // target, and self-spawn is allowed (the edited role is offered in the first
                         // group). Targets may belong to any project, so the chips are grouped by
-                        // project with the role's own scope first to keep a long list navigable.
+                        // project with the role's own scope first to keep a long list navigable; the
+                        // grouped rendering itself lives in the shared picker.
                         Text("Spawnable agent roles", style = MaterialTheme.typography.titleSmall)
                         if (roles.isEmpty()) {
                             Text(
@@ -233,44 +234,26 @@ fun AgentRoleFormDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
-                            buildSpawnableAgentRoleSections(
-                                roles = roles,
-                                projects = projects,
-                                ownProjectId = formState.projectId,
-                                editedRoleId = formState.roleId
-                            ).forEach { section ->
-                                Text(
-                                    text = section.title,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    section.roles.forEach { target ->
-                                        val selected = target.id in formState.spawnableAgentRoleIds
-                                        FilterChip(
-                                            selected = selected,
-                                            onClick = {
-                                                onFormUpdate { current ->
-                                                    current.copy(
-                                                        spawnableAgentRoleIds = if (selected) {
-                                                            current.spawnableAgentRoleIds - target.id
-                                                        } else {
-                                                            current.spawnableAgentRoleIds + target.id
-                                                        }
-                                                    )
-                                                }
-                                            },
-                                            label = {
-                                                val display = target.displayName?.takeIf { it.isNotBlank() }
-                                                Text(if (display == null) target.name else "${target.name} — $display")
+                            AgentRoleChipPicker(
+                                sections = buildSpawnableAgentRoleSections(
+                                    roles = roles,
+                                    projects = projects,
+                                    ownProjectId = formState.projectId,
+                                    editedRoleId = formState.roleId
+                                ),
+                                selectedRoleIds = formState.spawnableAgentRoleIds,
+                                onToggleRole = { roleId ->
+                                    onFormUpdate { current ->
+                                        current.copy(
+                                            spawnableAgentRoleIds = if (roleId in current.spawnableAgentRoleIds) {
+                                                current.spawnableAgentRoleIds - roleId
+                                            } else {
+                                                current.spawnableAgentRoleIds + roleId
                                             }
                                         )
                                     }
                                 }
-                            }
+                            )
                         }
 
                         // Project membership is now a SINGLE selection: a role belongs to at most one

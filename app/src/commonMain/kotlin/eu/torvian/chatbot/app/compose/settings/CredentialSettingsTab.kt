@@ -21,10 +21,14 @@ import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.CredentialDispatchWarning
 import eu.torvian.chatbot.app.viewmodel.CredentialProfileFormState
+import eu.torvian.chatbot.app.viewmodel.CredentialRoleOptions
 import eu.torvian.chatbot.app.viewmodel.CredentialSecretFormState
 import eu.torvian.chatbot.app.viewmodel.CredentialSettingsDialog
 import eu.torvian.chatbot.common.models.api.credential.*
 import eu.torvian.chatbot.common.models.worker.WorkerDto
+
+/** Marker shown on a profile that no agent role is linked to. */
+private const val UNLINKED_PROFILE_MARKER = "No agent roles linked — unusable until linked"
 
 /**
  * Credential profiles and secrets, grouped by worker.
@@ -110,6 +114,7 @@ fun CredentialSettingsTab(
             is CredentialSettingsDialog.None -> Unit
             is CredentialSettingsDialog.Profile -> CredentialProfileDialog(
                 form = dialog.form,
+                roleOptions = state.roleOptions,
                 onUpdate = actions::onUpdateProfileForm,
                 onSave = actions::onSaveProfile,
                 onDismiss = actions::onCancelDialog
@@ -260,7 +265,7 @@ private fun ProfilesSection(state: CredentialSettingsState, actions: CredentialS
                 Text(text = "No profiles yet.", style = MaterialTheme.typography.bodySmall)
             } else {
                 profiles.data.forEach { profile ->
-                    ProfileCard(profile, actions)
+                    ProfileCard(profile, state.roleOptions, actions)
                 }
             }
 
@@ -308,11 +313,21 @@ private fun SecretsSection(state: CredentialSettingsState, actions: CredentialSe
 /**
  * One profile row.
  *
+ * The linked agent roles are resolved through the same derivation the editor reads, so a renamed role
+ * shows up without reopening the dialog. Unlike the picker chips, these labels keep the project name:
+ * a card row has no section header to carry it. A profile with no links carries the
+ * unusable-until-linked marker: it is still listed and relayed, but no role may attach it.
+ *
  * @param profile Profile to render.
+ * @param roleOptions Roles and their card labels, used to resolve the labels of the linked ids.
  * @param actions Callbacks forwarded to the view model.
  */
 @Composable
-private fun ProfileCard(profile: CredentialProfileDto, actions: CredentialSettingsActions) {
+private fun ProfileCard(
+    profile: CredentialProfileDto,
+    roleOptions: CredentialRoleOptions,
+    actions: CredentialSettingsActions,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -332,6 +347,23 @@ private fun ProfileCard(profile: CredentialProfileDto, actions: CredentialSettin
             val description = profile.description
             if (!description.isNullOrBlank()) {
                 Text(text = description, style = MaterialTheme.typography.bodySmall)
+            }
+            // The marker keys off the id set, not the resolved labels, so a link to a since-deleted role
+            // still counts as linked rather than silently turning the profile into a draft.
+            if (profile.agentRoleIds.isEmpty()) {
+                Text(
+                    text = UNLINKED_PROFILE_MARKER,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else {
+                val labels = profile.agentRoleIds.mapNotNull { id -> roleOptions.labelsById[id] }
+                if (labels.isNotEmpty()) {
+                    Text(
+                        text = "agent roles: ${labels.joinToString(", ")}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
             Row {
                 TextButton(onClick = { actions.onStartEditingProfile(profile) }) { Text("Edit") }
@@ -368,6 +400,7 @@ private fun SecretCard(secret: CredentialSecretMetadataDto, actions: CredentialS
  * Profile editor.
  *
  * @param form Editable form state.
+ * @param roleOptions Roles the profile may be linked to, grouped by project for the picker.
  * @param onUpdate Applies a transformation to the form.
  * @param onSave Saves the form.
  * @param onDismiss Closes the dialog.
@@ -375,6 +408,7 @@ private fun SecretCard(secret: CredentialSecretMetadataDto, actions: CredentialS
 @Composable
 private fun CredentialProfileDialog(
     form: CredentialProfileFormState,
+    roleOptions: CredentialRoleOptions,
     onUpdate: ((CredentialProfileFormState) -> CredentialProfileFormState) -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit,
@@ -470,6 +504,36 @@ private fun CredentialProfileDialog(
                     )
                     Text(text = "Enabled")
                 }
+                HorizontalDivider()
+                Text(text = "Agent roles allowed to attach", style = MaterialTheme.typography.titleSmall)
+                // Every owned role is offered, across all projects, because a profile may be shared by
+                // roles of different projects; the section header carries the project, so same-named
+                // roles stay distinguishable without repeating it on every chip.
+                AgentRoleChipPicker(
+                    sections = roleOptions.sections,
+                    selectedRoleIds = form.agentRoleIds,
+                    onToggleRole = { roleId ->
+                        onUpdate { current ->
+                            current.copy(
+                                agentRoleIds = if (roleId in current.agentRoleIds) {
+                                    current.agentRoleIds - roleId
+                                } else {
+                                    current.agentRoleIds + roleId
+                                }
+                            )
+                        }
+                    }
+                )
+                if (roleOptions.sections.isEmpty()) {
+                    Text(
+                        text = "No agent roles are available to link.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Text(
+                    text = "A profile with no linked role cannot be attached by any role.",
+                    style = MaterialTheme.typography.bodySmall
+                )
                 if (form.violations.isNotEmpty()) {
                     HorizontalDivider()
                     form.violations.forEach { violation ->

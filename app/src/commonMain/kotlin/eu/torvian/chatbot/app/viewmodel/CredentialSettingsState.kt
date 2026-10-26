@@ -1,6 +1,24 @@
 package eu.torvian.chatbot.app.viewmodel
 
+import eu.torvian.chatbot.app.domain.contracts.AgentRoleSection
 import eu.torvian.chatbot.common.models.api.credential.CredentialChannel
+
+/**
+ * Roles a credential profile may be linked to, derived once from the role and project streams.
+ *
+ * The picker renders [sections], and the profile card resolves the labels of a profile's linked ids
+ * through [labelsById]. Both fields come from the same inputs, so the card can never contradict the
+ * picker.
+ *
+ * @property sections Roles grouped per project, project-name ascending with the unassociated roles
+ *   last, as the grouped picker renders them.
+ * @property labelsById Card label per role id: the role label plus its project, because a card row
+ *   has no grouping to carry that context.
+ */
+data class CredentialRoleOptions(
+    val sections: List<AgentRoleSection>,
+    val labelsById: Map<Long, String>,
+)
 
 /**
  * Editable state of one credential profile form.
@@ -23,6 +41,8 @@ import eu.torvian.chatbot.common.models.api.credential.CredentialChannel
  * @property askpassVariablesText Askpass variable names, one per line.
  * @property environmentText Non-secret environment entries, one `NAME=value` pair per line.
  * @property isEnabled Whether the profile may be attached.
+ * @property agentRoleIds Agent roles allowed to attach the profile. An empty set is a draft that
+ *   nobody may attach; it is saved as such rather than rejected.
  * @property violations Validation messages of the last failed save.
  */
 data class CredentialProfileFormState(
@@ -40,6 +60,7 @@ data class CredentialProfileFormState(
     val askpassVariablesText: String = "",
     val environmentText: String = "",
     val isEnabled: Boolean = true,
+    val agentRoleIds: Set<Long> = emptySet(),
     val violations: List<String> = emptyList(),
 )
 

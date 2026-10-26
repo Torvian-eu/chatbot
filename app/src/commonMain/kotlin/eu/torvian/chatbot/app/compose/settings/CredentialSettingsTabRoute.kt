@@ -47,6 +47,7 @@ fun CredentialSettingsTabRoute(
     val secrets by viewModel.secrets.collectAsState()
     val dialog by viewModel.dialog.collectAsState()
     val dispatchWarning by viewModel.dispatchWarning.collectAsState()
+    val roleOptions by viewModel.roleOptions.collectAsState()
 
     CredentialSettingsTab(
         state = CredentialSettingsState(
@@ -56,6 +57,7 @@ fun CredentialSettingsTabRoute(
             secrets = secrets,
             dialog = dialog,
             dispatchWarning = dispatchWarning,
+            roleOptions = roleOptions,
         ),
         actions = object : CredentialSettingsActions {
             override fun onLoad() = viewModel.load()

@@ -207,6 +207,8 @@ fun appSettingsModule(): Module = module {
         CredentialSettingsViewModel(
             credentialRepository = get(),
             workerRepository = get(),
+            agentRoleRepository = get(),
+            projectRepository = get(),
             notificationService = get()
         )
     }
