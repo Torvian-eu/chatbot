@@ -30,6 +30,9 @@ import kotlinx.serialization.json.put
  * action-specific arguments, maps typed manager errors to stable tool results, and never throws for
  * a logical failure.
  *
+ * It is the only built-in tool whose behaviour consumes the acting agent role: `attach` authorizes
+ * against `context.agentRoleId`, so a call that carries none is refused.
+ *
  * @param manager Process-wide session registry and lifecycle owner.
  */
 internal class TerminalSessionTool(
@@ -43,6 +46,7 @@ internal class TerminalSessionTool(
         input: JsonObject,
         context: BuiltInToolExecutionContext,
     ): BuiltInToolExecutionResult {
+        val agentRoleId = context.agentRoleId
         val validationErrors = mutableListOf<String>()
         val action = parseRequiredString(input, "action", validationErrors)
 
@@ -178,6 +182,7 @@ internal class TerminalSessionTool(
                 waitMillis = waitMillis,
                 maxLines = maxLines,
                 maxBytes = maxBytes,
+                agentRoleId = agentRoleId,
             )
 
             "detach" -> manager.detach(
@@ -296,6 +301,12 @@ internal class TerminalSessionTool(
                 BuiltInToolExecutionError.CREDENTIAL_UNAVAILABLE,
                 "Credential profile '${error.profile}' cannot be attached: ${error.detail}. " +
                     "The secret value is never returned; fix the assignment or re-enter the secret.",
+            )
+
+            is TerminalSessionError.ProfileNotAuthorized -> builtInToolErrorResult(
+                BuiltInToolExecutionError.PERMISSION_DENIED,
+                "Credential profile '${error.profile}' cannot be attached: ${error.detail}. " +
+                    "Only agent roles linked to a profile may attach it.",
             )
 
             is TerminalSessionError.UnknownProfile -> invalidInputResult(

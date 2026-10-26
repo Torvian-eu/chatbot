@@ -300,11 +300,15 @@ internal class TerminalSessionManager(
      * only name a profile. The secret is decrypted here, handed to the channel material, and dropped
      * as soon as the material exists, so no plaintext outlives the call.
      *
+     * Only the agent role acting in the call may attach the profile: a call without a role id, and a
+     * role the profile is not linked to, are both refused before anything is decrypted or delivered.
+     *
      * @param sessionId Session handle returned by [start].
      * @param profileName Name of a profile assigned to this worker.
      * @param waitMillis Maximum time this call waits for output to settle.
      * @param maxLines Maximum lines returned by this call.
      * @param maxBytes Maximum bytes returned by this call.
+     * @param agentRoleId Agent role acting in this call, or null when the authorization carries none.
      * @return Session snapshot with status `ATTACHED`, or a logical failure.
      */
     suspend fun attach(
@@ -313,6 +317,7 @@ internal class TerminalSessionManager(
         waitMillis: Long,
         maxLines: Int,
         maxBytes: Int,
+        agentRoleId: Long?,
     ): Either<TerminalSessionError, TerminalSnapshot> = either {
         val session = lookup(sessionId)
         session.actionLock.withLock {
@@ -336,16 +341,42 @@ internal class TerminalSessionManager(
             ensure(session.isWritable()) {
                 TerminalSessionError.SessionNotWritable(sessionId, session.exitCode)
             }
+            // Checked before name resolution so a role-less caller cannot even learn which profile names
+            // this worker holds.
+            val actingRoleId = agentRoleId ?: raise(
+                TerminalSessionError.ProfileNotAuthorized(
+                    profileName,
+                    "the execution authorization carries no agent role, so no credential profile " +
+                        "can be attached",
+                )
+            )
 
             val profile = dependencies.store.profile(profileName) ?: raise(
                 TerminalSessionError.UnknownProfile(
                     profile = profileName,
+                    // Only the profiles this role could actually attach, so the hint discloses nothing
+                    // about profiles linked to other roles.
                     known = dependencies.store.profiles()
-                        .filter { it.isEnabled }
+                        .filter { it.isEnabled && actingRoleId in it.agentRoleIds }
                         .map { it.name }
                         .sorted(),
                 )
             )
+            // Before the enabled check, so an unlinked role does not learn a profile's enabled state.
+            if (actingRoleId !in profile.agentRoleIds) {
+                logger.warn(
+                    "Rejected credential attach for profile '{}' (id {}): agent role {} is not linked to it",
+                    profile.name,
+                    profile.id,
+                    actingRoleId,
+                )
+                raise(
+                    TerminalSessionError.ProfileNotAuthorized(
+                        profileName,
+                        "profile '$profileName' is not linked to agent role $actingRoleId",
+                    )
+                )
+            }
             ensure(profile.isEnabled) {
                 TerminalSessionError.CredentialUnavailable(profileName, "the profile is disabled")
             }

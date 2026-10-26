@@ -66,7 +66,10 @@ class TerminalSessionToolAttachTest {
     /** Verifies that attach requires the credential name. */
     @Test
     fun `attach requires a credential`(): Unit = runBlocking {
-        val result = tool.execute(input("attach") { put("session_id", SESSION_ID) }, context())
+        val result = tool.execute(
+            input("attach") { put("session_id", SESSION_ID) },
+            context(TEST_ROLE_ID),
+        )
 
         assertInvalidInput(result)
         assertTrue(validationErrors(result).contains("credential"))
@@ -80,12 +83,11 @@ class TerminalSessionToolAttachTest {
                 put("session_id", SESSION_ID)
                 put("credential", " ")
             },
-            context(),
-        )
+            context(TEST_ROLE_ID))
 
         assertInvalidInput(result)
         assertTrue(validationErrors(result).contains("credential"))
-        coVerify(exactly = 0) { manager.attach(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { manager.attach(any(), any(), any(), any(), any(), any()) }
     }
 
     /** Verifies that attach accepts the documented arguments only. */
@@ -97,8 +99,7 @@ class TerminalSessionToolAttachTest {
                 put("credential", "vps")
                 put("command", "bash")
             },
-            context(),
-        )
+            context(TEST_ROLE_ID))
 
         assertInvalidInput(result)
         assertTrue(validationErrors(result).contains("command"))
@@ -113,8 +114,7 @@ class TerminalSessionToolAttachTest {
                     put("session_id", SESSION_ID)
                     put("credential", "vps")
                 },
-                context(),
-            )
+                context(TEST_ROLE_ID))
 
             assertInvalidInput(result)
             assertTrue(
@@ -128,8 +128,7 @@ class TerminalSessionToolAttachTest {
                 put("command", "bash")
                 put("credential", "vps")
             },
-            context(),
-        )
+            context(TEST_ROLE_ID))
         assertInvalidInput(startResult)
         assertTrue(validationErrors(startResult).contains("credential"))
     }
@@ -137,7 +136,7 @@ class TerminalSessionToolAttachTest {
     /** Verifies that detach needs only the session handle. */
     @Test
     fun `detach requires a session handle`(): Unit = runBlocking {
-        val result = tool.execute(input("detach"), context())
+        val result = tool.execute(input("detach"), context(TEST_ROLE_ID))
 
         assertInvalidInput(result)
         assertTrue(validationErrors(result).contains("session_id"))
@@ -146,7 +145,7 @@ class TerminalSessionToolAttachTest {
     /** Verifies that a successful attach reports the attachment without any secret material. */
     @Test
     fun `attach details report the profile and channel`(): Unit = runBlocking {
-        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any()) } returns
+        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any(), any()) } returns
             snapshot(status = TerminalStatus.ATTACHED, transition = AttachTransition.ATTACHED).right()
 
         val result = tool.execute(
@@ -154,8 +153,7 @@ class TerminalSessionToolAttachTest {
                 put("session_id", SESSION_ID)
                 put("credential", "vps")
             },
-            context(),
-        )
+            context(TEST_ROLE_ID))
 
         assertFalse(result.isError)
         val details = assertNotNull(result.details).jsonObject
@@ -181,8 +179,7 @@ class TerminalSessionToolAttachTest {
 
         val result = tool.execute(
             input("poll") { put("session_id", SESSION_ID) },
-            context(),
-        )
+            context(TEST_ROLE_ID))
 
         assertFalse(result.isError)
         val details = assertNotNull(result.details).jsonObject
@@ -195,7 +192,7 @@ class TerminalSessionToolAttachTest {
     /** Verifies that the attach call states the attachment in its output, where the model can read it. */
     @Test
     fun `attach output states the attached profile and channel`(): Unit = runBlocking {
-        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any()) } returns
+        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any(), any()) } returns
             snapshot(status = TerminalStatus.ATTACHED, transition = AttachTransition.ATTACHED).right()
 
         val result = tool.execute(
@@ -203,8 +200,7 @@ class TerminalSessionToolAttachTest {
                 put("session_id", SESSION_ID)
                 put("credential", "vps")
             },
-            context(),
-        )
+            context(TEST_ROLE_ID))
 
         assertEquals(
             "status: ATTACHED\n" +
@@ -229,7 +225,7 @@ class TerminalSessionToolAttachTest {
                 attachExitCode = 7,
             ).right()
 
-        val result = tool.execute(input("poll") { put("session_id", SESSION_ID) }, context())
+        val result = tool.execute(input("poll") { put("session_id", SESSION_ID) }, context(TEST_ROLE_ID))
 
         assertEquals(
             "status: QUIET\n" +
@@ -247,7 +243,10 @@ class TerminalSessionToolAttachTest {
         coEvery { manager.detach(SESSION_ID, any(), any(), any()) } returns
             snapshot(status = TerminalStatus.QUIET, transition = AttachTransition.DETACHED).right()
 
-        val result = tool.execute(input("detach") { put("session_id", SESSION_ID) }, context())
+        val result = tool.execute(
+            input("detach") { put("session_id", SESSION_ID) },
+            context(TEST_ROLE_ID),
+        )
 
         assertEquals(
             "status: QUIET\n" +
@@ -266,7 +265,7 @@ class TerminalSessionToolAttachTest {
         coEvery { manager.poll(SESSION_ID, any(), any(), any()) } returns
             snapshot(status = TerminalStatus.ATTACHED, attached = true).right()
 
-        val result = tool.execute(input("poll") { put("session_id", SESSION_ID) }, context())
+        val result = tool.execute(input("poll") { put("session_id", SESSION_ID) }, context(TEST_ROLE_ID))
 
         assertEquals(
             "status: ATTACHED\n" +
@@ -287,7 +286,7 @@ class TerminalSessionToolAttachTest {
         coEvery { manager.poll(SESSION_ID, any(), any(), any()) } returns
             snapshot(status = TerminalStatus.QUIET, attached = false).right()
 
-        val result = tool.execute(input("poll") { put("session_id", SESSION_ID) }, context())
+        val result = tool.execute(input("poll") { put("session_id", SESSION_ID) }, context(TEST_ROLE_ID))
 
         assertEquals(
             "status: QUIET\n" +
@@ -301,7 +300,7 @@ class TerminalSessionToolAttachTest {
     /** Verifies that an unavailable credential account is a permission problem, not a bad argument. */
     @Test
     fun `missing credential account maps to permission denied`(): Unit = runBlocking {
-        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any()) } returns
+        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any(), any()) } returns
             TerminalSessionError.CredentialSupportUnavailable(
                 "worker.commandIsolation.enabled is off"
             ).left()
@@ -311,8 +310,7 @@ class TerminalSessionToolAttachTest {
                 put("session_id", SESSION_ID)
                 put("credential", "vps")
             },
-            context(),
-        )
+            context(TEST_ROLE_ID))
 
         assertTrue(result.isError)
         assertEquals(BuiltInToolExecutionError.PERMISSION_DENIED, result.errorCode)
@@ -321,7 +319,7 @@ class TerminalSessionToolAttachTest {
     /** Verifies that an unusable secret maps to the credential-specific error code. */
     @Test
     fun `undecryptable secret maps to credential unavailable`(): Unit = runBlocking {
-        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any()) } returns
+        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any(), any()) } returns
             TerminalSessionError.CredentialUnavailable("vps", "secret '$REFERENCE' could not be used").left()
 
         val result = tool.execute(
@@ -329,8 +327,7 @@ class TerminalSessionToolAttachTest {
                 put("session_id", SESSION_ID)
                 put("credential", "vps")
             },
-            context(),
-        )
+            context(TEST_ROLE_ID))
 
         assertTrue(result.isError)
         assertEquals(BuiltInToolExecutionError.CREDENTIAL_UNAVAILABLE, result.errorCode)
@@ -343,7 +340,7 @@ class TerminalSessionToolAttachTest {
     /** Verifies that an unknown profile is an input error listing the assigned names. */
     @Test
     fun `unknown profile maps to invalid input with the assigned names`(): Unit = runBlocking {
-        coEvery { manager.attach(SESSION_ID, "missing", any(), any(), any()) } returns
+        coEvery { manager.attach(SESSION_ID, "missing", any(), any(), any(), any()) } returns
             TerminalSessionError.UnknownProfile("missing", listOf("github", "vps")).left()
 
         val result = tool.execute(
@@ -351,8 +348,7 @@ class TerminalSessionToolAttachTest {
                 put("session_id", SESSION_ID)
                 put("credential", "missing")
             },
-            context(),
-        )
+            context(TEST_ROLE_ID))
 
         assertInvalidInput(result)
         val details = validationErrors(result)
@@ -364,9 +360,9 @@ class TerminalSessionToolAttachTest {
     /** Verifies that state mistakes are input errors with guidance rather than execution failures. */
     @Test
     fun `state errors map to invalid input`(): Unit = runBlocking {
-        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any()) } returns
+        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any(), any()) } returns
             TerminalSessionError.AlreadyAttached(SESSION_ID, "vps").left()
-        coEvery { manager.attach(SESSION_ID, "other", any(), any(), any()) } returns
+        coEvery { manager.attach(SESSION_ID, "other", any(), any(), any(), any()) } returns
             TerminalSessionError.NotQuiet(SESSION_ID).left()
         coEvery { manager.detach(SESSION_ID, any(), any(), any()) } returns
             TerminalSessionError.NotAttached(SESSION_ID).left()
@@ -377,7 +373,7 @@ class TerminalSessionToolAttachTest {
                     put("session_id", SESSION_ID)
                     put("credential", "vps")
                 },
-                context(),
+                context(TEST_ROLE_ID),
             )
         )
         assertInvalidInput(
@@ -386,16 +382,21 @@ class TerminalSessionToolAttachTest {
                     put("session_id", SESSION_ID)
                     put("credential", "other")
                 },
-                context(),
+                context(TEST_ROLE_ID),
             )
         )
-        assertInvalidInput(tool.execute(input("detach") { put("session_id", SESSION_ID) }, context()))
+        assertInvalidInput(
+            tool.execute(
+                input("detach") { put("session_id", SESSION_ID) },
+                context(TEST_ROLE_ID),
+            )
+        )
     }
 
     /** Verifies that a failed spawn is an execution failure. */
     @Test
     fun `spawn failure maps to execution failed`(): Unit = runBlocking {
-        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any()) } returns
+        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any(), any()) } returns
             TerminalSessionError.SpawnFailed("test").left()
 
         val result = tool.execute(
@@ -403,11 +404,79 @@ class TerminalSessionToolAttachTest {
                 put("session_id", SESSION_ID)
                 put("credential", "vps")
             },
-            context(),
-        )
+            context(TEST_ROLE_ID))
 
         assertTrue(result.isError)
         assertEquals(BuiltInToolExecutionError.EXECUTION_FAILED, result.errorCode)
+    }
+
+    /** Verifies that an unlinked agent role is a permission problem naming the profile. */
+    @Test
+    fun `unauthorized profile maps to permission denied naming the profile`(): Unit = runBlocking {
+        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any(), any()) } returns
+            TerminalSessionError.ProfileNotAuthorized("vps", "profile 'vps' is not linked to agent role 9")
+                .left()
+
+        val result = tool.execute(
+            input("attach") {
+                put("session_id", SESSION_ID)
+                put("credential", "vps")
+            },
+            context(TEST_ROLE_ID),
+        )
+
+        assertTrue(result.isError)
+        assertEquals(BuiltInToolExecutionError.PERMISSION_DENIED, result.errorCode)
+        val message = assertNotNull(result.errorMessage)
+        assertTrue(message.contains("vps"))
+    }
+
+    /** Verifies that the acting role reaches the manager unchanged. */
+    @Test
+    fun `attach forwards the acting agent role to the manager`(): Unit = runBlocking {
+        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any(), any()) } returns
+            snapshot(status = TerminalStatus.ATTACHED, transition = AttachTransition.ATTACHED).right()
+
+        tool.execute(
+            input("attach") {
+                put("session_id", SESSION_ID)
+                put("credential", "vps")
+            },
+            context(TEST_ROLE_ID),
+        )
+
+        coVerify(exactly = 1) { manager.attach(SESSION_ID, "vps", any(), any(), any(), TEST_ROLE_ID) }
+    }
+
+    /**
+     * Verifies that a call without an agent role serves the non-credential actions but refuses
+     * `attach`, so a caller that cannot supply a role fails closed instead of attaching an unowned
+     * profile.
+     */
+    @Test
+    fun `a call without an agent role refuses attach but serves other actions`(): Unit = runBlocking {
+        coEvery { manager.poll(SESSION_ID, any(), any(), any()) } returns
+            snapshot(status = TerminalStatus.QUIET, attached = false).right()
+        coEvery { manager.attach(SESSION_ID, "vps", any(), any(), any(), null) } returns
+            TerminalSessionError.ProfileNotAuthorized(
+                "vps",
+                "the execution authorization carries no agent role",
+            ).left()
+
+        val poll = tool.execute(input("poll") { put("session_id", SESSION_ID) }, context())
+        assertFalse(poll.isError)
+
+        val attach = tool.execute(
+            input("attach") {
+                put("session_id", SESSION_ID)
+                put("credential", "vps")
+            },
+            context(),
+        )
+        assertTrue(attach.isError)
+        assertEquals(BuiltInToolExecutionError.PERMISSION_DENIED, attach.errorCode)
+        // A context without a role hands the manager null, which is what makes attach fail closed.
+        coVerify(exactly = 1) { manager.attach(SESSION_ID, "vps", any(), any(), any(), null) }
     }
 
     /** Verifies that the catalog advertises the new actions and the attach-only property. */
@@ -494,12 +563,14 @@ class TerminalSessionToolAttachTest {
     )
 
     /**
+     * @param agentRoleId Acting agent role, or null for a call that carries none.
      * @return Execution context using a temporary workspace.
      */
-    private fun context(): BuiltInToolExecutionContext = BuiltInToolExecutionContext(
+    private fun context(agentRoleId: Long? = null): BuiltInToolExecutionContext = testExecutionContext(
         workspace = java.nio.file.Path.of("/tmp"),
         defaultCommandTimeoutSeconds = 10,
         defaultSearchTimeoutSeconds = 5,
+        agentRoleId = agentRoleId,
     )
 
     private companion object {
@@ -508,5 +579,8 @@ class TerminalSessionToolAttachTest {
 
         /** Secret reference a profile would use; its value must never appear in a result. */
         const val REFERENCE = "vps_password"
+
+        /** Agent role the tests act as. */
+        const val TEST_ROLE_ID = 31L
     }
 }
