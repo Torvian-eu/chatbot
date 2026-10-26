@@ -10,9 +10,10 @@ import eu.torvian.chatbot.server.data.entities.WorkerCredentialSecretEntity
  * Converts a stored profile row to the shared profile DTO.
  *
  * @receiver Stored profile entity.
+ * @param agentRoleIds Agent roles linked to the profile.
  * @return Profile DTO carrying no secret material.
  */
-internal fun WorkerCredentialProfileEntity.toDto(): CredentialProfileDto = CredentialProfileDto(
+internal fun WorkerCredentialProfileEntity.toDto(agentRoleIds: Set<Long>): CredentialProfileDto = CredentialProfileDto(
     id = id,
     workerId = workerId,
     name = name,
@@ -27,6 +28,7 @@ internal fun WorkerCredentialProfileEntity.toDto(): CredentialProfileDto = Crede
     isEnabled = isEnabled,
     environmentVariables = environmentVariables,
     askpassVariables = askpassVariables,
+    agentRoleIds = agentRoleIds,
     updatedAt = updatedAt,
 )
 

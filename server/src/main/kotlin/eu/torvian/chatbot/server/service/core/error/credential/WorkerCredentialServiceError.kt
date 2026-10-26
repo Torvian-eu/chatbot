@@ -73,6 +73,15 @@ sealed interface WorkerCredentialServiceError {
     data class SecretNotAssigned(val workerId: Long, val reference: String) : WorkerCredentialServiceError
 
     /**
+     * A supplied link set names agent roles that do not exist or are not owned by the caller.
+     *
+     * The whole write is refused, so a profile never carries a partially applied link set.
+     *
+     * @property agentRoleIds Offending role ids, as supplied by the caller.
+     */
+    data class AgentRoleNotFound(val agentRoleIds: List<Long>) : WorkerCredentialServiceError
+
+    /**
      * A secret update tried to change the reference a profile may already depend on.
      *
      * Replacing the value is the supported edit; a rename would silently break the profiles that name
@@ -123,6 +132,13 @@ fun WorkerCredentialServiceError.toApiError(): ApiError = when (this) {
             CommonApiErrorCodes.FAILED_PRECONDITION,
             "The referenced credential secret is not assigned to this worker",
             "reference" to reference
+        )
+
+    is WorkerCredentialServiceError.AgentRoleNotFound ->
+        apiError(
+            CommonApiErrorCodes.VALIDATION_FAILED,
+            "agentRoleIds contains agent roles that do not exist or are not owned by the caller",
+            "agentRoleIds" to agentRoleIds.joinToString(",")
         )
 
     is WorkerCredentialServiceError.SecretReferenceImmutable ->

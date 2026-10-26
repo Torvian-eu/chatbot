@@ -12,7 +12,9 @@ import eu.torvian.chatbot.common.models.api.credential.CredentialProfileRules
 import eu.torvian.chatbot.common.models.api.credential.SignedCredentialProfileDto
 import eu.torvian.chatbot.common.models.api.credential.UpdateCredentialProfileRequest
 import eu.torvian.chatbot.common.security.SignedRequest
+import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.UserDeviceDao
+import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileAgentRoleDao
 import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileDao
 import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileSignatureDao
 import eu.torvian.chatbot.server.data.dao.WorkerCredentialSecretDao
@@ -34,22 +36,28 @@ import kotlin.time.Clock
  *
  * Authorization follows worker ownership: a profile is bound to exactly one worker, so the worker's
  * owner is the only principal allowed to read or mutate it. Validation runs the same rule set the
- * worker applies before caching a profile.
+ * worker applies before caching a profile. A profile's linked agent roles are part of the signed body,
+ * so they are validated (owner-scoped) and replaced in the same transaction as the profile row and its
+ * signature; reads return them through one batched link query per call.
  *
  * @property profileDao Persistence gateway for profiles.
  * @property profileSignatureDao Persistence gateway for device signatures.
+ * @property agentRoleLinkDao Persistence gateway for the profile ↔ agent-role links.
  * @property secretDao Persistence gateway used to confirm the referenced secret exists on the worker.
  * @property userDeviceDao Registry lookup that turns a signer id into a stored device row.
  * @property workerDao Persistence gateway used for worker ownership checks.
- * @property transactionScope Transaction boundary keeping profile and signature writes atomic.
- * @property logger Diagnostic sink; receives identifiers and profile names only.
+ * @property agentRoleDao Owner-scoped role lookup used to validate the supplied link set.
+ * @property transactionScope Transaction boundary keeping profile, link and signature writes atomic.
+ * @property logger Diagnostic sink; receives identifiers, profile names and role ids only.
  */
 class WorkerCredentialProfileServiceImpl(
     private val profileDao: WorkerCredentialProfileDao,
     private val profileSignatureDao: WorkerCredentialProfileSignatureDao,
+    private val agentRoleLinkDao: WorkerCredentialProfileAgentRoleDao,
     private val secretDao: WorkerCredentialSecretDao,
     private val userDeviceDao: UserDeviceDao,
     private val workerDao: WorkerDao,
+    private val agentRoleDao: AgentRoleDao,
     private val transactionScope: TransactionScope,
     private val logger: Logger = LogManager.getLogger(WorkerCredentialProfileServiceImpl::class.java),
 ) : WorkerCredentialProfileService {
@@ -65,6 +73,7 @@ class WorkerCredentialProfileServiceImpl(
                 val signerDevice = userDeviceDao.getDeviceByClientId(userId, signedRequest.signerId)
                     ?: raise(WorkerCredentialServiceError.Unauthorized(userId, request.workerId))
                 validateFields(request.toFields()).bind()
+                validateAgentRoleIds(userId, request.agentRoleIds).bind()
 
                 val created = profileDao.createProfile(
                     CreateWorkerCredentialProfileEntity(
@@ -84,14 +93,16 @@ class WorkerCredentialProfileServiceImpl(
                     )
                 ).mapLeft { it.toServiceError() }.bind()
 
+                agentRoleLinkDao.replaceAgentRoleIds(created.id, request.agentRoleIds)
                 storeSignature(created.id, signerDevice.id, signedRequest)
                 logger.info(
-                    "Created credential profile {} ({}) for worker {}",
+                    "Created credential profile {} ({}) for worker {} linked to agent roles {}",
                     created.name,
                     created.id,
-                    created.workerId
+                    created.workerId,
+                    request.agentRoleIds
                 )
-                created.toDto()
+                created.toDto(agentRoleLinkDao.getAgentRoleIds(created.id).toSortedSet())
             }
         }
 
@@ -109,6 +120,7 @@ class WorkerCredentialProfileServiceImpl(
                 val signerDevice = userDeviceDao.getDeviceByClientId(userId, signedRequest.signerId)
                     ?: raise(WorkerCredentialServiceError.Unauthorized(userId, request.workerId))
                 validateFields(request.toFields()).bind()
+                validateAgentRoleIds(userId, request.agentRoleIds).bind()
 
                 val updated = profileDao.updateProfile(
                     profileId,
@@ -129,14 +141,16 @@ class WorkerCredentialProfileServiceImpl(
                     )
                 ).mapLeft { it.toServiceError() }.bind()
 
+                agentRoleLinkDao.replaceAgentRoleIds(updated.id, request.agentRoleIds)
                 storeSignature(updated.id, signerDevice.id, signedRequest)
                 logger.info(
-                    "Updated credential profile {} ({}) on worker {}",
+                    "Updated credential profile {} ({}) on worker {} linked to agent roles {}",
                     updated.name,
                     updated.id,
-                    updated.workerId
+                    updated.workerId,
+                    request.agentRoleIds
                 )
-                updated.toDto()
+                updated.toDto(agentRoleLinkDao.getAgentRoleIds(updated.id).toSortedSet())
             }
         }
 
@@ -150,7 +164,7 @@ class WorkerCredentialProfileServiceImpl(
                 validateWorkerOwnership(userId, existing.workerId).bind()
                 val deleted = profileDao.deleteProfile(profileId).mapLeft { it.toServiceError() }.bind()
                 logger.info("Deleted credential profile {} ({})", deleted.name, deleted.id)
-                deleted.toDto()
+                deleted.toDto(emptySet())
             }
         }
 
@@ -161,7 +175,7 @@ class WorkerCredentialProfileServiceImpl(
         transactionScope.transaction {
             either {
                 validateWorkerOwnership(userId, workerId).bind()
-                profileDao.getProfilesByWorkerId(workerId).map { it.toDto() }
+                profileDao.getProfilesByWorkerId(workerId).toDtoList()
             }
         }
 
@@ -173,7 +187,7 @@ class WorkerCredentialProfileServiceImpl(
             either {
                 val existing = loadProfile(profileId).bind()
                 validateWorkerOwnership(userId, existing.workerId).bind()
-                existing.toDto()
+                existing.toDtoWithLinks()
             }
         }
 
@@ -190,10 +204,11 @@ class WorkerCredentialProfileServiceImpl(
                 val signaturesByProfile = profileSignatureDao
                     .getSignaturesByProfileIds(profiles.map { it.id })
                     .groupBy { it.profileId }
+                val agentRoleIdsByProfile = agentRoleLinkDao.getAgentRoleIdsByProfileIds(profiles.map { it.id })
 
                 profiles.map { profile ->
                     SignedCredentialProfileDto(
-                        profile = profile.toDto(),
+                        profile = profile.toDto(agentRoleIdsByProfile[profile.id].orEmpty().toSortedSet()),
                         signedRequest = latestSignature(signaturesByProfile[profile.id].orEmpty())
                     )
                 }
@@ -205,7 +220,7 @@ class WorkerCredentialProfileServiceImpl(
     ): Either<WorkerCredentialServiceError, List<CredentialProfileDto>> =
         transactionScope.transaction {
             either {
-                profileDao.getEnabledProfilesByWorkerId(workerId).map { it.toDto() }
+                profileDao.getEnabledProfilesByWorkerId(workerId).toDtoList()
             }
         }
 
@@ -216,11 +231,53 @@ class WorkerCredentialProfileServiceImpl(
             either {
                 val profile = loadProfile(profileId).bind()
                 SignedCredentialProfileDto(
-                    profile = profile.toDto(),
+                    profile = profile.toDtoWithLinks(),
                     signedRequest = latestSignature(profileSignatureDao.getSignaturesByProfileIds(listOf(profileId)))
                 )
             }
         }
+
+    /**
+     * Verifies that every supplied agent role exists and is owned by the caller, refusing the whole
+     * write when any id is unknown or foreign.
+     *
+     * One owner-scoped batch read both validates existence and enforces ownership, so a foreign id can
+     * never create a link row.
+     *
+     * @param userId Authenticated user, whose roles are the only linkable ones.
+     * @param requested Link ids supplied by the caller.
+     * @return Either a typed failure naming the offending ids or success.
+     */
+    private suspend fun validateAgentRoleIds(
+        userId: Long,
+        requested: Set<Long>,
+    ): Either<WorkerCredentialServiceError, Unit> = either {
+        if (requested.isEmpty()) return@either
+
+        val ownedIds = agentRoleDao.getRolesByIdsForUser(userId, requested.toList()).map { it.id }.toSet()
+        val missing = requested.filterNot { it in ownedIds }
+        ensure(missing.isEmpty()) { WorkerCredentialServiceError.AgentRoleNotFound(missing) }
+    }
+
+    /**
+     * @receiver Stored profile entity whose links are wanted.
+     * @return The profile DTO with its linked role ids in ascending order.
+     */
+    private suspend fun WorkerCredentialProfileEntity.toDtoWithLinks(): CredentialProfileDto =
+        toDto(agentRoleLinkDao.getAgentRoleIds(id).toSortedSet())
+
+    /**
+     * Maps a list of profiles with one batched link read, so a list endpoint never issues a query per
+     * profile.
+     *
+     * @receiver Stored profile entities to map.
+     * @return The profile DTOs, each carrying its linked role ids in ascending order.
+     */
+    private suspend fun List<WorkerCredentialProfileEntity>.toDtoList(): List<CredentialProfileDto> {
+        if (isEmpty()) return emptyList()
+        val agentRoleIdsByProfile = agentRoleLinkDao.getAgentRoleIdsByProfileIds(map { it.id })
+        return map { it.toDto(agentRoleIdsByProfile[it.id].orEmpty().toSortedSet()) }
+    }
 
     /**
      * Reconstructs the detached signature for one profile from its most recent device row.
