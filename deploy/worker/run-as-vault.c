@@ -5,7 +5,7 @@
 //   run-as-vault <command> [args...]                  create a process group, drop, then exec
 //   run-as-vault --signal <TERM|KILL> <pgid>          drop, then signal a process group
 //   run-as-vault --write-secret <root> <path>         read stdin into a new secret file
-//   run-as-vault --clear-secret-dir <root> <dir>      remove one secret tree
+//   run-as-vault --clear-secret-dir <root> <dir>      empty one secret tree
 //
 // Build:   gcc -O2 -Wall -o run-as-vault run-as-vault.c
 // Install: install -o root -g torvian -m 4750 run-as-vault /usr/local/bin/run-as-vault
@@ -18,6 +18,9 @@
 //    root as an argument instead of a compiled-in constant, so one setting decides where secrets
 //    live; passing it grants nothing, because only the worker group may execute this helper and the
 //    worker already chooses every child's argv.
+//  - The clear mode only empties a tree and leaves the directory itself to its caller: removing an
+//    entry inside the secret root needs write permission there, and the root is owned by the worker
+//    account with mode 0711, so this account can only traverse it.
 //  - Both modes refuse a target that is not a real descendant of the root, which stops a worker bug
 //    from writing a secret outside the tree. O_EXCL additionally turns a pre-planted file or symlink
 //    into a hard failure instead of a write into someone else's file.
@@ -157,7 +160,11 @@ static int create_missing_dirs(const char *root, const char *parent, const struc
 
 // Removes one tree without following symlinks. Missing entries count as success: the worker asks for
 // a cleanup it cannot always know the state of.
-static int remove_tree(const char *path) {
+//
+// `remove_self` is 0 for the tree root, whose parent is the secret root: the credential account has
+// traverse-only permission there, so removing that entry always fails with EACCES and the caller
+// removes the emptied directory with the worker account's authority instead.
+static int remove_tree(const char *path, int remove_self) {
     struct stat entry;
     if (lstat(path, &entry) != 0) {
         if (errno == ENOENT) return 0;
@@ -166,6 +173,9 @@ static int remove_tree(const char *path) {
     }
 
     if (!S_ISDIR(entry.st_mode)) {
+        // A regular file that sits where a tree root was expected is the caller's to remove for the
+        // same reason the root directory is.
+        if (!remove_self) return 0;
         if (unlink(path) != 0 && errno != ENOENT) {
             fprintf(stderr, "%s: unlink %s: %m\n", PROGRAM, path);
             return EXIT_IO;
@@ -191,14 +201,14 @@ static int remove_tree(const char *path) {
             result = EXIT_IO;
             break;
         }
-        int child_result = remove_tree(child_path);
+        int child_result = remove_tree(child_path, 1);
         if (child_result != 0) result = child_result;
     }
     closedir(directory);
 
     // The directory itself is removed even when one child failed, so a single unreadable entry does
     // not keep the whole tree alive.
-    if (rmdir(path) != 0 && errno != ENOENT && result == 0) {
+    if (remove_self && rmdir(path) != 0 && errno != ENOENT && result == 0) {
         fprintf(stderr, "%s: rmdir %s: %m\n", PROGRAM, path);
         result = EXIT_IO;
     }
@@ -341,7 +351,9 @@ static int write_secret(const char *root, const char *path) {
     return 0;
 }
 
-// Removes the secret tree named by [path], which must be a strict descendant of [root].
+// Empties the secret tree named by [path], which must be a strict descendant of [root]. The
+// directory itself stays in place: it is the caller that removes it, under the account that owns the
+// secret root.
 static int clear_secret_dir(const char *root, const char *path) {
     char real_root[PATH_MAX];
     int root_result = resolve_root(root, real_root, sizeof(real_root));
@@ -384,7 +396,9 @@ static int clear_secret_dir(const char *root, const char *path) {
     int drop_result = drop_privileges(PROGRAM, pw);
     if (drop_result != 0) return drop_result;
 
-    return remove_tree(real_path);
+    // Nothing privileged runs after the drop: the only work left is unlinking inside the tree, which
+    // the credential account owns.
+    return remove_tree(real_path, 0);
 }
 
 // Signals one process group as the credential account. Exit 0 also covers "the group no longer

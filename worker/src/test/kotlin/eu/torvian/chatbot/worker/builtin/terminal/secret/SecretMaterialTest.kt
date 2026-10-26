@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.builtin.terminal.secret
 
 import arrow.core.Either
+import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.credential.CredentialChannel
 import eu.torvian.chatbot.worker.credential.CredentialProfile
@@ -20,6 +21,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.Logger
 
 /**
  * Verifies the three delivery channels and the cleanup they own.
@@ -31,6 +34,9 @@ class SecretMaterialTest {
 
     /** Root of the temporary secret trees created by this test class. */
     private val root: Path = createTempDirectory("secret-material-test")
+
+    /** Logger handed to the channels; the tests assert on the filesystem rather than on log lines. */
+    private val logger: Logger = LogManager.getLogger(SecretMaterialTest::class.java)
 
     /** Removes the temporary root once a test finishes. */
     @AfterTest
@@ -58,6 +64,7 @@ class SecretMaterialTest {
                 askpassUsername = "x-access-token",
                 value = value("hunter2"),
                 deadline = DEADLINE,
+                logger = logger,
             ).getOrNull()
         )
 
@@ -84,6 +91,7 @@ class SecretMaterialTest {
                 askpassUsername = null,
                 value = value("token"),
                 deadline = DEADLINE,
+                logger = logger,
             ).getOrNull()
         )
 
@@ -104,6 +112,7 @@ class SecretMaterialTest {
                 askpassUsername = null,
                 value = value("token"),
                 deadline = DEADLINE,
+                logger = logger,
             ).swap().getOrNull()
         )
 
@@ -121,6 +130,7 @@ class SecretMaterialTest {
                 askpassUsername = null,
                 value = value("token"),
                 deadline = DEADLINE,
+                logger = logger,
             ).swap().getOrNull()
         )
     }
@@ -158,6 +168,7 @@ class SecretMaterialTest {
                 envName = "GOOGLE_APPLICATION_CREDENTIALS",
                 value = value("{\"type\":\"service_account\"}"),
                 deadline = DEADLINE,
+                logger = logger,
             ).getOrNull()
         )
 
@@ -170,6 +181,25 @@ class SecretMaterialTest {
         assertTrue(!Path.of(path).exists(), "The secret file was not removed")
     }
 
+    /** Verifies that a removal failure is logged instead of thrown, so cleanup cannot fail an exit. */
+    @Test
+    fun `close survives a tree that cannot be removed`() {
+        val material = assertIs<SecretMaterial>(
+            FileSecretMaterial.create(
+                trees = TempDirTreeFactory(root, failClear = true),
+                fileName = "credentials.json",
+                envName = "SECRET_FILE",
+                value = value("token"),
+                deadline = DEADLINE,
+                logger = logger,
+            ).getOrNull()
+        )
+
+        // Closing twice proves both the exception-free and the idempotent halves of the contract.
+        material.close(DEADLINE)
+        material.close(DEADLINE)
+    }
+
     /** Verifies that the file channel requires both a file name and a variable name. */
     @Test
     fun `file material requires a file name and a variable name`() {
@@ -180,6 +210,7 @@ class SecretMaterialTest {
                 envName = "VAR",
                 value = value("token"),
                 deadline = DEADLINE,
+                logger = logger,
             ).swap().getOrNull()
         )
         assertIs<SecretMaterialError.PreparationFailed>(
@@ -189,6 +220,7 @@ class SecretMaterialTest {
                 envName = null,
                 value = value("token"),
                 deadline = DEADLINE,
+                logger = logger,
             ).swap().getOrNull()
         )
     }
@@ -197,7 +229,11 @@ class SecretMaterialTest {
     @Test
     fun `factory builds the material the profile names`() {
         val script = executableScript().toString()
-        val factory = SecretMaterialFactory(trees = TempDirTreeFactory(root), askpassScriptPath = script)
+        val factory = SecretMaterialFactory(
+            trees = TempDirTreeFactory(root),
+            askpassScriptPath = script,
+            logger = logger,
+        )
 
         val askpass = assertIs<SecretMaterial>(
             factory.create(profile(channel = CredentialChannel.ASKPASS), value("token"), DEADLINE)
@@ -262,8 +298,12 @@ class SecretMaterialTest {
      * [SecretTreeFactory] backed by a temporary directory instead of the credential helper.
      *
      * @property root Directory the per-attach trees are created under.
+     * @property failClear Whether removals report a typed failure instead of deleting the tree.
      */
-    private class TempDirTreeFactory(private val root: Path) : SecretTreeFactory {
+    private class TempDirTreeFactory(
+        private val root: Path,
+        private val failClear: Boolean = false,
+    ) : SecretTreeFactory {
         /** Directories created so far, so a test can assert they were removed. */
         private val created = mutableListOf<Path>()
 
@@ -281,6 +321,9 @@ class SecretMaterialTest {
         }
 
         override fun clear(directoryPath: String, deadline: Long): Either<SecretMaterialError, Unit> {
+            if (failClear) {
+                return SecretMaterialError.PreparationFailed("the tree could not be removed").left()
+            }
             Path.of(directoryPath).toFile().deleteRecursively()
             return Unit.right()
         }

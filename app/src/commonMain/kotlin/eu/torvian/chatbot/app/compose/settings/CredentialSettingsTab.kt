@@ -526,7 +526,8 @@ private fun ChannelPicker(selected: CredentialChannel, onSelect: (CredentialChan
  * Secret editor: replacement only, because a stored value is never returned.
  *
  * The value field is masked by default and can be revealed only for the text being typed here;
- * stored values are never read back.
+ * stored values are never read back. It accepts multiple lines, because private keys, certificates
+ * and service-account JSON documents only look complete when their line structure is visible.
  *
  * @param form Editable form state.
  * @param onUpdate Applies a transformation to the form.
@@ -559,7 +560,8 @@ private fun CredentialSecretDialog(
                     value = form.value,
                     onValueChange = { value -> onUpdate { it.copy(value = value) } },
                     label = { Text("Value (stored encrypted, never shown again)") },
-                    singleLine = true,
+                    minLines = 1,
+                    maxLines = 8,
                     visualTransformation = if (isValueVisible) {
                         VisualTransformation.None
                     } else {
@@ -580,7 +582,8 @@ private fun CredentialSecretDialog(
                     },
                 )
                 Text(
-                    text = "Limit ${CredentialSecretLimits.MAX_SECRET_BYTES} bytes. The server stores " +
+                    text = "Multi-line values are kept exactly as entered. Limit " +
+                            "${CredentialSecretLimits.MAX_SECRET_BYTES} bytes. The server stores " +
                             "ciphertext that only the bound worker can decrypt.",
                     style = MaterialTheme.typography.bodySmall
                 )

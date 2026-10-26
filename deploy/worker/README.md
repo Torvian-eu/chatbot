@@ -6,7 +6,7 @@ This folder contains the files needed to run the chatbot worker as a Docker cont
 
 - `Dockerfile`: Dockerfile for the worker module.
 - `run-as-agent.c`: source of the privilege-dropping helper that built-in tool commands run through. It is compiled in a builder stage of the Dockerfile; it is not copied into `dist/`.
-- `run-as-vault.c`: source of the second privilege-dropping helper, which credential profile targets run through and which also creates and removes the per-attach secret files.
+- `run-as-vault.c`: source of the second privilege-dropping helper, which credential profile targets run through and which also creates the per-attach secret file and empties its tree; the worker removes the emptied directory, because the credential account may only traverse the secret root.
 - `privilege_drop.h`: the privilege-drop sequence shared by both helpers, so the security-critical part exists once.
 - `torvian-askpass.sh`: root-owned askpass helper handed to `askpass` credential profiles. It holds no secret.
 - `start-worker-docker.sh`: startup script used inside the Docker image. It runs the worker as the non-root `torvian` user (via `gosu`) while still being able to write to the mounted config, data, and logs volumes. It also supports the trusted-signer admin mode (see below).
@@ -56,7 +56,7 @@ How it works: the image ships a small root-owned setuid helper (`/usr/local/bin/
 | `/home/agent` | `agent:shared` | `0755` | Home directory of the isolated account. |
 | `/home/vault` | `vault:shared` | `0711` | Home directory of the credential account. |
 | `/home/vault/work` | `vault:shared` | `0711` | Working directory of credential profile targets. |
-| `/run/torvian/secrets` | `torvian:torvian` | `0711` | One tree per attached profile, created by the helper. |
+| `/run/torvian/secrets` | `torvian:torvian` | `0711` | One tree per attached profile. The helper creates and empties a tree; the worker removes the emptied directory, which the credential account cannot do here. |
 
 - `torvian` (uid 10001) runs the worker JVM; `agent` (uid 10002) runs spawned commands; `vault` (uid 10004) runs credential profile targets; `shared` (gid 10003) is the group that joins `agent` and `vault`, and it is their **primary** group so files created by commands land in a group the worker can write to.
 - Both helpers are `4750` and owned by `root:torvian`, not world-executable: a world-executable `run-as-vault` would let any ordinary session become `vault` and read every loaded secret. The startup script re-applies that ownership on every start, because `PUID`/`PGID` change the `torvian` group id, and it refuses to run when `torvian` and `shared` resolve to the same gid — `agent` could otherwise execute the credential helper through the shared group.
