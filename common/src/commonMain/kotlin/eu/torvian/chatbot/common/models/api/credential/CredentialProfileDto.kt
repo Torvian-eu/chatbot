@@ -27,6 +27,8 @@ import kotlin.time.Instant
  *   profile's process only. Values are not secret and are stored and displayed in plaintext.
  * @property askpassVariables Names that receive the askpass script path; askpass-only and required
  *   there. Naming them from the profile keeps tool-specific variable names out of worker code.
+ * @property agentRoleIds Agent roles allowed to attach the profile, in ascending order. This set is
+ *   covered by the device signature; an empty set makes the profile attachable by nobody.
  * @property updatedAt Last modification timestamp.
  */
 @Serializable
@@ -45,5 +47,6 @@ data class CredentialProfileDto(
     val isEnabled: Boolean = true,
     val environmentVariables: Map<String, String> = emptyMap(),
     val askpassVariables: List<String> = emptyList(),
+    val agentRoleIds: Set<Long> = emptySet(),
     val updatedAt: Instant,
 )

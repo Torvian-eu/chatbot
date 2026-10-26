@@ -19,6 +19,9 @@ import kotlinx.serialization.Serializable
  * @property input Exact JSON argument string approved by the app, preserved byte-for-byte.
  * @property approved Whether the app authorized execution.
  * @property denialReason Optional denial reason supplied by the app when execution was rejected.
+ * @property agentRoleId Agent role acting in the session that approved the call, or null when the
+ *   session has no role. An older app build omits it, so a null value must fail closed wherever it
+ *   scopes an authorization decision.
  */
 @Serializable
 data class BuiltInToolExecutionAuthorization(
@@ -31,5 +34,6 @@ data class BuiltInToolExecutionAuthorization(
     val builtInToolName: String,
     val input: String?,
     val approved: Boolean,
-    val denialReason: String? = null
+    val denialReason: String? = null,
+    val agentRoleId: Long? = null,
 )
