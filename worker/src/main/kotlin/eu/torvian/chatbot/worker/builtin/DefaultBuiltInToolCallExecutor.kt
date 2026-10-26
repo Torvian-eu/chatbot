@@ -11,8 +11,8 @@ import org.apache.logging.log4j.Logger
  * Default in-memory implementation of [BuiltInToolCallExecutor].
  *
  * Resolves the unprefixed built-in tool name to a [BuiltInTool] implementation and dispatches the
- * call with the injected [context]. Unknown tool names return a structured
- * [BuiltInToolExecutionResult] error instead of throwing.
+ * call inside a per-call [BuiltInToolExecutionContext] built from the injected [environment].
+ * Unknown tool names return a structured [BuiltInToolExecutionResult] error instead of throwing.
  *
  * Parses the raw [input] JSON string internally. If the input is malformed JSON, a structured
  * error with [BuiltInToolExecutionError.INVALID_INPUT] is returned immediately, matching the
@@ -21,12 +21,16 @@ import org.apache.logging.log4j.Logger
  * The set of available tools is supplied via [tools] (typically assembled in the Koin module) so
  * that adding a new built-in tool is purely additive and never requires modifying this dispatcher.
  *
- * @property context Execution context providing the worker workspace and command timeout.
+ * The acting agent role is per call, so each dispatch wraps the shared [environment] in a
+ * [BuiltInToolExecutionContext] that carries it; every tool therefore receives the same context
+ * type and reads the role only when its own behaviour depends on it.
+ *
+ * @property environment Process-scoped environment shared by every invocation.
  * @property tools Registry mapping the unprefixed [BuiltInTool.name] (e.g. `read_text_file`) to its
  *   implementation.
  */
 class DefaultBuiltInToolCallExecutor(
-    private val context: BuiltInToolExecutionContext,
+    private val environment: BuiltInToolEnvironment,
     private val tools: Map<String, BuiltInTool>,
 ) : BuiltInToolCallExecutor {
 
@@ -34,7 +38,11 @@ class DefaultBuiltInToolCallExecutor(
         private val logger: Logger = LogManager.getLogger(DefaultBuiltInToolCallExecutor::class.java)
         private val jsonParser = Json { ignoreUnknownKeys = true }
     }
-    override suspend fun execute(toolName: String, input: String?): BuiltInToolExecutionResult {
+    override suspend fun execute(
+        toolName: String,
+        input: String?,
+        agentRoleId: Long?,
+    ): BuiltInToolExecutionResult {
         val arguments = input
             ?.let { raw ->
                 try {
@@ -59,7 +67,7 @@ class DefaultBuiltInToolCallExecutor(
             )
         }
         return try {
-            tool.execute(arguments, context)
+            tool.execute(arguments, BuiltInToolExecutionContext(environment, agentRoleId))
         } catch (e: WorkspaceSecurityViolation) {
             BuiltInToolExecutionResult(
                 isError = true,

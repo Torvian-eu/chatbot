@@ -114,7 +114,7 @@ internal object RunCommandTestSupport {
         workspace: Path,
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     ): BuiltInToolExecutionContext =
-        BuiltInToolExecutionContext(
+        testExecutionContext(
             workspace = workspace,
             defaultCommandTimeoutSeconds = 60,
             defaultSearchTimeoutSeconds = 5,

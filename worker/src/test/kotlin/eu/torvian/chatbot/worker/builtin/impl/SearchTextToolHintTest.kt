@@ -53,7 +53,7 @@ class SearchTextToolHintTest {
     }
 
     private fun context(workspace: Path): BuiltInToolExecutionContext =
-        BuiltInToolExecutionContext(
+        testExecutionContext(
             workspace = workspace,
             defaultCommandTimeoutSeconds = 60,
             defaultSearchTimeoutSeconds = 5,

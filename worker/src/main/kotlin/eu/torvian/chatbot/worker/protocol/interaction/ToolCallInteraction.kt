@@ -84,6 +84,7 @@ class ToolCallInteraction(
         val executionResult = toolCallExecutor.execute(
             toolName = authorization.builtInToolName,
             input = authorization.input,
+            agentRoleId = authorization.agentRoleId,
         )
         emitResult(executionResult)
     }

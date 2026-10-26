@@ -15,8 +15,14 @@ interface BuiltInToolCallExecutor {
      * @param toolName Unprefixed built-in tool name (e.g. `read_text_file`).
      * @param input Raw JSON string containing the tool arguments. May be `null` or blank, which
      *   is treated as an empty arguments object.
+     * @param agentRoleId Verified agent role acting in this call, or null when the authorization
+     *   carries none. Tools that need it treat null as a rejection.
      * @return Built-in tool execution result; returns an [BuiltInToolExecutionError.UNKNOWN_TOOL]
      *   result if no implementation matches the tool name.
      */
-    suspend fun execute(toolName: String, input: String?): BuiltInToolExecutionResult
+    suspend fun execute(
+        toolName: String,
+        input: String?,
+        agentRoleId: Long?,
+    ): BuiltInToolExecutionResult
 }

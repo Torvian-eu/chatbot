@@ -392,9 +392,9 @@ fun workerModule(
         manager?.close()
     }
 
-    single<BuiltInToolExecutionContext> {
+    single<BuiltInToolEnvironment> {
         val cfg = get<RuntimeConfig>()
-        BuiltInToolExecutionContext(
+        DefaultBuiltInToolEnvironment(
             workspace = Paths.get(cfg.workspace.path),
             defaultCommandTimeoutSeconds = cfg.builtInTools.defaultCommandTimeoutSeconds,
             defaultSearchTimeoutSeconds = cfg.builtInTools.defaultSearchTimeoutSeconds,
@@ -422,7 +422,7 @@ fun workerModule(
 
     single<BuiltInToolCallExecutor> {
         DefaultBuiltInToolCallExecutor(
-            context = get(),
+            environment = get(),
             tools = get(),
         )
     }

@@ -44,7 +44,7 @@ class WriteFileToolTest {
      * Creates an execution context rooted at [workspace] using the IO dispatcher.
      */
     private fun context(workspace: Path): BuiltInToolExecutionContext =
-        BuiltInToolExecutionContext(
+        testExecutionContext(
             workspace = workspace,
             defaultCommandTimeoutSeconds = 60,
             defaultSearchTimeoutSeconds = 5,

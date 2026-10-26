@@ -116,6 +116,7 @@ class DefaultCredentialProfileValidator(
  * @property isEnabled Whether the profile may be attached.
  * @property environmentVariables Non-secret environment entries.
  * @property askpassVariables Names receiving the askpass script path.
+ * @property agentRoleIds Agent roles the signed body allows to attach the profile, compared as a set.
  */
 private data class NormalizedCredentialProfilePayload(
     val workerId: Long,
@@ -131,6 +132,7 @@ private data class NormalizedCredentialProfilePayload(
     val isEnabled: Boolean,
     val environmentVariables: Map<String, String>,
     val askpassVariables: List<String>,
+    val agentRoleIds: Set<Long>,
 )
 
 /**
@@ -152,6 +154,7 @@ private fun CreateCredentialProfileRequest.toNormalized(): NormalizedCredentialP
         isEnabled = isEnabled,
         environmentVariables = environmentVariables,
         askpassVariables = askpassVariables,
+        agentRoleIds = agentRoleIds,
     )
 
 /**
@@ -173,6 +176,7 @@ private fun UpdateCredentialProfileRequest.toNormalized(): NormalizedCredentialP
         isEnabled = isEnabled,
         environmentVariables = environmentVariables,
         askpassVariables = askpassVariables,
+        agentRoleIds = agentRoleIds,
     )
 
 /**
@@ -198,6 +202,8 @@ private fun CredentialProfileDto.findMismatchedFields(
     if (isEnabled != signedPayload.isEnabled) add("isEnabled")
     if (environmentVariables != signedPayload.environmentVariables) add("environmentVariables")
     if (askpassVariables != signedPayload.askpassVariables) add("askpassVariables")
+    // Sets compare by membership, so the same link set in another order is not a mismatch.
+    if (agentRoleIds != signedPayload.agentRoleIds) add("agentRoleIds")
 }
 
 /**
