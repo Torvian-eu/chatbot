@@ -102,6 +102,7 @@ class InMemoryWorkerCredentialStoreTest {
         isEnabled = true,
         environmentVariables = emptyMap(),
         askpassVariables = listOf("SSH_ASKPASS"),
+        agentRoleIds = emptySet(),
     )
 
     /**

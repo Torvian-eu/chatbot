@@ -103,7 +103,8 @@ fun AgentRoleDialogs(
                 text = {
                     Text(
                         "Are you sure you want to delete the role '${dialogState.role.displayName ?: dialogState.role.name}'? " +
-                                "Sessions using it will be unassigned and become inert until another role is selected."
+                                "Sessions using it will be unassigned and become inert until another role is selected. " +
+                                "Credential profiles linked to it will stop allowing this role until each profile is saved again."
                     )
                 },
                 confirmButton = {

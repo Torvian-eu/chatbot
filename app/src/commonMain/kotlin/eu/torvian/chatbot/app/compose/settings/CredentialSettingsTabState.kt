@@ -4,6 +4,7 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.CredentialDispatchWarning
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.CredentialProfileFormState
+import eu.torvian.chatbot.app.viewmodel.CredentialRoleOptions
 import eu.torvian.chatbot.app.viewmodel.CredentialSecretFormState
 import eu.torvian.chatbot.app.viewmodel.CredentialSettingsDialog
 import eu.torvian.chatbot.common.models.api.credential.CredentialProfileDto
@@ -19,6 +20,7 @@ import eu.torvian.chatbot.common.models.worker.WorkerDto
  * @property secrets Secret metadata of the selected worker; no value is ever present.
  * @property dialog Dialog currently open.
  * @property dispatchWarning Persisted change the worker has not accepted yet, if any.
+ * @property roleOptions Roles the profile editor may link, with the per-role labels its card uses.
  */
 data class CredentialSettingsState(
     val workers: DataState<RepositoryError, List<WorkerDto>>,
@@ -27,6 +29,7 @@ data class CredentialSettingsState(
     val secrets: DataState<RepositoryError, List<CredentialSecretMetadataDto>>,
     val dialog: CredentialSettingsDialog,
     val dispatchWarning: CredentialDispatchWarning?,
+    val roleOptions: CredentialRoleOptions,
 )
 
 /**

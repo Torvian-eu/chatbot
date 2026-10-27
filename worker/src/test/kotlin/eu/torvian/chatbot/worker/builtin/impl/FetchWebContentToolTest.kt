@@ -4,7 +4,6 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
-import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.net.WebFetchError
 import eu.torvian.chatbot.worker.builtin.net.WebFetchRequest
@@ -57,7 +56,7 @@ class FetchWebContentToolTest {
 
     private fun toolWith(fake: FakeWebFetchService) = FetchWebContentTool(fetchService = fake)
 
-    private fun context() = BuiltInToolExecutionContext(
+    private fun context() = testExecutionContext(
         workspace = createTempDirectory("fetch-test"),
         defaultCommandTimeoutSeconds = 60,
         defaultSearchTimeoutSeconds = 5,

@@ -21,7 +21,18 @@ import org.koin.dsl.module
  */
 fun credentialServiceModule() = module {
     single<CredentialSecretEncryptionService> { DefaultCredentialSecretEncryptionService(get()) }
-    single<WorkerCredentialProfileService> { WorkerCredentialProfileServiceImpl(get(), get(), get(), get(), get(), get()) }
+    single<WorkerCredentialProfileService> {
+        WorkerCredentialProfileServiceImpl(
+            profileDao = get(),
+            profileSignatureDao = get(),
+            agentRoleLinkDao = get(),
+            secretDao = get(),
+            userDeviceDao = get(),
+            workerDao = get(),
+            agentRoleDao = get(),
+            transactionScope = get(),
+        )
+    }
     single<WorkerCredentialSecretService> { WorkerCredentialSecretServiceImpl(get(), get(), get(), get()) }
     single<CredentialCommandDispatchService> { DefaultCredentialCommandDispatchService(get()) }
     single<CredentialSyncService> { DefaultCredentialSyncService(get(), get(), get()) }

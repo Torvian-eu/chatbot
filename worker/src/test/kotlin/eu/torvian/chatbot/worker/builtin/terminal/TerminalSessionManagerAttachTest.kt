@@ -77,7 +77,7 @@ class TerminalSessionManagerAttachTest {
         val sessionId = fixture.startSession()
 
         val snapshot = assertNotNull(
-            fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull()
+            fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull()
         )
 
         val spec = assertNotNull(factory.lastSpec)
@@ -103,7 +103,9 @@ class TerminalSessionManagerAttachTest {
         val fixture = Fixture(QueuedProcessFactory(FakeTerminalProcess(), FakeTerminalProcess()))
         val sessionId = fixture.startSession()
 
-        val snapshot = assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        val snapshot = assertNotNull(
+            fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull()
+        )
 
         assertFalse(snapshot.output.contains("token"))
         assertFalse(snapshot.attachProfile.orEmpty().contains(SECRET_REF))
@@ -119,7 +121,7 @@ class TerminalSessionManagerAttachTest {
         val sessionId = fixture.startSession()
 
         val error = assertIs<TerminalSessionError.NotQuiet>(
-            fixture.manager.attach(sessionId, "vps", 0, 20, 200).swap().getOrNull()
+            fixture.manager.attach(sessionId, "vps", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
         )
 
         assertEquals(sessionId, error.sessionId)
@@ -132,10 +134,10 @@ class TerminalSessionManagerAttachTest {
         val factory = QueuedProcessFactory(FakeTerminalProcess(), FakeTerminalProcess())
         val fixture = Fixture(factory)
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         val error = assertIs<TerminalSessionError.AlreadyAttached>(
-            fixture.manager.attach(sessionId, "vps", 0, 20, 200).swap().getOrNull()
+            fixture.manager.attach(sessionId, "vps", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
         )
 
         assertEquals("vps", error.profile)
@@ -149,11 +151,93 @@ class TerminalSessionManagerAttachTest {
         val sessionId = fixture.startSession()
 
         val error = assertIs<TerminalSessionError.UnknownProfile>(
-            fixture.manager.attach(sessionId, "missing", 0, 20, 200).swap().getOrNull()
+            fixture.manager.attach(sessionId, "missing", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
         )
 
         assertEquals("missing", error.profile)
         assertEquals(listOf("vps"), error.known)
+    }
+
+    /** Verifies that a call without an agent role cannot even learn which profiles exist here. */
+    @Test
+    fun `attach without an agent role is denied before name resolution`(): Unit = runBlocking {
+        val fixture = Fixture(QueuedProcessFactory(FakeTerminalProcess()))
+        val sessionId = fixture.startSession()
+
+        val error = assertIs<TerminalSessionError.ProfileNotAuthorized>(
+            fixture.manager.attach(sessionId, "missing", 0, 20, 200, agentRoleId = null).swap().getOrNull()
+        )
+
+        assertEquals("missing", error.profile)
+        assertTrue(error.detail.contains("no agent role"), "Unexpected detail: ${error.detail}")
+    }
+
+    /** Verifies that a profile with no linked role is attachable by nobody. */
+    @Test
+    fun `attach rejects a profile without linked agent roles`(): Unit = runBlocking {
+        val fixture = Fixture(QueuedProcessFactory(FakeTerminalProcess()))
+        fixture.store.upsertProfile(profile(channel = CredentialChannel.ENV).copy(agentRoleIds = emptySet()))
+        val sessionId = fixture.startSession()
+
+        val error = assertIs<TerminalSessionError.ProfileNotAuthorized>(
+            fixture.manager.attach(sessionId, "vps", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
+        )
+
+        assertEquals("vps", error.profile)
+        assertTrue(error.detail.contains(TEST_ROLE_ID.toString()), "Unexpected detail: ${error.detail}")
+    }
+
+    /** Verifies that an unlinked role is rejected before the secret is decrypted. */
+    @Test
+    fun `attach rejects an unlinked agent role without decrypting`(): Unit = runBlocking {
+        val decryptor = RecordingDecryptor()
+        val factory = QueuedProcessFactory(FakeTerminalProcess())
+        val fixture = Fixture(factory, decryptor = decryptor)
+        val sessionId = fixture.startSession()
+
+        val error = assertIs<TerminalSessionError.ProfileNotAuthorized>(
+            fixture.manager.attach(sessionId, "vps", 0, 20, 200, agentRoleId = OTHER_ROLE_ID).swap().getOrNull()
+        )
+
+        assertEquals("vps", error.profile)
+        assertTrue(decryptor.decrypted.isEmpty(), "An unauthorized attach must not decrypt the secret")
+        assertEquals(1, factory.startedCount, "A rejected attach must not spawn a process")
+    }
+
+    /** Verifies that the unknown-profile hint lists only the acting role's linked profiles. */
+    @Test
+    fun `attach hint lists only profiles linked to the acting role`(): Unit = runBlocking {
+        val fixture = Fixture(QueuedProcessFactory(FakeTerminalProcess()))
+        fixture.store.upsertProfile(
+            profile(channel = CredentialChannel.ENV).copy(
+                id = 2,
+                name = "other-role",
+                agentRoleIds = setOf(OTHER_ROLE_ID),
+            )
+        )
+        fixture.store.upsertProfile(
+            profile(channel = CredentialChannel.ENV).copy(id = 3, name = "disabled", isEnabled = false)
+        )
+        val sessionId = fixture.startSession()
+
+        val error = assertIs<TerminalSessionError.UnknownProfile>(
+            fixture.manager.attach(sessionId, "missing", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
+        )
+
+        assertEquals(listOf("vps"), error.known)
+    }
+
+    /** Verifies that the hint falls back to the empty set when the role links nothing. */
+    @Test
+    fun `attach hint is empty for a role without links`(): Unit = runBlocking {
+        val fixture = Fixture(QueuedProcessFactory(FakeTerminalProcess()))
+        val sessionId = fixture.startSession()
+
+        val error = assertIs<TerminalSessionError.UnknownProfile>(
+            fixture.manager.attach(sessionId, "missing", 0, 20, 200, agentRoleId = OTHER_ROLE_ID).swap().getOrNull()
+        )
+
+        assertEquals(emptyList(), error.known)
     }
 
     /** Verifies that a worker without a credential account refuses to attach at all. */
@@ -163,7 +247,7 @@ class TerminalSessionManagerAttachTest {
         val sessionId = fixture.startSession()
 
         val error = assertIs<TerminalSessionError.CredentialSupportUnavailable>(
-            fixture.manager.attach(sessionId, "vps", 0, 20, 200).swap().getOrNull()
+            fixture.manager.attach(sessionId, "vps", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
         )
 
         assertTrue(error.detail.contains("commandIsolation"), "Unexpected detail: ${error.detail}")
@@ -182,7 +266,7 @@ class TerminalSessionManagerAttachTest {
         val sessionId = fixture.startSession()
 
         val error = assertIs<TerminalSessionError.CredentialUnavailable>(
-            fixture.manager.attach(sessionId, "vps", 0, 20, 200).swap().getOrNull()
+            fixture.manager.attach(sessionId, "vps", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
         )
 
         assertEquals("vps", error.profile)
@@ -201,7 +285,7 @@ class TerminalSessionManagerAttachTest {
         val sessionId = fixture.startSession()
 
         assertIs<TerminalSessionError.SpawnFailed>(
-            fixture.manager.attach(sessionId, "vps", 0, 20, 200).swap().getOrNull()
+            fixture.manager.attach(sessionId, "vps", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
         )
 
         assertEquals(0, fixture.remainingSecretTrees(), "The secret tree outlived a failed spawn")
@@ -215,7 +299,7 @@ class TerminalSessionManagerAttachTest {
         val sessionId = fixture.startSession()
 
         val error = assertIs<TerminalSessionError.CredentialUnavailable>(
-            fixture.manager.attach(sessionId, "vps", 0, 20, 200).swap().getOrNull()
+            fixture.manager.attach(sessionId, "vps", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
         )
 
         assertTrue(error.detail.contains("askpass"), "Unexpected detail: ${error.detail}")
@@ -230,7 +314,7 @@ class TerminalSessionManagerAttachTest {
         val profile = FakeTerminalProcess()
         val fixture = Fixture(QueuedProcessFactory(shell, profile))
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         val snapshot = assertNotNull(fixture.manager.detach(sessionId, 40, 20, 200).getOrNull())
 
@@ -257,11 +341,12 @@ class TerminalSessionManagerAttachTest {
 
     /** Verifies that a profile exit returns the session to its shell and reports the transition. */
     @Test
-    fun `profile exit auto-detaches and reports the exit code`(): Unit = runBlocking {        val shell = FakeTerminalProcess()
+    fun `profile exit auto-detaches and reports the exit code`(): Unit = runBlocking {
+        val shell = FakeTerminalProcess()
         val profile = FakeTerminalProcess()
         val fixture = Fixture(QueuedProcessFactory(shell, profile))
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         profile.writeOutput("done\n")
         profile.finish(7)
@@ -289,7 +374,7 @@ class TerminalSessionManagerAttachTest {
         val profile = FakeTerminalProcess()
         val fixture = Fixture(QueuedProcessFactory(FakeTerminalProcess(), profile))
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         profile.writeOutput("fatal: could not read token\n")
         profile.finish(255)
@@ -315,7 +400,9 @@ class TerminalSessionManagerAttachTest {
         val sessionId = fixture.startSession()
 
         spawn.arm()
-        val attaching = async(Dispatchers.Default) { fixture.manager.attach(sessionId, "vps", 5_000, 20, 200) }
+        val attaching = async(Dispatchers.Default) {
+            fixture.manager.attach(sessionId, "vps", 5_000, 20, 200, agentRoleId = TEST_ROLE_ID)
+        }
         assertTrue(spawn.awaitSpawn(5_000), "the attach never reached the spawn")
         // The profile prints and exits while the attach still holds the session lock.
         profile.writeOutput("Permission denied (publickey).\n")
@@ -335,7 +422,7 @@ class TerminalSessionManagerAttachTest {
         val profile = FakeTerminalProcess()
         val fixture = Fixture(QueuedProcessFactory(FakeTerminalProcess(), profile))
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         profile.writeOutput("line one\nline two\nline three\n")
 
@@ -351,7 +438,7 @@ class TerminalSessionManagerAttachTest {
         val profile = FakeTerminalProcess()
         val fixture = Fixture(QueuedProcessFactory(FakeTerminalProcess(), profile))
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         profile.writeOutput("line one\nline two\nline three\n")
 
@@ -372,7 +459,7 @@ class TerminalSessionManagerAttachTest {
         val shell = FakeTerminalProcess()
         val fixture = Fixture(QueuedProcessFactory(shell, FakeTerminalProcess()))
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         shell.writeOutput("shell-only output\n")
 
@@ -397,7 +484,7 @@ class TerminalSessionManagerAttachTest {
         val profile = FakeTerminalProcess()
         val fixture = Fixture(QueuedProcessFactory(FakeTerminalProcess(), profile))
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         fixture.store.removeProfile(PROFILE_ID)
 
@@ -408,7 +495,7 @@ class TerminalSessionManagerAttachTest {
 
         assertNotNull(fixture.manager.detach(sessionId, 40, 20, 200).getOrNull())
         assertIs<TerminalSessionError.UnknownProfile>(
-            fixture.manager.attach(sessionId, "vps", 0, 20, 200).swap().getOrNull()
+            fixture.manager.attach(sessionId, "vps", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
         )
     }
 
@@ -418,7 +505,7 @@ class TerminalSessionManagerAttachTest {
         val profile = FakeTerminalProcess()
         val fixture = Fixture(QueuedProcessFactory(FakeTerminalProcess(), profile))
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         fixture.store.upsertProfile(profile(channel = CredentialChannel.ENV).copy(isEnabled = false))
 
@@ -428,7 +515,7 @@ class TerminalSessionManagerAttachTest {
 
         assertNotNull(fixture.manager.detach(sessionId, 40, 20, 200).getOrNull())
         val error = assertIs<TerminalSessionError.CredentialUnavailable>(
-            fixture.manager.attach(sessionId, "vps", 0, 20, 200).swap().getOrNull()
+            fixture.manager.attach(sessionId, "vps", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
         )
         assertTrue(error.detail.contains("disabled"), "Unexpected detail: ${error.detail}")
     }
@@ -447,7 +534,7 @@ class TerminalSessionManagerAttachTest {
             decryptor = decryptor,
         )
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
         assertEquals(listOf(CACHED_SECRET_ID), decryptor.decrypted.map { it.id })
 
         fixture.store.upsertSecret(secret(id = REPLACED_SECRET_ID))
@@ -461,14 +548,14 @@ class TerminalSessionManagerAttachTest {
         )
 
         assertNotNull(fixture.manager.detach(sessionId, 40, 20, 200).getOrNull())
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
         // The next attach resolves the replaced row, which is the only effect the change may have.
         assertEquals(REPLACED_SECRET_ID, decryptor.decrypted.last().id)
 
         fixture.store.removeSecret(REPLACED_SECRET_ID)
         assertNotNull(fixture.manager.detach(sessionId, 40, 20, 200).getOrNull())
         val error = assertIs<TerminalSessionError.CredentialUnavailable>(
-            fixture.manager.attach(sessionId, "vps", 0, 20, 200).swap().getOrNull()
+            fixture.manager.attach(sessionId, "vps", 0, 20, 200, agentRoleId = TEST_ROLE_ID).swap().getOrNull()
         )
         assertTrue(error.detail.contains("not assigned"), "Unexpected detail: ${error.detail}")
     }
@@ -480,7 +567,7 @@ class TerminalSessionManagerAttachTest {
         val profile = FakeTerminalProcess()
         val fixture = Fixture(QueuedProcessFactory(shell, profile))
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         shell.finish(0)
 
@@ -497,7 +584,7 @@ class TerminalSessionManagerAttachTest {
         val profile = FakeTerminalProcess()
         val fixture = Fixture(QueuedProcessFactory(shell, profile))
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         shell.finish(0)
         // Which exit the session sees first decides the outcome, so wait for the state the session
@@ -531,7 +618,9 @@ class TerminalSessionManagerAttachTest {
         val sessionId = fixture.startSession()
 
         spawn.arm()
-        val attach = async(Dispatchers.Default) { fixture.manager.attach(sessionId, "vps", 10_000, 20, 200) }
+        val attach = async(Dispatchers.Default) {
+            fixture.manager.attach(sessionId, "vps", 10_000, 20, 200, agentRoleId = TEST_ROLE_ID)
+        }
         assertTrue(spawn.awaitSpawn(5_000), "the attach never reached the spawn")
         attach.cancel()
         spawn.release()
@@ -567,7 +656,9 @@ class TerminalSessionManagerAttachTest {
         val sessionId = fixture.startSession()
 
         spawn.arm()
-        val attach = async(Dispatchers.Default) { fixture.manager.attach(sessionId, "vps", 10_000, 20, 200) }
+        val attach = async(Dispatchers.Default) {
+            fixture.manager.attach(sessionId, "vps", 10_000, 20, 200, agentRoleId = TEST_ROLE_ID)
+        }
         assertTrue(spawn.awaitSpawn(5_000), "the attach never reached the spawn")
         attach.cancel()
         spawn.release()
@@ -602,7 +693,9 @@ class TerminalSessionManagerAttachTest {
         val sessionId = fixture.startSession()
 
         spawn.arm()
-        val attach = async(Dispatchers.Default) { fixture.manager.attach(sessionId, "vps", 10_000, 20, 200) }
+        val attach = async(Dispatchers.Default) {
+            fixture.manager.attach(sessionId, "vps", 10_000, 20, 200, agentRoleId = TEST_ROLE_ID)
+        }
         assertTrue(spawn.awaitSpawn(5_000), "the attach never reached the spawn")
 
         // Shutdown uses a bounded action-lock wait, so this is the busy-close path, not a queued close.
@@ -643,7 +736,9 @@ class TerminalSessionManagerAttachTest {
         )
         repeat(2) {
             val sessionId = fixture.startSession()
-            assertNotNull(fixture.manager.attach(sessionId, "vps", 200, 20, 200).getOrNull())
+            assertNotNull(
+                fixture.manager.attach(sessionId, "vps", 200, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull()
+            )
         }
         assertEquals(2, fixture.remainingSecretTrees(), "the attaches created no secret trees")
 
@@ -666,7 +761,7 @@ class TerminalSessionManagerAttachTest {
         val profile = FakeTerminalProcess()
         val fixture = Fixture(QueuedProcessFactory(shell, profile))
         val sessionId = fixture.startSession()
-        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200).getOrNull())
+        assertNotNull(fixture.manager.attach(sessionId, "vps", 40, 20, 200, agentRoleId = TEST_ROLE_ID).getOrNull())
 
         val snapshot = assertNotNull(fixture.manager.close(sessionId, 20, 200).getOrNull())
 
@@ -1002,6 +1097,12 @@ class TerminalSessionManagerAttachTest {
         /** Session id the fixture hands out unless a test needs several sessions. */
         const val FIXED_SESSION_ID = "aB3xY9"
 
+        /** Agent role the fixture's profile is linked to, and the role every attach call acts as. */
+        const val TEST_ROLE_ID = 31L
+
+        /** Agent role that no cached profile is linked to. */
+        const val OTHER_ROLE_ID = 32L
+
         /**
          * @return An id generator handing out a fresh six-character id per call.
          */
@@ -1029,6 +1130,7 @@ class TerminalSessionManagerAttachTest {
             isEnabled = true,
             environmentVariables = mapOf("PROFILE_HINT" to "1"),
             askpassVariables = emptyList(),
+            agentRoleIds = setOf(TEST_ROLE_ID),
         )
     }
 }

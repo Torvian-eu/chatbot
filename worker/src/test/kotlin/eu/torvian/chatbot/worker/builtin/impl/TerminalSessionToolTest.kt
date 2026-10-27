@@ -423,7 +423,7 @@ class TerminalSessionToolTest {
     /**
      * @return Execution context using a temporary workspace.
      */
-    private fun context() = eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext(
+    private fun context() = testExecutionContext(
         workspace = Path.of("/tmp"),
         defaultCommandTimeoutSeconds = 10,
         defaultSearchTimeoutSeconds = 5,

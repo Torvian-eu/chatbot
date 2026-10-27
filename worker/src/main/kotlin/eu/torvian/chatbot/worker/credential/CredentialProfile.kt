@@ -25,6 +25,8 @@ import eu.torvian.chatbot.common.models.api.credential.WorkerCredentialSecretDto
  * @property isEnabled Whether the profile may be attached.
  * @property environmentVariables Supplementary non-secret environment entries for the profile process.
  * @property askpassVariables Names that receive the askpass script path.
+ * @property agentRoleIds Agent roles allowed to attach the profile. This is the membership authority
+ *   used by `attach`; an empty set makes the profile attachable by nobody.
  */
 data class CredentialProfile(
     val id: Long,
@@ -41,6 +43,7 @@ data class CredentialProfile(
     val isEnabled: Boolean,
     val environmentVariables: Map<String, String>,
     val askpassVariables: List<String>,
+    val agentRoleIds: Set<Long>,
 ) {
     /**
      * @return The shared field set of this profile, used for re-validation on the worker.
@@ -60,6 +63,7 @@ data class CredentialProfile(
             isEnabled = isEnabled,
             environmentVariables = environmentVariables,
             askpassVariables = askpassVariables,
+            agentRoleIds = agentRoleIds,
         )
 }
 
@@ -108,6 +112,7 @@ fun CredentialProfileDto.toCredentialProfile(): CredentialProfile = CredentialPr
     isEnabled = isEnabled,
     environmentVariables = environmentVariables,
     askpassVariables = askpassVariables,
+    agentRoleIds = agentRoleIds,
 )
 
 /**

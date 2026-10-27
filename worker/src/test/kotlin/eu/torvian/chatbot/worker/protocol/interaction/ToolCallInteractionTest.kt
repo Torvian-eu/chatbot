@@ -25,6 +25,11 @@ import kotlin.test.assertTrue
  */
 class ToolCallInteractionTest {
 
+    private companion object {
+        /** Agent role the signed authorizations carry. */
+        const val TEST_ROLE_ID = 77L
+    }
+
     /**
      * Verifies that the executor is invoked with the parsed tool name and input, and that the
      * resulting [BuiltInToolExecutionResult] is sent back as a `command.result` payload.
@@ -66,6 +71,8 @@ class ToolCallInteractionTest {
         assertEquals(1, executor.executed.size, "Executor should be invoked exactly once")
         assertEquals("read_text_file", executor.executed.single().toolName)
         assertEquals(Json.encodeToString(JsonObject.serializer(), input), executor.executed.single().input)
+        // The verified authorization's acting role is what scopes the call, so it must reach the executor.
+        assertEquals(TEST_ROLE_ID, executor.executed.single().agentRoleId)
 
         val outbound = emitter.messages
         assertEquals(2, outbound.size, "Expected accepted + result")
@@ -269,6 +276,7 @@ class ToolCallInteractionTest {
             input = encodedInput,
             approved = true,
             denialReason = null,
+            agentRoleId = null,
         )
         val payload = Json.encodeToString(BuiltInToolExecutionAuthorization.serializer(), authorization)
         val decoded = Json.decodeFromString(BuiltInToolExecutionAuthorization.serializer(), payload)
@@ -278,11 +286,15 @@ class ToolCallInteractionTest {
     // --- helpers ---
 
     /**
-     * Builds an [BuiltInToolExecutionAuthorization] fixture with sensible defaults.
+     * @param toolCallId Persisted tool-call identifier.
+     * @param toolName Public tool name of the call.
+     * @param agentRoleId Agent role acting in the session, or null for a role-less session.
+     * @return An authorization fixture with sensible defaults.
      */
     private fun buildAuthorization(
         toolCallId: Long = 900L,
         toolName: String,
+        agentRoleId: Long? = TEST_ROLE_ID,
     ): BuiltInToolExecutionAuthorization = BuiltInToolExecutionAuthorization(
         toolCallId = toolCallId,
         sessionId = 1L,
@@ -294,6 +306,7 @@ class ToolCallInteractionTest {
         input = null,
         approved = true,
         denialReason = null,
+        agentRoleId = agentRoleId,
     )
 
     /**
@@ -350,12 +363,24 @@ class ToolCallInteractionTest {
     private class RecordingExecutor(
         private val result: BuiltInToolExecutionResult,
     ) : BuiltInToolCallExecutor {
-        data class Invocation(val toolName: String, val input: String?)
+        /**
+         * One recorded call.
+         *
+         * @property toolName Public tool name of the call.
+         * @property input Raw argument string.
+         * @property agentRoleId Agent role the interaction passed along.
+         */
+        data class Invocation(val toolName: String, val input: String?, val agentRoleId: Long?)
 
+        /** Calls recorded so far, in order. */
         val executed: MutableList<Invocation> = mutableListOf()
 
-        override suspend fun execute(toolName: String, input: String?): BuiltInToolExecutionResult {
-            executed += Invocation(toolName, input)
+        override suspend fun execute(
+            toolName: String,
+            input: String?,
+            agentRoleId: Long?,
+        ): BuiltInToolExecutionResult {
+            executed += Invocation(toolName, input, agentRoleId)
             return result
         }
     }

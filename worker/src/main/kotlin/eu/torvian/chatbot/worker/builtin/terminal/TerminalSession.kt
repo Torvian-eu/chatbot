@@ -197,9 +197,21 @@ internal sealed interface TerminalSessionError {
      * The named credential profile is not assigned to this worker.
      *
      * @property profile Name the caller asked for.
-     * @property known Names of the profiles that are assigned to this worker.
+     * @property known Names of the enabled profiles linked to the acting role, already filtered so the
+     *   hint never discloses a profile the role could not attach.
      */
     data class UnknownProfile(val profile: String, val known: List<String>) : TerminalSessionError
+
+    /**
+     * The acting agent role may not attach the named credential profile.
+     *
+     * Returned before any decryption or delivery, so a rejected call learns nothing about the secret
+     * and the profile is left untouched.
+     *
+     * @property profile Name of the profile that was refused.
+     * @property detail Reason naming the acting role or its absence, never a secret reference.
+     */
+    data class ProfileNotAuthorized(val profile: String, val detail: String) : TerminalSessionError
 
     /**
      * The action requires an attached profile but none is active.

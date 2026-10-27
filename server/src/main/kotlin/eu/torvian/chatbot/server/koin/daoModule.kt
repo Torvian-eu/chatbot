@@ -84,6 +84,7 @@ fun daoModule() = module {
 
     // Worker credential DAOs
     single<WorkerCredentialProfileDao> { WorkerCredentialProfileDaoExposed(get()) }
+    single<WorkerCredentialProfileAgentRoleDao> { WorkerCredentialProfileAgentRoleDaoExposed(get()) }
     single<WorkerCredentialSecretDao> { WorkerCredentialSecretDaoExposed(get()) }
     single<WorkerCredentialProfileSignatureDao> { WorkerCredentialProfileSignatureDaoExposed(get()) }
 

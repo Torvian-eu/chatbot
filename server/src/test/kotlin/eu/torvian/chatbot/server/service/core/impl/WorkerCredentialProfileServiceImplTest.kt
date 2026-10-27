@@ -8,13 +8,16 @@ import eu.torvian.chatbot.common.models.api.credential.CreateCredentialProfileRe
 import eu.torvian.chatbot.common.models.api.credential.CredentialChannel
 import eu.torvian.chatbot.common.models.api.credential.UpdateCredentialProfileRequest
 import eu.torvian.chatbot.common.security.SignedRequest
+import eu.torvian.chatbot.server.data.dao.AgentRoleDao
 import eu.torvian.chatbot.server.data.dao.UserDeviceDao
+import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileAgentRoleDao
 import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileDao
 import eu.torvian.chatbot.server.data.dao.WorkerCredentialProfileSignatureDao
 import eu.torvian.chatbot.server.data.dao.WorkerCredentialSecretDao
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.WorkerCredentialPersistenceError
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
+import eu.torvian.chatbot.server.data.entities.AgentRoleEntity
 import eu.torvian.chatbot.server.data.entities.CreateWorkerCredentialProfileEntity
 import eu.torvian.chatbot.server.data.entities.UpdateWorkerCredentialProfileEntity
 import eu.torvian.chatbot.server.data.entities.UserDeviceEntity
@@ -45,17 +48,21 @@ class WorkerCredentialProfileServiceImplTest {
 
     private val profileDao = mockk<WorkerCredentialProfileDao>()
     private val signatureDao = mockk<WorkerCredentialProfileSignatureDao>(relaxed = true)
+    private val agentRoleLinkDao = mockk<WorkerCredentialProfileAgentRoleDao>()
     private val secretDao = mockk<WorkerCredentialSecretDao>()
     private val userDeviceDao = mockk<UserDeviceDao>()
     private val workerDao = mockk<WorkerDao>()
+    private val agentRoleDao = mockk<AgentRoleDao>()
     private val transactionScope = mockk<TransactionScope>()
 
     private val service = WorkerCredentialProfileServiceImpl(
         profileDao = profileDao,
         profileSignatureDao = signatureDao,
+        agentRoleLinkDao = agentRoleLinkDao,
         secretDao = secretDao,
         userDeviceDao = userDeviceDao,
         workerDao = workerDao,
+        agentRoleDao = agentRoleDao,
         transactionScope = transactionScope,
     )
 
@@ -94,7 +101,7 @@ class WorkerCredentialProfileServiceImplTest {
 
     @BeforeEach
     fun setUp() {
-        clearMocks(profileDao, signatureDao, secretDao, userDeviceDao, workerDao, transactionScope)
+        clearMocks(profileDao, signatureDao, agentRoleLinkDao, secretDao, userDeviceDao, workerDao, agentRoleDao, transactionScope)
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
             block()
@@ -103,6 +110,9 @@ class WorkerCredentialProfileServiceImplTest {
         coEvery { userDeviceDao.getDeviceByClientId(ownerId, "device-1") } returns device
         coEvery { userDeviceDao.getDeviceById(device.id) } returns device
         coEvery { secretDao.getSecretByWorkerIdAndReference(workerId, "vps_password") } returns secret()
+        coEvery { agentRoleLinkDao.getAgentRoleIds(any()) } returns emptySet()
+        coEvery { agentRoleLinkDao.getAgentRoleIdsByProfileIds(any()) } returns emptyMap()
+        coEvery { agentRoleLinkDao.replaceAgentRoleIds(any(), any()) } returns Unit
     }
 
     /**
@@ -308,9 +318,135 @@ class WorkerCredentialProfileServiceImplTest {
     }
 
     /**
+     * Ensures a create with a link set persists exactly that set and reports it back.
+     */
+    @Test
+    fun `createProfile links the supplied agent roles in the same transaction`() = runTest {
+        coEvery { agentRoleDao.getRolesByIdsForUser(ownerId, any()) } returns
+            listOf(agentRole(4L), agentRole(9L))
+        coEvery { profileDao.createProfile(any()) } answers { stored(firstArg()) }
+        coEvery { agentRoleLinkDao.getAgentRoleIds(1L) } returns setOf(4L, 9L)
+
+        val result = service.createProfile(ownerId, createRequest(agentRoleIds = setOf(4L, 9L)), signedRequest)
+
+        val dto = result.getOrNull() ?: error("expected success, got $result")
+        assertEquals(setOf(4L, 9L), dto.agentRoleIds)
+        coVerify(exactly = 1) { agentRoleLinkDao.replaceAgentRoleIds(1L, setOf(4L, 9L)) }
+        // Profile, links and signature all pass through the one service transaction.
+        coVerify(exactly = 1) { transactionScope.transaction<Any>(any()) }
+        coVerify { signatureDao.upsertSignature(any()) }
+    }
+
+    /**
+     * Ensures saving a profile with no linked role is accepted, producing an empty link set.
+     */
+    @Test
+    fun `createProfile accepts a draft without linked agent roles`() = runTest {
+        coEvery { profileDao.createProfile(any()) } answers { stored(firstArg()) }
+
+        val result = service.createProfile(ownerId, createRequest(), signedRequest)
+
+        assertEquals(emptySet(), result.getOrNull()?.agentRoleIds)
+        coVerify(exactly = 1) { agentRoleLinkDao.replaceAgentRoleIds(1L, emptySet()) }
+    }
+
+    /**
+     * Ensures an unknown or foreign role id fails the whole write before anything is persisted.
+     */
+    @Test
+    fun `createProfile rejects unknown agent roles without writing`() = runTest {
+        coEvery { agentRoleDao.getRolesByIdsForUser(ownerId, any()) } returns listOf(agentRole(4L))
+
+        val result = service.createProfile(ownerId, createRequest(agentRoleIds = setOf(4L, 9L)), signedRequest)
+
+        val error = result.leftOrNull()
+        assertIs<WorkerCredentialServiceError.AgentRoleNotFound>(error)
+        assertEquals(listOf(9L), error.agentRoleIds)
+        coVerify(exactly = 0) { profileDao.createProfile(any()) }
+        coVerify(exactly = 0) { agentRoleLinkDao.replaceAgentRoleIds(any(), any()) }
+        coVerify(exactly = 0) { signatureDao.upsertSignature(any()) }
+    }
+
+    /**
+     * Ensures an update replaces the link set instead of appending to it.
+     */
+    @Test
+    fun `updateProfile replaces the linked agent roles`() = runTest {
+        coEvery { profileDao.getProfileById(1L) } returns storedProfile()
+        coEvery { profileDao.updateProfile(1L, any()) } returns storedProfile(name = "vps2").right()
+        coEvery { agentRoleDao.getRolesByIdsForUser(ownerId, any()) } returns
+            listOf(agentRole(5L), agentRole(6L))
+        coEvery { agentRoleLinkDao.getAgentRoleIds(1L) } returns setOf(5L, 6L)
+
+        val result = service.updateProfile(
+            ownerId,
+            1L,
+            UpdateCredentialProfileRequest(
+                workerId = workerId,
+                name = "vps2",
+                secretRef = "vps_password",
+                command = "/bin/sh",
+                channel = CredentialChannel.ASKPASS,
+                askpassVariables = listOf("SSH_ASKPASS"),
+                agentRoleIds = setOf(5L, 6L),
+            ),
+            signedRequest
+        )
+
+        assertEquals(setOf(5L, 6L), result.getOrNull()?.agentRoleIds)
+        coVerify(exactly = 1) { agentRoleLinkDao.replaceAgentRoleIds(1L, setOf(5L, 6L)) }
+    }
+
+    /**
+     * Ensures a single-profile read reports the linked roles and a list read batches the link lookup.
+     */
+    @Test
+    fun `reads report the linked agent roles`() = runTest {
+        coEvery { profileDao.getProfileById(1L) } returns storedProfile()
+        coEvery { profileDao.getProfilesByWorkerId(workerId) } returns listOf(storedProfile())
+        coEvery { agentRoleLinkDao.getAgentRoleIds(1L) } returns setOf(2L, 7L)
+        coEvery { agentRoleLinkDao.getAgentRoleIdsByProfileIds(listOf(1L)) } returns mapOf(1L to setOf(2L, 7L))
+
+        assertEquals(setOf(2L, 7L), service.getProfile(ownerId, 1L).getOrNull()?.agentRoleIds)
+        assertEquals(
+            setOf(2L, 7L),
+            service.getProfiles(ownerId, workerId).getOrNull()?.single()?.agentRoleIds
+        )
+        coVerify(exactly = 1) { agentRoleLinkDao.getAgentRoleIdsByProfileIds(listOf(1L)) }
+    }
+
+    /**
+     * Ensures the bootstrap relay carries the link set, so the worker can enforce it.
+     */
+    @Test
+    fun `getAssignedProfiles relays the linked agent roles`() = runTest {
+        coEvery { profileDao.getProfilesByWorkerId(workerId) } returns listOf(storedProfile())
+        coEvery { signatureDao.getSignaturesByProfileIds(listOf(1L)) } returns emptyList()
+        coEvery { agentRoleLinkDao.getAgentRoleIdsByProfileIds(listOf(1L)) } returns mapOf(1L to setOf(3L))
+
+        val assigned = service.getAssignedProfiles(workerId).getOrNull()?.single()
+
+        assertEquals(setOf(3L), assigned?.profile?.agentRoleIds)
+    }
+
+    /**
+     * @param id Role identifier.
+     * @return A stored role row carrying the identifier only.
+     */
+    private fun agentRole(id: Long): AgentRoleEntity = AgentRoleEntity(
+        id = id,
+        name = "role-$id",
+        displayName = null,
+        description = "",
+        modelPresetId = null,
+        createdAt = Instant.fromEpochMilliseconds(0),
+        updatedAt = Instant.fromEpochMilliseconds(0),
+    )
+
+    /**
      * @return A create request matching the askpass OpenSSH recipe.
      */
-    private fun createRequest(): CreateCredentialProfileRequest = CreateCredentialProfileRequest(
+    private fun createRequest(agentRoleIds: Set<Long> = emptySet()): CreateCredentialProfileRequest = CreateCredentialProfileRequest(
         workerId = workerId,
         name = "vps",
         secretRef = "vps_password",
@@ -319,6 +455,7 @@ class WorkerCredentialProfileServiceImplTest {
         channel = CredentialChannel.ASKPASS,
         askpassVariables = listOf("SSH_ASKPASS"),
         environmentVariables = mapOf("SSH_ASKPASS_REQUIRE" to "force"),
+        agentRoleIds = agentRoleIds,
     )
 
     /**

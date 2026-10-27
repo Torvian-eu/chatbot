@@ -3,16 +3,23 @@ package eu.torvian.chatbot.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.domain.contracts.NO_PROJECT_SECTION_TITLE
+import eu.torvian.chatbot.app.domain.contracts.buildAgentRoleSections
+import eu.torvian.chatbot.app.repository.AgentRoleRepository
 import eu.torvian.chatbot.app.repository.CredentialDispatchWarning
 import eu.torvian.chatbot.app.repository.CredentialRepository
+import eu.torvian.chatbot.app.repository.ProjectRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.WorkerRepository
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.credential.*
 import eu.torvian.chatbot.common.models.worker.WorkerDto
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -26,11 +33,15 @@ import kotlinx.coroutines.launch
  *
  * @property credentialRepository Repository holding profiles, secrets and the dispatch warning.
  * @property workerRepository Repository providing the worker picker.
+ * @property agentRoleRepository Repository providing the roles a profile may be linked to.
+ * @property projectRepository Repository providing the project names those roles are labelled with.
  * @property notificationService Sink for operator-visible notifications.
  */
 class CredentialSettingsViewModel(
     private val credentialRepository: CredentialRepository,
     private val workerRepository: WorkerRepository,
+    private val agentRoleRepository: AgentRoleRepository,
+    private val projectRepository: ProjectRepository,
     private val notificationService: NotificationService,
 ) : ViewModel() {
 
@@ -61,7 +72,37 @@ class CredentialSettingsViewModel(
     val dialog: StateFlow<CredentialSettingsDialog> = _dialog.asStateFlow()
 
     /**
+     * Roles the profile editor may link, with the card labels resolved at the same time.
+     *
+     * Derived from the role and project streams rather than loaded separately, so a rename or a new
+     * role is reflected without reopening the dialog. A role whose project no longer resolves stays
+     * visible under the group for unassociated roles and keeps the no-project card label.
+     */
+    val roleOptions: StateFlow<CredentialRoleOptions> = combine(
+        agentRoleRepository.roles,
+        projectRepository.projects,
+    ) { roles, projects ->
+        val roleList = (roles as? DataState.Success)?.data.orEmpty()
+        val projectList = (projects as? DataState.Success)?.data.orEmpty()
+        val projectNames = projectList.associate { it.id to it.name }
+        CredentialRoleOptions(
+            sections = buildAgentRoleSections(roleList, projectList),
+            labelsById = roleList.associate { role ->
+                val label = role.displayName?.takeIf { it.isNotBlank() } ?: role.name
+                role.id to "$label — ${role.projectId?.let(projectNames::get) ?: NO_PROJECT_SECTION_TITLE}"
+            },
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(),
+        CredentialRoleOptions(emptyList(), emptyMap())
+    )
+
+    /**
      * Loads the worker picker and, once a worker is known, its profiles and secrets.
+     *
+     * The role and project streams are loaded alongside, because the profile editor needs them for the
+     * link picker; their failures are reported but never block the worker read model.
      */
     fun load() {
         viewModelScope.launch {
@@ -79,6 +120,14 @@ class CredentialSettingsViewModel(
                     }
                 }
             )
+        }
+        viewModelScope.launch {
+            agentRoleRepository.loadRoles().onLeft { error ->
+                notificationService.repositoryError(error, "Failed to load agent roles")
+            }
+            projectRepository.loadProjects().onLeft { error ->
+                notificationService.repositoryError(error, "Failed to load projects")
+            }
         }
     }
 
@@ -133,6 +182,7 @@ class CredentialSettingsViewModel(
                     "${entry.key}=${entry.value}"
                 },
                 isEnabled = profile.isEnabled,
+                agentRoleIds = profile.agentRoleIds,
             )
         )
     }
@@ -374,6 +424,7 @@ class CredentialSettingsViewModel(
             isEnabled = isEnabled,
             environmentVariables = environmentText.asEnvironmentMap(),
             askpassVariables = askpassVariablesText.asLines(),
+            agentRoleIds = agentRoleIds,
         )
     }
 
@@ -396,6 +447,7 @@ class CredentialSettingsViewModel(
             isEnabled = isEnabled,
             environmentVariables = environmentVariables,
             askpassVariables = askpassVariables,
+            agentRoleIds = agentRoleIds,
         )
 
     /**
@@ -417,6 +469,7 @@ class CredentialSettingsViewModel(
             isEnabled = isEnabled,
             environmentVariables = environmentVariables,
             askpassVariables = askpassVariables,
+            agentRoleIds = agentRoleIds,
         )
 
     /**

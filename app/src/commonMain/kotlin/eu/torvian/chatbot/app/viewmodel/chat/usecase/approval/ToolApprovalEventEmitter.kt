@@ -208,7 +208,9 @@ internal class ToolApprovalEventEmitter(
             return
         }
 
-        // Build typed authorization locally for signing
+        // Build typed authorization locally for signing. The session's role is the authoritative actor
+        // for per-role authorization: a tool call belongs to the session that produced it, and the
+        // session's role is the immutable actor for an already-created call.
         val authorization = BuiltInToolExecutionAuthorization(
             toolCallId = toolCall.id,
             sessionId = currentSession.id,
@@ -219,7 +221,8 @@ internal class ToolApprovalEventEmitter(
             builtInToolName = toolDefinition.builtInToolName,
             input = toolCall.input,
             approved = approved,
-            denialReason = denialReason
+            denialReason = denialReason,
+            agentRoleId = currentSession.agentRoleId,
         )
 
         val signedRequest = requestSigningService.signRequest(

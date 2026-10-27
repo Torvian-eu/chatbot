@@ -233,7 +233,7 @@ class RunCommandToolPipeDrainTest {
             val result = RunCommandTestSupport.executeWithTestDeadline(
                 tool,
                 RunCommandTestSupport.buildInput(command, args, timeout = COMMAND_TIMEOUT_SECONDS, maxBytes = 32),
-                RunCommandTestSupport.context(dir).copy(ioDispatcher = dispatcher),
+                RunCommandTestSupport.context(dir, dispatcher),
                 deadline = testDeadline,
             )
 

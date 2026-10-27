@@ -203,6 +203,16 @@ fun buildSpawnableAgentRoleSections(
 }
 
 /**
+ * Text of one agent-role chip in the grouped role pickers: the machine name, extended with the
+ * display name as `name — displayName` when that name is non-blank.
+ *
+ * The chip never repeats the project, because the picker carries it in the section header; surfaces
+ * without grouping compose their own label.
+ */
+val AgentRoleDto.pickerLabel: String
+    get() = displayName?.takeIf { it.isNotBlank() }?.let { display -> "$name — $display" } ?: name
+
+/**
  * Deterministic chip order inside a spawn-target group: name ascending (case-insensitive), then id.
  */
 private val roleNameOrder = compareBy<AgentRoleDto>({ it.name.lowercase() }, { it.id })

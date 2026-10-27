@@ -36,7 +36,7 @@ interface WorkerCredentialProfileDao {
     ): Either<WorkerCredentialPersistenceError, WorkerCredentialProfileEntity>
 
     /**
-     * Deletes a profile and its signatures.
+     * Deletes a profile and its signatures; its agent-role links go with the profile by cascade.
      *
      * @param id Profile identifier.
      * @return Either a failure or the profile as it was before deletion.

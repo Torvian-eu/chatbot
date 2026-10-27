@@ -23,6 +23,8 @@ import kotlinx.serialization.Serializable
  * @property environmentVariables Supplementary non-secret environment variables for the profile's
  *   process.
  * @property askpassVariables Names that receive the askpass script path; askpass channel only.
+ * @property agentRoleIds Agent roles allowed to attach the profile. The relation is many-to-many and
+ *   unordered; an empty set makes the profile attachable by no role at all.
  */
 @Serializable
 data class CredentialProfileFields(
@@ -39,6 +41,7 @@ data class CredentialProfileFields(
     val isEnabled: Boolean = true,
     val environmentVariables: Map<String, String> = emptyMap(),
     val askpassVariables: List<String> = emptyList(),
+    val agentRoleIds: Set<Long> = emptySet(),
 )
 
 /**
@@ -57,6 +60,8 @@ data class CredentialProfileFields(
  * @property isEnabled Whether the profile may be attached.
  * @property environmentVariables Supplementary non-secret environment variables.
  * @property askpassVariables Names that receive the askpass script path.
+ * @property agentRoleIds Agent roles allowed to attach the profile; signing them makes the link set
+ *   part of the authority the worker verifies. An empty set is a draft nobody may attach.
  */
 @Serializable
 data class CreateCredentialProfileRequest(
@@ -73,6 +78,7 @@ data class CreateCredentialProfileRequest(
     val isEnabled: Boolean = true,
     val environmentVariables: Map<String, String> = emptyMap(),
     val askpassVariables: List<String> = emptyList(),
+    val agentRoleIds: Set<Long> = emptySet(),
 ) {
     /**
      * @return The signed field set this request carries.
@@ -91,6 +97,7 @@ data class CreateCredentialProfileRequest(
         isEnabled = isEnabled,
         environmentVariables = environmentVariables,
         askpassVariables = askpassVariables,
+        agentRoleIds = agentRoleIds,
     )
 }
 
@@ -113,6 +120,7 @@ data class CreateCredentialProfileRequest(
  * @property isEnabled Whether the profile may be attached.
  * @property environmentVariables Supplementary non-secret environment variables.
  * @property askpassVariables Names that receive the askpass script path.
+ * @property agentRoleIds Agent roles allowed to attach the profile, replacing the previous set.
  */
 @Serializable
 data class UpdateCredentialProfileRequest(
@@ -129,6 +137,7 @@ data class UpdateCredentialProfileRequest(
     val isEnabled: Boolean = true,
     val environmentVariables: Map<String, String> = emptyMap(),
     val askpassVariables: List<String> = emptyList(),
+    val agentRoleIds: Set<Long> = emptySet(),
 ) {
     /**
      * @return The signed field set this request carries.
@@ -147,5 +156,6 @@ data class UpdateCredentialProfileRequest(
         isEnabled = isEnabled,
         environmentVariables = environmentVariables,
         askpassVariables = askpassVariables,
+        agentRoleIds = agentRoleIds,
     )
 }

@@ -53,6 +53,7 @@ fun serviceModule() = module {
             projectDao = get(),
             sessionDao = get(),
             credentialProfileDao = get(),
+            credentialProfileLinkDao = get(),
             workerDao = get()
         )
     }

@@ -31,7 +31,8 @@ interface BuiltInTool {
      * with `isError = true` and a stable error code.
      *
      * @param input Validated JSON arguments for the tool.
-     * @param context Execution context providing the worker workspace and command timeout.
+     * @param context Execution context of this call: the worker environment plus the acting agent
+     *   role, which is null when the authorization carries none.
      * @return Built-in tool result, possibly with `isError = true`.
      */
     suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult

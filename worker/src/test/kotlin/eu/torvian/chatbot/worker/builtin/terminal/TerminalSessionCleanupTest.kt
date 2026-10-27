@@ -238,6 +238,7 @@ class TerminalSessionCleanupTest {
         isEnabled = true,
         environmentVariables = emptyMap(),
         askpassVariables = emptyList(),
+        agentRoleIds = emptySet(),
     )
 
     private companion object {

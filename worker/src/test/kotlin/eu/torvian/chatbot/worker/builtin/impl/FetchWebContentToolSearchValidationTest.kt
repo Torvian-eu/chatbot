@@ -2,7 +2,6 @@ package eu.torvian.chatbot.worker.builtin.impl
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
-import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.net.WebFetchError
 import eu.torvian.chatbot.worker.builtin.net.WebFetchRequest
@@ -37,7 +36,7 @@ class FetchWebContentToolSearchValidationTest {
 
     private fun toolWith(fake: RecordingFakeService) = FetchWebContentTool(fetchService = fake)
 
-    private fun context() = BuiltInToolExecutionContext(
+    private fun context() = testExecutionContext(
         workspace = createTempDirectory("fetch-search-validation"),
         defaultCommandTimeoutSeconds = 60,
         defaultSearchTimeoutSeconds = 5,

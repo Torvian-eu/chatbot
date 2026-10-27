@@ -150,6 +150,61 @@ class DefaultCredentialProfileValidatorTest {
     }
 
     /**
+     * Ensures the link set compares by membership, so a differently ordered relayed array still matches.
+     */
+    @Test
+    fun `agent role links compare as a set regardless of order`() = runTest {
+        val keyPair = generateKeyPair()
+        val request = requestFixture().copy(agentRoleIds = linkedSetOf(1L, 2L, 3L))
+
+        val result = validator(keyPair).validate(
+            profileFixture(request).copy(agentRoleIds = linkedSetOf(3L, 1L, 2L)),
+            signedRequest(keyPair, request),
+            workerId = 2L
+        )
+
+        assertIs<CredentialProfileValidationResult.Authorized>(result)
+    }
+
+    /**
+     * Ensures a relayed link set that differs from the signed one rejects the profile, so the set is
+     * never signed but unverified.
+     */
+    @Test
+    fun `tampered agent role links are rejected`() = runTest {
+        val keyPair = generateKeyPair()
+        val request = requestFixture().copy(agentRoleIds = setOf(1L, 2L))
+
+        val result = validator(keyPair).validate(
+            profileFixture(request).copy(agentRoleIds = setOf(1L, 2L, 4L)),
+            signedRequest(keyPair, request),
+            workerId = 2L
+        )
+
+        assertEquals(
+            listOf("agentRoleIds"),
+            assertIs<CredentialProfileValidationResult.DtoMismatch>(result).fields
+        )
+    }
+
+    /**
+     * Ensures a payload signed before the field existed decodes to an empty set, which equals the empty
+     * link set a pre-existing profile has, so the upgrade itself rejects nothing.
+     */
+    @Test
+    fun `payload without agent role links matches an empty link set`() = runTest {
+        val keyPair = generateKeyPair()
+        val request = requestFixture()
+        val payload = json.encodeToString(request)
+
+        assertTrue(!payload.contains("agentRoleIds"), "Unexpected field in payload: $payload")
+
+        val result = validator(keyPair).validate(profileFixture(request), signedRequest(keyPair, payload), 2L)
+
+        assertIs<CredentialProfileValidationResult.Authorized>(result)
+    }
+
+    /**
      * Ensures a row bound to another worker is rejected before any signature work.
      */
     @Test
@@ -262,6 +317,7 @@ class DefaultCredentialProfileValidatorTest {
             isEnabled = request.isEnabled,
             environmentVariables = request.environmentVariables,
             askpassVariables = request.askpassVariables,
+            agentRoleIds = request.agentRoleIds,
             updatedAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
         )
 
@@ -285,6 +341,7 @@ class DefaultCredentialProfileValidatorTest {
             isEnabled = request.isEnabled,
             environmentVariables = request.environmentVariables,
             askpassVariables = request.askpassVariables,
+            agentRoleIds = request.agentRoleIds,
             updatedAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
         )
 
