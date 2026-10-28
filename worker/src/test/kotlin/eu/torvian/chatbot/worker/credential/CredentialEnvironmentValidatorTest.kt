@@ -263,10 +263,18 @@ class CredentialEnvironmentValidatorTest {
     }
 
     /**
-     * @return A working directory owned by the account the credentials are configured with.
+     * @return A working directory shaped like the deployment's `/home/vault/work`: owned by the
+     *   account the credentials are configured with, and not writable by its group or by others.
      */
     private fun workingDirectory(): Path {
         val directory = root.resolve("work").createDirectory()
+        // Creating a directory applies the ambient umask, so a permissive launcher would leave the
+        // fixture group-writable. The deployment fixes this mode explicitly on the directory the
+        // fixture mirrors, so the fixture does too. Hosts without a POSIX view reject the call and the
+        // mode-dependent cases skip themselves there.
+        runCatching {
+            Files.setPosixFilePermissions(directory, PosixFilePermissions.fromString("rwx--x--x"))
+        }
         return directory
     }
 

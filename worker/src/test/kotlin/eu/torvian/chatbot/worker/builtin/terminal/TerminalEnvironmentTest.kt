@@ -50,9 +50,21 @@ class TerminalEnvironmentTest {
         val base = mapOf("PATH" to "/usr/bin")
         val result = terminalEnvironment(base)
 
-        val unexpectedWorkerKeys = System.getenv().keys
-            .filterNot { it in base }
-            .filter { it in result }
+        // The ambient environment is never a source of child variables, so its keys carry no leak
+        // signal: a host that happens to export TERM or PAGER would fail here even though the
+        // decorator set those values itself. Only the documented terminal variables may be added.
+        val terminalKeys = setOf(
+            "TERM",
+            "NO_COLOR",
+            "CLICOLOR",
+            "PAGER",
+            "GIT_PAGER",
+            "SYSTEMD_PAGER",
+            "DEBIAN_FRONTEND",
+            "PS1",
+            "PROMPT_COMMAND",
+        )
+        val unexpectedWorkerKeys = result.keys - base.keys - terminalKeys
         assertTrue(
             unexpectedWorkerKeys.isEmpty(),
             "Unexpected worker variables leaked into the child environment: $unexpectedWorkerKeys",
